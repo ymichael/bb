@@ -149,7 +149,7 @@ interface OutputBuffer {
   handler(chunk: OutputChunk): void;
 }
 
-interface ProcessExitResult {
+export interface ProcessExitResult {
   code: number | null;
   signal: NodeJS.Signals | null;
 }
@@ -801,9 +801,20 @@ function spawnManagedProcess(args: ManagedSpawnArgs): ChildProcess {
   return child;
 }
 
-function waitForProcessExit(
+function hasProcessExited(childProcess: ChildProcess): boolean {
+  return childProcess.exitCode !== null || childProcess.signalCode !== null;
+}
+
+export function waitForProcessExit(
   childProcess: ChildProcess,
 ): Promise<ProcessExitResult> {
+  if (hasProcessExited(childProcess)) {
+    return Promise.resolve({
+      code: childProcess.exitCode,
+      signal: childProcess.signalCode,
+    });
+  }
+
   return new Promise<ProcessExitResult>((resolvePromise) => {
     childProcess.once("exit", (code, signal) => {
       resolvePromise({ code, signal });
@@ -827,14 +838,15 @@ function toExitCode(result: ProcessExitResult): number {
   return result.signal === null ? 1 : 128;
 }
 
-function killProcessIfRunning(
+async function terminateProcessIfRunning(
   childProcess: ChildProcess,
   signal: NodeJS.Signals,
-): void {
-  if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
+): Promise<void> {
+  if (hasProcessExited(childProcess)) {
     return;
   }
   childProcess.kill(signal);
+  await waitForProcessExit(childProcess);
 }
 
 function createSharedEnv(context: BbAppStartContext): NodeJS.ProcessEnv {
@@ -1088,17 +1100,23 @@ async function runHostDaemonOnly(
   });
 
   let shuttingDown = false;
-  const shutdown = (signal: NodeJS.Signals): void => {
+  const daemonExit = waitForProcessExit(daemonProcess);
+
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
     process.stdout.write("\n");
     log(dim("●"), "Shutting down");
-    killProcessIfRunning(daemonProcess, signal);
+    await terminateProcessIfRunning(daemonProcess, signal);
   };
 
-  const removeSignalForwarding = installTerminationSignalForwarding(shutdown);
+  const removeSignalForwarding = installTerminationSignalForwarding(
+    (signal) => {
+      void shutdown(signal);
+    },
+  );
 
   try {
     try {
@@ -1111,7 +1129,8 @@ async function runHostDaemonOnly(
       log(" ", dim(`lock: ${context.daemonLockDir}`));
       log(" ", dim(`logs: ${context.logDir}/`));
       outputBuffer.flush();
-      process.exitCode = daemonProcess.exitCode ?? 1;
+      process.exitCode = 1;
+      await shutdown("SIGTERM");
       return;
     }
 
@@ -1133,7 +1152,7 @@ async function runHostDaemonOnly(
     log(" ", dim("Press Ctrl+C to stop"));
 
     outputBuffer.flush();
-    process.exitCode = toExitCode(await waitForProcessExit(daemonProcess));
+    process.exitCode = toExitCode(await daemonExit);
   } finally {
     removeSignalForwarding();
   }
@@ -1264,24 +1283,37 @@ export async function runBbApp(
     env: sharedEnv,
     outputBuffer,
   });
+  const serverExit = waitForNamedProcessExit({
+    childProcess: serverProcess,
+    processName: "server",
+  });
 
   let shuttingDown = false;
   let daemonProcess: ChildProcess | null = null;
 
-  const shutdown = (signal: NodeJS.Signals): void => {
+  const shutdown = async (signal: NodeJS.Signals): Promise<void> => {
     if (shuttingDown) {
       return;
     }
     shuttingDown = true;
     process.stdout.write("\n");
     log(dim("●"), "Shutting down");
+    const terminationPromises = [
+      terminateProcessIfRunning(serverProcess, signal),
+    ];
     if (daemonProcess !== null) {
-      killProcessIfRunning(daemonProcess, signal);
+      terminationPromises.push(
+        terminateProcessIfRunning(daemonProcess, signal),
+      );
     }
-    killProcessIfRunning(serverProcess, signal);
+    await Promise.all(terminationPromises);
   };
 
-  const removeSignalForwarding = installTerminationSignalForwarding(shutdown);
+  const removeSignalForwarding = installTerminationSignalForwarding(
+    (signal) => {
+      void shutdown(signal);
+    },
+  );
 
   try {
     try {
@@ -1293,7 +1325,8 @@ export async function runBbApp(
       endStep(red("✗"), "Server failed to start (health check timed out)");
       log(" ", dim(`Check logs: ${context.logDir}/`));
       outputBuffer.flush();
-      shutdown("SIGTERM");
+      process.exitCode = 1;
+      await shutdown("SIGTERM");
       return;
     }
 
@@ -1312,6 +1345,10 @@ export async function runBbApp(
       env: createDaemonEnv(context, autoJoinEnv),
       outputBuffer,
     });
+    const daemonExit = waitForNamedProcessExit({
+      childProcess: daemonProcess,
+      processName: "daemon",
+    });
 
     try {
       await waitForHealth({
@@ -1323,7 +1360,8 @@ export async function runBbApp(
       log(" ", dim(`lock: ${context.daemonLockDir}`));
       log(" ", dim(`logs: ${context.logDir}/`));
       outputBuffer.flush();
-      shutdown("SIGTERM");
+      process.exitCode = 1;
+      await shutdown("SIGTERM");
       return;
     }
 
@@ -1342,26 +1380,23 @@ export async function runBbApp(
     log(" ", dim("Press Ctrl+C to stop"));
 
     outputBuffer.flush();
-    const firstExit = await Promise.race([
-      waitForNamedProcessExit({
-        childProcess: serverProcess,
-        processName: "server",
-      }),
-      waitForNamedProcessExit({
-        childProcess: daemonProcess,
-        processName: "daemon",
-      }),
-    ]);
+    const firstExit = await Promise.race([serverExit, daemonExit]);
 
     if (firstExit.processName === "server") {
-      killProcessIfRunning(daemonProcess, firstExit.result.signal ?? "SIGTERM");
+      await terminateProcessIfRunning(
+        daemonProcess,
+        firstExit.result.signal ?? "SIGTERM",
+      );
     } else {
-      killProcessIfRunning(serverProcess, firstExit.result.signal ?? "SIGTERM");
+      await terminateProcessIfRunning(
+        serverProcess,
+        firstExit.result.signal ?? "SIGTERM",
+      );
     }
 
     process.exitCode = toExitCode(firstExit.result);
   } catch (error) {
-    shutdown("SIGTERM");
+    await shutdown("SIGTERM");
     throw error;
   } finally {
     removeSignalForwarding();

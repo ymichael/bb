@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { mkdtempSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,6 +14,21 @@ import {
   resolveBbAppStartContext,
   resolveBbAppCommand,
 } from "../src/index.js";
+import { waitForProcessExit } from "../src/launcher.js";
+
+interface DelayArgs {
+  ms: number;
+}
+
+type DelayResult = "timeout";
+
+function delay(args: DelayArgs): Promise<DelayResult> {
+  return new Promise((resolvePromise) => {
+    setTimeout(() => {
+      resolvePromise("timeout");
+    }, args.ms);
+  });
+}
 
 describe("bb-app launcher", () => {
   it("resolves production defaults for npx startup", () => {
@@ -195,5 +211,21 @@ describe("bb-app launcher", () => {
         moduleUrl: pathToFileURL(realEntryPath).href,
       }),
     ).toBe(true);
+  });
+
+  it("observes child processes that exited before wait registration", async () => {
+    const childProcess = spawn(process.execPath, ["-e", "process.exit(7)"], {
+      stdio: "ignore",
+    });
+    await new Promise<void>((resolvePromise, reject) => {
+      childProcess.once("error", reject);
+      childProcess.once("exit", () => {
+        resolvePromise();
+      });
+    });
+
+    await expect(
+      Promise.race([waitForProcessExit(childProcess), delay({ ms: 100 })]),
+    ).resolves.toEqual({ code: 7, signal: null });
   });
 });
