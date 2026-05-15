@@ -1,5 +1,6 @@
 import {
   createHostDaemonLocalClient,
+  DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
   workspaceOpenTargetsResponseSchema,
   type OpenInTargetRequest,
   type StatusResponse,
@@ -22,7 +23,9 @@ const hostDaemonErrorResponseSchema = z.object({
  */
 export function getHostDaemonClient(port: number) {
   if (!client || clientPort !== port) {
-    client = createHostDaemonLocalClient(`http://localhost:${port}`);
+    client = createHostDaemonLocalClient(
+      `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${port}`,
+    );
     clientPort = port;
   }
   return client;

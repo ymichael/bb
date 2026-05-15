@@ -14,7 +14,7 @@
     "dev:restart-server": "cross-env NODE_ENV=development node --conditions=source --import tsx packages/scripts/src/commands/request-dev-restart.ts server",
     "dev:restart-host-daemon": "cross-env NODE_ENV=development node --conditions=source --import tsx packages/scripts/src/commands/request-dev-restart.ts host-daemon",
     "dev:host-daemon": "cross-env NODE_ENV=development BB_DATA_DIR=~/.bb-dev-extra-host node --conditions=source --import tsx packages/scripts/src/commands/run-host-daemon.ts",
-    "build": "turbo run build --filter=@bb/scripts --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli",
+    "build": "turbo run build --filter=@bb/scripts --filter=@bb/app --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/cli --filter=bb-app",
     "start": "cross-env NODE_ENV=production dotenv -c production -- pnpm run --silent scripts:prepare && cross-env NODE_ENV=production dotenv -c production -- node packages/scripts/dist/commands/start-bb.js",
     "start:host-daemon": "cross-env NODE_ENV=production pnpm run --silent scripts:prepare && cross-env NODE_ENV=production node packages/scripts/dist/commands/start-host-daemon.js",
     "reset": "cross-env NODE_ENV=production pnpm run --silent scripts:prepare && cross-env NODE_ENV=production node packages/scripts/dist/commands/reset-bb-data.js",

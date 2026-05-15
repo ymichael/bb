@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
   HOST_DAEMON_PROTOCOL_VERSION,
   openInTargetRequestSchema,
   type WorkspaceOpenTarget,
@@ -30,6 +31,40 @@ describe("api-host-daemon", () => {
 
     expect(secondClient).toBe(firstClient);
     expect(thirdClient).not.toBe(firstClient);
+  });
+
+  it("targets the shared local bind host for daemon requests", async () => {
+    const requestedUrls: string[] = [];
+    installFetchRoutes([
+      {
+        pathname: "/status",
+        port: 3002,
+        handler: async (request) => {
+          requestedUrls.push(request.url);
+          return jsonResponse({
+            connected: true,
+            hostId: "host_1",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+            serverUrl: "http://localhost:3334",
+            supportsNativeFolderPicker: true,
+            platform: "darwin",
+          });
+        },
+      },
+    ]);
+
+    const { fetchHostStatus } = await importFreshApiHostDaemon();
+
+    await fetchHostStatus(3002);
+
+    expect(requestedUrls).toHaveLength(1);
+    const [requestedUrl] = requestedUrls;
+    if (requestedUrl === undefined) {
+      throw new Error("Expected host daemon request URL");
+    }
+    const url = new URL(requestedUrl);
+    expect(url.hostname).toBe(DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST);
+    expect(url.port).toBe("3002");
   });
 
   it("returns the daemon status when the daemon is reachable", async () => {
@@ -246,7 +281,7 @@ describe("api-host-daemon", () => {
         lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
-        },
+      },
     ]);
   });
 
@@ -271,7 +306,7 @@ describe("api-host-daemon", () => {
         lineNumber: null,
         path: "/tmp/workspace",
         targetId: "vscode",
-        }),
+      }),
     ).rejects.toThrow("Workspace open target is unavailable: VS Code");
   });
 });

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import { extname } from "node:path";
 import { resolve } from "node:path";
 import { createInterface } from "node:readline";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 import {
   decodeBridgeJsonRpcResponse,
@@ -832,10 +832,15 @@ export function handleLine(line: string): void {
 
 function isMainModule(): boolean {
   const entryPoint = process.argv[1];
-  return (
-    entryPoint !== undefined &&
-    import.meta.url === pathToFileURL(resolve(entryPoint)).href
-  );
+  if (entryPoint === undefined) return false;
+  try {
+    return (
+      realpathSync(fileURLToPath(import.meta.url)) ===
+      realpathSync(resolve(entryPoint))
+    );
+  } catch {
+    return false;
+  }
 }
 
 if (isMainModule()) {

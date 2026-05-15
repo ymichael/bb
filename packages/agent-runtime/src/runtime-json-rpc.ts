@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import type { Writable } from "node:stream";
 import { z } from "zod";
 import type { ProviderRequestCommandPlan } from "./provider-adapter.js";
 
@@ -128,6 +129,12 @@ interface SettleJsonRpcResponseArgs {
   response: JsonRpcObject;
 }
 
+const closedJsonRpcStdinErrorCodes = new Set([
+  "EPIPE",
+  "ERR_STREAM_DESTROYED",
+]);
+const jsonRpcStdinErrorHandledStreams = new WeakSet<Writable>();
+
 function isJsonRpcObject(value: unknown): value is JsonRpcObject {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
@@ -141,6 +148,38 @@ function formatJsonRpcErrorMessage(error: unknown): string {
     return error.message;
   }
   return JSON.stringify(error);
+}
+
+function isClosedJsonRpcStdinError(error: Error): boolean {
+  return (
+    "code" in error &&
+    typeof error.code === "string" &&
+    closedJsonRpcStdinErrorCodes.has(error.code)
+  );
+}
+
+function handleJsonRpcStdinError(error: Error): void {
+  if (isClosedJsonRpcStdinError(error)) {
+    return;
+  }
+  throw error;
+}
+
+function ensureJsonRpcStdinErrorHandler(stdin: Writable): void {
+  if (jsonRpcStdinErrorHandledStreams.has(stdin)) {
+    return;
+  }
+  jsonRpcStdinErrorHandledStreams.add(stdin);
+  stdin.on("error", handleJsonRpcStdinError);
+}
+
+function writeJsonRpcLine(child: ChildProcess, line: string): void {
+  const stdin = child.stdin;
+  if (!stdin || stdin.destroyed || !stdin.writable) {
+    return;
+  }
+  ensureJsonRpcStdinErrorHandler(stdin);
+  stdin.write(line + "\n");
 }
 
 export function parseJsonRpcLine(line: string): ParsedJsonRpcLine {
@@ -223,7 +262,7 @@ export function sendJsonRpc(
   message: JsonRpcMessage | ProviderRequestCommandPlan,
 ): void {
   const line = JSON.stringify(toJsonRpcMessage(message));
-  child.stdin?.write(line + "\n");
+  writeJsonRpcLine(child, line);
 }
 
 export function toJsonRpcMessage(
@@ -270,17 +309,19 @@ export function sendJsonRpcRequest<TResult>(
 }
 
 export function sendJsonRpcResult(args: SendJsonRpcResultArgs): void {
-  args.child.stdin?.write(
+  writeJsonRpcLine(
+    args.child,
     JSON.stringify({
       jsonrpc: "2.0",
       id: args.id,
       result: args.result,
-    }) + "\n",
+    }),
   );
 }
 
 export function sendJsonRpcError(args: SendJsonRpcErrorArgs): void {
-  args.child.stdin?.write(
+  writeJsonRpcLine(
+    args.child,
     JSON.stringify({
       jsonrpc: "2.0",
       id: args.id,
@@ -288,7 +329,7 @@ export function sendJsonRpcError(args: SendJsonRpcErrorArgs): void {
         code: args.code ?? -32000,
         message: args.message,
       },
-    }) + "\n",
+    }),
   );
 }
 

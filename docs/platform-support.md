@@ -6,6 +6,13 @@
 - Linux persistent host
 - Windows via Ubuntu on WSL2
 
+Supported npm package runtimes:
+
+- Node.js 22 LTS
+- Node.js 24 LTS
+- Node.js 26 Current
+- Node.js 20 is best-effort only because it is end-of-life upstream
+
 Windows support means the Linux stack runs entirely inside WSL2:
 
 - all `bb` processes run inside the same Ubuntu WSL2 distro
@@ -28,6 +35,8 @@ Windows support means the Linux stack runs entirely inside WSL2:
 - managed clone/worktree environments
 - provider runtime startup where the provider itself supports the host
   environment
+- `npx bb-app` package startup on supported npm package runtimes
+- `npx --package bb-app bb ...` CLI execution through the published package
 
 ### Command ownership and mode selection
 
@@ -83,6 +92,25 @@ We are explicitly not adopting:
 - generic filesystem helper libraries
   - `fs/promises` is sufficient
 
+### Native npm dependencies
+
+The npm package keeps native add-ons as runtime dependencies instead of bundling
+one platform-specific `.node` binary into bb's JavaScript artifacts. This lets
+npm install the correct native artifacts on the target machine for packages such
+as `better-sqlite3` and `@parcel/watcher`.
+
+Known failure modes remain the normal native-addon ones:
+
+- changing Node versions after install without reinstalling or rebuilding
+- copying `node_modules` across operating systems, CPU architectures, or libc
+  variants
+- disabling package lifecycle scripts
+- running on a platform where no prebuild exists and no local build toolchain is
+  available
+
+The recovery path after a Node/runtime change is to reinstall the package or
+rebuild the native dependency, for example `npm rebuild better-sqlite3`.
+
 ## Setup Hook Policy
 
 - The supported setup hook is POSIX `.bb-env-setup.sh`.
@@ -101,6 +129,10 @@ We are explicitly not adopting:
 
 - GitHub Actions uses Ubuntu as the required support gate for build,
   typecheck, lint, test, and Linux smoke coverage.
+- Full build, typecheck, lint, and test checks run on Ubuntu with Node.js 22,
+  24, and 26. Node.js 20 runs as a best-effort compatibility signal only.
+- The `bb-app` tarball smoke runs on Ubuntu and macOS with Node.js 22, 24, and
+  26, and validates the packed npm artifact through `npx --package`.
 - Native Windows CI is intentionally not required because Windows support uses
   the Linux runtime path inside WSL2 rather than a separate native Windows
   product path.

@@ -4,6 +4,7 @@ import {
   DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_BIND_HOST,
   DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_HEALTH_VALUE,
   DEFAULT_EPHEMERAL_HOST_DAEMON_LOCAL_PORT,
+  DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
   DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
 } from "@bb/host-daemon-contract";
@@ -17,7 +18,7 @@ describe("host daemon local API config", () => {
         localApi: undefined,
       }),
     ).toEqual({
-      bindHost: "localhost",
+      bindHost: DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST,
       healthPath: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH,
       healthValue: DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE,
       mode: "full",

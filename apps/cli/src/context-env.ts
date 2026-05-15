@@ -1,4 +1,5 @@
 import { cliConfig } from "@bb/config/cli";
+import { DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST } from "@bb/host-daemon-contract";
 
 const VALID_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
 
@@ -22,7 +23,7 @@ export function resolveServerUrl(): string {
 }
 
 export function resolveHostDaemonUrl(): string {
-  return `http://localhost:${cliConfig.BB_HOST_DAEMON_PORT}`;
+  return `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${cliConfig.BB_HOST_DAEMON_PORT}`;
 }
 
 export function resolveProjectId(flagValue?: string): string | undefined {

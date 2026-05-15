@@ -78,6 +78,7 @@ interface StartRealDaemonOptions {
 }
 
 interface SmokeLogger {
+  debug(): void;
   error(): void;
   info(): void;
   warn(): void;
@@ -108,6 +109,7 @@ const smokeThreadResponseSchema = threadSchema.pick({
   status: true,
 });
 const smokeLogger: SmokeLogger = {
+  debug() {},
   error() {},
   info() {},
   warn() {},

@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST } from "@bb/host-daemon-contract";
 import {
   bold,
   cyan,
@@ -161,7 +162,7 @@ export async function main(): Promise<void> {
   try {
     try {
       await waitForHealth(
-        `http://localhost:${context.daemonPort}/health`,
+        `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.daemonPort}/health`,
         daemonProcess,
       );
     } catch {
