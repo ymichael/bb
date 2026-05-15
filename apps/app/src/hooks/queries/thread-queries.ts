@@ -51,6 +51,7 @@ import {
   threadTimelineQueryKey,
   type ArchivedThreadsManagedFilter,
 } from "./query-keys";
+import { ARCHIVED_THREADS_PAGE_SIZE } from "./archived-threads-page-size";
 
 interface QueryOptions {
   enabled?: boolean;
@@ -89,8 +90,6 @@ function requireThreadId(id: string, hookName: string): string {
 
   return id;
 }
-
-export const ARCHIVED_THREADS_PAGE_SIZE = 100;
 
 export interface UseArchivedThreadsFilters {
   projectId: string | undefined;

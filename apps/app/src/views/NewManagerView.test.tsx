@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Suspense, type JSX, type ReactNode } from "react";
+import { Suspense, useState, type JSX, type ReactNode } from "react";
 import {
   act,
   cleanup,
@@ -28,7 +28,11 @@ import {
   type FetchRoute,
 } from "@/test/http-test-utils";
 import { createTestSystemProvider } from "@/test/system-provider-test-utils";
-import { NewManagerView } from "./NewManagerView";
+import {
+  NewManagerForm,
+  NewManagerView,
+  type NewManagerFormProps,
+} from "./NewManagerView";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket } =
@@ -326,9 +330,54 @@ interface RenderNewManagerRouteArgs {
   wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
 }
 
+type NewManagerFormHireRequest = Parameters<NewManagerFormProps["onHire"]>[0];
+
+interface RenderNewManagerFormArgs {
+  models: readonly AvailableModel[];
+  onHire: NewManagerFormProps["onHire"];
+  wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
+}
+
 function ThreadRouteProbe() {
   const location = useLocation();
   return <p>Thread route: {location.pathname}</p>;
+}
+
+async function renderNewManagerForm(args: RenderNewManagerFormArgs) {
+  const projects = [makeProjectResponse()];
+  const hosts = [makeHost("host-local", "Local Host")];
+  const providers = createDefaultSystemProviders();
+  const isLocalHost: NewManagerFormProps["isLocalHost"] = (hostId) =>
+    hostId === "host-local";
+  const onProjectChange: NewManagerFormProps["onProjectChange"] = () => {};
+  const onCancel: NewManagerFormProps["onCancel"] = () => {};
+
+  function TestNewManagerForm() {
+    const [selectedProviderId, setSelectedProviderId] = useState("");
+
+    return (
+      <NewManagerForm
+        projectId="proj-1"
+        projects={projects}
+        projectsAreLoaded
+        providers={providers}
+        providersAreLoaded
+        hosts={hosts}
+        isLocalHost={isLocalHost}
+        models={args.models}
+        selectedProviderId={selectedProviderId}
+        onSelectedProviderIdChange={setSelectedProviderId}
+        onProjectChange={onProjectChange}
+        onCancel={onCancel}
+        onHire={args.onHire}
+        isHirePending={false}
+      />
+    );
+  }
+
+  await act(async () => {
+    render(<TestNewManagerForm />, { wrapper: args.wrapper });
+  });
 }
 
 async function renderNewManagerRoute(args: RenderNewManagerRouteArgs) {
@@ -372,15 +421,16 @@ describe("NewManagerView", () => {
         isDefault: true,
       }),
     ];
-    const { managerRequests, managerThread, requestedModelProviders } =
-      installNewManagerRoutes({
-        modelResponsesByProvider: {
-          pi: piModels,
-        },
-      });
-    const { queryClient, wrapper } = createSuspenseWrapper();
+    const managerRequests: NewManagerFormHireRequest[] = [];
+    const { wrapper } = createSuspenseWrapper();
 
-    await renderNewManagerRoute({ wrapper });
+    await renderNewManagerForm({
+      models: piModels,
+      onHire: async (request) => {
+        managerRequests.push(request);
+      },
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Host" }).title).toContain(
@@ -398,6 +448,52 @@ describe("NewManagerView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
 
     await waitFor(() => {
+      expect(managerRequests).toEqual([
+        {
+          projectId: "proj-1",
+          providerId: "pi",
+          model: "anthropic/claude-opus-4-7",
+          reasoningLevel: "medium",
+          environment: { type: "host", hostId: "host-local" },
+        },
+      ]);
+    });
+  });
+
+  it("submits the default manager hire through the route and caches the created thread", async () => {
+    const piModels = [
+      makeModel("anthropic/claude-opus-4-7", {
+        displayName: "Claude Opus 4.7",
+        isDefault: true,
+      }),
+    ];
+    const {
+      managerRequests,
+      managerRequestProjectIds,
+      managerThread,
+      requestedModelProviders,
+    } = installNewManagerRoutes({
+      modelResponsesByProvider: {
+        pi: piModels,
+      },
+    });
+    const { queryClient, wrapper } = createSuspenseWrapper();
+
+    await renderNewManagerRoute({ wrapper });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Host" }).title).toContain(
+        "Local Host",
+      );
+    });
+    await waitFor(() => {
+      expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
+
+    await waitFor(() => {
+      expect(managerRequestProjectIds).toEqual(["proj-1"]);
       expect(managerRequests).toEqual([
         {
           origin: "app",

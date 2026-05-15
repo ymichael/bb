@@ -12,6 +12,7 @@ import type { ThreadListEntry } from "@bb/domain";
 import type { ReactNode } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { ARCHIVED_THREADS_PAGE_SIZE } from "@/hooks/queries/archived-threads-page-size";
 import {
   type FetchRoute,
   installFetchRoutes,
@@ -19,6 +20,10 @@ import {
 } from "@/test/http-test-utils";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ProjectArchivedThreadsView } from "./ProjectArchivedThreadsView";
+
+vi.mock("@/hooks/queries/archived-threads-page-size", () => ({
+  ARCHIVED_THREADS_PAGE_SIZE: 2,
+}));
 
 interface ArchivedThreadsWrapperProps {
   children: ReactNode;
@@ -137,7 +142,7 @@ async function renderProjectArchivedThreadsView(
       handler: (request) => {
         const parsedRequest = readArchivedThreadListRequest(request);
         expect(parsedRequest.archived).toBe("true");
-        expect(parsedRequest.limit).toBe("100");
+        expect(parsedRequest.limit).toBe(String(ARCHIVED_THREADS_PAGE_SIZE));
         args.onThreadListRequest?.(parsedRequest);
         const threads =
           typeof args.threads === "function"
@@ -198,14 +203,20 @@ describe("ProjectArchivedThreadsView", () => {
   });
 
   it("requests the next page when Load more is clicked", async () => {
-    const firstPage = Array.from({ length: 100 }, (_, index) =>
+    const firstPage = [
       createThread({
-        archivedAt: 1000 - index,
-        id: `thr_page1_${index}`,
-        title: `Page1 thread ${index}`,
-        titleFallback: `Page1 thread ${index}`,
+        archivedAt: 1000,
+        id: "thr_page1_0",
+        title: "Page1 thread 0",
+        titleFallback: "Page1 thread 0",
       }),
-    );
+      createThread({
+        archivedAt: 999,
+        id: "thr_page1_1",
+        title: "Page1 thread 1",
+        titleFallback: "Page1 thread 1",
+      }),
+    ];
     const secondPage = [
       createThread({
         archivedAt: 5,
@@ -224,7 +235,7 @@ describe("ProjectArchivedThreadsView", () => {
         if (request.offset === null || request.offset === "0") {
           return firstPage;
         }
-        if (request.offset === "100") {
+        if (request.offset === String(ARCHIVED_THREADS_PAGE_SIZE)) {
           return secondPage;
         }
         return [];
@@ -237,7 +248,7 @@ describe("ProjectArchivedThreadsView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load more" }));
 
     await screen.findByText("Page2 thread");
-    expect(requestedOffsets).toContain("100");
+    expect(requestedOffsets).toContain(String(ARCHIVED_THREADS_PAGE_SIZE));
     expect(screen.queryByRole("button", { name: "Load more" })).toBeNull();
   });
 
