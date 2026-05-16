@@ -1098,9 +1098,7 @@ export const terminalClientMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-export type TerminalClientMessage = z.infer<
-  typeof terminalClientMessageSchema
->;
+export type TerminalClientMessage = z.infer<typeof terminalClientMessageSchema>;
 
 export const terminalServerMessageSchema = z.discriminatedUnion("type", [
   z
@@ -1141,9 +1139,7 @@ export const terminalServerMessageSchema = z.discriminatedUnion("type", [
     })
     .strict(),
 ]);
-export type TerminalServerMessage = z.infer<
-  typeof terminalServerMessageSchema
->;
+export type TerminalServerMessage = z.infer<typeof terminalServerMessageSchema>;
 
 export const timelineTurnSummaryDetailsRequestSchema = z.object({
   turnId: z.string().min(1),
@@ -1232,6 +1228,13 @@ export const systemConfigResponseSchema = z.object({
   voiceTranscriptionEnabled: z.boolean(),
 });
 export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
+
+export const systemConfigReloadResponseSchema = z.object({
+  ok: z.literal(true),
+});
+export type SystemConfigReloadResponse = z.infer<
+  typeof systemConfigReloadResponseSchema
+>;
 
 export const environmentStatusResponseSchema = z.object({
   workspace: workspaceStatusSchema.nullable(), // null for non-git environments

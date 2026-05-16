@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { envsafe, str } from "envsafe";
 import { dataDir } from "./data-dir.js";
 import { DEFAULTS } from "./defaults.js";
+import { LOG_LEVEL_VALUES } from "./log-level.js";
 
 export const commonConfig = envsafe({
   BB_DATA_DIR: dataDir({
@@ -14,6 +15,6 @@ export const commonConfig = envsafe({
     desc: "Log level: trace, debug, info, warn, error, fatal",
     default: DEFAULTS.logLevel.prod,
     devDefault: DEFAULTS.logLevel.dev,
-    choices: ["trace", "debug", "info", "warn", "error", "fatal"],
+    choices: LOG_LEVEL_VALUES,
   }),
 });

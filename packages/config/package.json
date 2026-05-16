@@ -33,6 +33,16 @@
       "types": "./src/host-daemon-entrypoint.ts",
       "default": "./src/host-daemon-entrypoint.ts"
     },
+    "./inference-model": {
+      "source": "./src/inference-model.ts",
+      "types": "./src/inference-model.ts",
+      "default": "./src/inference-model.ts"
+    },
+    "./log-level": {
+      "source": "./src/log-level.ts",
+      "types": "./src/log-level.ts",
+      "default": "./src/log-level.ts"
+    },
     "./cli": {
       "source": "./src/cli.ts",
       "types": "./src/cli.ts",
@@ -67,6 +77,16 @@
       "source": "./src/strings.ts",
       "types": "./src/strings.ts",
       "default": "./src/strings.ts"
+    },
+    "./public-url": {
+      "source": "./src/public-url.ts",
+      "types": "./src/public-url.ts",
+      "default": "./src/public-url.ts"
+    },
+    "./bb-app-managed-config": {
+      "source": "./src/bb-app-managed-config.ts",
+      "types": "./src/bb-app-managed-config.ts",
+      "default": "./src/bb-app-managed-config.ts"
     }
   },
   "scripts": {
@@ -76,7 +96,8 @@
   },
   "dependencies": {
     "@bb/domain": "workspace:*",
-    "envsafe": "^2.0.3"
+    "envsafe": "^2.0.3",
+    "zod": "4.3.6"
   },
   "devDependencies": {
     "@bb/tsconfig": "workspace:*",

@@ -7,7 +7,7 @@ import { cors } from "hono/cors";
 import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
 import { devEnvConfig } from "@bb/config/dev-env";
 import { serverConfig } from "@bb/config/server";
-import type { AppDeps } from "./types.js";
+import type { AppDeps, ServerAppDeps } from "./types.js";
 import { ApiError, errorToResponse } from "./errors.js";
 import { registerAutomationRoutes } from "./routes/automations.js";
 import { registerEnvironmentRoutes } from "./routes/environments.js";
@@ -140,14 +140,13 @@ function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
 }
 
 export function createApp(
-  deps: AppDeps,
+  deps: ServerAppDeps,
   options?: CreateAppOptions,
 ): ServerApp {
   const app = new Hono();
   const { injectWebSocket, upgradeWebSocket, wss } = createNodeWebSocket({
     app,
   });
-  const allowedCorsOrigins = buildAllowedCorsOrigins(deps);
   const slowApiRequestLogThresholdMs =
     options?.slowApiRequestLogThresholdMs ?? SLOW_API_REQUEST_LOG_THRESHOLD_MS;
 
@@ -159,6 +158,7 @@ export function createApp(
     "*",
     cors({
       origin: (origin, context) => {
+        const allowedCorsOrigins = buildAllowedCorsOrigins(deps);
         const requestOrigin = new URL(context.req.url).origin;
         if (origin === requestOrigin || allowedCorsOrigins.has(origin)) {
           return origin;

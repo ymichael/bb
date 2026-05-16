@@ -1,3 +1,5 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createEnvironment, hostDaemonCommands, updateHost } from "@bb/db";
 import {
   makeWorkspaceMergeBase,
@@ -779,11 +781,65 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         featureFlags: {
           askUserQuestion: true,
-          terminals: false,
+          terminals: true,
         },
         hostDaemonPort: 4010,
         voiceTranscriptionEnabled: true,
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("reloads bb-app managed config from POST /system/config/reload", async () => {
+    const harness = await createTestAppHarness({
+      openAiApiKey: "ambient-openai-key",
+    });
+    try {
+      await writeFile(
+        join(harness.config.dataDir, "config.json"),
+        `${JSON.stringify({ env: { OPENAI_API_KEY: "stored-openai-key" } })}\n`,
+        "utf8",
+      );
+
+      const response = await harness.app.request(
+        "/api/v1/system/config/reload",
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({ ok: true });
+      expect(harness.config.openAiApiKey).toBe("stored-openai-key");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects invalid bb-app managed config reloads without changing runtime config", async () => {
+    const harness = await createTestAppHarness({
+      inferenceModel: "openai/gpt-4o-mini",
+    });
+    try {
+      await writeFile(
+        join(harness.config.dataDir, "config.json"),
+        `${JSON.stringify({ env: { BB_INFERENCE_MODEL: "gpt-4o-mini" } })}\n`,
+        "utf8",
+      );
+
+      const response = await harness.app.request(
+        "/api/v1/system/config/reload",
+        {
+          method: "POST",
+        },
+      );
+
+      expect(response.status).toBe(422);
+      await expect(readJson(response)).resolves.toMatchObject({
+        code: "invalid_config",
+      });
+      expect(harness.config.inferenceModel).toBe("openai/gpt-4o-mini");
     } finally {
       await harness.cleanup();
     }

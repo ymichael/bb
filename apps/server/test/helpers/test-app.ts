@@ -14,9 +14,10 @@ import { createApp } from "../../src/server.js";
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
+import { createBbAppManagedConfigReloader } from "../../src/services/system/bb-app-managed-config.js";
 import { TerminalSessionLifecycle } from "../../src/services/terminals/terminal-session-lifecycle.js";
 import { createLifecycleDedupers } from "../../src/lifecycle-dedupers.js";
-import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
+import type { ServerAppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
 
@@ -27,7 +28,7 @@ export interface TestAppHarness {
   app: ReturnType<typeof createApp>["app"];
   config: ServerRuntimeConfig;
   db: DbConnection;
-  deps: AppDeps;
+  deps: ServerAppDeps;
   hub: NotificationHub;
   cleanup(): Promise<void>;
 }
@@ -152,7 +153,13 @@ export async function createTestAppHarness(
     appUrl: "https://bb.example.test",
     ...configOverrides,
   };
-  const deps: AppDeps = {
+  const bbAppManagedConfig = await createBbAppManagedConfigReloader({
+    config,
+    hub,
+    logger: testLogger,
+  });
+  const deps: ServerAppDeps = {
+    bbAppManagedConfig,
     config,
     db,
     hostLifecycle,

@@ -42,6 +42,15 @@ describe("commonConfig", () => {
       importFresh<typeof import("../src/common.js")>("../src/common.js"),
     ).rejects.toThrow("BB_DATA_DIR must not be empty");
   });
+
+  it("rejects unsupported BB_LOG_LEVEL overrides", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_LOG_LEVEL", "bogus");
+
+    await expect(
+      importFresh<typeof import("../src/common.js")>("../src/common.js"),
+    ).rejects.toThrow(/BB_LOG_LEVEL/u);
+  });
 });
 
 describe("data-dir helpers", () => {

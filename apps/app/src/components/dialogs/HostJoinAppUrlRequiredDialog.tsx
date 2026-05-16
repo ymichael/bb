@@ -36,13 +36,12 @@ export function HostJoinAppUrlRequiredDialogContent() {
       </DialogHeader>
 
       <div className="min-w-0 space-y-2 text-sm text-foreground">
-        <p>
-          Please add this line to your{" "}
-          <code className="font-mono text-xs">.env</code> file and restart bb:
-        </p>
+        <p>Run this on the server machine, then restart bb:</p>
         <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs leading-5">
           <code>
-            BB_APP_URL=http://&lt;your-machine&gt;.&lt;tailnet&gt;.ts.net:38886
+            {
+              "npx bb-app config BB_APP_URL http://<your-machine>.<tailnet>.ts.net:38886"
+            }
           </code>
         </pre>
       </div>

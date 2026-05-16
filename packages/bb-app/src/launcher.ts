@@ -1,19 +1,38 @@
 #!/usr/bin/env node
 import type { ChildProcess } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { access, mkdir, readFile, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readFile,
+  rename,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import {
+  BB_APP_MANAGED_ENV_KEYS,
+  BB_APP_SECRET_MANAGED_ENV_KEYS,
+  bbAppManagedConfigSchema,
+  formatBbAppConfigPath,
+  type BbAppManagedConfig,
+  type BbAppManagedEnvConfig,
+  type BbAppManagedEnvKey,
+} from "@bb/config/bb-app-managed-config";
+import { validateInferenceModel } from "@bb/config/inference-model";
+import { validateLogLevel } from "@bb/config/log-level";
+import { validateOptionalUrl } from "@bb/config/public-url";
 import { z } from "zod";
 
 const DEFAULT_SERVER_PORT = 38886;
 const DEFAULT_HOST_DAEMON_PORT = 38887;
 const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
 const DEFAULT_DATA_DIR_NAME = ".bb";
-const CONFIG_FILE_NAME = "config.json";
 const HOST_AUTH_FILE_NAME = "auth.json";
 const HOST_ID_FILE_NAME = "host-id";
 const HEALTH_CHECK_TIMEOUT_MS = 15_000;
@@ -21,6 +40,19 @@ const HEALTH_CHECK_INTERVAL_MS = 100;
 const START_COMMAND = "start";
 const HOST_DAEMON_COMMAND = "host-daemon";
 const HOST_DAEMON_JOIN_COMMAND = "join";
+const CONFIG_COMMAND = "config";
+const CONFIG_UNSET_COMMAND = "unset";
+const CONFIG_LIST_COMMAND = "list";
+const CONFIG_REFRESH_COMMAND = "refresh";
+
+type ManagedEnvKey = BbAppManagedEnvKey;
+type ManagedConfigKey = "BB_SERVER_URL" | "serverUrl" | ManagedEnvKey;
+
+const MANAGED_ENV_KEYS = BB_APP_MANAGED_ENV_KEYS;
+const MANAGED_ENV_KEY_VALUES = new Set<string>(MANAGED_ENV_KEYS);
+const SECRET_MANAGED_ENV_KEY_VALUES = new Set<string>(
+  BB_APP_SECRET_MANAGED_ENV_KEYS,
+);
 
 const hostJoinResponseSchema = z
   .object({
@@ -29,12 +61,13 @@ const hostJoinResponseSchema = z
   })
   .passthrough();
 
-const managedConfigSchema = z.object({
-  serverUrl: z.string().min(1).optional(),
+const apiErrorResponseSchema = z.object({
+  message: z.string(),
 });
 
 export type HostJoinResponse = z.infer<typeof hostJoinResponseSchema>;
-export type ManagedConfig = z.infer<typeof managedConfigSchema>;
+export type ManagedEnvConfig = BbAppManagedEnvConfig;
+export type ManagedConfig = BbAppManagedConfig;
 
 export interface PersistentHostJoinRequestBody {
   hostId?: string;
@@ -98,6 +131,13 @@ export interface BbAppStartContext {
   serverUrl: string;
 }
 
+export interface BbAppRuntimeState {
+  config: ManagedConfig;
+  context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+  serverEnv: NodeJS.ProcessEnv;
+}
+
 export interface IsMainModuleArgs {
   entrypointPath: string | undefined;
   moduleUrl: string;
@@ -110,6 +150,11 @@ export interface StartCommand {
 export interface HostDaemonCommand {
   args: string[];
   kind: "host-daemon";
+}
+
+export interface ConfigCommand {
+  args: string[];
+  kind: "config";
 }
 
 export interface HelpCommand {
@@ -127,6 +172,7 @@ export interface LauncherCliOptions {
   help: boolean;
   hostDaemonPort?: string;
   hostId?: string;
+  hostType?: string;
   joinCode?: string;
   serverPort?: string;
   serverUrl?: string;
@@ -157,6 +203,7 @@ export interface ProcessExitResult {
 type ManagedProcessName = "daemon" | "server";
 type OutputChunk = Buffer | string;
 type BbAppCommand =
+  | ConfigCommand
   | HelpCommand
   | HostDaemonCommand
   | InvalidCommand
@@ -197,6 +244,21 @@ interface ArtifactPath {
 
 interface CreateCliEnvArgs {
   context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+}
+
+interface CreateSharedEnvArgs {
+  context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+}
+
+interface CreateServerEnvArgs {
+  context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+}
+
+interface CreateServerBaseEnvArgs {
+  config: ManagedConfig;
   env: NodeJS.ProcessEnv;
 }
 
@@ -241,9 +303,51 @@ interface WriteManagedConfigArgs {
   dataDir: string;
 }
 
+interface WriteManagedConfigFileArgs {
+  config: ManagedConfig;
+  dataDir: string;
+}
+
 interface ResolveServerUrlArgs {
   config: ManagedConfig;
   defaultServerUrl: string;
+  env: NodeJS.ProcessEnv;
+  optionServerUrl?: string;
+}
+
+interface ApplyManagedConfigEnvArgs {
+  config: ManagedConfig;
+  env: NodeJS.ProcessEnv;
+}
+
+interface ResolveBbAppRuntimeStateArgs {
+  entrypointUrl: string;
+  env: NodeJS.ProcessEnv;
+  homeDir: string;
+  options: LauncherCliOptions;
+  serverUrlMode: "local" | "managed";
+}
+
+interface RunConfigCommandArgs {
+  args: string[];
+  dataDir: string;
+  serverUrl: string;
+}
+
+interface RefreshRunningServerConfigArgs {
+  required: boolean;
+  serverUrl: string;
+}
+
+interface RunHostDaemonOnlyArgs {
+  args: string[];
+  context: BbAppStartContext;
+  env: NodeJS.ProcessEnv;
+}
+
+interface RunBundledCliCommandArgs {
+  args: string[];
+  context: BbAppStartContext;
   env: NodeJS.ProcessEnv;
 }
 
@@ -295,6 +399,18 @@ function formatReadyOutputRow(label: string, value: string): string {
   return `${dim(label.padEnd("daemon".length))} ${value}`;
 }
 
+function isManagedEnvKey(value: string): value is ManagedEnvKey {
+  return MANAGED_ENV_KEY_VALUES.has(value);
+}
+
+function isSecretManagedEnvKey(value: ManagedEnvKey): boolean {
+  return SECRET_MANAGED_ENV_KEY_VALUES.has(value);
+}
+
+function supportedConfigKeysText(): string {
+  return ["BB_SERVER_URL", ...MANAGED_ENV_KEYS].join(", ");
+}
+
 function createDefaultLauncherOptions(): LauncherCliOptions {
   return { help: false };
 }
@@ -341,6 +457,7 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
       "enroll-key": { type: "string" },
       "host-daemon-port": { type: "string" },
       "host-id": { type: "string" },
+      "host-type": { type: "string" },
       "join-code": { type: "string" },
       "server-port": { type: "string" },
       "server-url": { type: "string" },
@@ -355,6 +472,7 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
   const enrollKey = readStringOption(parsed.values["enroll-key"]);
   const hostDaemonPort = readStringOption(parsed.values["host-daemon-port"]);
   const hostId = readStringOption(parsed.values["host-id"]);
+  const hostType = readStringOption(parsed.values["host-type"]);
   const joinCode = readStringOption(parsed.values["join-code"]);
   const serverPort = readStringOption(parsed.values["server-port"]);
   const serverUrl = chooseServerUrlOption(
@@ -372,6 +490,9 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
   }
   if (hostId !== undefined) {
     options.hostId = hostId;
+  }
+  if (hostType !== undefined) {
+    options.hostType = hostType;
   }
   if (joinCode !== undefined) {
     options.joinCode = joinCode;
@@ -446,6 +567,9 @@ function createEnvFromOptions(
   if (args.options.hostId !== undefined) {
     env.BB_HOST_ID = args.options.hostId;
   }
+  if (args.options.hostType !== undefined) {
+    env.BB_HOST_TYPE = args.options.hostType;
+  }
   if (args.options.joinCode !== undefined) {
     env.BB_HOST_ENROLL_KEY = args.options.joinCode;
   }
@@ -457,10 +581,29 @@ function createEnvFromOptions(
 
 function resolveServerUrl(args: ResolveServerUrlArgs): string {
   return (
-    trimToUndefined(args.env.BB_SERVER_URL) ??
+    trimToUndefined(args.optionServerUrl) ??
     args.config.serverUrl ??
+    trimToUndefined(args.env.BB_SERVER_URL) ??
     args.defaultServerUrl
   );
+}
+
+function applyManagedConfigEnv(
+  args: ApplyManagedConfigEnvArgs,
+): NodeJS.ProcessEnv {
+  return {
+    ...args.env,
+    ...args.config.env,
+  };
+}
+
+function createServerBaseEnv(args: CreateServerBaseEnvArgs): NodeJS.ProcessEnv {
+  return {
+    ...args.env,
+    ...(args.config.env?.BB_LOG_LEVEL !== undefined
+      ? { BB_LOG_LEVEL: args.config.env.BB_LOG_LEVEL }
+      : {}),
+  };
 }
 
 async function readManagedConfig(
@@ -468,19 +611,19 @@ async function readManagedConfig(
 ): Promise<ManagedConfig> {
   try {
     const rawConfig = await readFile(
-      join(args.dataDir, CONFIG_FILE_NAME),
+      formatBbAppConfigPath(args.dataDir),
       "utf8",
     );
-    return managedConfigSchema.parse(JSON.parse(rawConfig));
+    return bbAppManagedConfigSchema.parse(JSON.parse(rawConfig));
   } catch (error) {
     if (error instanceof SyntaxError) {
       throw new Error(
-        `Invalid bb-app config JSON at ${join(args.dataDir, CONFIG_FILE_NAME)}`,
+        `Invalid bb-app config JSON at ${formatBbAppConfigPath(args.dataDir)}`,
       );
     }
     if (error instanceof z.ZodError) {
       throw new Error(
-        `Invalid bb-app config at ${join(args.dataDir, CONFIG_FILE_NAME)}: ${error.message}`,
+        `Invalid bb-app config at ${formatBbAppConfigPath(args.dataDir)}: ${error.message}`,
       );
     }
     if (error instanceof Error && "code" in error && error.code === "ENOENT") {
@@ -490,18 +633,94 @@ async function readManagedConfig(
   }
 }
 
-async function writeManagedConfig(args: WriteManagedConfigArgs): Promise<void> {
-  await mkdir(args.dataDir, { recursive: true });
-  const existingConfig = await readManagedConfig({ dataDir: args.dataDir });
+function createManagedEnvPatch(
+  key: ManagedEnvKey,
+  value: string,
+): ManagedEnvConfig {
+  const env: ManagedEnvConfig = {};
+  env[key] = value;
+  return env;
+}
+
+function mergeManagedConfig(
+  currentConfig: ManagedConfig,
+  patchConfig: ManagedConfig,
+): ManagedConfig {
   const nextConfig: ManagedConfig = {
-    ...existingConfig,
-    ...args.config,
+    ...currentConfig,
   };
-  await writeFile(
-    join(args.dataDir, CONFIG_FILE_NAME),
-    `${JSON.stringify(nextConfig, null, 2)}\n`,
-    { encoding: "utf8", mode: 0o600 },
+
+  if (patchConfig.serverUrl !== undefined) {
+    nextConfig.serverUrl = patchConfig.serverUrl;
+  }
+
+  if (patchConfig.env !== undefined) {
+    nextConfig.env = {
+      ...currentConfig.env,
+      ...patchConfig.env,
+    };
+  }
+
+  return nextConfig;
+}
+
+function pruneManagedConfig(config: ManagedConfig): ManagedConfig {
+  const nextConfig: ManagedConfig = {};
+  if (config.serverUrl !== undefined) {
+    nextConfig.serverUrl = config.serverUrl;
+  }
+  if (config.env !== undefined && Object.keys(config.env).length > 0) {
+    nextConfig.env = config.env;
+  }
+  return nextConfig;
+}
+
+async function writeManagedConfigFile(
+  args: WriteManagedConfigFileArgs,
+): Promise<void> {
+  validateManagedConfigForWrite(args.config);
+  await mkdir(args.dataDir, { recursive: true });
+  const nextConfig = pruneManagedConfig(args.config);
+  const configPath = formatBbAppConfigPath(args.dataDir);
+  const tempPath = join(
+    args.dataDir,
+    `.config.json.${process.pid}.${randomUUID()}.tmp`,
   );
+
+  try {
+    await writeFile(tempPath, `${JSON.stringify(nextConfig, null, 2)}\n`, {
+      encoding: "utf8",
+      mode: 0o600,
+    });
+    await rename(tempPath, configPath);
+  } catch (error) {
+    await unlink(tempPath).catch(() => undefined);
+    throw error;
+  }
+}
+
+function validateManagedConfigForWrite(config: ManagedConfig): void {
+  const env = config.env;
+  if (env === undefined) {
+    return;
+  }
+  if (env.BB_APP_URL !== undefined) {
+    validateOptionalUrl("BB_APP_URL", env.BB_APP_URL);
+  }
+  if (env.BB_INFERENCE_MODEL !== undefined) {
+    validateInferenceModel(env.BB_INFERENCE_MODEL);
+  }
+  if (env.BB_LOG_LEVEL !== undefined) {
+    validateLogLevel(env.BB_LOG_LEVEL);
+  }
+}
+
+async function writeManagedConfig(args: WriteManagedConfigArgs): Promise<void> {
+  const existingConfig = await readManagedConfig({ dataDir: args.dataDir });
+  await writeManagedConfigFile({
+    config: mergeManagedConfig(existingConfig, args.config),
+    dataDir: args.dataDir,
+  });
 }
 
 export function resolveBbAppStartContext(
@@ -524,7 +743,7 @@ export function resolveBbAppStartContext(
 
   return {
     appDistDir: resolve(packageRoot, "app", "dist"),
-    configFile: join(dataDir, CONFIG_FILE_NAME),
+    configFile: formatBbAppConfigPath(dataDir),
     daemonBundleDir,
     daemonEntry: resolve(daemonBundleDir, "daemon-bundle.mjs"),
     daemonLockDir: `${join(dataDir, "daemon.lock")}.lock`,
@@ -542,42 +761,72 @@ export function resolveBbAppStartContext(
   };
 }
 
-export async function resolveBbAppRuntimeContext(
-  args: ResolveBbAppRuntimeContextArgs,
-): Promise<BbAppStartContext> {
+export async function resolveBbAppRuntimeState(
+  args: ResolveBbAppRuntimeStateArgs,
+): Promise<BbAppRuntimeState> {
   const initialEnv = createEnvFromOptions({
     env: args.env,
     options: args.options,
   });
-  if (args.serverUrlMode === "local") {
-    const localEnv = { ...initialEnv };
-    delete localEnv.BB_SERVER_URL;
-    return resolveBbAppStartContext({
-      entrypointUrl: args.entrypointUrl,
-      env: localEnv,
-      homeDir: args.homeDir,
-    });
-  }
-
   const initialContext = resolveBbAppStartContext({
     entrypointUrl: args.entrypointUrl,
     env: initialEnv,
     homeDir: args.homeDir,
   });
   const config = await readManagedConfig({ dataDir: initialContext.dataDir });
+  const managedEnv = applyManagedConfigEnv({
+    config,
+    env: initialEnv,
+  });
+
+  if (args.serverUrlMode === "local") {
+    const localEnv = { ...managedEnv };
+    const localServerEnv = createServerBaseEnv({
+      config,
+      env: initialEnv,
+    });
+    delete localEnv.BB_SERVER_URL;
+    delete localServerEnv.BB_SERVER_URL;
+    return {
+      config,
+      context: resolveBbAppStartContext({
+        entrypointUrl: args.entrypointUrl,
+        env: localEnv,
+        homeDir: args.homeDir,
+      }),
+      env: localEnv,
+      serverEnv: localServerEnv,
+    };
+  }
+
   const finalEnv = {
-    ...initialEnv,
+    ...managedEnv,
     BB_SERVER_URL: resolveServerUrl({
       config,
       defaultServerUrl: initialContext.serverUrl,
+      env: managedEnv,
+      optionServerUrl: args.options.serverUrl,
+    }),
+  };
+  return {
+    config,
+    context: resolveBbAppStartContext({
+      entrypointUrl: args.entrypointUrl,
+      env: finalEnv,
+      homeDir: args.homeDir,
+    }),
+    env: finalEnv,
+    serverEnv: createServerBaseEnv({
+      config,
       env: initialEnv,
     }),
   };
-  return resolveBbAppStartContext({
-    entrypointUrl: args.entrypointUrl,
-    env: finalEnv,
-    homeDir: args.homeDir,
-  });
+}
+
+export async function resolveBbAppRuntimeContext(
+  args: ResolveBbAppRuntimeContextArgs,
+): Promise<BbAppStartContext> {
+  return (await resolveBbAppRuntimeState(args)).context;
 }
 
 export function createHostJoinRequestBody(
@@ -619,6 +868,13 @@ export function resolveBbAppCommand(args: string[]): BbAppCommand {
     };
   }
 
+  if (args[0] === CONFIG_COMMAND) {
+    return {
+      args: args.slice(1),
+      kind: "config",
+    };
+  }
+
   if (args[0] === "help" || args[0] === "--help" || args[0] === "-h") {
     return { kind: "help" };
   }
@@ -627,6 +883,196 @@ export function resolveBbAppCommand(args: string[]): BbAppCommand {
     command: args[0],
     kind: "invalid",
   };
+}
+
+function printConfigHelp(dataDir: string): void {
+  process.stdout.write(`bb-app config
+
+Usage:
+  bb-app config
+  bb-app config list
+  bb-app config refresh
+  bb-app config <key> <value>
+  bb-app config unset <key>
+
+Supported keys:
+  ${supportedConfigKeysText()}
+
+Config file:
+  ${formatBbAppConfigPath(dataDir)}
+`);
+}
+
+function resolveManagedConfigKey(rawKey: string): ManagedConfigKey {
+  const key = rawKey.trim();
+  if (key === "BB_SERVER_URL" || key === "serverUrl") {
+    return key;
+  }
+  if (isManagedEnvKey(key)) {
+    return key;
+  }
+  throw new Error(
+    `Unsupported bb-app config key "${rawKey}". Supported keys: ${supportedConfigKeysText()}`,
+  );
+}
+
+function createManagedConfigPatch(
+  key: ManagedConfigKey,
+  value: string,
+): ManagedConfig {
+  if (key === "BB_SERVER_URL" || key === "serverUrl") {
+    return { serverUrl: value };
+  }
+  return { env: createManagedEnvPatch(key, value) };
+}
+
+function unsetManagedConfigKey(
+  config: ManagedConfig,
+  key: ManagedConfigKey,
+): ManagedConfig {
+  const nextConfig: ManagedConfig = {
+    ...config,
+  };
+  if (key === "BB_SERVER_URL" || key === "serverUrl") {
+    delete nextConfig.serverUrl;
+    return pruneManagedConfig(nextConfig);
+  }
+  const nextEnv: ManagedEnvConfig = {
+    ...config.env,
+  };
+  delete nextEnv[key];
+  nextConfig.env = nextEnv;
+  return pruneManagedConfig(nextConfig);
+}
+
+function formatManagedEnvValue(key: ManagedEnvKey, value: string): string {
+  if (isSecretManagedEnvKey(key)) {
+    return "<set>";
+  }
+  return value;
+}
+
+function formatManagedConfig(config: ManagedConfig): string {
+  const lines: string[] = [];
+  if (config.serverUrl !== undefined) {
+    lines.push(`BB_SERVER_URL=${config.serverUrl}`);
+  }
+  for (const key of MANAGED_ENV_KEYS) {
+    const value = config.env?.[key];
+    if (value !== undefined) {
+      lines.push(`${key}=${formatManagedEnvValue(key, value)}`);
+    }
+  }
+  return lines.length > 0 ? `${lines.join("\n")}\n` : "No bb-app config set.\n";
+}
+
+async function refreshRunningServerConfig(
+  args: RefreshRunningServerConfigArgs,
+): Promise<boolean> {
+  const reloadUrl = new URL("/api/v1/system/config/reload", args.serverUrl);
+  let response: Response;
+  try {
+    response = await fetch(reloadUrl, { method: "POST" });
+  } catch {
+    if (args.required) {
+      throw new Error(`Could not reach bb server at ${args.serverUrl}`);
+    }
+    return false;
+  }
+
+  if (response.ok) {
+    return true;
+  }
+
+  let message = `bb server rejected config reload with HTTP ${response.status}`;
+  try {
+    const parsed = apiErrorResponseSchema.safeParse(await response.json());
+    if (parsed.success) {
+      message = parsed.data.message;
+    }
+  } catch {
+    // Keep the generic HTTP status message.
+  }
+  throw new Error(message);
+}
+
+async function refreshRunningServerConfigAfterWrite(
+  serverUrl: string,
+): Promise<void> {
+  const refreshed = await refreshRunningServerConfig({
+    required: false,
+    serverUrl,
+  });
+  if (refreshed) {
+    process.stdout.write("Reloaded running bb server config.\n");
+    return;
+  }
+  process.stdout.write(
+    `No running bb server found at ${serverUrl}; config will apply on next start.\n`,
+  );
+}
+
+async function runConfigCommand(args: RunConfigCommandArgs): Promise<void> {
+  const commandArgs = args.args;
+  if (
+    commandArgs.length === 0 ||
+    (commandArgs.length === 1 && commandArgs[0] === CONFIG_LIST_COMMAND)
+  ) {
+    process.stdout.write(
+      formatManagedConfig(await readManagedConfig({ dataDir: args.dataDir })),
+    );
+    return;
+  }
+  if (
+    commandArgs.length === 1 &&
+    (commandArgs[0] === "help" ||
+      commandArgs[0] === "--help" ||
+      commandArgs[0] === "-h")
+  ) {
+    printConfigHelp(args.dataDir);
+    return;
+  }
+  if (commandArgs.length === 1 && commandArgs[0] === CONFIG_REFRESH_COMMAND) {
+    await refreshRunningServerConfig({
+      required: true,
+      serverUrl: args.serverUrl,
+    });
+    process.stdout.write("Reloaded running bb server config.\n");
+    return;
+  }
+  if (commandArgs[0] === CONFIG_UNSET_COMMAND) {
+    if (commandArgs.length !== 2) {
+      throw new Error("Usage: bb-app config unset <key>");
+    }
+    const key = resolveManagedConfigKey(commandArgs[1]);
+    const currentConfig = await readManagedConfig({ dataDir: args.dataDir });
+    await writeManagedConfigFile({
+      config: unsetManagedConfigKey(currentConfig, key),
+      dataDir: args.dataDir,
+    });
+    process.stdout.write(
+      `Unset ${key} in ${formatBbAppConfigPath(args.dataDir)}\n`,
+    );
+    await refreshRunningServerConfigAfterWrite(args.serverUrl);
+    return;
+  }
+  if (commandArgs.length !== 2) {
+    throw new Error("Usage: bb-app config <key> <value>");
+  }
+
+  const value = commandArgs[1].trim();
+  if (value.length === 0) {
+    throw new Error("Config value must not be empty. Use unset to remove it.");
+  }
+  const key = resolveManagedConfigKey(commandArgs[0]);
+  await writeManagedConfig({
+    config: createManagedConfigPatch(key, value),
+    dataDir: args.dataDir,
+  });
+  process.stdout.write(
+    `Set ${key} in ${formatBbAppConfigPath(args.dataDir)}\n`,
+  );
+  await refreshRunningServerConfigAfterWrite(args.serverUrl);
 }
 
 function requiredArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
@@ -849,12 +1295,22 @@ async function terminateProcessIfRunning(
   await waitForProcessExit(childProcess);
 }
 
-function createSharedEnv(context: BbAppStartContext): NodeJS.ProcessEnv {
+function createSharedEnv(args: CreateSharedEnvArgs): NodeJS.ProcessEnv {
   return {
-    ...process.env,
-    BB_DATA_DIR: context.dataDir,
-    BB_HOST_DAEMON_PORT: String(context.daemonPort),
-    BB_SERVER_PORT: String(context.serverPort),
+    ...args.env,
+    BB_DATA_DIR: args.context.dataDir,
+    BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
+    BB_SERVER_PORT: String(args.context.serverPort),
+    NODE_ENV: "production",
+  };
+}
+
+function createServerEnv(args: CreateServerEnvArgs): NodeJS.ProcessEnv {
+  return {
+    ...args.env,
+    BB_DATA_DIR: args.context.dataDir,
+    BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
+    BB_SERVER_PORT: String(args.context.serverPort),
     NODE_ENV: "production",
   };
 }
@@ -970,14 +1426,17 @@ async function createHostDaemonJoinEnv(
 }
 
 async function runBundledCliCommand(
-  context: BbAppStartContext,
-  args: string[],
+  args: RunBundledCliCommandArgs,
 ): Promise<number> {
-  const childProcess = spawn(join(context.daemonBundleDir, "bb"), args, {
-    cwd: process.cwd(),
-    env: createCliEnv({ context, env: process.env }),
-    stdio: "inherit",
-  });
+  const childProcess = spawn(
+    join(args.context.daemonBundleDir, "bb"),
+    args.args,
+    {
+      cwd: process.cwd(),
+      env: createCliEnv({ context: args.context, env: args.env }),
+      stdio: "inherit",
+    },
+  );
 
   return toExitCode(await waitForProcessExit(childProcess));
 }
@@ -985,15 +1444,19 @@ async function runBundledCliCommand(
 export async function runBbCli(
   cliArgs: string[] = process.argv.slice(2),
 ): Promise<void> {
-  const context = await resolveBbAppRuntimeContext({
+  const runtime = await resolveBbAppRuntimeState({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
     options: createDefaultLauncherOptions(),
     serverUrlMode: "managed",
   });
-  assertBbAppArtifacts(context);
-  process.exitCode = await runBundledCliCommand(context, cliArgs);
+  assertBbAppArtifacts(runtime.context);
+  process.exitCode = await runBundledCliCommand({
+    args: cliArgs,
+    context: runtime.context,
+    env: runtime.env,
+  });
 }
 
 export async function runBbServer(
@@ -1012,60 +1475,56 @@ Usage:
     throw new Error("bb-server does not accept arguments.");
   }
 
-  const context = await resolveBbAppRuntimeContext({
+  const runtime = await resolveBbAppRuntimeState({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
     options: parsedArgs.options,
     serverUrlMode: "local",
   });
-  assertBbAppArtifacts(context);
+  assertBbAppArtifacts(runtime.context);
 
-  const childProcess = spawn(process.execPath, [context.serverEntry], {
+  const childProcess = spawn(process.execPath, [runtime.context.serverEntry], {
     cwd: process.cwd(),
-    env: createSharedEnv(context),
+    env: createServerEnv({
+      context: runtime.context,
+      env: runtime.serverEnv,
+    }),
     stdio: "inherit",
   });
   process.exitCode = toExitCode(await waitForProcessExit(childProcess));
 }
 
-async function runHostDaemonOnly(
-  context: BbAppStartContext,
-  args: string[],
-  options: LauncherCliOptions,
-): Promise<void> {
-  const command = resolveHostDaemonCommand(args);
-  const baseDaemonEnv = createEnvFromOptions({
-    env: process.env,
-    options,
-  });
+async function runHostDaemonOnly(args: RunHostDaemonOnlyArgs): Promise<void> {
+  const command = resolveHostDaemonCommand(args.args);
+  const baseDaemonEnv = args.env;
   const serverUrl = resolveHostDaemonServerUrl({
-    context,
+    context: args.context,
     env: baseDaemonEnv,
   });
   const joinEnv =
     command.kind === "join"
       ? await createHostDaemonJoinEnv({
-          context,
+          context: args.context,
           env: baseDaemonEnv,
           serverUrl,
         })
       : baseDaemonEnv;
   const daemonEnv = createHostDaemonOnlyEnv({
-    context,
+    context: args.context,
     env: joinEnv,
     serverUrl,
   });
   const enrollment = resolveEnrollmentRequirements({
-    context,
+    context: args.context,
     env: daemonEnv,
   });
 
   process.stdout.write(`\n  ${bold("bb host-daemon")}\n\n`);
 
-  if (existsSync(context.daemonLockDir)) {
+  if (existsSync(args.context.daemonLockDir)) {
     log(yellow("!"), "Daemon lock is held - another instance may be running");
-    log(" ", dim(`lock: ${context.daemonLockDir}`));
+    log(" ", dim(`lock: ${args.context.daemonLockDir}`));
     log(
       " ",
       dim("Remove it manually if the previous process exited uncleanly."),
@@ -1092,7 +1551,7 @@ async function runHostDaemonOnly(
 
   const outputBuffer = createOutputBuffer();
   const daemonProcess = spawnManagedProcess({
-    args: [context.daemonEntry],
+    args: [args.context.daemonEntry],
     command: process.execPath,
     env: daemonEnv,
     outputBuffer,
@@ -1121,12 +1580,12 @@ async function runHostDaemonOnly(
     try {
       await waitForHealth({
         childProcess: daemonProcess,
-        url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${context.daemonPort}/health`,
+        url: `http://${DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST}:${args.context.daemonPort}/health`,
       });
     } catch {
       endStep(red("✗"), "Host daemon failed to start");
-      log(" ", dim(`lock: ${context.daemonLockDir}`));
-      log(" ", dim(`logs: ${context.logDir}/`));
+      log(" ", dim(`lock: ${args.context.daemonLockDir}`));
+      log(" ", dim(`logs: ${args.context.logDir}/`));
       outputBuffer.flush();
       process.exitCode = 1;
       await shutdown("SIGTERM");
@@ -1139,13 +1598,16 @@ async function runHostDaemonOnly(
     log(green("●"), bold("bb host-daemon is ready"));
     process.stdout.write("\n");
     log(" ", formatReadyOutputRow("server", cyan(serverUrl)));
-    log(" ", formatReadyOutputRow("daemon", String(context.daemonPort)));
-    log(" ", formatReadyOutputRow("data", context.dataDir));
-    log(" ", formatReadyOutputRow("logs", `${context.logDir}/`));
-    log(" ", formatReadyOutputRow("lock", context.daemonLockFile));
+    log(" ", formatReadyOutputRow("daemon", String(args.context.daemonPort)));
+    log(" ", formatReadyOutputRow("data", args.context.dataDir));
+    log(" ", formatReadyOutputRow("logs", `${args.context.logDir}/`));
+    log(" ", formatReadyOutputRow("lock", args.context.daemonLockFile));
     log(
       " ",
-      formatReadyOutputRow("auth", join(context.dataDir, HOST_AUTH_FILE_NAME)),
+      formatReadyOutputRow(
+        "auth",
+        join(args.context.dataDir, HOST_AUTH_FILE_NAME),
+      ),
     );
     process.stdout.write("\n");
     log(" ", dim("Press Ctrl+C to stop"));
@@ -1165,21 +1627,25 @@ export async function runBbHostDaemon(
     process.stdout.write(`bb-host-daemon
 
 Usage:
-  bb-host-daemon [--server-url <url>]
+  bb-host-daemon [--server-url <url>] [--host-id <id>] [--host-type <type>] [--enroll-key <key>]
   bb-host-daemon join --server-url <url>
 `);
     return;
   }
 
-  const context = await resolveBbAppRuntimeContext({
+  const runtime = await resolveBbAppRuntimeState({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
     options: parsedArgs.options,
     serverUrlMode: "managed",
   });
-  assertBbAppArtifacts(context);
-  await runHostDaemonOnly(context, parsedArgs.positionals, parsedArgs.options);
+  assertBbAppArtifacts(runtime.context);
+  await runHostDaemonOnly({
+    args: parsedArgs.positionals,
+    context: runtime.context,
+    env: runtime.env,
+  });
 }
 
 function installTerminationSignalForwarding(
@@ -1215,7 +1681,9 @@ function printBbAppHelp(): void {
 Usage:
   bb-app [--data-dir <path>] [--server-port <port>] [--host-daemon-port <port>]
   bb-app start
-  bb-app host-daemon [--server-url <url>]
+  bb-app config <key> <value>
+  bb-app config refresh
+  bb-app host-daemon [--server-url <url>] [--host-id <id>] [--host-type <type>] [--enroll-key <key>]
   bb-app host-daemon join --server-url <url>
 
 CLI:
@@ -1245,28 +1713,50 @@ export async function runBbApp(
     return;
   }
 
-  const context = await resolveBbAppRuntimeContext({
+  const runtime = await resolveBbAppRuntimeState({
     entrypointUrl: import.meta.url,
     env: process.env,
     homeDir: homedir(),
     options: parsedArgs.options,
     serverUrlMode: command.kind === "host-daemon" ? "managed" : "local",
   });
-  assertBbAppArtifacts(context);
 
-  if (command.kind === "host-daemon") {
-    await runHostDaemonOnly(context, command.args, parsedArgs.options);
+  if (command.kind === "config") {
+    await runConfigCommand({
+      args: command.args,
+      dataDir: runtime.context.dataDir,
+      serverUrl: runtime.context.serverUrl,
+    });
     return;
   }
 
+  assertBbAppArtifacts(runtime.context);
+
+  if (command.kind === "host-daemon") {
+    await runHostDaemonOnly({
+      args: command.args,
+      context: runtime.context,
+      env: runtime.env,
+    });
+    return;
+  }
+
+  const context = runtime.context;
   const outputBuffer = createOutputBuffer();
-  const sharedEnv = createSharedEnv(context);
+  const serverEnv = createServerEnv({
+    context,
+    env: runtime.serverEnv,
+  });
+  const sharedEnv = createSharedEnv({
+    context,
+    env: runtime.env,
+  });
 
   process.stdout.write(`\n  ${bold("bb")}\n\n`);
 
-  if (existsSync(context.daemonLockDir)) {
+  if (existsSync(runtime.context.daemonLockDir)) {
     log(yellow("!"), "Daemon lock is held - another instance may be running");
-    log(" ", dim(`lock: ${context.daemonLockDir}`));
+    log(" ", dim(`lock: ${runtime.context.daemonLockDir}`));
     log(
       " ",
       dim("Remove it manually if the previous process exited uncleanly."),
@@ -1277,9 +1767,9 @@ export async function runBbApp(
   beginStep("Starting server");
 
   const serverProcess = spawnManagedProcess({
-    args: [context.serverEntry],
+    args: [runtime.context.serverEntry],
     command: process.execPath,
-    env: sharedEnv,
+    env: serverEnv,
     outputBuffer,
   });
   const serverExit = waitForNamedProcessExit({

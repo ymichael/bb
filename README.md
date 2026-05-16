@@ -8,6 +8,8 @@
 
 # bb
 
+[![npm version](https://img.shields.io/npm/v/bb-app.svg)](https://www.npmjs.com/package/bb-app)
+
 A programmable workspace for coding agents.
 
 bb is a tool that your agents can use too. Delegate your entire workflow
@@ -21,79 +23,44 @@ execution, and keep humans and agents working in the same loop.
 
 > [!NOTE]
 > bb is in active development. Core architecture is stable, but workflows
-> and surfaces are still evolving.
+> and surfaces are still evolving. The npm package is currently published as
+> an alpha while the install and first-run flow settles.
 
-## Quick Start
-
-bb runs from source and orchestrates coding agents you already have installed.
-
-### Prerequisites
-
-- Node.js `22.12.0` or newer (see [`.nvmrc`](./.nvmrc)); Node `20.19.x` also works.
-- pnpm `9.15.0` (the version is pinned in [`package.json`](./package.json)).
-- Git.
-- At least one supported agent provider: [Claude Code](https://docs.anthropic.com/en/docs/claude-code), [Codex](https://developers.openai.com/codex/cli), or [Pi](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent)
-
-If you already use one of these, bb will pick up your existing credentials. If you use all three, you can mix and match per task.
-
-### Supported host environments
-
-- macOS
-- Linux
-- Windows via Ubuntu on WSL2
-
-If you use Windows, run all `bb` commands inside WSL2, install Node.js, pnpm,
-Git, and your provider CLIs inside that WSL2 distro, and use Linux-style paths
-such as `/home/me/repo` or `/mnt/c/Users/me/repo`. Native Windows PowerShell,
-CMD, drive-letter paths, and UNC paths are not supported product paths. Repos
-inside the WSL filesystem are recommended; `/mnt/c/...` is intentionally
-supported so you can keep an existing Windows checkout, but it is slower and
-less reliable for file watching.
-
-### Install and run
+## Use bb
 
 ```bash
-pnpm install
-cp .env.example .env
-# Edit .env before first start. OPENAI_API_KEY is recommended for full local functionality.
-pnpm start
+npx bb-app
 ```
 
-Then open: `http://localhost:38886`
+Then open `http://localhost:38886`. For install requirements, provider setup,
+configuration, and package-focused docs, start with
+[`packages/bb-app`](./packages/bb-app/README.md).
 
-`pnpm start` builds the app, server, host daemon, and CLI before launching the
-server and local host daemon. It stores production-mode state under `~/.bb/`
-by default. Press `Ctrl+C` in the terminal to stop both processes.
+## Repository Overview
 
-The full platform policy and checkout/path expectations live in
-[`docs/platform-support.md`](./docs/platform-support.md).
+This monorepo contains the packaged app plus the runtime services it bundles:
 
-For using bb across devices and machines, see
-[Using bb on multiple devices](./docs/multiple-devices.md) and
-[Adding another host](./docs/additional-hosts.md).
+| Package or app                                                     | Role                                                                                  |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------- |
+| [`packages/bb-app`](./packages/bb-app)                             | Published npm package and `npx bb-app` launcher.                                      |
+| [`apps/app`](./apps/app)                                           | Web UI for inspecting projects, threads, environments, and running work.              |
+| [`apps/server`](./apps/server)                                     | HTTP API, WebSocket notifications, state management, and server-owned product policy. |
+| [`apps/host-daemon`](./apps/host-daemon)                           | Host-local runtime that provisions workspaces and runs provider processes.            |
+| [`apps/cli`](./apps/cli)                                           | Scriptable `bb` CLI for users and agents.                                             |
+| [`packages/server-contract`](./packages/server-contract)           | HTTP and WebSocket contract between clients and the server.                           |
+| [`packages/host-daemon-contract`](./packages/host-daemon-contract) | Command/event contract between the server and host daemons.                           |
 
-### Provider credentials
+## Development
 
-bb uses whichever providers you have configured. If you need to set one up:
-
-| Provider      | Setup                                                                                                                                                  |
-| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `codex`       | Install the [Codex CLI](https://developers.openai.com/codex/cli). Then run `codex login` or configure credentials per the Codex docs.                  |
-| `claude-code` | Install [Claude Code](https://docs.anthropic.com/en/docs/claude-code) and authenticate per its docs.                                                   |
-| `pi`          | See the [Pi coding agent docs](https://github.com/badlogic/pi-mono/tree/main/packages/coding-agent). Run `pi` and then `/login` for interactive setup. |
-
-Server configuration (ports, data directory, inference model, etc.) is defined in [`packages/config/src/`](./packages/config/src/) with validated defaults for dev and production. Agent provider CLI credentials are still managed by each provider, but bb also uses API keys for server-side helpers.
-
-<details>
-<summary>Development setup</summary>
-
-If you want to work on bb itself, use the development loop:
+Use the development loop when working on bb itself:
 
 ```bash
 pnpm dev
 ```
 
-That starts the Vite app on `http://localhost:5173` and proxies API and WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by default so it can run alongside `pnpm start`.
+That starts the Vite app on `http://localhost:5173` and proxies API and
+WebSocket traffic to a separate dev server on `:3334`, using `~/.bb-dev` by
+default so it can run alongside the packaged `npx bb-app` instance.
 
 Development behavior is intentionally split:
 
@@ -111,13 +78,25 @@ pnpm dev:restart-host-daemon
 
 These rebuild first, then restart only the targeted stateful services.
 
+To test the release-style package launcher from a source checkout:
+
+```bash
+pnpm start
+```
+
+That builds the local `bb-app` package artifacts and runs
+`packages/bb-app/dist/bb-app.js`, matching the published `npx bb-app` path
+without downloading from npm.
+
 To test an additional host against that dev server, use:
 
 ```bash
-BB_HOST_ENROLL_KEY=<join-code> pnpm dev:host-daemon
+pnpm dev:host-daemon -- --auto-join
 ```
 
-That runs a second host daemon against the dev server and stores its state under `~/.bb-dev-extra-host`. Provide the join code from the server-side host join flow on first run; after enrollment, the daemon persists its auth state locally.
+That runs a second host daemon against the dev server and stores its state
+under `~/.bb-dev-extra-host`. On first run, it requests local enrollment from
+the dev server; after enrollment, the daemon persists its auth state locally.
 
 ```bash
 pnpm bb --help            # built CLI, targets the default/prod instance
@@ -131,22 +110,16 @@ pnpm reset:all            # clear both production and dev states
 
 These reset commands prompt for confirmation before deleting anything.
 
-</details>
-
-## How It Works
+## System Overview
 
 ### The runtime pieces
 
-| Component       | Role                                                                                                                                                                                                                                                                                                                      |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Server**      | Central hub. Stores all state in a SQLite database, exposes an HTTP API, and pushes change notifications over WebSocket. Stateless itself — the DB is the source of truth. Routes work to hosts by queuing commands.                                                                                                      |
-| **Host daemon** | Runs on each machine (your laptop or a remote server). Connects to the server, picks up commands, provisions workspaces, runs agent provider processes, and streams events back. Exposes a local HTTP API for the app and CLI to do machine-local things (open editor, pick folders, check daemon status). |
-| **App**         | Web UI for inspecting projects and threads, following progress, and steering work.                                                                                                                                                                                                                                        |
-| **CLI** (`bb`)  | First-class interface for both users and agents. Same capabilities as the app, scriptable.                                                                                                                                                                                                                                |
-
-### WebSocket is notification-only
-
-WebSocket connections never carry data payloads. They send lightweight change hints (e.g. "thread X changed") so clients know to refetch via HTTP. This keeps the protocol simple and means WS disconnects don't lose data — the DB is always current.
+| Component       | Role                                                                                                                                                                                                                                                                                                    |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Server**      | Central hub. Stores all state in a SQLite database, exposes an HTTP API, and pushes change notifications over WebSocket. Stateless itself — the DB is the source of truth. Routes work to hosts by queuing commands.                                                                                    |
+| **Host daemon** | Runs on each host (your laptop or a remote server). Connects to the server, picks up commands, provisions workspaces, runs agent provider processes, and streams events back. Exposes a local HTTP API for the app and CLI to do machine-local things (open editor, pick folders, check daemon status). |
+| **App**         | Web UI for inspecting projects and threads, following progress, and steering work.                                                                                                                                                                                                                      |
+| **CLI** (`bb`)  | First-class interface for both users and agents. Same capabilities as the app, scriptable.                                                                                                                                                                                                              |
 
 ### Data model
 
@@ -172,50 +145,11 @@ Two contract packages define the boundaries between components:
 
 Implementation packages never import across these boundaries. The server doesn't know how workspaces are provisioned. The daemon doesn't know about threads or projects beyond what commands tell it.
 
-## Configuration
-
-All configuration is via environment variables, validated at startup with sensible defaults. Override them in `.env` files at the repo root (gitignored) and they will be loaded automatically by `pnpm dev` and `pnpm start`. Start from [`.env.example`](./.env.example) for a local template:
-
-```bash
-cp .env.example .env
-```
-
-The standard [dotenv-cli](https://github.com/entropitor/dotenv-cli) cascade applies: `.env`, `.env.local`, `.env.<environment>`, `.env.<environment>.local` — where environment is `development` for `pnpm dev` and `production` for `pnpm start`. See [`packages/config/src/`](./packages/config/src/) for the full set of variables.
-
-### First-run credentials
-
-`OPENAI_API_KEY` is the main key most users should set for the best default experience. bb's server-side helper model defaults to `BB_INFERENCE_MODEL=openai/gpt-4o-mini`; without an OpenAI key, those helper calls return no result. Core threads can still run when the selected provider CLI is authenticated, such as `codex login` or a logged-in Claude Code install.
-
-| Variable         | When to set             | Used for                                                                                                   |
-| ---------------- | ----------------------- | ---------------------------------------------------------------------------------------------------------- |
-| `OPENAI_API_KEY` | Recommended             | Generated thread titles, branch names, commit messages, and voice transcription.                           |
-| `BB_APP_URL`     | Optional for remote use | Human-facing app URL used for generated links and allowed browser origins. Leave empty for local-only use. |
-
-`BB_DATA_DIR` is the most important one — it's the root directory for all bb-managed state: the SQLite database, logs, host identity, and thread storage. Defaults to `~/.bb/` (or `~/.bb-dev/` when using `pnpm dev`). Pointing two instances at different data directories gives you fully isolated environments — this is how dev and production run side by side, and how tests get clean state.
-
-Use `pnpm reset` or `pnpm reset:dev` to clear a data directory. These only remove bb-managed state, not provider credentials.
-
-If the default ports are already in use, set explicit ports before starting:
-
-```bash
-BB_SERVER_PORT=48886 BB_HOST_DAEMON_PORT=48887 pnpm start
-```
-
-Root commands such as `pnpm start`, `pnpm bb`, `pnpm bb:dev`, and `pnpm reset`
-are thin wrappers around `@bb/scripts`. Those wrappers force `NODE_ENV` to the
-intended mode (`production` or `development`) so ambient shell state does not
-silently retarget bb. If you set a concrete `BB_*` variable such as
-`BB_DATA_DIR`, `BB_SERVER_URL`, or `BB_HOST_DAEMON_PORT`, that explicit value
-still wins over the mode-selected default.
-
-Inside the product itself, `NODE_ENV` is only used to choose defaults. When one
-process needs to target a specific bb instance, it passes explicit `BB_*`
-addressing values instead.
-
 ## Further Reading
 
 - [Vision](docs/VISION.md)
 - [Platform support](docs/platform-support.md)
+- [Configuration](docs/configuration.md)
 - [Using bb on multiple devices](docs/multiple-devices.md)
 - [Adding another host](docs/additional-hosts.md)
 - [Worktrees and setup scripts](docs/worktrees.md)

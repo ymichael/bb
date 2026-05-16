@@ -228,7 +228,7 @@ describe("spawnLoggedProcess", () => {
             expiresAt: Date.now() + 60_000,
             hostId: "host_standalone",
             joinCode: "bbde_standalone",
-            joinCommand: "pnpm start:host-daemon",
+            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {

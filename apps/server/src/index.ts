@@ -10,6 +10,7 @@ import { createApp } from "./server.js";
 import { createHostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "./services/machine-auth.js";
+import { createBbAppManagedConfigReloader } from "./services/system/bb-app-managed-config.js";
 import { startEventLoopStallMonitor } from "./services/system/event-loop-stall-monitor.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
 import { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
@@ -54,6 +55,12 @@ async function main(): Promise<void> {
   if (appUrl !== undefined) {
     runtimeConfig.appUrl = appUrl;
   }
+  const bbAppManagedConfig = await createBbAppManagedConfigReloader({
+    config: runtimeConfig,
+    hub,
+    logger,
+  });
+
   const machineAuth = await createMachineAuthService({
     dataDir: commonConfig.BB_DATA_DIR,
     db,
@@ -63,6 +70,7 @@ async function main(): Promise<void> {
 
   const { app, closeWebSockets, injectWebSocket } = createApp(
     {
+      bbAppManagedConfig,
       config: runtimeConfig,
       db,
       hostLifecycle,

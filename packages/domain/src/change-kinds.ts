@@ -55,7 +55,7 @@ export const HOST_CHANGE_KINDS = [
 ] as const;
 export type HostChangeKind = (typeof HOST_CHANGE_KINDS)[number];
 
-export const SYSTEM_CHANGE_KINDS = [] as const;
+export const SYSTEM_CHANGE_KINDS = ["config-changed"] as const;
 export type SystemChangeKind = (typeof SYSTEM_CHANGE_KINDS)[number];
 
 export const subscribeMessageSchema = z.object({

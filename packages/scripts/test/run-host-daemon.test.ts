@@ -136,7 +136,7 @@ describe("run-host-daemon auto join", () => {
             expiresAt: Date.now() + 60_000,
             hostId: persistedHostId,
             joinCode: "bbde_test_join",
-            joinCommand: "pnpm start:host-daemon",
+            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {
@@ -194,7 +194,7 @@ describe("run-host-daemon auto join", () => {
             expiresAt: Date.now() + 60_000,
             hostId: "host_generated",
             joinCode: "bbde_generated_join",
-            joinCommand: "pnpm start:host-daemon",
+            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {
@@ -249,7 +249,7 @@ describe("run-host-daemon auto join", () => {
             expiresAt: Date.now() + 60_000,
             hostId: "host_remote_generated",
             joinCode: "bbde_remote_join",
-            joinCommand: "pnpm start:host-daemon",
+            joinCommand: "npx bb-app host-daemon",
           }),
           {
             headers: {

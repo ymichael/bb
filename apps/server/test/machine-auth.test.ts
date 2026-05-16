@@ -77,7 +77,7 @@ describe("machine auth service", () => {
     });
 
     expect(joinCommand).toBe(
-      "BB_SERVER_URL='https://server.example.test' BB_HOST_ID='host'\"'\"'quoted' BB_HOST_TYPE='persistent' BB_HOST_ENROLL_KEY='bbde_'\"'\"'quoted' pnpm start:host-daemon",
+      "npx bb-app --server-url 'https://server.example.test' --host-id 'host'\"'\"'quoted' --host-type 'persistent' --enroll-key 'bbde_'\"'\"'quoted' host-daemon",
     );
   });
 

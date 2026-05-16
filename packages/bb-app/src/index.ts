@@ -5,6 +5,7 @@ export {
   parseLauncherArgs,
   resolveBbAppCommand,
   resolveBbAppRuntimeContext,
+  resolveBbAppRuntimeState,
   resolveBbAppStartContext,
   resolveDataDir,
   resolvePort,
@@ -15,6 +16,8 @@ export {
 } from "./launcher.js";
 export type {
   BbAppStartContext,
+  BbAppRuntimeState,
+  ConfigCommand,
   CreateHostJoinRequestBodyArgs,
   HelpCommand,
   HostDaemonCommand,
@@ -25,6 +28,7 @@ export type {
   LauncherCliOptions,
   LocalHostJoinRequestBody,
   ManagedConfig,
+  ManagedEnvConfig,
   ParsedLauncherArgs,
   PersistentHostJoinRequestBody,
   ResolveBbAppRuntimeContextArgs,

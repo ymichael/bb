@@ -381,6 +381,42 @@ async function smokeHelpCommands(tarballPath) {
   });
 }
 
+async function smokeConfigCommand(tarballPath) {
+  const dataDir = join(tempRoot, "config-command-data");
+  await runCommand({
+    args: createNpxArgs(tarballPath, "bb-app", [
+      "--data-dir",
+      dataDir,
+      "config",
+      "OPENAI_API_KEY",
+      "test-openai-key",
+    ]),
+    command: "npx",
+    label: "bb-app config OPENAI_API_KEY",
+  });
+  await runCommand({
+    args: createNpxArgs(tarballPath, "bb-app", [
+      "--data-dir",
+      dataDir,
+      "config",
+      "BB_APP_URL",
+      "https://bb.example.test",
+    ]),
+    command: "npx",
+    label: "bb-app config BB_APP_URL",
+  });
+
+  const configJson = JSON.parse(
+    await readFile(join(dataDir, "config.json"), "utf8"),
+  );
+  if (configJson.env?.OPENAI_API_KEY !== "test-openai-key") {
+    throw new Error("Expected bb-app config to persist OPENAI_API_KEY");
+  }
+  if (configJson.env?.BB_APP_URL !== "https://bb.example.test") {
+    throw new Error("Expected bb-app config to persist BB_APP_URL");
+  }
+}
+
 async function smokeFullStack(tarballPath) {
   const dataDir = join(tempRoot, "full-stack-data");
   const serverPort = await getFreePort();
@@ -501,6 +537,7 @@ try {
   const tarballPath = await packTarball();
   await smokeProviderBridgeBundles(tarballPath);
   await smokeHelpCommands(tarballPath);
+  await smokeConfigCommand(tarballPath);
   await smokeFullStack(tarballPath);
   await smokeDaemonJoin(tarballPath);
   process.stdout.write("bb-app tarball smoke passed\n");

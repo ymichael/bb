@@ -62,6 +62,7 @@ import type {
   ThreadAssignedChildSummaryResponse,
   ThreadComposerBootstrapResponse,
   ThreadQueuedMessageListResponse,
+  SystemConfigReloadResponse,
   SystemConfigResponse,
   SystemExecutionOptionsQuery,
   SystemExecutionOptionsResponse,
@@ -532,6 +533,10 @@ export type PublicApiSchema = {
 
   "/system/config": {
     $get: Endpoint<EmptyInput, SystemConfigResponse>;
+  };
+  "/system/config/reload": {
+    /** Rereads the server's local bb-app config file and applies supported runtime config. */
+    $post: Endpoint<EmptyInput, SystemConfigReloadResponse>;
   };
   "/system/execution-options": {
     /** List provider metadata and models for execution controls in one host lookup flow. */

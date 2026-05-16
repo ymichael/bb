@@ -51,9 +51,10 @@ describe("host join and enroll routes", () => {
       const body = await parseHostJoinResponse(response);
       expect(body.hostId).toMatch(/^host_/u);
       expect(body.joinCode).toMatch(/^bbde_/u);
-      expect(body.joinCommand).toContain("pnpm start:host-daemon");
+      expect(body.joinCommand).toContain("npx bb-app");
+      expect(body.joinCommand).toContain("host-daemon");
       expect(body.joinCommand).toContain(
-        "BB_SERVER_URL='https://bb.example.test'",
+        "--server-url 'https://bb.example.test'",
       );
       expect(body.joinCommand).toContain(body.hostId);
       expect(body.joinCommand).toContain(body.joinCode);
@@ -95,7 +96,7 @@ describe("host join and enroll routes", () => {
       expect(body.hostId).toBe("host_local_auto_join");
       expect(body.joinCode).toMatch(/^bbde_/u);
       expect(body.joinCommand).toContain(
-        "BB_SERVER_URL='http://127.0.0.1:3334'",
+        "--server-url 'http://127.0.0.1:3334'",
       );
       expect(getHost(harness.db, "host_local_auto_join")).toMatchObject({
         id: "host_local_auto_join",
@@ -186,7 +187,7 @@ describe("host join and enroll routes", () => {
       expect(response.status).toBe(201);
       const body = await parseHostJoinResponse(response);
       expect(body.joinCommand).toContain(
-        "BB_SERVER_URL='https://bb.example.test'",
+        "--server-url 'https://bb.example.test'",
       );
       expect(getHost(harness.db, "host_remote_local_join")).toMatchObject({
         id: "host_remote_local_join",

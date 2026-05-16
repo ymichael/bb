@@ -1,5 +1,17 @@
 import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import {
+  createServer,
+  type IncomingMessage,
+  type ServerResponse,
+} from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -10,10 +22,12 @@ import {
   isMainModule,
   parseLauncherArgs,
   resolveBbAppRuntimeContext,
+  resolveBbAppRuntimeState,
   resolveDataDir,
   resolvePort,
   resolveBbAppStartContext,
   resolveBbAppCommand,
+  runBbApp,
 } from "../src/index.js";
 import { waitForProcessExit } from "../src/launcher.js";
 
@@ -21,7 +35,37 @@ interface DelayArgs {
   ms: number;
 }
 
+interface ConfigReloadTestServer {
+  close(): Promise<void>;
+  port: number;
+  reloadCount(): number;
+}
+
+interface InvalidConfigCommandCase {
+  expectedError: RegExp;
+  key: string;
+  value: string;
+}
+
 type DelayResult = "timeout";
+
+const invalidConfigCommandCases: InvalidConfigCommandCase[] = [
+  {
+    expectedError: /BB_INFERENCE_MODEL must use provider\/model format/u,
+    key: "BB_INFERENCE_MODEL",
+    value: "gpt-4o-mini",
+  },
+  {
+    expectedError: /BB_APP_URL must be a valid URL/u,
+    key: "BB_APP_URL",
+    value: "not-a-url",
+  },
+  {
+    expectedError: /BB_LOG_LEVEL must be one of/u,
+    key: "BB_LOG_LEVEL",
+    value: "bogus",
+  },
+];
 
 const packageMetadataSchema = z.object({
   engines: z.object({
@@ -38,6 +82,56 @@ function delay(args: DelayArgs): Promise<DelayResult> {
       resolvePromise("timeout");
     }, args.ms);
   });
+}
+
+async function startConfigReloadTestServer(): Promise<ConfigReloadTestServer> {
+  let reloadRequests = 0;
+  const server = createServer(
+    (request: IncomingMessage, response: ServerResponse) => {
+      if (
+        request.method === "POST" &&
+        request.url === "/api/v1/system/config/reload"
+      ) {
+        reloadRequests += 1;
+        response.writeHead(200, { "content-type": "application/json" });
+        response.end(JSON.stringify({ ok: true }));
+        return;
+      }
+      response.writeHead(404, { "content-type": "application/json" });
+      response.end(JSON.stringify({ code: "not_found", message: "Not found" }));
+    },
+  );
+
+  await new Promise<void>((resolvePromise, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      resolvePromise();
+    });
+  });
+
+  const address = server.address();
+  if (typeof address === "string" || address === null) {
+    throw new Error("Expected test server to listen on a TCP port");
+  }
+  const addressInfo: AddressInfo = address;
+
+  return {
+    async close(): Promise<void> {
+      await new Promise<void>((resolvePromise, reject) => {
+        server.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolvePromise();
+        });
+      });
+    },
+    port: addressInfo.port,
+    reloadCount(): number {
+      return reloadRequests;
+    },
+  };
 }
 
 function readPackageMetadata(): PackageMetadata {
@@ -149,6 +243,15 @@ describe("bb-app launcher", () => {
     });
   });
 
+  it("resolves config commands", () => {
+    expect(
+      resolveBbAppCommand(["config", "OPENAI_API_KEY", "test-key"]),
+    ).toEqual({
+      args: ["OPENAI_API_KEY", "test-key"],
+      kind: "config",
+    });
+  });
+
   it("prints help for help requests", () => {
     expect(resolveBbAppCommand(["--help"])).toEqual({ kind: "help" });
     expect(resolveBbAppCommand(["help"])).toEqual({ kind: "help" });
@@ -165,12 +268,15 @@ describe("bb-app launcher", () => {
         "https://bb.example.test",
         "--host-daemon-port",
         "48887",
+        "--host-type",
+        "persistent",
       ]),
     ).toEqual({
       options: {
         dataDir: "~/bb-data",
         help: false,
         hostDaemonPort: "48887",
+        hostType: "persistent",
         serverUrl: "https://bb.example.test",
       },
       positionals: ["host-daemon", "join"],
@@ -196,6 +302,29 @@ describe("bb-app launcher", () => {
     expect(context.serverUrl).toBe("https://bb.example.test");
   });
 
+  it("uses managed config server URL over ambient env", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-server-config-"));
+    writeFileSync(
+      join(dataDir, "config.json"),
+      JSON.stringify({ serverUrl: "https://stored.example.test" }),
+      "utf8",
+    );
+
+    const runtime = await resolveBbAppRuntimeState({
+      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
+      env: {
+        BB_DATA_DIR: dataDir,
+        BB_SERVER_URL: "https://ambient.example.test",
+      },
+      homeDir: "/home/tester",
+      options: { help: false },
+      serverUrlMode: "managed",
+    });
+
+    expect(runtime.context.serverUrl).toBe("https://stored.example.test");
+    expect(runtime.env.BB_SERVER_URL).toBe("https://stored.example.test");
+  });
+
   it("keeps full-stack startup local even when managed config has a server URL", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "bb-app-local-config-"));
     writeFileSync(
@@ -213,6 +342,171 @@ describe("bb-app launcher", () => {
     });
 
     expect(context.serverUrl).toBe("http://127.0.0.1:38886");
+  });
+
+  it("applies managed config environment values over ambient env", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-env-config-"));
+    writeFileSync(
+      join(dataDir, "config.json"),
+      JSON.stringify({
+        env: {
+          BB_APP_URL: "https://bb.example.test",
+          BB_LOG_LEVEL: "debug",
+          OPENAI_API_KEY: "stored-openai-key",
+        },
+      }),
+      "utf8",
+    );
+
+    const runtime = await resolveBbAppRuntimeState({
+      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
+      env: { BB_DATA_DIR: dataDir, OPENAI_API_KEY: "ambient-openai-key" },
+      homeDir: "/home/tester",
+      options: { help: false },
+      serverUrlMode: "local",
+    });
+
+    expect(runtime.env.BB_APP_URL).toBe("https://bb.example.test");
+    expect(runtime.env.BB_LOG_LEVEL).toBe("debug");
+    expect(runtime.env.OPENAI_API_KEY).toBe("stored-openai-key");
+    expect(runtime.serverEnv.BB_LOG_LEVEL).toBe("debug");
+    expect(runtime.serverEnv.OPENAI_API_KEY).toBe("ambient-openai-key");
+  });
+
+  it("uses launcher flags over managed config and ambient server URL", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-flag-config-"));
+    writeFileSync(
+      join(dataDir, "config.json"),
+      JSON.stringify({ serverUrl: "https://stored.example.test" }),
+      "utf8",
+    );
+
+    const runtime = await resolveBbAppRuntimeState({
+      entrypointUrl: pathToFileURL("/repo/packages/bb-app/dist/bb-app.js").href,
+      env: {
+        BB_DATA_DIR: dataDir,
+        BB_SERVER_URL: "https://ambient.example.test",
+      },
+      homeDir: "/home/tester",
+      options: {
+        help: false,
+        serverUrl: "https://flag.example.test",
+      },
+      serverUrlMode: "managed",
+    });
+
+    expect(runtime.context.serverUrl).toBe("https://flag.example.test");
+    expect(runtime.env.BB_SERVER_URL).toBe("https://flag.example.test");
+  });
+
+  it("stores managed config values from the config command", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-command-"));
+
+    await runBbApp([
+      "--data-dir",
+      dataDir,
+      "config",
+      "OPENAI_API_KEY",
+      "test-openai-key",
+    ]);
+    await runBbApp([
+      "--data-dir",
+      dataDir,
+      "config",
+      "BB_APP_URL",
+      "https://bb.example.test",
+    ]);
+
+    expect(
+      JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")),
+    ).toEqual({
+      env: {
+        BB_APP_URL: "https://bb.example.test",
+        OPENAI_API_KEY: "test-openai-key",
+      },
+    });
+    expect(statSync(join(dataDir, "config.json")).mode & 0o777).toBe(0o600);
+  });
+
+  it("rejects invalid managed config values before writing or reloading", async () => {
+    const server = await startConfigReloadTestServer();
+    try {
+      for (const testCase of invalidConfigCommandCases) {
+        const dataDir = mkdtempSync(join(tmpdir(), "bb-app-invalid-config-"));
+        const configPath = join(dataDir, "config.json");
+        const initialConfig = {
+          env: {
+            OPENAI_API_KEY: "existing-openai-key",
+          },
+        };
+        writeFileSync(
+          configPath,
+          `${JSON.stringify(initialConfig, null, 2)}\n`,
+          "utf8",
+        );
+
+        await expect(
+          runBbApp([
+            "--data-dir",
+            dataDir,
+            "--server-port",
+            String(server.port),
+            "config",
+            testCase.key,
+            testCase.value,
+          ]),
+        ).rejects.toThrow(testCase.expectedError);
+
+        expect(JSON.parse(readFileSync(configPath, "utf8"))).toEqual(
+          initialConfig,
+        );
+      }
+
+      expect(server.reloadCount()).toBe(0);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("asks a running local server to reload after config writes", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-reload-"));
+    const server = await startConfigReloadTestServer();
+
+    try {
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "--server-port",
+        String(server.port),
+        "config",
+        "OPENAI_API_KEY",
+        "test-openai-key",
+      ]);
+
+      expect(server.reloadCount()).toBe(1);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("supports explicitly refreshing running server config", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-refresh-"));
+    const server = await startConfigReloadTestServer();
+
+    try {
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "--server-port",
+        String(server.port),
+        "config",
+        "refresh",
+      ]);
+
+      expect(server.reloadCount()).toBe(1);
+    } finally {
+      await server.close();
+    }
   });
 
   it("detects npm bin symlinks as the main module", () => {

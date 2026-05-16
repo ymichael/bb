@@ -3,19 +3,11 @@ import { commonConfig } from "./common.js";
 import { databaseConfig } from "./database.js";
 import { DEFAULTS } from "./defaults.js";
 import { featureFlags } from "./feature-flags.js";
+import { validateInferenceModel } from "./inference-model.js";
 import { validateOptionalUrl } from "./public-url.js";
 import { serverPortConfig } from "./server-port.js";
 
 export { commonConfig };
-
-function validateInferenceModel(value: string): string {
-  if (/^[^/]+\/[^/]+$/u.test(value)) {
-    return value;
-  }
-  throw new Error(
-    `BB_INFERENCE_MODEL must use provider/model format, received "${value}"`,
-  );
-}
 
 const rawServerConfig = envsafe({
   BB_HOST_DAEMON_PORT: port({

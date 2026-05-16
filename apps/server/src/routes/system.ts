@@ -5,7 +5,7 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import type { AppDeps } from "../types.js";
+import type { ServerAppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { queueCommandAndWait } from "../services/hosts/command-wait.js";
@@ -16,7 +16,7 @@ import {
 } from "../services/system/execution-options.js";
 import { resolveSystemLookupHostId } from "../services/system/host-lookup.js";
 
-export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
+export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
   const { get, post } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
@@ -28,6 +28,16 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
       voiceTranscriptionEnabled: !!deps.config.openAiApiKey,
     }),
   );
+
+  post("/system/config/reload", async (context) => {
+    try {
+      await deps.bbAppManagedConfig.reload({ notify: true });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new ApiError(422, "invalid_config", message);
+    }
+    return context.json({ ok: true });
+  });
 
   get(
     "/system/providers",

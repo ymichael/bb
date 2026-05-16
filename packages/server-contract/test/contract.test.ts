@@ -469,7 +469,7 @@ describe("server-contract canonical schemas", () => {
         hostId: "host_123",
         joinCode: "bbde_example",
         joinCommand:
-          "BB_SERVER_URL=http://localhost:3334 pnpm start:host-daemon",
+          "npx bb-app --server-url http://localhost:3334 --enroll-key bbde_example host-daemon",
       }),
     ).toMatchObject({
       hostId: "host_123",
@@ -722,7 +722,7 @@ describe("server-contract canonical schemas", () => {
       "automations-changed",
       "nudges-changed",
     ]);
-    expect(SYSTEM_CHANGE_KINDS).toEqual([]);
+    expect(SYSTEM_CHANGE_KINDS).toEqual(["config-changed"]);
   });
 
   it("keeps only intentional optional request fields", () => {

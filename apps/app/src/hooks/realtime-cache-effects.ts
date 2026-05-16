@@ -24,6 +24,7 @@ import {
   REALTIME_ENVIRONMENT_CHANGE_REGISTRY,
   REALTIME_HOST_CHANGE_REGISTRY,
   REALTIME_PROJECT_CHANGE_REGISTRY,
+  REALTIME_SYSTEM_CHANGE_REGISTRY,
   REALTIME_THREAD_CHANGE_REGISTRY,
   shouldFlushThreadChangesImmediately,
 } from "./realtime-cache-registry";
@@ -306,6 +307,12 @@ export function createRealtimeCacheEffects({
           }
           break;
         case "system":
+          for (const changeKind of message.changes) {
+            executeRealtimeDirtyHandlers({
+              context: { queryClient },
+              handlers: REALTIME_SYSTEM_CHANGE_REGISTRY[changeKind].dirty,
+            });
+          }
           break;
         default:
           assertNever(message);

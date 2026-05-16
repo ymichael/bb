@@ -4,6 +4,7 @@ import type { Logger } from "@bb/logger";
 import type { HostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import type { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
+import type { BbAppManagedConfigReloader } from "./services/system/bb-app-managed-config.js";
 import type { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
 import type { LifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { NotificationHub } from "./ws/hub.js";
@@ -31,6 +32,10 @@ export interface AppDeps {
   machineAuth: MachineAuthService;
   pendingInteractions: PendingInteractionLifecycle;
   terminalSessions: TerminalSessionLifecycle;
+}
+
+export interface ServerAppDeps extends AppDeps {
+  bbAppManagedConfig: BbAppManagedConfigReloader;
 }
 
 export type LifecycleDeps = Pick<

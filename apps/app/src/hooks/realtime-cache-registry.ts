@@ -243,8 +243,15 @@ export const REALTIME_HOST_CHANGE_REGISTRY = {
   },
 } satisfies HostChangeRegistry;
 
-export const REALTIME_SYSTEM_CHANGE_REGISTRY =
-  {} satisfies SystemChangeRegistry;
+export const REALTIME_SYSTEM_CHANGE_REGISTRY = {
+  "config-changed": {
+    dirty: [
+      dirtySystemProviderQueries,
+      dirtySystemExecutionOptionQueries,
+      dirtyThreadComposerBootstrapQueries,
+    ],
+  },
+} satisfies SystemChangeRegistry;
 
 export type ThreadChangeFlushPriority = "debounced" | "immediate";
 
@@ -312,7 +319,11 @@ export interface HostChangeRule {
 
 export type HostChangeRegistry = Record<HostChangeKind, HostChangeRule>;
 
-export type SystemChangeRegistry = Record<SystemChangeKind, never>;
+export interface SystemChangeRule {
+  dirty: readonly RealtimeDirtyHandler<RealtimeDirtyContext>[];
+}
+
+export type SystemChangeRegistry = Record<SystemChangeKind, SystemChangeRule>;
 
 export function executeRealtimeDirtyHandlers<
   Context extends RealtimeDirtyContext,

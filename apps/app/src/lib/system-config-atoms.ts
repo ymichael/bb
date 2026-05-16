@@ -62,13 +62,24 @@ async function loadSystemConfig(): Promise<SystemConfigResponse> {
 
 const systemConfigRefreshTickAtom = atom(0);
 systemConfigRefreshTickAtom.onMount = (setRefreshTick) => {
-  const unsubscribe = wsManager.onConnected(({ reconnected }) => {
+  const unsubscribeConnected = wsManager.onConnected(({ reconnected }) => {
     if (!reconnected && !didLastSystemConfigLoadFail()) {
       return;
     }
     setRefreshTick((count) => count + 1);
   });
-  return unsubscribe;
+  const unsubscribeChanged = wsManager.onChanged((message) => {
+    if (
+      message.entity === "system" &&
+      message.changes.includes("config-changed")
+    ) {
+      setRefreshTick((count) => count + 1);
+    }
+  });
+  return () => {
+    unsubscribeConnected();
+    unsubscribeChanged();
+  };
 };
 
 export const systemConfigAtom = atom(async (get) => {

@@ -14,7 +14,7 @@ const pendingTarget: CreateHostJoinResponse = {
   hostId: HOST_IDS.remote,
   joinCode: "bbde_story_join_code",
   joinCommand:
-    "BB_SERVER_URL='http://server-machine.example-tailnet.ts.net:38886' BB_HOST_ID='host_remote' BB_HOST_TYPE='persistent' BB_HOST_ENROLL_KEY='bbde_story_join_code_with_a_long_wrapping_token_value' pnpm start:host-daemon",
+    "npx bb-app --server-url 'http://server-machine.example-tailnet.ts.net:38886' --host-id 'host_remote' --host-type 'persistent' --enroll-key 'bbde_story_join_code_with_a_long_wrapping_token_value' host-daemon",
 };
 
 const connectedTarget: CreateHostJoinResponse = {
@@ -55,7 +55,10 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="connected" hint="daemon has opened a host session">
         <DialogStage className="sm:max-w-2xl">
-          <HostJoinDialogContent host={connectedHost} target={connectedTarget} />
+          <HostJoinDialogContent
+            host={connectedHost}
+            target={connectedTarget}
+          />
         </DialogStage>
       </StoryRow>
       <StoryRow

@@ -17,23 +17,28 @@ The machine running bb does the work. Other devices are just browsers.
 
 ## Set it up
 
-On the machine running bb, add the URL your other devices will use to your
-`.env` file. Replace `<machine>.<tailnet>.ts.net` with that machine's Tailscale
+On the machine running bb, configure `BB_APP_URL` to the URL your other devices
+will use. Replace `<machine>.<tailnet>.ts.net` with that machine's Tailscale
 name:
 
-```
-BB_APP_URL=http://<machine>.<tailnet>.ts.net:38886
+```bash
+npx bb-app config BB_APP_URL http://<machine>.<tailnet>.ts.net:38886
 ```
 
 If you don't use MagicDNS, the Tailscale IP works too:
 
-```
-BB_APP_URL=http://<tailscale-ip>:38886
+```bash
+npx bb-app config BB_APP_URL http://<tailscale-ip>:38886
 ```
 
-Restart bb (`pnpm start`) so it picks up the new value, then open that same
-URL in a browser on any other device. The project list should load and you're
-in.
+If bb is not already running, start it:
+
+```bash
+npx bb-app
+```
+
+Then open that same URL in a browser on any other device. The project list
+should load and you're in.
 
 ## Optional: use HTTPS for voice and clipboard
 
@@ -50,13 +55,13 @@ tailnet](https://tailscale.com/kb/1153/enabling-https), then put bb behind
 tailscale serve --bg --https=443 http://127.0.0.1:38886
 ```
 
-Update `BB_APP_URL` in your `.env` to the HTTPS URL:
+Update `BB_APP_URL` to the HTTPS URL:
 
-```
-BB_APP_URL=https://<machine>.<tailnet>.ts.net
+```bash
+npx bb-app config BB_APP_URL https://<machine>.<tailnet>.ts.net
 ```
 
-Then restart bb.
+bb picks up the new URL while it is running.
 
 ## A note on access
 
@@ -72,6 +77,7 @@ A few quick checks:
    trouble — for example, `http://<machine>.<tailnet>.ts.net:38886/health`.
    It should return `{"ok":true}`. If it doesn't, that device isn't reaching
    the server — check Tailscale on both sides.
-2. Make sure `BB_APP_URL` is set to the same URL you typed into the browser.
+2. Make sure `BB_APP_URL` is configured to the same URL you typed into the
+   browser.
 3. Try the Tailscale IP instead of the MagicDNS name (or vice versa).
 4. Phones on cellular are fine as long as Tailscale stays connected.

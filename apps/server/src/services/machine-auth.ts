@@ -14,7 +14,6 @@ const AUTH_SECRET_FILE_NAME = "auth-secret";
 const DAEMON_ENROLL_CONFIG_ID = "daemon-enroll";
 const DAEMON_HOST_CONFIG_ID = "daemon-host";
 const ENROLL_KEY_TTL_SECONDS = 60 * 15;
-const LOCAL_JOIN_COMMAND = "pnpm start:host-daemon";
 const MACHINE_AUTH_SYSTEM_USER_ID = "bb-machine-auth-system-user";
 const MACHINE_AUTH_SYSTEM_USER_EMAIL = "machine-auth@bb.internal";
 const MACHINE_AUTH_SYSTEM_USER_NAME = "Machine Auth System";
@@ -342,11 +341,12 @@ export async function createMachineAuthService(
       serverUrl,
     }: BuildJoinCommandArgs): string {
       return [
-        `BB_SERVER_URL=${quoteShellValue(normalizeServerUrl(serverUrl))}`,
-        `BB_HOST_ID=${quoteShellValue(hostId)}`,
-        `BB_HOST_TYPE=${quoteShellValue(hostType)}`,
-        `BB_HOST_ENROLL_KEY=${quoteShellValue(joinCode)}`,
-        LOCAL_JOIN_COMMAND,
+        "npx bb-app",
+        `--server-url ${quoteShellValue(normalizeServerUrl(serverUrl))}`,
+        `--host-id ${quoteShellValue(hostId)}`,
+        `--host-type ${quoteShellValue(hostType)}`,
+        `--enroll-key ${quoteShellValue(joinCode)}`,
+        "host-daemon",
       ].join(" ");
     },
     async disableMachineKey(disableArgs: DisableMachineKeyArgs): Promise<void> {
