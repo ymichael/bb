@@ -273,6 +273,10 @@ const commandHandlers: CommandHandlerMap = {
   ) => {
     try {
       await requireWorkspaceEnvironment(command, options.runtimeManager);
+      options.terminalManager?.closeEnvironmentTerminals(
+        command.environmentId,
+        "environment-destroyed",
+      );
       await options.runtimeManager.destroyEnvironment(command.environmentId);
     } catch (error) {
       // Treat already-missing workspaces as successful destroy (idempotent retry).

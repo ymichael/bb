@@ -27,6 +27,7 @@ export interface CommandRouterOptions {
   readPersistedRuntimeMaterial: CommandDispatchOptions["readPersistedRuntimeMaterial"];
   persistRuntimeMaterial: CommandDispatchOptions["persistRuntimeMaterial"];
   runtimeManager: RuntimeManager;
+  terminalManager?: CommandDispatchOptions["terminalManager"];
   reportResult?: (result: CommandResultReport) => Promise<void>;
   eventSink: CommandDispatchOptions["eventSink"];
   listModels?: CommandDispatchOptions["listModels"];
@@ -173,6 +174,7 @@ export class CommandRouter {
         readPersistedRuntimeMaterial: this.options.readPersistedRuntimeMaterial,
         persistRuntimeMaterial: this.options.persistRuntimeMaterial,
         runtimeManager: this.options.runtimeManager,
+        terminalManager: this.options.terminalManager,
         dataDir: this.options.dataDir,
         eventSink: this.options.eventSink,
         listModels: this.options.listModels,

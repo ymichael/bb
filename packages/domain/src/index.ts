@@ -35,6 +35,25 @@ export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
 export type { FeatureFlags } from "./feature-flags.js";
 
 export {
+  TERMINAL_COLS_MAX,
+  TERMINAL_DATA_MAX_BASE64_LENGTH,
+  TERMINAL_DATA_MAX_BYTES,
+  TERMINAL_ROWS_MAX,
+  getTerminalBase64DecodedByteLength,
+  terminalColsSchema,
+  terminalDataBase64Schema,
+  terminalSessionCloseReasonSchema,
+  terminalSessionCloseReasonValues,
+  terminalRowsSchema,
+  terminalSessionStatusSchema,
+  terminalSessionStatusValues,
+} from "./terminal.js";
+export type {
+  TerminalSessionCloseReason,
+  TerminalSessionStatus,
+} from "./terminal.js";
+
+export {
   PROMPT_HISTORY_ENTRY_LIMIT,
   promptHistoryEntrySchema,
   promptHistoryScopeSchema,

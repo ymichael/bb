@@ -7,11 +7,19 @@ export type {
   PathProjectId,
   PathProviderId,
   PathThreadAndQueuedMessage,
+  PathThreadAndTerminal,
   Untyped,
 } from "./common.js";
 
 export { apiErrorSchema, domainErrorCodeSchema } from "./errors.js";
 export type { ApiError, DomainErrorCode } from "./errors.js";
+
+export {
+  TERMINAL_COLS_MAX,
+  TERMINAL_DATA_MAX_BASE64_LENGTH,
+  TERMINAL_DATA_MAX_BYTES,
+  TERMINAL_ROWS_MAX,
+} from "@bb/domain";
 
 export {
   timelineActivityIntentSchema,
@@ -185,9 +193,16 @@ export {
   timelineTurnSummaryDetailsQuerySchema,
   systemExecutionOptionsQuerySchema,
   systemExecutionOptionsResponseSchema,
+  closeThreadTerminalRequestSchema,
+  createThreadTerminalRequestSchema,
   systemVoiceTranscriptionResponseSchema,
   systemProvidersQuerySchema,
+  terminalClientMessageSchema,
+  terminalOutputChunkSchema,
+  terminalServerMessageSchema,
+  terminalSessionSchema,
   threadPendingInteractionsResponseSchema,
+  threadTerminalListResponseSchema,
   threadTimelineResponseSchema,
   timelineTurnSummaryDetailsRequestSchema,
   timelineTurnSummaryDetailsResponseSchema,
@@ -197,6 +212,7 @@ export {
   updateAutomationEnabledRequestSchema,
   updateProjectRequestSchema,
   updateProjectSourceRequestSchema,
+  updateThreadTerminalRequestSchema,
   updateThreadRequestSchema,
   upsertSandboxEnvVarRequestSchema,
   unmanagedWorkspaceSchema,
@@ -316,8 +332,15 @@ export type {
   TimelinePaginationCursor,
   ThreadTimelineQuery,
   TimelineTurnSummaryDetailsQuery,
+  CloseThreadTerminalRequest,
+  CreateThreadTerminalRequest,
   SystemVoiceTranscriptionResponse,
+  TerminalClientMessage,
+  TerminalOutputChunk,
+  TerminalServerMessage,
+  TerminalSession,
   ThreadPendingInteractionsResponse,
+  ThreadTerminalListResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
@@ -328,6 +351,7 @@ export type {
   UpdateHostRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
+  UpdateThreadTerminalRequest,
   UpdateThreadRequest,
   UpsertSandboxEnvVarRequest,
   UploadedPromptAttachment,

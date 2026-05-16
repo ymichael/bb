@@ -13,7 +13,7 @@ import {
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { verifyAuthenticatedDaemon } from "../internal/auth.js";
-import type { AppDeps } from "../types.js";
+import type { AppDeps, ServerAppDeps } from "../types.js";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
@@ -65,7 +65,7 @@ export async function validateDaemonWebSocket(
 }
 
 export function onDaemonSocketOpen(
-  deps: Pick<AppDeps, "hub" | "logger">,
+  deps: Pick<ServerAppDeps, "config" | "hub" | "logger" | "terminalSessions">,
   args: { hostId: string; sessionId: string; socket: DaemonSocket },
 ): void {
   deps.logger.info(
@@ -73,10 +73,16 @@ export function onDaemonSocketOpen(
     "Daemon WebSocket opened",
   );
   deps.hub.registerDaemon(args.sessionId, args.hostId, args.socket);
+  if (deps.config.featureFlags.terminals) {
+    deps.terminalSessions.expireDisconnectedHostTerminals({
+      daemonSessionId: args.sessionId,
+      hostId: args.hostId,
+    });
+  }
 }
 
 export function onDaemonSocketMessage(
-  deps: Pick<AppDeps, "db" | "logger">,
+  deps: Pick<ServerAppDeps, "config" | "db" | "logger" | "terminalSessions">,
   args: DaemonSocketMessageArgs,
 ): void {
   let decoded: unknown;
@@ -99,6 +105,16 @@ export function onDaemonSocketMessage(
       sessionId: args.sessionId,
     });
     heartbeatSession(deps.db, session.id, Date.now() + session.leaseTimeoutMs);
+    if (
+      result.data.type !== "heartbeat" &&
+      deps.config.featureFlags.terminals
+    ) {
+      deps.terminalSessions.handleDaemonTerminalMessage({
+        hostId: args.hostId,
+        message: result.data,
+        sessionId: args.sessionId,
+      });
+    }
   } catch (error) {
     if (error instanceof ApiError && error.body.code === "inactive_session") {
       deps.logger.info(
@@ -127,11 +143,15 @@ export function onDaemonSocketMessage(
 }
 
 export function onDaemonSocketClose(
-  deps: Pick<AppDeps, "db" | "hub" | "logger" | "pendingInteractions">,
+  deps: Pick<
+    ServerAppDeps,
+    "db" | "hub" | "logger" | "pendingInteractions" | "terminalSessions"
+  >,
   sessionId: string,
 ): void {
   deps.logger.info({ sessionId }, "Daemon WebSocket closed");
   deps.hub.unregisterDaemon(sessionId);
+  deps.terminalSessions.handleDaemonSessionClosed({ sessionId });
 
   const session = deps.db
     .select()

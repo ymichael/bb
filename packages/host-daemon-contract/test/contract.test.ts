@@ -4,6 +4,10 @@ import { describe, expect, it } from "vitest";
 import * as contract from "../src/index.js";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
+  TERMINAL_COLS_MAX,
+  TERMINAL_DATA_MAX_BASE64_LENGTH,
+  TERMINAL_DATA_MAX_BYTES,
+  TERMINAL_ROWS_MAX,
   createHostDaemonClient,
   hostDaemonEnrollRequestSchema,
   hostDaemonEnrollResponseSchema,
@@ -23,10 +27,15 @@ import {
   hostDaemonServerWsMessageSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
+  hostDaemonTerminalOutputChunkSchema,
 } from "../src/index.js";
 
 const PRODUCER_EVENT_ID = "hdevt_23456789abcdefghijkm";
 const CLIENT_REQUEST_ID = "creq_23456789ab";
+
+function terminalDataBase64(byteLength: number): string {
+  return Buffer.alloc(byteLength, "a").toString("base64");
+}
 
 const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.checkout":
@@ -1209,6 +1218,96 @@ describe("host-daemon session schemas", () => {
         bufferDepth: 0,
       }),
     ).toThrow();
+  });
+
+  it("bounds terminal dimensions in daemon websocket messages", () => {
+    expect(
+      hostDaemonServerWsMessageSchema.safeParse({
+        type: "terminal.open",
+        requestId: "request-1",
+        terminalId: "term_123",
+        threadId: "thr_123",
+        environmentId: "env_123",
+        workspaceContext: {
+          workspacePath: "/tmp/workspace",
+          workspaceProvisionType: "unmanaged",
+        },
+        cols: TERMINAL_COLS_MAX,
+        rows: TERMINAL_ROWS_MAX,
+      }).success,
+    ).toBe(true);
+    expect(
+      hostDaemonServerWsMessageSchema.safeParse({
+        type: "terminal.resize",
+        terminalId: "term_123",
+        cols: TERMINAL_COLS_MAX + 1,
+        rows: TERMINAL_ROWS_MAX,
+      }).success,
+    ).toBe(false);
+    expect(
+      hostDaemonDaemonWsMessageSchema.safeParse({
+        type: "terminal.opened",
+        requestId: "request-1",
+        terminalId: "term_123",
+        shell: "/bin/zsh",
+        title: "zsh",
+        initialCwd: "/tmp/workspace",
+        currentCwd: null,
+        cols: TERMINAL_COLS_MAX,
+        rows: TERMINAL_ROWS_MAX + 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("bounds and validates terminal data in daemon websocket messages", () => {
+    const maxPayload = terminalDataBase64(TERMINAL_DATA_MAX_BYTES);
+    const oversizedDecodedPayload = terminalDataBase64(
+      TERMINAL_DATA_MAX_BYTES + 1,
+    );
+    const oversizedEncodedPayload = "A".repeat(
+      TERMINAL_DATA_MAX_BASE64_LENGTH + 4,
+    );
+
+    expect(
+      hostDaemonServerWsMessageSchema.safeParse({
+        type: "terminal.input",
+        terminalId: "term_123",
+        dataBase64: maxPayload,
+      }).success,
+    ).toBe(true);
+    expect(
+      hostDaemonTerminalOutputChunkSchema.safeParse({
+        seq: 0,
+        dataBase64: maxPayload,
+      }).success,
+    ).toBe(true);
+    expect(
+      hostDaemonDaemonWsMessageSchema.safeParse({
+        type: "terminal.replay",
+        requestId: "request-1",
+        terminalId: "term_123",
+        chunks: [
+          {
+            seq: 0,
+            dataBase64: oversizedDecodedPayload,
+          },
+        ],
+        nextSeq: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      hostDaemonServerWsMessageSchema.safeParse({
+        type: "terminal.input",
+        terminalId: "term_123",
+        dataBase64: "not base64!",
+      }).success,
+    ).toBe(false);
+    expect(
+      hostDaemonTerminalOutputChunkSchema.safeParse({
+        seq: 0,
+        dataBase64: oversizedEncodedPayload,
+      }).success,
+    ).toBe(false);
   });
 
   it("builds an internal client rooted at /internal", () => {

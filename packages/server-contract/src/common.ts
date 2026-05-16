@@ -10,3 +10,6 @@ export type PathProviderId = { param: { providerId: string } };
 export type PathThreadAndQueuedMessage = {
   param: { id: string; queuedMessageId: string };
 };
+export type PathThreadAndTerminal = {
+  param: { id: string; terminalId: string };
+};

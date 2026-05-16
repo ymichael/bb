@@ -90,6 +90,7 @@ describe("consumer-specific config", () => {
     vi.stubEnv("E2B_TEMPLATE", undefined);
     vi.stubEnv("BB_GITHUB_PAT", undefined);
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", undefined);
+    vi.stubEnv("BB_FF_TERMINALS", undefined);
     vi.stubEnv("BB_INFERENCE_MODEL", undefined);
     vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
     vi.stubEnv("ANTHROPIC_API_KEY", "test-anthropic-key");
@@ -106,7 +107,10 @@ describe("consumer-specific config", () => {
     expect(serverConfig.E2B_API_KEY).toBe("");
     expect(serverConfig.E2B_TEMPLATE).toBe("");
     expect(serverConfig.BB_GITHUB_PAT).toBe("");
-    expect(serverConfig.featureFlags).toEqual({ askUserQuestion: false });
+    expect(serverConfig.featureFlags).toEqual({
+      askUserQuestion: false,
+      terminals: false,
+    });
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
     expect(serverConfig.ANTHROPIC_API_KEY).toBe("test-anthropic-key");
@@ -154,11 +158,13 @@ describe("consumer-specific config", () => {
   it("parses feature flags from env", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", "true");
+    vi.stubEnv("BB_FF_TERMINALS", "true");
 
     const { serverConfig } =
       await importFresh<typeof import("../src/server.js")>("../src/server.js");
 
     expect(serverConfig.featureFlags.askUserQuestion).toBe(true);
+    expect(serverConfig.featureFlags.terminals).toBe(true);
   });
 
   it("rejects invalid feature flag booleans in server config", async () => {
@@ -168,6 +174,15 @@ describe("consumer-specific config", () => {
     await expect(
       importFresh<typeof import("../src/server.js")>("../src/server.js"),
     ).rejects.toThrow(/BB_FF_ASK_USER_QUESTION/u);
+  });
+
+  it("rejects invalid terminal feature flag booleans in server config", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("BB_FF_TERMINALS", "not-bool");
+
+    await expect(
+      importFresh<typeof import("../src/server.js")>("../src/server.js"),
+    ).rejects.toThrow(/BB_FF_TERMINALS/u);
   });
 
   it("requires a valid server URL for the daemon and CLI", async () => {

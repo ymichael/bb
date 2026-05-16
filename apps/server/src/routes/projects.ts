@@ -38,7 +38,7 @@ import {
 } from "@bb/server-contract";
 import type { Hono } from "hono";
 import { renderTemplate } from "@bb/templates";
-import type { AppDeps } from "../types.js";
+import type { AppDeps, ServerAppDeps } from "../types.js";
 import { COMMAND_TIMEOUT_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import {
@@ -211,7 +211,7 @@ function resolveProjectSourcePath(
   return { hostId: source.hostId, path: source.path };
 }
 
-export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
+export function registerProjectRoutes(app: Hono, deps: ServerAppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });

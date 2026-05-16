@@ -6,6 +6,7 @@ import {
   hostDaemonServerWsMessageSchema,
   type HostDaemonSessionCloseReason,
   type HostDaemonSessionOpenResponse,
+  type HostDaemonDaemonWsMessage,
 } from "@bb/host-daemon-contract";
 import {
   DEFAULT_CONNECTION_TIMEOUT_MS,
@@ -126,6 +127,15 @@ export class ServerConnection {
       websocket.onclose = null;
       websocket.close();
     }
+  }
+
+  sendMessage(message: HostDaemonDaemonWsMessage): boolean {
+    if (!this.websocket || this.websocket.readyState !== OPEN_READY_STATE) {
+      return false;
+    }
+    const payload = hostDaemonDaemonWsMessageSchema.parse(message);
+    this.websocket.send(JSON.stringify(payload));
+    return true;
   }
 
   setSessionCloseHandler(
@@ -310,7 +320,19 @@ export class ServerConnection {
       return;
     }
 
-    this.handleSessionCloseMessage(message.data.reason);
+    if (message.data.type === "session-close") {
+      this.handleSessionCloseMessage(message.data.reason);
+      return;
+    }
+
+    void Promise.resolve(this.options.onTerminalMessage?.(message.data)).catch(
+      (error) => {
+        this.options.logger.warn(
+          { err: error, type: message.data.type },
+          "Terminal websocket message handler failed",
+        );
+      },
+    );
   }
 
   private handleSessionCloseMessage(
@@ -375,10 +397,7 @@ export class ServerConnection {
         return;
       }
 
-      const payload = hostDaemonDaemonWsMessageSchema.parse({
-        type: "heartbeat",
-      });
-      this.websocket.send(JSON.stringify(payload));
+      this.sendMessage({ type: "heartbeat" });
     }, this.session.heartbeatIntervalMs);
   }
 

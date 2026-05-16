@@ -23,6 +23,8 @@ import type {
   ProjectSourceType,
   ReasoningLevel,
   ServiceTier,
+  TerminalSessionCloseReason,
+  TerminalSessionStatus,
   ThreadOperationKind,
   ThreadProvisioningStage,
   ThreadType,
@@ -601,6 +603,51 @@ export const hostDaemonCommands = sqliteTable(
     index("host_daemon_commands_completed_prune_idx")
       .on(table.completedAt)
       .where(sql`${table.completedAt} IS NOT NULL`),
+  ],
+);
+
+export const terminalSessions = sqliteTable(
+  "terminal_sessions",
+  {
+    id: text("id").primaryKey(),
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    environmentId: text("environment_id")
+      .notNull()
+      .references(() => environments.id, { onDelete: "cascade" }),
+    hostId: text("host_id")
+      .notNull()
+      .references(() => hosts.id, { onDelete: "cascade" }),
+    daemonSessionId: text("daemon_session_id").references(
+      () => hostDaemonSessions.id,
+      { onDelete: "set null" },
+    ),
+    title: text("title").notNull(),
+    initialCwd: text("initial_cwd").notNull(),
+    currentCwd: text("current_cwd"),
+    cols: integer("cols").notNull(),
+    rows: integer("rows").notNull(),
+    status: text("status").$type<TerminalSessionStatus>().notNull(),
+    exitCode: integer("exit_code"),
+    closeReason: text("close_reason").$type<TerminalSessionCloseReason>(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+    lastConnectedAt: integer("last_connected_at"),
+    exitedAt: integer("exited_at"),
+  },
+  (table) => [
+    index("terminal_sessions_thread_status_updated_idx").on(
+      table.threadId,
+      table.status,
+      table.updatedAt,
+    ),
+    index("terminal_sessions_environment_status_idx").on(
+      table.environmentId,
+      table.status,
+    ),
+    index("terminal_sessions_host_status_idx").on(table.hostId, table.status),
+    index("terminal_sessions_daemon_session_idx").on(table.daemonSessionId),
   ],
 );
 

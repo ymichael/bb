@@ -97,6 +97,7 @@ export interface RuntimeEntry {
   stopWatchingStatus: () => void;
   workspace: HostWorkspace;
   path: string;
+  terminals: Set<string>;
   threads: Map<string, RuntimeThreadState>;
 }
 
@@ -328,6 +329,14 @@ export class RuntimeManager {
     });
   }
 
+  markTerminalActive(environmentId: string, terminalId: string): void {
+    this.entries.get(environmentId)?.terminals.add(terminalId);
+  }
+
+  markTerminalInactive(environmentId: string, terminalId: string): void {
+    this.entries.get(environmentId)?.terminals.delete(terminalId);
+  }
+
   forgetThread(environmentId: string, threadId: string): void {
     this.entries.get(environmentId)?.threads.delete(threadId);
     this.trackedThreadStorageTargets.delete(threadId);
@@ -458,7 +467,7 @@ export class RuntimeManager {
       const hasActiveThread = [...entry.threads.values()].some(
         (thread) => thread.status === "active",
       );
-      return !hasActiveThread;
+      return !hasActiveThread && entry.terminals.size === 0;
     });
 
     for (const entry of idleEntries) {
@@ -663,6 +672,7 @@ export class RuntimeManager {
       environmentId: args.environmentId,
       runtime,
       stopWatchingStatus,
+      terminals: new Set<string>(),
       workspace,
       path: workspace.path,
       threads,

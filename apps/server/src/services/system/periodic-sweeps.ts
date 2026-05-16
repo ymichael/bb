@@ -36,6 +36,7 @@ import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
   LoggedSandboxWorkSessionDeps,
+  ServerAppDeps,
 } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
 import { advanceEnvironmentCleanup } from "../environments/environment-cleanup.js";
@@ -183,7 +184,7 @@ export async function runEphemeralHostCleanupSweep(
 
 export async function runProjectDeletionSweep(
   deps: Pick<
-    AppDeps,
+    ServerAppDeps,
     | "cloudAuth"
     | "config"
     | "db"
@@ -195,6 +196,7 @@ export async function runProjectDeletionSweep(
     | "pendingInteractions"
     | "sandboxEnv"
     | "sandboxRegistry"
+    | "terminalSessions"
   >,
 ): Promise<void> {
   for (const projectId of listProjectsPendingDeletion(deps)) {
@@ -391,7 +393,7 @@ export async function runThreadLifecycleSweep(
 
 export async function runPeriodicSweeps(
   deps: Pick<
-    AppDeps,
+    ServerAppDeps,
     | "cloudAuth"
     | "config"
     | "db"
@@ -403,6 +405,7 @@ export async function runPeriodicSweeps(
     | "pendingInteractions"
     | "sandboxEnv"
     | "sandboxRegistry"
+    | "terminalSessions"
   >,
 ): Promise<void> {
   try {

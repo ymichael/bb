@@ -23,6 +23,7 @@ export const THREAD_CHANGE_KINDS = [
   "parent-changed",
   "read-state-changed",
   "manager-assignment-changed",
+  "terminals-changed",
 ] as const;
 export type ThreadChangeKind = (typeof THREAD_CHANGE_KINDS)[number];
 

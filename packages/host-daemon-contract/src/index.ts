@@ -1,6 +1,12 @@
 export type { EmptyInput, Endpoint, Untyped } from "./common.js";
 export { typedRoutes } from "@bb/hono-typed-routes";
 export {
+  TERMINAL_COLS_MAX,
+  TERMINAL_DATA_MAX_BASE64_LENGTH,
+  TERMINAL_DATA_MAX_BYTES,
+  TERMINAL_ROWS_MAX,
+} from "@bb/domain";
+export {
   HOST_AUTH_FILE_NAME,
   HOST_ID_FILE_NAME,
   HOST_RUNTIME_MATERIAL_FILE_NAME,
@@ -135,6 +141,7 @@ export {
   hostDaemonSessionCloseReasonSchema,
   hostDaemonSessionOpenRequestSchema,
   hostDaemonSessionOpenResponseSchema,
+  hostDaemonTerminalOutputChunkSchema,
   hostDaemonTrackedThreadTargetSchema,
   hostDaemonToolCallRequestSchema,
   hostDaemonToolCallResponseSchema,
@@ -168,6 +175,7 @@ export type {
   HostDaemonSessionCloseReason,
   HostDaemonSessionOpenRequest,
   HostDaemonSessionOpenResponse,
+  HostDaemonTerminalOutputChunk,
   HostDaemonTrackedThreadTarget,
   HostDaemonToolCallRequest,
   HostDaemonToolCallResponse,

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { WorkspaceError } from "@bb/host-workspace";
 import { dispatchCommand } from "../../src/command-dispatch.js";
 import type { BufferedEventInput } from "../../src/event-buffer.js";
@@ -309,6 +309,7 @@ describe("environment command dispatch", () => {
 
   it("covers environment.destroy", async () => {
     const harness = createHarness();
+    const closeEnvironmentTerminals = vi.fn();
     await harness.manager.ensureEnvironment({
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
@@ -323,10 +324,17 @@ describe("environment command dispatch", () => {
           workspaceProvisionType: "managed-worktree",
         },
       },
-      makeDispatchOptions({ runtimeManager: harness.manager }),
+      makeDispatchOptions({
+        runtimeManager: harness.manager,
+        terminalManager: { closeEnvironmentTerminals },
+      }),
     );
 
     expect(result).toEqual({});
+    expect(closeEnvironmentTerminals).toHaveBeenCalledWith(
+      "env-1",
+      "environment-destroyed",
+    );
     expect(harness.runtimeState.shutdownCount).toBe(1);
     expect(harness.workspaceState.destroyed).toBe(true);
   });

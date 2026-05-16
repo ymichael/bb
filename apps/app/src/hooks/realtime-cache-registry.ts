@@ -25,6 +25,7 @@ import {
   allThreadQueuedMessagesQueryKeyPrefix,
   allThreadPendingInteractionsQueryKeyPrefix,
   allThreadQueryKeyPrefix,
+  allThreadTerminalsQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
   hostsQueryKey,
   localPathExistenceQueryKeyPrefix,
@@ -40,6 +41,7 @@ import {
   threadPromptHistoryQueryKey,
   threadPromptHistoryQueryKeyPrefix,
   threadQueryKey,
+  threadTerminalsQueryKey,
   threadsQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
@@ -127,6 +129,12 @@ export const REALTIME_THREAD_CHANGE_REGISTRY = {
     dirty: [
       dirtyThreadListQueries, // Sidebar grouping and manager-child filters depend on parentThreadId.
       dirtyThreadDetailQueries, // Detail metadata and managed-by UI render parentThreadId.
+    ],
+  },
+  "terminals-changed": {
+    flush: "debounced",
+    dirty: [
+      dirtyThreadTerminalQueries, // Terminal panel lists sessions by thread.
     ],
   },
 } satisfies ThreadChangeRegistry;
@@ -387,6 +395,14 @@ function dirtyThreadPendingInteractionQueries({
   return threadId
     ? [threadPendingInteractionsQueryKey(threadId)]
     : [allThreadPendingInteractionsQueryKeyPrefix()];
+}
+
+function dirtyThreadTerminalQueries({
+  threadId,
+}: ThreadRealtimeDirtyContext): QueryKey[] {
+  return threadId
+    ? [threadTerminalsQueryKey(threadId)]
+    : [allThreadTerminalsQueryKeyPrefix()];
 }
 
 function dirtyProjectPromptHistoryQueries({

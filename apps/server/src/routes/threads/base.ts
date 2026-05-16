@@ -21,7 +21,7 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import type { AppDeps } from "../../types.js";
+import type { AppDeps, ServerAppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { parseOptionalInteger } from "../../services/lib/validation.js";
 import {
@@ -102,7 +102,7 @@ function buildThreadResponse(
   return response;
 }
 
-export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
+export function registerThreadBaseRoutes(app: Hono, deps: ServerAppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
@@ -236,6 +236,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       thread,
     });
     markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
+    deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     requestThreadStopIfNeeded(deps, thread, environment);
     await finalizeStoppedThread(deps, {
       threadId: thread.id,

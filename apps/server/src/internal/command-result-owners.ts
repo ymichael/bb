@@ -26,6 +26,7 @@ import {
 } from "@bb/domain";
 import type { ThreadEventScope } from "@bb/domain";
 import type { InteractiveLifecycleCoordinationDeps } from "../lifecycle-coordination-deps.js";
+import type { ServerAppDeps } from "../types.js";
 import {
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
@@ -70,7 +71,8 @@ import {
 } from "../services/threads/managed-thread-notifications.js";
 import { tryTransitionInTransaction } from "../services/threads/thread-transitions.js";
 
-export type CommandResultSideEffectsDeps = InteractiveLifecycleCoordinationDeps;
+export type CommandResultSideEffectsDeps = InteractiveLifecycleCoordinationDeps &
+  Pick<ServerAppDeps, "terminalSessions">;
 export type CommandResultSettlementDeps = Omit<
   CommandResultSideEffectsDeps,
   "db" | "hub"
@@ -513,9 +515,20 @@ function handleEnvironmentDestroyResult(
     return emptyCommandResultSideEffects();
   }
 
+  postCommitActions.push({
+    name: "Terminal cleanup after environment destroy",
+    context: {
+      environmentId: environment.id,
+    },
+    run: (deps) =>
+      deps.terminalSessions.closeDestroyedEnvironmentTerminals({
+        environmentId: environment.id,
+      }),
+  });
+
   const host = getHost(args.deps.db, environment.hostId);
   if (host?.type !== "ephemeral") {
-    return emptyCommandResultSideEffects();
+    return { postCommitActions };
   }
 
   postCommitActions.push({

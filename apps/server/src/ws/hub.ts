@@ -8,7 +8,14 @@ import type {
   ThreadChangeMetadata,
 } from "@bb/domain";
 import type { DbNotifier } from "@bb/db";
-import type { HostDaemonSessionCloseReason } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonServerWsMessage,
+  HostDaemonSessionCloseReason,
+} from "@bb/host-daemon-contract";
+import {
+  terminalServerMessageSchema,
+  type TerminalServerMessage,
+} from "@bb/server-contract";
 import { COMMAND_RESULT_CACHE_TTL_MS } from "../constants.js";
 import type { CommandResultWaiterResponse } from "../internal/command-result-response.js";
 
@@ -67,6 +74,14 @@ export class NotificationHub implements DbNotifier {
     string,
     ReturnType<typeof setTimeout>
   >();
+  private readonly terminalClientSocketsById = new Map<
+    string,
+    Set<HubSocket>
+  >();
+  private readonly terminalIdsByClientSocket = new Map<
+    HubSocket,
+    Set<string>
+  >();
   private readonly threadEventWaiters = new Map<
     string,
     Set<ThreadEventWaiter>
@@ -79,6 +94,7 @@ export class NotificationHub implements DbNotifier {
   }
 
   unregisterClient(socket: HubSocket): void {
+    this.unregisterTerminalClientSocket(socket);
     const keys = this.clientKeysBySocket.get(socket);
     if (!keys) {
       return;
@@ -96,6 +112,79 @@ export class NotificationHub implements DbNotifier {
     }
 
     this.clientKeysBySocket.delete(socket);
+  }
+
+  registerTerminalClient(terminalId: string, socket: HubSocket): void {
+    const sockets =
+      this.terminalClientSocketsById.get(terminalId) ?? new Set<HubSocket>();
+    sockets.add(socket);
+    this.terminalClientSocketsById.set(terminalId, sockets);
+
+    const terminalIds =
+      this.terminalIdsByClientSocket.get(socket) ?? new Set<string>();
+    terminalIds.add(terminalId);
+    this.terminalIdsByClientSocket.set(socket, terminalIds);
+  }
+
+  unregisterTerminalClient(terminalId: string, socket: HubSocket): void {
+    const sockets = this.terminalClientSocketsById.get(terminalId);
+    if (sockets) {
+      sockets.delete(socket);
+      if (sockets.size === 0) {
+        this.terminalClientSocketsById.delete(terminalId);
+      }
+    }
+
+    const terminalIds = this.terminalIdsByClientSocket.get(socket);
+    if (!terminalIds) {
+      return;
+    }
+    terminalIds.delete(terminalId);
+    if (terminalIds.size === 0) {
+      this.terminalIdsByClientSocket.delete(socket);
+    }
+  }
+
+  unregisterTerminalClientSocket(socket: HubSocket): void {
+    const terminalIds = this.terminalIdsByClientSocket.get(socket);
+    if (!terminalIds) {
+      return;
+    }
+
+    for (const terminalId of terminalIds) {
+      const sockets = this.terminalClientSocketsById.get(terminalId);
+      if (!sockets) {
+        continue;
+      }
+      sockets.delete(socket);
+      if (sockets.size === 0) {
+        this.terminalClientSocketsById.delete(terminalId);
+      }
+    }
+
+    this.terminalIdsByClientSocket.delete(socket);
+  }
+
+  sendTerminalSocketMessage(
+    socket: HubSocket,
+    message: TerminalServerMessage,
+  ): void {
+    socket.send(JSON.stringify(terminalServerMessageSchema.parse(message)));
+  }
+
+  sendTerminalClientMessage(
+    terminalId: string,
+    message: TerminalServerMessage,
+  ): void {
+    const sockets = this.terminalClientSocketsById.get(terminalId);
+    if (!sockets) {
+      return;
+    }
+
+    const payload = JSON.stringify(terminalServerMessageSchema.parse(message));
+    for (const socket of sockets) {
+      socket.send(payload);
+    }
   }
 
   subscribe(socket: HubSocket, entity: string, id?: string): void {
@@ -465,10 +554,29 @@ export class NotificationHub implements DbNotifier {
     hostId: string,
     message: { type: "commands-available" } = { type: "commands-available" },
   ): void {
+    this.sendDaemonMessage(hostId, message);
+  }
+
+  sendDaemonMessage(
+    hostId: string,
+    message: HostDaemonServerWsMessage,
+  ): boolean {
     const sessionId = this.daemonSessionIdsByHost.get(hostId);
     if (!sessionId) {
-      return;
+      return false;
     }
-    this.daemonSessions.get(sessionId)?.socket.send(JSON.stringify(message));
+    return this.sendDaemonSessionMessage(sessionId, message);
+  }
+
+  sendDaemonSessionMessage(
+    sessionId: string,
+    message: HostDaemonServerWsMessage,
+  ): boolean {
+    const session = this.daemonSessions.get(sessionId);
+    if (!session) {
+      return false;
+    }
+    session.socket.send(JSON.stringify(message));
+    return true;
   }
 }

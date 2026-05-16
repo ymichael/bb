@@ -6,6 +6,9 @@ import {
   hostTypeSchema,
   pendingInteractionCreateSchema,
   pendingInteractionStatusSchema,
+  terminalColsSchema,
+  terminalDataBase64Schema,
+  terminalRowsSchema,
   threadEventSchema,
   toolCallRequestSchema,
   toolCallResponseSchema,
@@ -16,6 +19,7 @@ import type { HostDaemonCommandResultReport } from "./commands.js";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonCommandEnvelopeSchema,
+  workspaceContextSchema,
 } from "./commands.js";
 import { hostRuntimeMaterialSnapshotSchema } from "./local-state.js";
 
@@ -225,24 +229,161 @@ export type HostDaemonSessionCloseReason = z.infer<
   typeof hostDaemonSessionCloseReasonSchema
 >;
 
+const terminalIdSchema = z.string().min(1);
+const terminalRequestIdSchema = z.string().min(1);
+const terminalCloseReasonSchema = z.enum([
+  "user",
+  "process-exit",
+  "daemon-disconnect",
+  "environment-destroyed",
+  "thread-deleted",
+  "open-timeout",
+]);
+
+export const hostDaemonTerminalOutputChunkSchema = z
+  .object({
+    seq: z.number().int().nonnegative(),
+    dataBase64: terminalDataBase64Schema,
+  })
+  .strict();
+export type HostDaemonTerminalOutputChunk = z.infer<
+  typeof hostDaemonTerminalOutputChunkSchema
+>;
+
+const hostDaemonTerminalOpenMessageSchema = z
+  .object({
+    type: z.literal("terminal.open"),
+    requestId: terminalRequestIdSchema,
+    terminalId: terminalIdSchema,
+    threadId: z.string().min(1),
+    environmentId: z.string().min(1),
+    workspaceContext: workspaceContextSchema,
+    cols: terminalColsSchema,
+    rows: terminalRowsSchema,
+  })
+  .strict();
+
+const hostDaemonTerminalAttachMessageSchema = z
+  .object({
+    type: z.literal("terminal.attach"),
+    requestId: terminalRequestIdSchema,
+    terminalId: terminalIdSchema,
+    sinceSeq: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const hostDaemonTerminalInputMessageSchema = z
+  .object({
+    type: z.literal("terminal.input"),
+    terminalId: terminalIdSchema,
+    dataBase64: terminalDataBase64Schema,
+  })
+  .strict();
+
+const hostDaemonTerminalResizeMessageSchema = z
+  .object({
+    type: z.literal("terminal.resize"),
+    terminalId: terminalIdSchema,
+    cols: terminalColsSchema,
+    rows: terminalRowsSchema,
+  })
+  .strict();
+
+const hostDaemonTerminalCloseMessageSchema = z
+  .object({
+    type: z.literal("terminal.close"),
+    terminalId: terminalIdSchema,
+    reason: terminalCloseReasonSchema,
+  })
+  .strict();
+
 export const hostDaemonServerWsMessageSchema = z.discriminatedUnion("type", [
-  z.object({
-    type: z.literal("commands-available"),
-  }),
-  z.object({
-    type: z.literal("session-close"),
-    reason: hostDaemonSessionCloseReasonSchema,
-  }),
+  z
+    .object({
+      type: z.literal("commands-available"),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("session-close"),
+      reason: hostDaemonSessionCloseReasonSchema,
+    })
+    .strict(),
+  hostDaemonTerminalOpenMessageSchema,
+  hostDaemonTerminalAttachMessageSchema,
+  hostDaemonTerminalInputMessageSchema,
+  hostDaemonTerminalResizeMessageSchema,
+  hostDaemonTerminalCloseMessageSchema,
 ]);
 export type HostDaemonServerWsMessage = z.infer<
   typeof hostDaemonServerWsMessageSchema
 >;
 
-export const hostDaemonDaemonWsMessageSchema = z
+const hostDaemonHeartbeatMessageSchema = z
   .object({
     type: z.literal("heartbeat"),
   })
   .strict();
+
+const hostDaemonTerminalOpenedMessageSchema = z
+  .object({
+    type: z.literal("terminal.opened"),
+    requestId: terminalRequestIdSchema,
+    terminalId: terminalIdSchema,
+    shell: z.string().min(1),
+    title: z.string().min(1),
+    initialCwd: z.string().min(1),
+    currentCwd: z.string().min(1).nullable(),
+    cols: terminalColsSchema,
+    rows: terminalRowsSchema,
+  })
+  .strict();
+
+const hostDaemonTerminalOutputMessageSchema = z
+  .object({
+    type: z.literal("terminal.output"),
+    terminalId: terminalIdSchema,
+    chunk: hostDaemonTerminalOutputChunkSchema,
+  })
+  .strict();
+
+const hostDaemonTerminalReplayMessageSchema = z
+  .object({
+    type: z.literal("terminal.replay"),
+    requestId: terminalRequestIdSchema,
+    terminalId: terminalIdSchema,
+    chunks: z.array(hostDaemonTerminalOutputChunkSchema),
+    nextSeq: z.number().int().nonnegative(),
+  })
+  .strict();
+
+const hostDaemonTerminalExitedMessageSchema = z
+  .object({
+    type: z.literal("terminal.exited"),
+    terminalId: terminalIdSchema,
+    exitCode: z.number().int().nullable(),
+    closeReason: terminalCloseReasonSchema,
+  })
+  .strict();
+
+const hostDaemonTerminalErrorMessageSchema = z
+  .object({
+    type: z.literal("terminal.error"),
+    requestId: terminalRequestIdSchema,
+    terminalId: terminalIdSchema,
+    code: z.string().min(1),
+    message: z.string().min(1),
+  })
+  .strict();
+
+export const hostDaemonDaemonWsMessageSchema = z.discriminatedUnion("type", [
+  hostDaemonHeartbeatMessageSchema,
+  hostDaemonTerminalOpenedMessageSchema,
+  hostDaemonTerminalOutputMessageSchema,
+  hostDaemonTerminalReplayMessageSchema,
+  hostDaemonTerminalExitedMessageSchema,
+  hostDaemonTerminalErrorMessageSchema,
+]);
 export type HostDaemonDaemonWsMessage = z.infer<
   typeof hostDaemonDaemonWsMessageSchema
 >;

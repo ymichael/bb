@@ -7,6 +7,7 @@ import type { PendingInteractionLifecycle } from "./services/interactions/pendin
 import type { SandboxHostRegistry } from "./services/hosts/sandbox-registry.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
 import type { SandboxEnvService } from "./services/sandbox-env/types.js";
+import type { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
 import type { LifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { NotificationHub } from "./ws/hub.js";
 
@@ -42,6 +43,10 @@ export interface AppDeps {
   sandboxEnv: SandboxEnvService;
   pendingInteractions: PendingInteractionLifecycle;
   sandboxRegistry: SandboxHostRegistry;
+}
+
+export interface ServerAppDeps extends AppDeps {
+  terminalSessions: TerminalSessionLifecycle;
 }
 
 export type SandboxLifecycleDeps = Pick<

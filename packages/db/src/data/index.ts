@@ -343,6 +343,36 @@ export type {
 } from "./commands.js";
 
 export {
+  createTerminalSession,
+  getTerminalSessionForThread,
+  listTerminalSessionsByEnvironment,
+  listTerminalSessionsByThread,
+  markDaemonTerminalSessionExited,
+  markDaemonTerminalSessionsDisconnected,
+  markEnvironmentTerminalSessionsExited,
+  markHostDisconnectedTerminalSessionsExited,
+  markTerminalSessionExited,
+  markTerminalSessionRunning,
+  markThreadTerminalSessionsExited,
+  updateTerminalSessionSize,
+  updateTerminalSessionTitle,
+} from "./terminal-sessions.js";
+export type {
+  CreateTerminalSessionInput,
+  GetTerminalSessionForThreadArgs,
+  MarkDaemonTerminalSessionExitedArgs,
+  MarkDaemonTerminalSessionsDisconnectedArgs,
+  MarkEnvironmentTerminalSessionsExitedArgs,
+  MarkHostDisconnectedTerminalSessionsExitedArgs,
+  MarkTerminalSessionExitedArgs,
+  MarkTerminalSessionRunningArgs,
+  MarkThreadTerminalSessionsExitedArgs,
+  TerminalSessionRow,
+  UpdateTerminalSessionSizeArgs,
+  UpdateTerminalSessionTitleArgs,
+} from "./terminal-sessions.js";
+
+export {
   createPendingInteraction,
   getActivePendingInteractionForThread,
   getPendingInteraction,

@@ -445,7 +445,12 @@ describe("internal session correctness", () => {
       };
 
       onDaemonSocketMessage(
-        { db: harness.db, logger },
+        {
+          config: harness.config,
+          db: harness.db,
+          logger,
+          terminalSessions: harness.deps.terminalSessions,
+        },
         {
           hostId: host.id,
           raw: JSON.stringify({ type: "heartbeat" }),
@@ -484,7 +489,12 @@ describe("internal session correctness", () => {
       };
 
       onDaemonSocketMessage(
-        { db: harness.db, logger },
+        {
+          config: harness.config,
+          db: harness.db,
+          logger,
+          terminalSessions: harness.deps.terminalSessions,
+        },
         {
           hostId: "host-heartbeat-intruder",
           raw: JSON.stringify({ type: "heartbeat" }),

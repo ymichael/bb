@@ -14,6 +14,7 @@ import { wsManager } from "./ws";
 // Offline/unavailable app behavior should fail closed independently of server defaults.
 const unavailableFeatureFlags: FeatureFlags = {
   askUserQuestion: false,
+  terminals: false,
 };
 
 const unavailableSystemConfig: SystemConfigResponse = {
@@ -169,6 +170,12 @@ export const hostDaemonPortAtom = atom<Promise<number | null>>(async (get) => {
 export const githubConnectedAtom = atom<Promise<boolean>>(async (get) => {
   const config = await get(systemConfigAtom);
   return config.githubConnected;
+});
+
+/** Whether thread terminal sessions are enabled by the server. */
+export const terminalsEnabledAtom = atom<Promise<boolean>>(async (get) => {
+  const config = await get(systemConfigAtom);
+  return config.featureFlags.terminals;
 });
 
 /** Whether the server supports sandbox host provisioning. */

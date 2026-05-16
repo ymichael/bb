@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useAtomValue } from "jotai";
 import { useParams } from "react-router-dom";
 import type {
   ThreadTimelineLocalFileLink,
@@ -13,6 +14,12 @@ import {
   useTouchThreadSecondaryPanelState,
   type ThreadSecondaryPanel as ThreadSecondaryPanelTab,
 } from "@/lib/thread-secondary-panel";
+import {
+  useThreadTerminalPanelState,
+  useThreadTerminalPanelStorageMaintenance,
+  useToggleThreadTerminalPanel,
+  useUpdateThreadTerminalPanelState,
+} from "@/lib/thread-terminal-panel";
 import { getActiveStorageFilePath } from "@/lib/thread-secondary-panel-state";
 import { useRequestEnvironmentAction } from "../../hooks/mutations/environment-mutations";
 import {
@@ -80,6 +87,7 @@ import { useEnvironmentMergeBase } from "@/components/secondary-panel/git-diff/u
 import { useThreadGitActions } from "./useThreadGitActions";
 import { useThreadReadTracking } from "./useThreadReadTracking";
 import { useThreadTimelinePages } from "./useThreadTimelinePages";
+import { terminalsEnabledAtom } from "@/lib/system-config-atoms";
 import {
   buildOpenInEditorHandler,
   resolveWorkspaceChangedFileOpenTarget,
@@ -92,6 +100,7 @@ import {
   isUnassignedStandardThread,
 } from "./threadManagerSelectorOptions";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport";
+import { ThreadTerminalPanel } from "@/components/thread/terminal/ThreadTerminalPanel";
 
 const EMPTY_MANAGER_THREADS: readonly ThreadListEntry[] = [];
 
@@ -127,13 +136,17 @@ export function ThreadDetailView() {
   }>();
   useThreadSecondaryPanelStorageMaintenance(threadId);
   useThreadSecondaryPanelUrlSync(threadId);
+  useThreadTerminalPanelStorageMaintenance(threadId);
   const secondaryPanelState = useThreadSecondaryPanelState(threadId);
+  const terminalPanelState = useThreadTerminalPanelState(threadId);
   const activeSecondaryPanel = secondaryPanelState.activePanel;
   const renderSecondaryPanelAsDrawer = useIsCompactViewport();
   const touchSecondaryPanelState = useTouchThreadSecondaryPanelState(threadId);
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "");
   const hasThreadDetailBootstrapSettled =
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
+  const toggleTerminalPanel = useToggleThreadTerminalPanel(threadId);
+  const updateTerminalPanelState = useUpdateThreadTerminalPanelState(threadId);
   const {
     data: thread,
     isFetching,
@@ -282,6 +295,7 @@ export function ThreadDetailView() {
   const markThreadRead = useMarkThreadRead();
   const updateEnvironment = useUpdateEnvironment();
   const updateThread = useUpdateThread();
+  const terminalsEnabled = useAtomValue(terminalsEnabledAtom);
   const hostConnectionNotice = useMemo(
     () => (thread ? buildHostConnectionNotice(thread) : null),
     [thread],
@@ -366,6 +380,21 @@ export function ThreadDetailView() {
       openSecondaryPanel(panel);
     },
     [clearActiveFileTabs, openSecondaryPanel],
+  );
+  const handleTerminalPanelResize = useCallback(
+    (sizePercent: number) => {
+      const panelHeightPercent = Math.round(sizePercent);
+      updateTerminalPanelState((current) => {
+        if (current.panelHeightPercent === panelHeightPercent) {
+          return current;
+        }
+        return {
+          ...current,
+          panelHeightPercent,
+        };
+      });
+    },
+    [updateTerminalPanelState],
   );
   const handleChangedFileClick = useCallback(
     (selection: WorkspaceChangedFileSelection) => {
@@ -715,6 +744,10 @@ export function ThreadDetailView() {
   const promptBannerMergeBaseBranch = effectiveMergeBaseBranch;
   const threadBranchName = workspaceBranch?.currentBranch ?? undefined;
   const isWorkspaceDeleted = environment?.status === "destroyed";
+  const canCreateTerminal =
+    terminalsEnabled &&
+    thread.environmentId !== null &&
+    environment?.status === "ready";
   const threadGitStatusDisplay = getGitStatusDisplay(workspaceStatus, {
     mergeBaseBranch,
     showBranchComparison: showBranchComparisonUi,
@@ -769,9 +802,12 @@ export function ThreadDetailView() {
       isManagedThread={Boolean(parentThreadId)}
       isManagerThread={isManagerThread}
       isSecondaryPanelOpen={isSecondaryPanelOpen}
+      isTerminalPanelOpen={terminalsEnabled && terminalPanelState.isOpen}
       isThreadGitActionPending={gitActions.isThreadGitActionPending}
       onOpenThreadGitAction={gitActions.threadGitActionDialog.onOpen}
       onToggleSecondaryPanel={toggleSecondaryPanel}
+      onToggleTerminalPanel={toggleTerminalPanel}
+      showTerminalPanelToggle={terminalsEnabled}
       threadHeaderGitActions={gitActions.threadHeaderGitActions}
       threadTitle={threadTitle}
       workspaceOpenButton={workspaceOpenButton}
@@ -937,6 +973,17 @@ export function ThreadDetailView() {
           onPanelChange: handleSecondaryPanelChange,
           showGitDiffTab: canUseGitUi,
         }}
+        terminalPanel={
+          terminalsEnabled ? (
+            <ThreadTerminalPanel
+              canCreateTerminal={canCreateTerminal}
+              threadId={thread.id}
+            />
+          ) : undefined
+        }
+        terminalPanelHeightPercent={terminalPanelState.panelHeightPercent}
+        terminalPanelOpen={terminalsEnabled && terminalPanelState.isOpen}
+        onTerminalPanelResize={handleTerminalPanelResize}
         timeline={{
           activeThinking,
           hasOlderTimelineRows,

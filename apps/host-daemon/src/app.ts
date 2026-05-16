@@ -23,6 +23,10 @@ import {
   RuntimeManager,
   type RuntimeManagerOptions,
 } from "./runtime-manager.js";
+import {
+  TerminalManager,
+  type TerminalManagerOptions,
+} from "./terminals/terminal-manager.js";
 import { hostDaemonConfig } from "@bb/config/host-daemon";
 import { createReplayCaptureService } from "@bb/replay-capture/writer";
 import { createServerClient } from "./server-client.js";
@@ -293,6 +297,7 @@ export interface HostDaemonApp {
   eventBuffer: EventBuffer;
   localApi: LocalApiServer | null;
   runtimeManager: RuntimeManager;
+  terminalManager: TerminalManager;
   router: CommandRouter;
   connection: ServerConnection;
 }
@@ -592,6 +597,12 @@ export async function createHostDaemonApp(
     },
     threadStorageRootPath,
   });
+  let sendTerminalMessage: TerminalManagerOptions["sendMessage"] = () => false;
+  const terminalManager = new TerminalManager({
+    logger: options.logger,
+    runtimeManager,
+    sendMessage: (message) => sendTerminalMessage(message),
+  });
 
   const router = new CommandRouter({
     dataDir: options.dataDir,
@@ -601,6 +612,7 @@ export async function createHostDaemonApp(
     readPersistedRuntimeMaterial: () =>
       readRuntimeMaterialState(options.dataDir),
     runtimeManager,
+    terminalManager,
     listModels: (args) =>
       defaultListModels(args, {
         bridgeBundleDir: options.bridgeBundleDir,
@@ -645,6 +657,7 @@ export async function createHostDaemonApp(
     createWebSocket: options.createWebSocket,
     getActiveThreads: () => runtimeManager.listActiveThreads(),
     onCommandsAvailable: () => commandFetchLoop.request(),
+    onTerminalMessage: (message) => terminalManager.handleMessage(message),
     onSessionOpened: (session) => {
       sessionState.value = session.sessionId;
       runtimeManager.replaceTrackedThreadStorageTargets(
@@ -666,6 +679,7 @@ export async function createHostDaemonApp(
       }
     },
   });
+  sendTerminalMessage = (message) => connection.sendMessage(message);
 
   const localApi = options.localApiConfig
     ? await startLocalApiServer({
@@ -696,6 +710,7 @@ export async function createHostDaemonApp(
     shutdownRuntimes: async () => {
       environmentChangeReporter.dispose();
       await localApi?.close();
+      await terminalManager.shutdownAll();
       await runtimeManager.shutdownAll();
       await eventBuffer.flush();
       await eventBuffer.dispose();
@@ -721,6 +736,7 @@ export async function createHostDaemonApp(
     eventBuffer,
     localApi,
     runtimeManager,
+    terminalManager,
     router,
     connection,
   };

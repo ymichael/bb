@@ -2,6 +2,7 @@ import ReconnectingWebSocket from "partysocket/ws";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonActiveThread,
+  type HostDaemonServerWsMessage,
   type HostDaemonSessionCloseReason,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
@@ -39,6 +40,11 @@ export type CreateReconnectingWebSocket = (
   options: ReconnectingWebSocketOptions,
 ) => ReconnectingWebSocketLike;
 
+export type HostDaemonServerTerminalMessage = Exclude<
+  HostDaemonServerWsMessage,
+  { type: "commands-available" } | { type: "session-close" }
+>;
+
 export interface ServerConnectionOptions {
   serverUrl: string;
   hostKey: string;
@@ -54,6 +60,9 @@ export interface ServerConnectionOptions {
     | HostDaemonActiveThread[]
     | Promise<HostDaemonActiveThread[]>;
   onCommandsAvailable?: () => void | Promise<void>;
+  onTerminalMessage?: (
+    message: HostDaemonServerTerminalMessage,
+  ) => void | Promise<void>;
   onSessionClose?: (
     reason: HostDaemonSessionCloseReason,
   ) => void | Promise<void>;

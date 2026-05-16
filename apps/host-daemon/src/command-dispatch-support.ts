@@ -18,6 +18,7 @@ import type {
 import type { HostRuntimeMaterialState } from "@bb/host-runtime-material";
 import type { InteractiveResolveCommandInput } from "./interactive-request-registry.js";
 import { RuntimeManager, type RuntimeEntry } from "./runtime-manager.js";
+import type { TerminalManager } from "./terminals/terminal-manager.js";
 import type { FetchProjectAttachment } from "./project-attachments.js";
 
 export type CommandOf<TType extends HostDaemonCommand["type"]> = Extract<
@@ -50,6 +51,7 @@ export interface CommandDispatchOptions {
   readPersistedRuntimeMaterial: () => Promise<HostRuntimeMaterialState | null>;
   persistRuntimeMaterial: (state: HostRuntimeMaterialState) => Promise<void>;
   runtimeManager: RuntimeManager;
+  terminalManager?: Pick<TerminalManager, "closeEnvironmentTerminals">;
   eventSink: EventSink;
   listModels?: (args: ListModelsDispatchArgs) => Promise<{
     models: AvailableModel[];

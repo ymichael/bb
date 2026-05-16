@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
 import type { DbConnection } from "@bb/db";
-import { defaultFeatureFlags, type HostType } from "@bb/domain";
+import {
+  defaultFeatureFlags,
+  type FeatureFlags,
+  type HostType,
+} from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
 import { createCloudAuthService } from "../../src/services/cloud-auth/service.js";
@@ -16,8 +20,9 @@ import {
 } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
 import { createSandboxEnvService } from "../../src/services/sandbox-env/service.js";
+import { TerminalSessionLifecycle } from "../../src/services/terminals/terminal-session-lifecycle.js";
 import { createLifecycleDedupers } from "../../src/lifecycle-dedupers.js";
-import type { AppDeps, ServerRuntimeConfig } from "../../src/types.js";
+import type { ServerAppDeps, ServerRuntimeConfig } from "../../src/types.js";
 import type { NotificationHub } from "../../src/ws/hub.js";
 import { NotificationHub as NotificationHubImpl } from "../../src/ws/hub.js";
 
@@ -28,7 +33,7 @@ export interface TestAppHarness {
   app: ReturnType<typeof createApp>["app"];
   config: ServerRuntimeConfig;
   db: DbConnection;
-  deps: AppDeps;
+  deps: ServerAppDeps;
   hub: NotificationHub;
   cleanup(): Promise<void>;
 }
@@ -37,6 +42,16 @@ export interface RunningTestServer extends TestAppHarness {
   baseUrl: string;
   close(): Promise<void>;
 }
+
+type TestFeatureFlagOverrides = Partial<FeatureFlags>;
+type OptionalTestFeatureFlagOverrides = TestFeatureFlagOverrides | undefined;
+
+export type TestAppHarnessConfigOverrides = Omit<
+  Partial<ServerRuntimeConfig>,
+  "featureFlags"
+> & {
+  featureFlags?: TestFeatureFlagOverrides;
+};
 
 export const testLogger = {
   debug(): void {},
@@ -75,6 +90,16 @@ function decodeTestDaemonKey(token: string): TestDaemonKeyParts | null {
   };
 }
 
+function resolveTestFeatureFlags(
+  overrides: OptionalTestFeatureFlagOverrides,
+): FeatureFlags {
+  return {
+    askUserQuestion:
+      overrides?.askUserQuestion ?? defaultFeatureFlags.askUserQuestion,
+    terminals: overrides?.terminals ?? defaultFeatureFlags.terminals,
+  };
+}
+
 export function createTestDaemonHostKey(
   args: Partial<TestDaemonKeyParts> = {},
 ): string {
@@ -85,8 +110,9 @@ export function createTestDaemonHostKey(
 }
 
 export async function createTestAppHarness(
-  overrides: Partial<ServerRuntimeConfig> = {},
+  overrides: TestAppHarnessConfigOverrides = {},
 ): Promise<TestAppHarness> {
+  const { featureFlags: featureFlagOverrides, ...configOverrides } = overrides;
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
@@ -96,6 +122,13 @@ export async function createTestAppHarness(
     hub,
     logger: testLogger,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
+  });
+  const terminalSessions = new TerminalSessionLifecycle({
+    attachTimeoutMs: 50,
+    db,
+    hub,
+    logger: testLogger,
+    openTimeoutMs: 50,
   });
   pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
@@ -134,7 +167,7 @@ export async function createTestAppHarness(
     dataDir,
     e2bApiKey: "test-e2b-api-key",
     e2bTemplate: "test-e2b-template",
-    featureFlags: defaultFeatureFlags,
+    featureFlags: resolveTestFeatureFlags(featureFlagOverrides),
     githubPat: "",
     hostDaemonPort: 3001,
     inferenceModel: "test/mock-model",
@@ -145,9 +178,9 @@ export async function createTestAppHarness(
     externalUrl: "https://bb.example.test",
     sandboxActivityExtensionDebounceMs: 30_000,
     sandboxIdleThresholdMs: 300_000,
-    ...overrides,
+    ...configOverrides,
   };
-  const deps: AppDeps = {
+  const deps: ServerAppDeps = {
     cloudAuth,
     config,
     db,
@@ -159,6 +192,7 @@ export async function createTestAppHarness(
     sandboxEnv,
     pendingInteractions,
     sandboxRegistry,
+    terminalSessions,
   };
   const { app } = createApp(deps);
 
@@ -177,7 +211,7 @@ export async function createTestAppHarness(
 }
 
 export async function startTestServer(
-  overrides: Partial<ServerRuntimeConfig> = {},
+  overrides: TestAppHarnessConfigOverrides = {},
 ): Promise<RunningTestServer> {
   const harness = await createTestAppHarness(overrides);
   let addressInfo: AddressInfo | null = null;

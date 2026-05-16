@@ -31,6 +31,7 @@ import type {
   EnvironmentDiffFileResponse,
   EnvironmentStatusResponse,
   CreateThreadRequest,
+  CreateThreadTerminalRequest,
   ProjectBranchesResponse,
   ProjectResponse,
   ProjectWithThreadsResponse,
@@ -53,13 +54,17 @@ import type {
   ThreadResponse,
   ThreadWithIncludesResponse,
   ThreadStorageFilesQuery,
+  TerminalSession,
+  ThreadTerminalListResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
+  CloseThreadTerminalRequest,
   ResolvePendingInteractionRequest,
   UpdateEnvironmentRequest,
   UpdateProjectRequest,
   UpdateThreadRequest,
+  UpdateThreadTerminalRequest,
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
   UpsertSandboxEnvVarRequest,
@@ -766,6 +771,56 @@ export async function getThreadDefaultExecutionOptions(
   return request<ResolvedThreadExecutionOptions | null>(
     apiClient.threads[":id"]["default-execution-options"].$get({
       param: { id },
+    }),
+  );
+}
+
+export async function listThreadTerminals(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ThreadTerminalListResponse> {
+  return request<ThreadTerminalListResponse>(
+    apiClient.threads[":id"].terminals.$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
+  );
+}
+
+export async function createThreadTerminal(
+  id: string,
+  req: CreateThreadTerminalRequest,
+): Promise<TerminalSession> {
+  return request<TerminalSession>(
+    apiClient.threads[":id"].terminals.$post({
+      param: { id },
+      json: req,
+    }),
+  );
+}
+
+export async function renameThreadTerminal(
+  id: string,
+  terminalId: string,
+  req: UpdateThreadTerminalRequest,
+): Promise<TerminalSession> {
+  return request<TerminalSession>(
+    apiClient.threads[":id"].terminals[":terminalId"].$patch({
+      param: { id, terminalId },
+      json: req,
+    }),
+  );
+}
+
+export async function closeThreadTerminal(
+  id: string,
+  terminalId: string,
+  req: CloseThreadTerminalRequest,
+): Promise<TerminalSession> {
+  return request<TerminalSession>(
+    apiClient.threads[":id"].terminals[":terminalId"].close.$post({
+      param: { id, terminalId },
+      json: req,
     }),
   );
 }

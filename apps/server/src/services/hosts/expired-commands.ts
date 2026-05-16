@@ -4,7 +4,7 @@ import {
   type HostDaemonCommand,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
-import type { AppDeps } from "../../types.js";
+import type { ServerAppDeps } from "../../types.js";
 import {
   buildCommandResultSettlementDeps,
   handleCommandResultSideEffects,
@@ -31,7 +31,7 @@ type LifecycleFailureReport =
   | Extract<HostDaemonCommandResultReport, { type: "interactive.resolve" }>;
 
 type ExpiredCommandDeps = Pick<
-  AppDeps,
+  ServerAppDeps,
   | "cloudAuth"
   | "config"
   | "db"
@@ -43,6 +43,7 @@ type ExpiredCommandDeps = Pick<
   | "pendingInteractions"
   | "sandboxEnv"
   | "sandboxRegistry"
+  | "terminalSessions"
 >;
 
 interface RecordExpiredCommandWaiterResponseArgs {

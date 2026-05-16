@@ -26,6 +26,7 @@ export const THREAD_QUEUED_MESSAGES_QUERY_KEY = "threadQueuedMessages";
 export const THREAD_PROMPT_HISTORY_QUERY_KEY = "threadPromptHistory";
 export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
   "threadPendingInteractions";
+export const THREAD_TERMINALS_QUERY_KEY = "threadTerminals";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 export const THREAD_HOST_FILE_PREVIEW_QUERY_KEY = "threadHostFilePreview";
@@ -177,6 +178,13 @@ export type ThreadPendingInteractionsQueryKeyPrefix = readonly [
 ];
 export type ThreadPendingInteractionsQueryKey = readonly [
   typeof THREAD_PENDING_INTERACTIONS_QUERY_KEY,
+  string,
+];
+export type AllThreadTerminalsQueryKeyPrefix = readonly [
+  typeof THREAD_TERMINALS_QUERY_KEY,
+];
+export type ThreadTerminalsQueryKey = readonly [
+  typeof THREAD_TERMINALS_QUERY_KEY,
   string,
 ];
 export type ThreadStorageFilesQueryKey = readonly [
@@ -520,6 +528,16 @@ export function threadPendingInteractionsQueryKey(
 
 export function allThreadPendingInteractionsQueryKeyPrefix(): ThreadPendingInteractionsQueryKeyPrefix {
   return [THREAD_PENDING_INTERACTIONS_QUERY_KEY];
+}
+
+export function threadTerminalsQueryKey(
+  threadId: string,
+): ThreadTerminalsQueryKey {
+  return [THREAD_TERMINALS_QUERY_KEY, threadId];
+}
+
+export function allThreadTerminalsQueryKeyPrefix(): AllThreadTerminalsQueryKeyPrefix {
+  return [THREAD_TERMINALS_QUERY_KEY];
 }
 
 export function threadStorageFilesQueryKey(

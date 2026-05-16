@@ -100,6 +100,38 @@ describe("NotificationHub", () => {
     expect(socket.messages).toHaveLength(0);
   });
 
+  it("registers terminal clients and removes them when the socket disconnects", () => {
+    const hub = new NotificationHub();
+    const socket = createMockSocket();
+
+    hub.registerTerminalClient("term-1", socket);
+    hub.sendTerminalClientMessage("term-1", {
+      type: "output",
+      chunk: {
+        seq: 0,
+        dataBase64: "aGVsbG8=",
+      },
+    });
+    hub.unregisterTerminalClientSocket(socket);
+    hub.sendTerminalClientMessage("term-1", {
+      type: "output",
+      chunk: {
+        seq: 1,
+        dataBase64: "d29ybGQ=",
+      },
+    });
+
+    expect(socket.messages.map((message) => JSON.parse(message))).toEqual([
+      {
+        type: "output",
+        chunk: {
+          seq: 0,
+          dataBase64: "aGVsbG8=",
+        },
+      },
+    ]);
+  });
+
   it("notifies only the daemon socket registered for the host", () => {
     const hub = new NotificationHub();
     const socket1 = createMockSocket();

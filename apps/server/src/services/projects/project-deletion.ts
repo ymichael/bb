@@ -14,6 +14,7 @@ import type { Environment, ThreadStatus } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
+  ServerAppDeps,
 } from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
 import {
@@ -48,6 +49,9 @@ interface AdvanceProjectThreadsForDeletionArgs {
   environmentsById: Map<string, Environment>;
   projectId: string;
 }
+
+type ProjectDeletionDeps = LoggedPendingInteractionWorkSessionDeps &
+  Pick<ServerAppDeps, "terminalSessions">;
 
 function isProjectDeletionActive(
   deps: Pick<AppDeps, "db">,
@@ -128,7 +132,7 @@ function tombstoneProjectThreadsForDeletion(
 }
 
 async function advanceProjectThreadsForDeletion(
-  deps: LoggedPendingInteractionWorkSessionDeps,
+  deps: ProjectDeletionDeps,
   args: AdvanceProjectThreadsForDeletionArgs,
 ): Promise<void> {
   const projectThreads = listProjectDeletionThreads(deps.db, {
@@ -143,6 +147,7 @@ async function advanceProjectThreadsForDeletion(
     if (thread.deletedAt === null) {
       markThreadDeleted(deps.db, deps.hub, { threadId: thread.id });
     }
+    deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     if (environment) {
       requestThreadStopIfNeeded(deps, thread, environment);
     }
@@ -189,7 +194,7 @@ export function beginProjectDeletion(
 }
 
 export function requestProjectDeletionAdvance(
-  deps: LoggedPendingInteractionWorkSessionDeps,
+  deps: ProjectDeletionDeps,
   args: ProjectDeletionArgs,
 ): void {
   scheduleAfterDaemonIngressResponse({
@@ -205,7 +210,7 @@ export function requestProjectDeletionAdvance(
 }
 
 export async function advanceProjectDeletion(
-  deps: LoggedPendingInteractionWorkSessionDeps,
+  deps: ProjectDeletionDeps,
   args: ProjectDeletionArgs,
 ): Promise<boolean> {
   if (!isProjectDeletionActive(deps, args.projectId)) {

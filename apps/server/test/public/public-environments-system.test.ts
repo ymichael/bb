@@ -787,6 +787,7 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         featureFlags: {
           askUserQuestion: true,
+          terminals: false,
         },
         githubConnected: false,
         hostDaemonPort: 4010,
@@ -808,6 +809,7 @@ describe("public environment and system routes", () => {
       await expect(readJson(response)).resolves.toEqual({
         featureFlags: {
           askUserQuestion: false,
+          terminals: false,
         },
         githubConnected: false,
         hostDaemonPort: 3001,

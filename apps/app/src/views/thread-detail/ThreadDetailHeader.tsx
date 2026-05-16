@@ -25,9 +25,12 @@ interface ThreadDetailHeaderProps {
   isManagedThread: boolean;
   isManagerThread: boolean;
   isSecondaryPanelOpen: boolean;
+  isTerminalPanelOpen: boolean;
   isThreadGitActionPending: boolean;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
+  onToggleTerminalPanel: () => void;
+  showTerminalPanelToggle: boolean;
   threadHeaderGitActions: ThreadHeaderGitAction[];
   threadTitle: string;
   workspaceOpenButton?: ReactNode;
@@ -38,9 +41,12 @@ export function ThreadDetailHeader({
   isManagedThread,
   isManagerThread,
   isSecondaryPanelOpen,
+  isTerminalPanelOpen,
   isThreadGitActionPending,
   onOpenThreadGitAction,
   onToggleSecondaryPanel,
+  onToggleTerminalPanel,
+  showTerminalPanelToggle,
   threadHeaderGitActions,
   threadTitle,
   workspaceOpenButton,
@@ -89,6 +95,24 @@ export function ThreadDetailHeader({
         </Button>
       ) : null}
       {actionsMenu}
+      {showTerminalPanelToggle ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
+          aria-label={
+            isTerminalPanelOpen ? "Hide terminal panel" : "Show terminal panel"
+          }
+          aria-pressed={isTerminalPanelOpen}
+          title={
+            isTerminalPanelOpen ? "Hide terminal panel" : "Show terminal panel"
+          }
+          onClick={onToggleTerminalPanel}
+        >
+          <Icon name="PanelBottom" />
+        </Button>
+      ) : null}
       {!renderAsDrawer && isSecondaryPanelOpen ? null : (
         <Button
           type="button"
@@ -96,11 +120,15 @@ export function ThreadDetailHeader({
           size="icon"
           className={cn(HEADER_ICON_BUTTON_CLASS, "text-muted-foreground")}
           aria-label={
-            isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
+            isSecondaryPanelOpen
+              ? "Hide secondary panel"
+              : "Show secondary panel"
           }
           aria-pressed={isSecondaryPanelOpen}
           title={
-            isSecondaryPanelOpen ? "Hide secondary panel" : "Show secondary panel"
+            isSecondaryPanelOpen
+              ? "Hide secondary panel"
+              : "Show secondary panel"
           }
           onClick={onToggleSecondaryPanel}
         >

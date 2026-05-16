@@ -5,8 +5,13 @@ import * as contract from "../src/index.js";
 import {
   PROJECT_CHANGE_KINDS,
   SYSTEM_CHANGE_KINDS,
+  TERMINAL_COLS_MAX,
+  TERMINAL_DATA_MAX_BASE64_LENGTH,
+  TERMINAL_DATA_MAX_BYTES,
+  TERMINAL_ROWS_MAX,
   automationSchema,
   createAutomationRequestSchema,
+  createThreadTerminalRequestSchema,
   createHostJoinRequestSchema,
   createHostJoinResponseSchema,
   createLocalPersistentHostJoinRequest,
@@ -22,6 +27,8 @@ import {
   resolvePendingInteractionRequestSchema,
   sendQueuedMessageRequestSchema,
   sendMessageRequestSchema,
+  terminalClientMessageSchema,
+  terminalOutputChunkSchema,
   threadListResponseSchema,
   threadPendingInteractionsResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
@@ -191,6 +198,10 @@ const INTENTIONAL_OPTIONAL_SERVER_FIELDS: Record<string, string> = {
     "Uploaded attachments may omit mime type when the client could not determine one.",
 };
 
+function terminalDataBase64(byteLength: number): string {
+  return Buffer.alloc(byteLength, "a").toString("base64");
+}
+
 describe("git branch name contract", () => {
   it("accepts valid branch names", () => {
     const validNames = [
@@ -263,6 +274,71 @@ describe("git branch name contract", () => {
       unmanagedBranchSpecSchema.safeParse({
         kind: "existing",
         name: "release 1.2",
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe("public terminal contracts", () => {
+  it("bounds terminal dimensions", () => {
+    expect(
+      createThreadTerminalRequestSchema.safeParse({
+        cols: TERMINAL_COLS_MAX,
+        rows: TERMINAL_ROWS_MAX,
+      }).success,
+    ).toBe(true);
+    expect(
+      createThreadTerminalRequestSchema.safeParse({
+        cols: TERMINAL_COLS_MAX + 1,
+        rows: TERMINAL_ROWS_MAX,
+      }).success,
+    ).toBe(false);
+    expect(
+      terminalClientMessageSchema.safeParse({
+        type: "resize",
+        cols: TERMINAL_COLS_MAX,
+        rows: TERMINAL_ROWS_MAX + 1,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("bounds and validates terminal data payloads", () => {
+    const maxPayload = terminalDataBase64(TERMINAL_DATA_MAX_BYTES);
+    const oversizedDecodedPayload = terminalDataBase64(
+      TERMINAL_DATA_MAX_BYTES + 1,
+    );
+    const oversizedEncodedPayload = "A".repeat(
+      TERMINAL_DATA_MAX_BASE64_LENGTH + 4,
+    );
+
+    expect(
+      terminalClientMessageSchema.safeParse({
+        type: "input",
+        dataBase64: maxPayload,
+      }).success,
+    ).toBe(true);
+    expect(
+      terminalOutputChunkSchema.safeParse({
+        seq: 0,
+        dataBase64: maxPayload,
+      }).success,
+    ).toBe(true);
+    expect(
+      terminalClientMessageSchema.safeParse({
+        type: "input",
+        dataBase64: oversizedDecodedPayload,
+      }).success,
+    ).toBe(false);
+    expect(
+      terminalOutputChunkSchema.safeParse({
+        seq: 0,
+        dataBase64: "not base64!",
+      }).success,
+    ).toBe(false);
+    expect(
+      terminalClientMessageSchema.safeParse({
+        type: "input",
+        dataBase64: oversizedEncodedPayload,
       }).success,
     ).toBe(false);
   });

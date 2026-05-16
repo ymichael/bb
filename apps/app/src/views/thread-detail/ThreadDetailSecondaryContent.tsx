@@ -1,9 +1,14 @@
 import { type ComponentProps, type ReactNode } from "react";
-import { Panel, PanelGroup } from "react-resizable-panels";
+import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
 import { ResponsiveDrawerShell } from "@/components/ui/responsive-overlay.js";
 import { useIsCompactViewport } from "@/components/ui/hooks/use-compact-viewport.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { useAtomValue } from "jotai";
+import {
+  MAX_TERMINAL_PANEL_HEIGHT_PERCENT,
+  MIN_TERMINAL_PANEL_HEIGHT_PERCENT,
+} from "@/lib/thread-terminal-panel-state";
+import { cn } from "@/lib/utils";
 import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";
 import { secondaryPanelWidthPercentAtom } from "@/components/secondary-panel/threadSecondaryPanelAtoms";
 import {
@@ -32,6 +37,10 @@ interface ThreadDetailSecondaryContentProps {
   isSecondaryPanelOpen: boolean;
   metadata: ThreadMetadataContentProps;
   secondaryPanel: ThreadSecondaryPanelProps;
+  terminalPanel?: ReactNode;
+  terminalPanelHeightPercent: number;
+  terminalPanelOpen: boolean;
+  onTerminalPanelResize: (sizePercent: number) => void;
   timeline: ThreadTimelinePaneProps;
 }
 
@@ -41,7 +50,11 @@ export function ThreadDetailSecondaryContent({
   isMetadataLoading,
   isSecondaryPanelOpen,
   metadata,
+  onTerminalPanelResize,
   secondaryPanel,
+  terminalPanel,
+  terminalPanelHeightPercent,
+  terminalPanelOpen,
   timeline,
 }: ThreadDetailSecondaryContentProps) {
   const renderAsDrawer = useIsCompactViewport();
@@ -78,23 +91,54 @@ export function ThreadDetailSecondaryContent({
   return (
     <div className="-mx-4 -mb-4 -mt-4 flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
       <PanelGroup
-        direction="horizontal"
+        direction="vertical"
         className="h-full w-full min-w-0"
       >
         <Panel
-          id="thread-detail-timeline-panel"
+          id="thread-detail-main-panel"
           defaultSize={
-            isSecondaryPanelOpen && !renderAsDrawer
-              ? 100 - persistedSecondaryWidthPercent
-              : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
+            terminalPanelOpen ? 100 - terminalPanelHeightPercent : 100
           }
           minSize={30}
           order={1}
           className="min-w-0 overflow-hidden"
         >
-          <ThreadTimelinePane {...timeline} footer={footer} header={header} />
+          <PanelGroup
+            direction="horizontal"
+            className="h-full w-full min-w-0"
+          >
+            <Panel
+              id="thread-detail-timeline-panel"
+              defaultSize={
+                isSecondaryPanelOpen && !renderAsDrawer
+                  ? 100 - persistedSecondaryWidthPercent
+                  : CLOSED_TIMELINE_PANEL_SIZE_PERCENT
+              }
+              minSize={30}
+              order={1}
+              className="min-w-0 overflow-hidden"
+            >
+              <ThreadTimelinePane {...timeline} footer={footer} header={header} />
+            </Panel>
+            {inlineSecondaryPanelContent}
+          </PanelGroup>
         </Panel>
-        {inlineSecondaryPanelContent}
+        {terminalPanelOpen && terminalPanel ? (
+          <>
+            <TerminalPanelResizeHandle />
+            <Panel
+              id="thread-detail-terminal-panel"
+              defaultSize={terminalPanelHeightPercent}
+              minSize={MIN_TERMINAL_PANEL_HEIGHT_PERCENT}
+              maxSize={MAX_TERMINAL_PANEL_HEIGHT_PERCENT}
+              order={2}
+              onResize={onTerminalPanelResize}
+              className="min-h-0 min-w-0 overflow-hidden"
+            >
+              {terminalPanel}
+            </Panel>
+          </>
+        ) : null}
       </PanelGroup>
       {renderAsDrawer ? (
         <ResponsiveDrawerShell
@@ -117,6 +161,21 @@ export function ThreadDetailSecondaryContent({
         </ResponsiveDrawerShell>
       ) : null}
     </div>
+  );
+}
+
+function TerminalPanelResizeHandle() {
+  return (
+    <PanelResizeHandle
+      id="thread-detail-terminal-panel-handle"
+      className={cn(
+        "group relative h-px shrink-0 cursor-row-resize bg-border/70",
+        "before:absolute before:-inset-y-1.5 before:inset-x-0 before:content-['']",
+      )}
+      aria-label="Resize thread and terminal panels"
+    >
+      <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/70 transition-colors group-hover:bg-accent-foreground/35" />
+    </PanelResizeHandle>
   );
 }
 

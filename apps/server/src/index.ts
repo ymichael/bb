@@ -18,6 +18,7 @@ import { createMachineAuthService } from "./services/machine-auth.js";
 import { createSandboxEnvService } from "./services/sandbox-env/service.js";
 import { startEventLoopStallMonitor } from "./services/system/event-loop-stall-monitor.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
+import { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
 import { createLifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { ServerRuntimeConfig } from "./types.js";
 import { NotificationHub } from "./ws/hub.js";
@@ -32,6 +33,11 @@ async function main(): Promise<void> {
     hub,
     logger,
     sandboxInteractionExpiryMs: DEFAULT_SANDBOX_PENDING_INTERACTION_EXPIRY_MS,
+  });
+  const terminalSessions = new TerminalSessionLifecycle({
+    db,
+    hub,
+    logger,
   });
   pendingInteractions.start();
   const sandboxRegistry = createSandboxHostRegistry();
@@ -98,6 +104,7 @@ async function main(): Promise<void> {
       sandboxEnv,
       pendingInteractions,
       sandboxRegistry,
+      terminalSessions,
     },
     { staticDir },
   );
@@ -130,6 +137,7 @@ async function main(): Promise<void> {
       pendingInteractions,
       sandboxEnv,
       sandboxRegistry,
+      terminalSessions,
     });
   }, 10_000);
   sweepInterval.unref();

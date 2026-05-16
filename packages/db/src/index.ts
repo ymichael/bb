@@ -28,6 +28,7 @@ export {
   createPromptHistoryEntryId,
   createProjectSourceId,
   createSandboxProviderCredentialId,
+  createTerminalSessionId,
   createThreadId,
   createThreadProvisioningId,
 } from "./ids.js";

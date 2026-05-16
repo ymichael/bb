@@ -7,7 +7,7 @@ import { cors } from "hono/cors";
 import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
 import { devEnvConfig } from "@bb/config/dev-env";
 import { serverConfig } from "@bb/config/server";
-import type { AppDeps } from "./types.js";
+import type { AppDeps, ServerAppDeps } from "./types.js";
 import { ApiError, errorToResponse } from "./errors.js";
 import { registerAutomationRoutes } from "./routes/automations.js";
 import { registerEnvironmentRoutes } from "./routes/environments.js";
@@ -41,6 +41,11 @@ import {
   validateDaemonWebSocket,
 } from "./ws/daemon-protocol.js";
 import { roundDurationMs } from "./services/lib/duration.js";
+import {
+  onTerminalSocketClose,
+  onTerminalSocketMessage,
+  onTerminalSocketOpen,
+} from "./ws/terminal-protocol.js";
 
 export type CloseWebSockets = () => Promise<void>;
 type NodeWebSocketServer = ReturnType<typeof createNodeWebSocket>["wss"];
@@ -135,7 +140,7 @@ function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
 }
 
 export function createApp(
-  deps: AppDeps,
+  deps: ServerAppDeps,
   options?: CreateAppOptions,
 ): ServerApp {
   const app = new Hono();
@@ -242,6 +247,36 @@ export function createApp(
       onClose: (_event, socket) => onClientSocketClose(deps.hub, socket),
     })),
   );
+
+  if (deps.config.featureFlags.terminals) {
+    app.get(
+      "/ws/threads/:threadId/terminals/:terminalId",
+      upgradeWebSocket((context) => {
+        const threadId = context.req.param("threadId");
+        const terminalId = context.req.param("terminalId");
+        return {
+          onOpen: (_event, socket) =>
+            onTerminalSocketOpen(deps, {
+              socket,
+              terminalId,
+              threadId,
+            }),
+          onMessage: (event, socket) =>
+            onTerminalSocketMessage(deps, {
+              raw: event.data,
+              socket,
+              terminalId,
+              threadId,
+            }),
+          onClose: (_event, socket) =>
+            onTerminalSocketClose(deps, {
+              socket,
+              terminalId,
+            }),
+        };
+      }),
+    );
+  }
 
   app.get(
     "/internal/ws",

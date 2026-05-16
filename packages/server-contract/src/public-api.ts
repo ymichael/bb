@@ -20,6 +20,7 @@ import type {
   PathProjectId,
   PathProviderId,
   PathThreadAndQueuedMessage,
+  PathThreadAndTerminal,
 } from "./common.js";
 import type {
   Automation,
@@ -34,7 +35,9 @@ import type {
   CreateManagerThreadRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
+  CreateThreadTerminalRequest,
   CreateThreadRequest,
+  CloseThreadTerminalRequest,
   DeleteThreadRequest,
   EnvironmentDiffQuery,
   EnvironmentDiffFileQuery,
@@ -78,6 +81,7 @@ import type {
   SystemProvidersQuery,
   SystemVoiceTranscriptionForm,
   SystemVoiceTranscriptionResponse,
+  TerminalSession,
   ThreadEventWaitQuery,
   ThreadEventsQuery,
   ThreadGetQuery,
@@ -86,6 +90,7 @@ import type {
   ThreadPendingInteractionsResponse,
   ThreadResponse,
   ThreadWithIncludesResponse,
+  ThreadTerminalListResponse,
   ThreadTimelineQuery,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsQuery,
@@ -95,6 +100,7 @@ import type {
   UpdateHostRequest,
   UpdateProjectRequest,
   UpdateProjectSourceRequest,
+  UpdateThreadTerminalRequest,
   UpdateThreadRequest,
   UpsertSandboxEnvVarRequest,
   UploadedPromptAttachment,
@@ -448,6 +454,30 @@ export type PublicApiSchema = {
   };
   "/threads/:id/unread": {
     $post: Endpoint<PathId, ThreadResponse>;
+  };
+  "/threads/:id/terminals": {
+    /** List terminal sessions owned by this thread. */
+    $get: Endpoint<PathId, ThreadTerminalListResponse>;
+    /** Start a new interactive terminal session in the thread workspace. */
+    $post: Endpoint<
+      PathId & { json: CreateThreadTerminalRequest },
+      TerminalSession,
+      201
+    >;
+  };
+  "/threads/:id/terminals/:terminalId": {
+    /** Rename a terminal session tab. */
+    $patch: Endpoint<
+      PathThreadAndTerminal & { json: UpdateThreadTerminalRequest },
+      TerminalSession
+    >;
+  };
+  "/threads/:id/terminals/:terminalId/close": {
+    /** Close a terminal session owned by this thread. */
+    $post: Endpoint<
+      PathThreadAndTerminal & { json: CloseThreadTerminalRequest },
+      TerminalSession
+    >;
   };
   "/threads/:id/timeline": {
     /** Get thread timeline for UI rendering. Events transformed via `@bb/thread-view`. */

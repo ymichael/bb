@@ -19,6 +19,7 @@ import {
   threadListQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
+  threadTerminalsQueryKey,
   threadTimelineQueryKey,
 } from "./queries/query-keys";
 import { createRealtimeCacheEffects } from "./realtime-cache-effects";
@@ -59,15 +60,18 @@ function createRealtimeEffectsTestContext() {
   const effects = createRealtimeCacheEffects({ queryClient });
   const firstProjectHistoryKey = projectPromptHistoryQueryKey("project-1");
   const secondProjectHistoryKey = projectPromptHistoryQueryKey("project-2");
+  const terminalKey = threadTerminalsQueryKey("thr_1");
 
   queryClient.setQueryData(firstProjectHistoryKey, []);
   queryClient.setQueryData(secondProjectHistoryKey, []);
+  queryClient.setQueryData(terminalKey, { sessions: [] });
 
   return {
     effects,
     firstProjectHistoryKey,
     queryClient,
     secondProjectHistoryKey,
+    terminalKey,
   };
 }
 
@@ -718,6 +722,29 @@ describe("createRealtimeCacheEffects", () => {
     expect(
       queryClient.getQueryState(secondProjectGithubBranchesKey)?.isInvalidated,
     ).not.toBe(true);
+
+    effects.dispose();
+  });
+
+  it("invalidates cached thread terminals for terminal changes", () => {
+    vi.useFakeTimers();
+    const { effects, queryClient, terminalKey } =
+      createRealtimeEffectsTestContext();
+
+    effects.handleChanged({
+      type: "changed",
+      entity: "thread",
+      id: "thr_1",
+      changes: ["terminals-changed"],
+    });
+
+    expect(queryClient.getQueryState(terminalKey)?.isInvalidated).not.toBe(
+      true,
+    );
+
+    vi.advanceTimersByTime(50);
+
+    expect(queryClient.getQueryState(terminalKey)?.isInvalidated).toBe(true);
 
     effects.dispose();
   });
