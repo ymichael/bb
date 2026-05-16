@@ -17,13 +17,21 @@ import type { SQL } from "drizzle-orm";
 import type {
   HostDaemonProducerEventId,
   ClientTurnRequestId,
+  SystemThreadInterruptedReason,
   StoredThreadEventDataForType,
+  ThreadEventTurnStatus,
   ThreadEventItemType,
   ThreadEventScope,
   ThreadEventScopeKind,
   ThreadEventType,
+  ThreadLatestTerminalSummary,
+  ThreadTerminalSourceEventType,
 } from "@bb/domain";
-import { clientTurnRequestIdSchema, getThreadEventScopeTurnId } from "@bb/domain";
+import {
+  clientTurnRequestIdSchema,
+  getThreadEventScopeTurnId,
+  resolveThreadTerminalCause,
+} from "@bb/domain";
 import type {
   DbConnection,
   DbQueryConnection,
@@ -150,6 +158,15 @@ export interface CompletedStoredTurnRow {
   turnId: string;
 }
 
+export interface ListLatestThreadTerminalSummariesArgs {
+  threadIds: readonly string[];
+}
+
+export interface LatestThreadTerminalSummaryRow {
+  summary: ThreadLatestTerminalSummary;
+  threadId: string;
+}
+
 export interface ListThreadIdsWithLatestHostDaemonRestartInterruptionArgs {
   threadIds: readonly string[];
 }
@@ -161,6 +178,20 @@ export interface ListThreadTurnInterruptionEventStatesArgs {
 export interface ThreadTurnInterruptionEventState {
   activeTurnId: string | null;
   latestProviderThreadId: string | null;
+  threadId: string;
+}
+
+interface LatestTerminalSummaryCandidate {
+  outcome: ThreadEventTurnStatus;
+  sourceEventSequence: number;
+  sourceEventType: ThreadTerminalSourceEventType;
+  threadId: string;
+  turnId: string | null;
+}
+
+interface LatestThreadInterruptionReasonRow {
+  reason: SystemThreadInterruptedReason;
+  sequence: number;
   threadId: string;
 }
 
@@ -1382,6 +1413,165 @@ export function getLastStoredProviderThreadId(
     .limit(1)
     .get();
   return row?.providerThreadId ?? null;
+}
+
+export function listLatestThreadTerminalSummaries(
+  db: DbQueryConnection,
+  args: ListLatestThreadTerminalSummariesArgs,
+): LatestThreadTerminalSummaryRow[] {
+  const threadIds = [...new Set(args.threadIds)];
+  if (threadIds.length === 0) {
+    return [];
+  }
+
+  const latestCandidateByThreadId = new Map<
+    string,
+    LatestTerminalSummaryCandidate
+  >();
+
+  const latestTurnCompletedRows = db
+    .select({
+      outcome: sql<ThreadEventTurnStatus>`json_extract(${events.data}, '$.status')`,
+      sourceEventSequence: events.sequence,
+      threadId: events.threadId,
+      turnId: events.turnId,
+    })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, threadIds),
+        eq(events.type, "turn/completed"),
+        sql`${events.sequence} = (
+          SELECT MAX(latest.sequence)
+          FROM events AS latest
+          WHERE latest.thread_id = ${events.threadId}
+            AND latest.type = 'turn/completed'
+        )`,
+      ),
+    )
+    .all();
+
+  for (const row of latestTurnCompletedRows) {
+    keepLatestTerminalSummaryCandidate(latestCandidateByThreadId, {
+      outcome: row.outcome,
+      sourceEventSequence: row.sourceEventSequence,
+      sourceEventType: "turn/completed",
+      threadId: row.threadId,
+      turnId: row.turnId,
+    });
+  }
+
+  const latestCommandFailureRows = db
+    .select({
+      sourceEventSequence: events.sequence,
+      threadId: events.threadId,
+      turnId: events.turnId,
+    })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, threadIds),
+        eq(events.type, "system/error"),
+        sql`json_extract(${events.data}, '$.code') = 'thread_command_failed'`,
+        sql`${events.sequence} = (
+          SELECT MAX(latest.sequence)
+          FROM events AS latest
+          WHERE latest.thread_id = ${events.threadId}
+            AND latest.type = 'system/error'
+            AND json_extract(latest.data, '$.code') = 'thread_command_failed'
+        )`,
+      ),
+    )
+    .all();
+
+  for (const row of latestCommandFailureRows) {
+    keepLatestTerminalSummaryCandidate(latestCandidateByThreadId, {
+      outcome: "failed",
+      sourceEventSequence: row.sourceEventSequence,
+      sourceEventType: "system/error",
+      threadId: row.threadId,
+      turnId: row.turnId,
+    });
+  }
+
+  const latestInterruptionByThreadId = new Map<
+    string,
+    LatestThreadInterruptionReasonRow
+  >();
+  const latestInterruptionRows = db
+    .select({
+      reason: sql<SystemThreadInterruptedReason>`json_extract(${events.data}, '$.reason')`,
+      sequence: events.sequence,
+      threadId: events.threadId,
+    })
+    .from(events)
+    .where(
+      and(
+        inArray(events.threadId, threadIds),
+        eq(events.type, "system/thread/interrupted"),
+        sql`${events.sequence} = (
+          SELECT MAX(latest.sequence)
+          FROM events AS latest
+          WHERE latest.thread_id = ${events.threadId}
+            AND latest.type = 'system/thread/interrupted'
+        )`,
+      ),
+    )
+    .all();
+
+  for (const row of latestInterruptionRows) {
+    latestInterruptionByThreadId.set(row.threadId, {
+      reason: row.reason,
+      sequence: row.sequence,
+      threadId: row.threadId,
+    });
+  }
+
+  return threadIds.flatMap((threadId) => {
+    const candidate = latestCandidateByThreadId.get(threadId);
+    if (!candidate) {
+      return [];
+    }
+    const latestInterruption = latestInterruptionByThreadId.get(threadId);
+    const relevantInterruption =
+      latestInterruption &&
+      latestInterruption.sequence >= candidate.sourceEventSequence
+        ? latestInterruption
+        : null;
+    return [
+      {
+        threadId,
+        summary: {
+          sourceEventSequence: candidate.sourceEventSequence,
+          sourceEventType: candidate.sourceEventType,
+          turnId: candidate.turnId,
+          outcome: candidate.outcome,
+          cause: resolveThreadTerminalCause({
+            outcome: candidate.outcome,
+            sourceEventSequence: candidate.sourceEventSequence,
+            sourceEventType: candidate.sourceEventType,
+            systemThreadInterruptedReason:
+              relevantInterruption?.reason ?? null,
+            systemThreadInterruptedSequence:
+              relevantInterruption?.sequence ?? null,
+          }),
+        },
+      },
+    ];
+  });
+}
+
+function keepLatestTerminalSummaryCandidate(
+  candidatesByThreadId: Map<string, LatestTerminalSummaryCandidate>,
+  candidate: LatestTerminalSummaryCandidate,
+): void {
+  const existing = candidatesByThreadId.get(candidate.threadId);
+  if (
+    !existing ||
+    candidate.sourceEventSequence > existing.sourceEventSequence
+  ) {
+    candidatesByThreadId.set(candidate.threadId, candidate);
+  }
 }
 
 export function listThreadTurnInterruptionEventStates(

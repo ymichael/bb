@@ -5,7 +5,7 @@ import {
   markThreadDeleted,
   updateThread,
 } from "@bb/db";
-import type { Environment, Thread, ThreadListEntry } from "@bb/domain";
+import type { Environment, Thread } from "@bb/domain";
 import {
   createThreadRequestSchema,
   deleteThreadRequestSchema,
@@ -17,6 +17,7 @@ import {
   type ThreadGetQuery,
   type ThreadIncludeOption,
   type ThreadAssignedChildSummaryResponse,
+  type ThreadListResponse,
   type ThreadWithIncludesResponse,
   type PublicApiSchema,
 } from "@bb/server-contract";
@@ -171,7 +172,7 @@ export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
       ...(offset !== undefined ? { offset } : {}),
     });
     return context.json(
-      toThreadListEntryResponses(deps, { threads }) satisfies ThreadListEntry[],
+      toThreadListEntryResponses(deps, { threads }) satisfies ThreadListResponse,
     );
   });
 

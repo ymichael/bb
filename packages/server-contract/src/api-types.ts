@@ -21,6 +21,7 @@ import {
   sandboxBackendInfoSchema,
   serviceTierSchema,
   threadListEntrySchema,
+  threadLatestTerminalSummarySchema,
   threadTimelinePendingTodosSchema,
   threadTypeSchema,
   threadWithRuntimeSchema,
@@ -374,10 +375,19 @@ export const sendDraftResponseSchema = z.object({
 });
 export type SendDraftResponse = z.infer<typeof sendDraftResponseSchema>;
 
-export const threadListResponseSchema = z.array(threadListEntrySchema);
+export const threadListEntryResponseSchema = threadListEntrySchema.extend({
+  latestTerminalSummary: threadLatestTerminalSummarySchema.nullable(),
+});
+export type ThreadListEntryResponse = z.infer<
+  typeof threadListEntryResponseSchema
+>;
+
+export const threadListResponseSchema = z.array(threadListEntryResponseSchema);
 export type ThreadListResponse = z.infer<typeof threadListResponseSchema>;
 
-export const threadResponseSchema = threadWithRuntimeSchema;
+export const threadResponseSchema = threadWithRuntimeSchema.extend({
+  latestTerminalSummary: threadLatestTerminalSummarySchema.nullable(),
+});
 export type ThreadResponse = z.infer<typeof threadResponseSchema>;
 
 export const threadIncludeOptionSchema = z.enum(["environment", "host"]);

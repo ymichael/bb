@@ -1,6 +1,13 @@
 import { Command } from "commander";
-import type { Thread, ThreadTimelinePendingTodos } from "@bb/domain";
-import type { ProjectResponse } from "@bb/server-contract";
+import type {
+  ThreadLatestTerminalSummary,
+  ThreadTimelinePendingTodos,
+} from "@bb/domain";
+import type {
+  ProjectResponse,
+  ThreadListResponse,
+  ThreadResponse,
+} from "@bb/server-contract";
 import { action } from "../action.js";
 import { resolveContextSnapshot } from "../context-env.js";
 import { type Client, createClient, unwrap } from "../client.js";
@@ -14,6 +21,7 @@ import {
   fetchThreadPendingTodos,
   printPendingTodos,
 } from "./thread/pending-todos.js";
+import { latestTerminalSummaryText } from "./thread/helpers.js";
 
 interface StatusPayload {
   project: { id: string; name: string } | null;
@@ -21,6 +29,7 @@ interface StatusPayload {
     id: string;
     type: string;
     status: string;
+    latestTerminalSummary: ThreadLatestTerminalSummary | null;
     title: string | null;
     parentThreadId: string | null;
     environment: ThreadEnvironmentInfo | null;
@@ -28,6 +37,7 @@ interface StatusPayload {
   managedThreads: Array<{
     id: string;
     status: string;
+    latestTerminalSummary: ThreadLatestTerminalSummary | null;
     title: string | null;
   }> | null;
   pendingTodos: ThreadTimelinePendingTodos | null;
@@ -61,9 +71,9 @@ function fetchProject(args: {
 function fetchThread(args: {
   client: Client;
   threadId: string;
-}): Promise<Thread | null> {
+}): Promise<ThreadResponse | null> {
   return fetchSilent(() =>
-    unwrap<Thread>(
+    unwrap<ThreadResponse>(
       args.client.api.v1.threads[":id"].$get({
         param: { id: args.threadId },
       }),
@@ -75,9 +85,9 @@ function fetchManagedThreads(args: {
   client: Client;
   projectId: string;
   parentThreadId: string;
-}): Promise<Thread[] | null> {
+}): Promise<ThreadListResponse | null> {
   return fetchSilent(() =>
-    unwrap<Thread[]>(
+    unwrap<ThreadListResponse>(
       args.client.api.v1.threads.$get({
         query: {
           projectId: args.projectId,
@@ -148,6 +158,7 @@ export function registerStatusCommand(
               id: threadResult.id,
               type: threadResult.type,
               status: threadResult.status,
+              latestTerminalSummary: threadResult.latestTerminalSummary,
               title: threadResult.title ?? null,
               parentThreadId: threadResult.parentThreadId ?? null,
               environment: environmentInfo,
@@ -165,6 +176,7 @@ export function registerStatusCommand(
                 payload.managedThreads = managed.map((t) => ({
                   id: t.id,
                   status: t.status,
+                  latestTerminalSummary: t.latestTerminalSummary,
                   title: t.title ?? null,
                 }));
               }
@@ -192,6 +204,12 @@ export function registerStatusCommand(
           console.log(`Thread: ${payload.thread.id}`);
           console.log(`  Type: ${payload.thread.type}`);
           console.log(`  Status: ${payload.thread.status}`);
+          const latestTerminal = latestTerminalSummaryText(
+            payload.thread.latestTerminalSummary,
+          );
+          if (latestTerminal) {
+            console.log(`  Latest turn: ${latestTerminal}`);
+          }
           if (payload.thread.title) {
             console.log(`  Title: ${payload.thread.title}`);
           }
@@ -207,7 +225,11 @@ export function registerStatusCommand(
             console.log(`Managed threads: ${payload.managedThreads.length}`);
             for (const mt of payload.managedThreads) {
               const title = mt.title ? `"${mt.title}"` : "";
-              console.log(`  ${mt.id}  ${mt.status}  ${title}`);
+              const latest = latestTerminalSummaryText(
+                mt.latestTerminalSummary,
+              );
+              const latestText = latest ? `  latest: ${latest}` : "";
+              console.log(`  ${mt.id}  ${mt.status}${latestText}  ${title}`);
             }
           }
 

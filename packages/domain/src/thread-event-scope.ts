@@ -145,7 +145,7 @@ export const threadEventScopeDefinitionByType = {
   "system/thread/interrupted": {
     policy: "thread",
     rationale:
-      "Thread stop lifecycle event; it represents user interruption of the whole running thread.",
+      "Thread stop lifecycle event; it represents interruption of the whole running thread by a bb lifecycle request or host/runtime recovery.",
   },
   "system/operation": {
     policy: "thread",

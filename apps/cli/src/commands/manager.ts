@@ -1,5 +1,5 @@
 import { Command } from "commander";
-import { type Thread } from "@bb/domain";
+import type { ThreadListResponse, ThreadResponse } from "@bb/server-contract";
 import { action } from "../action.js";
 import { createClient, unwrap } from "../client.js";
 import { fetchLocalHostId } from "../daemon.js";
@@ -13,6 +13,7 @@ import {
 } from "./helpers.js";
 import {
   MANAGED_PERMISSION_MODE_HELP,
+  latestTerminalSummaryText,
   parsePermissionMode,
 } from "./thread/helpers.js";
 
@@ -95,7 +96,7 @@ export function registerManagerCommands(
               );
             }
           }
-          const thread = await unwrap<Thread>(
+          const thread = await unwrap<ThreadResponse>(
             client.api.v1.projects[":id"].managers.$post({
               param: { id: projectId },
               json: {
@@ -133,7 +134,7 @@ export function registerManagerCommands(
           );
           const projectId = resolvedProject.id;
           printContextLabel(resolvedProject, "Project", "BB_PROJECT_ID", opts);
-          const managers = await unwrap<Thread[]>(
+          const managers = await unwrap<ThreadListResponse>(
             client.api.v1.threads.$get({
               query: { projectId, type: "manager" },
             }),
@@ -216,8 +217,8 @@ export function registerManagerCommands(
 async function getThreadById(
   client: ReturnType<typeof createClient>,
   threadId: string,
-): Promise<Thread> {
-  return unwrap<Thread>(
+): Promise<ThreadResponse> {
+  return unwrap<ThreadResponse>(
     client.api.v1.threads[":id"].$get({
       param: { id: threadId },
     }),
@@ -227,7 +228,7 @@ async function getThreadById(
 async function getManagerThreadById(
   client: ReturnType<typeof createClient>,
   threadId: string,
-): Promise<Thread> {
+): Promise<ThreadResponse> {
   const thread = await getThreadById(client, threadId);
   if (thread.type !== "manager") {
     throw new Error(`Thread ${threadId} is not a manager`);
@@ -239,15 +240,15 @@ async function listManagedThreads(
   client: ReturnType<typeof createClient>,
   projectId: string,
   managerThreadId: string,
-): Promise<Thread[]> {
-  return unwrap<Thread[]>(
+): Promise<ThreadListResponse> {
+  return unwrap<ThreadListResponse>(
     client.api.v1.threads.$get({
       query: { projectId, parentThreadId: managerThreadId },
     }),
   );
 }
 
-function printManagerThread(thread: Thread): void {
+function printManagerThread(thread: ThreadResponse): void {
   console.log("");
   console.log(`  ID:       ${thread.id}`);
   console.log(`  Title:    ${thread.title ?? "<untitled>"}`);
@@ -259,19 +260,21 @@ function printManagerThread(thread: Thread): void {
   console.log("");
 }
 
-function printThreadsTable(threads: Thread[]): void {
+function printThreadsTable(threads: ThreadListResponse): void {
   const rows = threads.map((thread) => [
     thread.id,
     thread.status,
+    latestTerminalSummaryText(thread.latestTerminalSummary) ?? "",
     thread.title ?? "<untitled>",
   ]);
   const idWidth = Math.max(4, ...rows.map((row) => row[0].length));
   const statusWidth = Math.max(6, ...rows.map((row) => row[1].length));
-  const titleWidth = Math.max(5, ...rows.map((row) => row[2].length));
+  const latestWidth = Math.max(11, ...rows.map((row) => row[2].length));
+  const titleWidth = Math.max(5, ...rows.map((row) => row[3].length));
   const table = renderBorderlessTable(
     {
-      head: ["ID", "Status", "Title"],
-      colWidths: [idWidth, statusWidth, titleWidth],
+      head: ["ID", "Status", "Latest turn", "Title"],
+      colWidths: [idWidth, statusWidth, latestWidth, titleWidth],
     },
     rows,
   );
@@ -280,7 +283,7 @@ function printThreadsTable(threads: Thread[]): void {
   console.log("");
 }
 
-function printManagedThreadTable(threads: Thread[]): void {
+function printManagedThreadTable(threads: ThreadListResponse): void {
   console.log("Managed threads:");
   if (threads.length === 0) {
     console.log("  None");

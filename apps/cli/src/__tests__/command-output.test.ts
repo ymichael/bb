@@ -6,6 +6,7 @@ import {
   type Environment,
   type PendingInteraction,
   type Thread,
+  type ThreadLatestTerminalSummary,
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
@@ -131,6 +132,24 @@ function makeThread(
     latestAttentionAt: Date.now(),
     createdAt: Date.now(),
     updatedAt: Date.now(),
+    ...overrides,
+  };
+}
+
+function makeLatestTerminalSummary(
+  overrides: Partial<ThreadLatestTerminalSummary> = {},
+): ThreadLatestTerminalSummary {
+  return {
+    sourceEventSequence: 5,
+    sourceEventType: "turn/completed",
+    turnId: "turn-1",
+    outcome: "interrupted",
+    cause: {
+      kind: "host-runtime-recovery",
+      text: "host/runtime recovery",
+      systemThreadInterruptedReason: "host-daemon-restarted",
+      sourceEventSequence: 6,
+    },
     ...overrides,
   };
 }
@@ -1001,7 +1020,7 @@ describe("CLI command output contracts", () => {
 
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
-      "ID                Status  Title  \n----------------  ------  -------\nthread-manager-1  active  Manager",
+      "ID                Status  Latest turn  Title  \n----------------  ------  -----------  -------\nthread-manager-1  active               Manager",
       "",
     ]);
   });
@@ -1017,17 +1036,20 @@ describe("CLI command output contracts", () => {
       createdAt: 1,
       updatedAt: 2,
     });
-    const managedThread: Thread = makeThread({
-      id: "thread-worker-1",
-      projectId: "project-123",
-      providerId: "codex",
-      title: "Worker",
-      type: "standard",
-      status: "active",
-      parentThreadId: "thread-manager-1",
-      createdAt: 3,
-      updatedAt: 4,
-    });
+    const managedThread = {
+      ...makeThread({
+        id: "thread-worker-1",
+        projectId: "project-123",
+        providerId: "codex",
+        title: "Worker",
+        type: "standard",
+        status: "active",
+        parentThreadId: "thread-manager-1",
+        createdAt: 3,
+        updatedAt: 4,
+      }),
+      latestTerminalSummary: makeLatestTerminalSummary(),
+    };
     const get = vi.fn(async ({ param }: { param: { id: string } }) => {
       expect(param.id).toBe("thread-manager-1");
       return managerThread;
@@ -1060,6 +1082,9 @@ describe("CLI command output contracts", () => {
     const lines = collectLogLines(vi.mocked(console.log));
     expect(lines).toContain("Managed threads:");
     expect(lines.some((line) => line.includes("thread-worker-1"))).toBe(true);
+    expect(lines.some((line) => line.includes("host/runtime recovery"))).toBe(
+      true,
+    );
   });
 
   it("bb manager delete deletes the manager thread", async () => {
@@ -1233,6 +1258,74 @@ describe("CLI command output contracts", () => {
     expect(collectLogLines(vi.mocked(console.log))).toContain(
       "  Environment: Sandbox (env-1)",
     );
+  });
+
+  it("bb status prints terminal summaries for the current thread and managed children", async () => {
+    vi.stubEnv("BB_PROJECT_ID", "proj-1");
+    vi.stubEnv("BB_THREAD_ID", "thread-manager-1");
+
+    const getProject = vi.fn(async () => ({
+      id: "proj-1",
+      name: "Alpha",
+    }));
+    const getThread = vi.fn(async () => ({
+      ...makeThread({
+        id: "thread-manager-1",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "manager",
+        status: "idle",
+      }),
+      latestTerminalSummary: makeLatestTerminalSummary({
+        outcome: "completed",
+        cause: null,
+      }),
+    }));
+    const listThreads = vi.fn(async () => [
+      {
+        ...makeThread({
+          id: "thread-worker-1",
+          projectId: "proj-1",
+          providerId: "codex",
+          status: "idle",
+          parentThreadId: "thread-manager-1",
+        }),
+        latestTerminalSummary: makeLatestTerminalSummary(),
+      },
+    ]);
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            projects: {
+              ":id": {
+                $get: getProject,
+              },
+            },
+            threads: {
+              $get: listThreads,
+              ":id": {
+                $get: getThread,
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(["status"], (program) =>
+      registerStatusCommand(program, () => "http://server"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("  Latest turn: completed");
+    expect(
+      lines.some((line) =>
+        line.includes(
+          "thread-worker-1  idle  latest: interrupted (host/runtime recovery)",
+        ),
+      ),
+    ).toBe(true);
   });
 
   it("bb thread spawn omits provider and model when the user relies on project defaults", async () => {
@@ -2408,6 +2501,48 @@ describe("CLI command output contracts", () => {
     expect(lines.some((line) => line.includes("Archived:"))).toBe(true);
   });
 
+  it("bb thread show prints latest terminal turn summary separately from status", async () => {
+    const thread = {
+      ...makeThread({
+        id: "thread-terminal-summary-1",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+      latestTerminalSummary: makeLatestTerminalSummary(),
+    };
+    const get = vi.fn(async () => thread);
+    const timelineGet = makeEmptyTimelineGetMock();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                $get: get,
+                timeline: { $get: timelineGet },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "show", "thread-terminal-summary-1"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("  Status: idle");
+    expect(lines).toContain(
+      "  Latest turn: interrupted (host/runtime recovery)",
+    );
+  });
+
   it("bb thread show --self resolves from BB_THREAD_ID", async () => {
     vi.stubEnv("BB_THREAD_ID", "thread-show-self");
     const thread: Thread = makeThread({
@@ -2491,15 +2626,18 @@ describe("CLI JSON output contracts", () => {
   });
 
   it("bb thread show --json prints the thread in status payload format", async () => {
-    const thread: Thread = makeThread({
-      id: "thread-json-show",
-      projectId: "proj-1",
-      providerId: "codex",
-      type: "standard",
-      status: "idle",
-      createdAt: 1,
-      updatedAt: 2,
-    });
+    const thread = {
+      ...makeThread({
+        id: "thread-json-show",
+        projectId: "proj-1",
+        providerId: "codex",
+        type: "standard",
+        status: "idle",
+        createdAt: 1,
+        updatedAt: 2,
+      }),
+      latestTerminalSummary: makeLatestTerminalSummary(),
+    };
     const get = vi.fn(async () => thread);
     const timelineGet = makeEmptyTimelineGetMock();
     createClientMock.mockReturnValue(

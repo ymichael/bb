@@ -5,7 +5,6 @@ import {
 } from "@bb/thread-view";
 import {
   type Environment,
-  type Thread,
   type ThreadEventRow,
   type ThreadGitDiffResponse,
   type ThreadTimelinePendingTodos,
@@ -13,6 +12,7 @@ import {
 } from "@bb/domain";
 import type {
   EnvironmentStatusResponse,
+  ThreadResponse,
   ThreadTimelineResponse,
 } from "@bb/server-contract";
 import { action } from "../../action.js";
@@ -27,7 +27,7 @@ import {
   fetchEnvironmentInfo,
   printEnvironmentInfo,
 } from "../environment-helpers.js";
-import { statusText } from "./helpers.js";
+import { latestTerminalSummaryText, statusText } from "./helpers.js";
 import {
   fetchThreadPendingTodos,
   printPendingTodos,
@@ -57,7 +57,7 @@ interface ThreadOutputCommandOptions {
 }
 
 interface ThreadStatusPayload {
-  thread: Thread;
+  thread: ThreadResponse;
 }
 
 interface ThreadShowJsonPayload extends ThreadStatusPayload {
@@ -120,7 +120,7 @@ export function registerShowCommand(
         const client = createClient(getUrl());
         const threadId = resolved.id;
         printContextLabel(resolved, "Thread", "BB_THREAD_ID", opts);
-        const thread = await unwrap<Thread>(
+        const thread = await unwrap<ThreadResponse>(
           client.api.v1.threads[":id"].$get({ param: { id: threadId } }),
         );
 
@@ -411,6 +411,12 @@ function printThreadStatus(
   console.log(`Thread: ${thread.id}`);
   console.log(`  Type: ${thread.type}`);
   console.log(`  Status: ${statusText(thread.status)}`);
+  const latestTerminal = latestTerminalSummaryText(
+    thread.latestTerminalSummary,
+  );
+  if (latestTerminal) {
+    console.log(`  Latest turn: ${latestTerminal}`);
+  }
   if (thread.title) {
     console.log(`  Title: ${thread.title}`);
   }

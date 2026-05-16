@@ -497,6 +497,7 @@ describe("server-contract canonical schemas", () => {
             displayStatus: "idle",
             hostReconnectGraceExpiresAt: null,
           },
+          latestTerminalSummary: null,
           hasPendingInteraction: true,
           environmentHostId: "host_123",
           environmentBranchName: "bb/test",

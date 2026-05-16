@@ -1,6 +1,7 @@
 import {
   permissionModeSchema,
   type PermissionMode,
+  type ThreadLatestTerminalSummary,
   type ThreadStatus,
   serviceTierSchema,
   type ServiceTier,
@@ -39,6 +40,17 @@ export function statusText(status: ThreadStatus): string {
     default:
       return assertNever(status);
   }
+}
+
+export function latestTerminalSummaryText(
+  summary: ThreadLatestTerminalSummary | null | undefined,
+): string | null {
+  if (!summary) {
+    return null;
+  }
+  return summary.cause
+    ? `${summary.outcome} (${summary.cause.text})`
+    : summary.outcome;
 }
 
 export function parseThreadWaitTimeoutSeconds(

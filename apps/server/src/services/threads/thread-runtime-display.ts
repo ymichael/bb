@@ -1,6 +1,7 @@
 import {
   getEnvironment,
   getLatestSessionForHost,
+  listLatestThreadTerminalSummaries,
   listLatestSessionsForHosts,
   type DbConnection,
   type HostDaemonSessionRow,
@@ -8,11 +9,13 @@ import {
 } from "@bb/db";
 import type {
   Thread,
-  ThreadListEntry,
   ThreadRuntimeState,
   ThreadStatus,
-  ThreadWithRuntime,
 } from "@bb/domain";
+import type {
+  ThreadListEntryResponse,
+  ThreadResponse,
+} from "@bb/server-contract";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../../constants.js";
 
 interface ThreadRuntimeDisplayDeps {
@@ -55,6 +58,10 @@ interface ToThreadListEntryResponseFromLatestSessionArgs {
   latestSession: HostDaemonSessionRow | null;
   now?: number;
   thread: ThreadWithPendingInteractionState;
+  terminalSummaryByThreadId?: ReadonlyMap<
+    string,
+    ThreadListEntryResponse["latestTerminalSummary"]
+  >;
 }
 
 function threadStatusRuntimeState(status: ThreadStatus): ThreadRuntimeState {
@@ -150,9 +157,13 @@ function resolveThreadEnvironmentHostId(
 export function toThreadResponseWithHost(
   deps: ThreadRuntimeDisplayDeps,
   args: ToThreadResponseWithHostArgs,
-): ThreadWithRuntime {
+): ThreadResponse {
+  const [terminalSummaryRow] = listLatestThreadTerminalSummaries(deps.db, {
+    threadIds: [args.thread.id],
+  });
   return {
     ...args.thread,
+    latestTerminalSummary: terminalSummaryRow?.summary ?? null,
     runtime: resolveThreadRuntimeState(deps, {
       environmentHostId: args.environmentHostId,
       now: args.now,
@@ -164,7 +175,7 @@ export function toThreadResponseWithHost(
 export function toThreadResponseFromThread(
   deps: ThreadRuntimeDisplayDeps,
   args: ToThreadResponseFromThreadArgs,
-): ThreadWithRuntime {
+): ThreadResponse {
   return toThreadResponseWithHost(deps, {
     ...args,
     environmentHostId: resolveThreadEnvironmentHostId(deps, args.thread),
@@ -174,7 +185,7 @@ export function toThreadResponseFromThread(
 export function toThreadListEntryResponse(
   deps: ThreadRuntimeDisplayDeps,
   args: ToThreadListEntryResponseArgs,
-): ThreadListEntry {
+): ThreadListEntryResponse {
   const latestSession =
     args.thread.status === "active" && args.thread.environmentHostId !== null
       ? getLatestSessionForHost(deps.db, {
@@ -185,13 +196,16 @@ export function toThreadListEntryResponse(
     latestSession,
     now: args.now,
     thread: args.thread,
+    terminalSummaryByThreadId: terminalSummaryMapForThreadIds(deps, [
+      args.thread.id,
+    ]),
   });
 }
 
 export function toThreadListEntryResponses(
   deps: ThreadRuntimeDisplayDeps,
   args: ToThreadListEntryResponsesArgs,
-): ThreadListEntry[] {
+): ThreadListEntryResponse[] {
   const activeHostIds = [
     ...new Set(
       args.threads.flatMap((thread) =>
@@ -206,6 +220,10 @@ export function toThreadListEntryResponses(
       (session) => [session.hostId, session],
     ),
   );
+  const terminalSummaryByThreadId = terminalSummaryMapForThreadIds(
+    deps,
+    args.threads.map((thread) => thread.id),
+  );
 
   return args.threads.map((thread) =>
     toThreadListEntryResponseFromLatestSession({
@@ -215,15 +233,18 @@ export function toThreadListEntryResponses(
           : latestSessionByHostId.get(thread.environmentHostId) ?? null,
       now: args.now,
       thread,
+      terminalSummaryByThreadId,
     }),
   );
 }
 
 function toThreadListEntryResponseFromLatestSession(
   args: ToThreadListEntryResponseFromLatestSessionArgs,
-): ThreadListEntry {
+): ThreadListEntryResponse {
   return {
     ...args.thread,
+    latestTerminalSummary:
+      args.terminalSummaryByThreadId?.get(args.thread.id) ?? null,
     runtime: resolveThreadRuntimeStateFromLatestSession({
       environmentHostId: args.thread.environmentHostId,
       latestSession: args.latestSession,
@@ -231,4 +252,16 @@ function toThreadListEntryResponseFromLatestSession(
       status: args.thread.status,
     }),
   };
+}
+
+function terminalSummaryMapForThreadIds(
+  deps: ThreadRuntimeDisplayDeps,
+  threadIds: readonly string[],
+): Map<string, ThreadListEntryResponse["latestTerminalSummary"]> {
+  return new Map(
+    listLatestThreadTerminalSummaries(deps.db, { threadIds }).map((row) => [
+      row.threadId,
+      row.summary,
+    ]),
+  );
 }

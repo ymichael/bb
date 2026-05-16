@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import {
+  appendStoredThreadEvent,
   closeSession,
   createConnection,
   createEnvironment,
@@ -15,7 +16,7 @@ import {
   type DbConnection,
   type ThreadWithPendingInteractionState,
 } from "@bb/db";
-import type { Thread, ThreadRuntimeState } from "@bb/domain";
+import { turnScope, type Thread, type ThreadRuntimeState } from "@bb/domain";
 import { DAEMON_DISCONNECT_GRACE_MS } from "../../../src/constants.js";
 import {
   resolveThreadRuntimeState,
@@ -277,5 +278,49 @@ describe("thread runtime display", () => {
         hostReconnectGraceExpiresAt: null,
       },
     ] satisfies ThreadRuntimeState[]);
+  });
+
+  it("attaches latest terminal summaries to list entries", () => {
+    const { db, hostId } = setup();
+    const { thread } = createThreadWithEnvironment({
+      db,
+      hostId,
+      status: "idle",
+    });
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_failed"),
+      providerThreadId: "provider_failed",
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider_failed",
+        status: "failed",
+      },
+    });
+
+    const [entry] = toThreadListEntryResponses(
+      { db },
+      {
+        threads: [
+          createThreadListEntry({
+            environmentHostId: hostId,
+            thread,
+          }),
+        ],
+      },
+    );
+
+    expect(entry?.latestTerminalSummary).toEqual({
+      sourceEventSequence: 1,
+      sourceEventType: "turn/completed",
+      turnId: "turn_failed",
+      outcome: "failed",
+      cause: {
+        kind: "provider-turn-failure",
+        text: "provider turn failure",
+        systemThreadInterruptedReason: null,
+        sourceEventSequence: 1,
+      },
+    });
   });
 });

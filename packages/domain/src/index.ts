@@ -290,6 +290,21 @@ export type {
 } from "./thread.js";
 
 export {
+  resolveThreadTerminalCause,
+  threadLatestTerminalSummarySchema,
+  threadTerminalCauseKindSchema,
+  threadTerminalCauseSchema,
+  threadTerminalSourceEventTypeSchema,
+} from "./thread-terminal-summary.js";
+export type {
+  ResolveThreadTerminalCauseArgs,
+  ThreadLatestTerminalSummary,
+  ThreadTerminalCause,
+  ThreadTerminalCauseKind,
+  ThreadTerminalSourceEventType,
+} from "./thread-terminal-summary.js";
+
+export {
   threadGitDiffResponseSchema,
   workspaceDiffTargetSchema,
 } from "./thread-git-diff.js";

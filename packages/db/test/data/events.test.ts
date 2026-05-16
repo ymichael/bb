@@ -18,6 +18,7 @@ import {
   getLatestThreadOutputEventRow,
   getLatestThreadSequence,
   insertEvents,
+  listLatestThreadTerminalSummaries,
   listContextWindowUsageRows,
   listCompletedTurnsByThreadIds,
   listEvents,
@@ -1700,6 +1701,192 @@ describe("events", () => {
         turnId: "turn_a",
       },
     ]);
+  });
+
+  it("summarizes the latest terminal turn outcome", () => {
+    const { db, thread } = setup();
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_done"),
+      providerThreadId: "provider_done",
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider_done",
+        status: "completed",
+      },
+    });
+
+    expect(listLatestThreadTerminalSummaries(db, { threadIds: [thread.id] }))
+      .toEqual([
+        {
+          threadId: thread.id,
+          summary: {
+            sourceEventSequence: 1,
+            sourceEventType: "turn/completed",
+            turnId: "turn_done",
+            outcome: "completed",
+            cause: null,
+          },
+        },
+      ]);
+  });
+
+  it("uses neutral lifecycle wording for manual stop interruptions", () => {
+    const { db, thread } = setup();
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_stopped"),
+      providerThreadId: "provider_stopped",
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider_stopped",
+        status: "interrupted",
+      },
+    });
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: threadScope(),
+      type: "system/thread/interrupted",
+      data: {
+        reason: "manual-stop",
+      },
+    });
+
+    expect(listLatestThreadTerminalSummaries(db, { threadIds: [thread.id] }))
+      .toEqual([
+        {
+          threadId: thread.id,
+          summary: {
+            sourceEventSequence: 1,
+            sourceEventType: "turn/completed",
+            turnId: "turn_stopped",
+            outcome: "interrupted",
+            cause: {
+              kind: "bb-lifecycle-request",
+              text: "stopped by bb lifecycle request",
+              systemThreadInterruptedReason: "manual-stop",
+              sourceEventSequence: 2,
+            },
+          },
+        },
+      ]);
+  });
+
+  it("uses host/runtime recovery wording for host daemon restart interruptions", () => {
+    const { db, thread } = setup();
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_recovered"),
+      providerThreadId: "provider_recovered",
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider_recovered",
+        status: "interrupted",
+      },
+    });
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: threadScope(),
+      type: "system/thread/interrupted",
+      data: {
+        reason: "host-daemon-restarted",
+      },
+    });
+
+    expect(listLatestThreadTerminalSummaries(db, { threadIds: [thread.id] }))
+      .toEqual([
+        {
+          threadId: thread.id,
+          summary: {
+            sourceEventSequence: 1,
+            sourceEventType: "turn/completed",
+            turnId: "turn_recovered",
+            outcome: "interrupted",
+            cause: {
+              kind: "host-runtime-recovery",
+              text: "host/runtime recovery",
+              systemThreadInterruptedReason: "host-daemon-restarted",
+              sourceEventSequence: 2,
+            },
+          },
+        },
+      ]);
+  });
+
+  it("uses provider/runtime wording for interrupted turns without a bb reason", () => {
+    const { db, thread } = setup();
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_provider_interrupted"),
+      providerThreadId: "provider_interrupted",
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider_interrupted",
+        status: "interrupted",
+      },
+    });
+
+    expect(listLatestThreadTerminalSummaries(db, { threadIds: [thread.id] }))
+      .toEqual([
+        {
+          threadId: thread.id,
+          summary: {
+            sourceEventSequence: 1,
+            sourceEventType: "turn/completed",
+            turnId: "turn_provider_interrupted",
+            outcome: "interrupted",
+            cause: {
+              kind: "provider-runtime-interruption",
+              text: "provider/runtime interruption",
+              systemThreadInterruptedReason: null,
+              sourceEventSequence: 1,
+            },
+          },
+        },
+      ]);
+  });
+
+  it("uses newer command failure system errors as failed terminal summaries", () => {
+    const { db, thread } = setup();
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_done"),
+      providerThreadId: "provider_done",
+      type: "turn/completed",
+      data: {
+        providerThreadId: "provider_done",
+        status: "completed",
+      },
+    });
+    appendStoredThreadEvent(db, noopNotifier, {
+      threadId: thread.id,
+      scope: turnScope("turn_command_failed"),
+      type: "system/error",
+      data: {
+        code: "thread_command_failed",
+        message: "Command thread.start failed",
+        detail: "daemon lost the command",
+      },
+    });
+
+    expect(listLatestThreadTerminalSummaries(db, { threadIds: [thread.id] }))
+      .toEqual([
+        {
+          threadId: thread.id,
+          summary: {
+            sourceEventSequence: 2,
+            sourceEventType: "system/error",
+            turnId: "turn_command_failed",
+            outcome: "failed",
+            cause: {
+              kind: "command-failure",
+              text: "command failure",
+              systemThreadInterruptedReason: null,
+              sourceEventSequence: 2,
+            },
+          },
+        },
+      ]);
   });
 
   it("lists active turn and latest provider state for thread interruption", () => {
