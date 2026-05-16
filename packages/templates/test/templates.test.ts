@@ -81,7 +81,8 @@ describe("@bb/templates", () => {
       "You are a manager in a project inside bb, an agent orchestration tool.",
     );
     expect(rendered).toContain("agent orchestration tool");
-    expect(rendered).toContain("Ask the user a blocking question only when");
+    expect(rendered).toContain("Delegate substantive work by default");
+    expect(rendered).toContain("All user-facing output goes through `message_user`");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
 
