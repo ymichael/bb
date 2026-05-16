@@ -54,6 +54,7 @@ interface BuildMarkdownComponentsArgs {
 
 interface MarkdownImageRendererArgs {
   alt: ComponentPropsWithoutRef<"img">["alt"];
+  imageAttributes: MarkdownImageRenderAttributes;
   imageUrls: readonly string[];
   setExpandedImageIndex: ExpandedImageIndexSetter;
   src: ComponentPropsWithoutRef<"img">["src"];
@@ -77,6 +78,10 @@ type MarkdownCodeProps = ComponentPropsWithoutRef<"code"> & ExtraProps;
 type MarkdownHeadingProps = ComponentPropsWithoutRef<"h1"> & ExtraProps;
 type MarkdownHrProps = ComponentPropsWithoutRef<"hr"> & ExtraProps;
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps;
+type MarkdownImageRenderAttributes = Omit<
+  MarkdownImageProps,
+  "alt" | "children" | "className" | "node" | "src"
+>;
 type MarkdownListItemProps = ComponentPropsWithoutRef<"li"> & ExtraProps;
 type MarkdownOrderedListProps = ComponentPropsWithoutRef<"ol"> & ExtraProps;
 type MarkdownParagraphProps = ComponentPropsWithoutRef<"p"> & ExtraProps;
@@ -262,8 +267,17 @@ function MarkdownH6({ children }: MarkdownHeadingProps) {
   );
 }
 
-function MarkdownParagraph({ children }: MarkdownParagraphProps) {
-  return <p className="mb-2 text-foreground last:mb-0">{children}</p>;
+function MarkdownParagraph({
+  children,
+  className: _className,
+  node: _node,
+  ...paragraphProps
+}: MarkdownParagraphProps) {
+  return (
+    <p {...paragraphProps} className="mb-2 text-foreground last:mb-0">
+      {children}
+    </p>
+  );
 }
 
 function MarkdownUnorderedList({ children }: MarkdownUnorderedListProps) {
@@ -333,6 +347,7 @@ function MarkdownTableCell({ children }: MarkdownTableCellProps) {
 
 function renderMarkdownImage({
   alt,
+  imageAttributes,
   imageUrls,
   setExpandedImageIndex,
   src,
@@ -342,6 +357,7 @@ function renderMarkdownImage({
   const imageIndex = imageUrls.indexOf(imageUrl);
   return (
     <img
+      {...imageAttributes}
       src={imageUrl}
       alt={typeof alt === "string" ? alt : "Image"}
       className="my-2 max-h-96 max-w-full cursor-zoom-in rounded-md border border-border/60 object-contain"
@@ -388,9 +404,16 @@ function buildMarkdownComponents({
     );
   }
 
-  function MarkdownImage({ src, alt }: MarkdownImageProps) {
+  function MarkdownImage({
+    src,
+    alt,
+    className: _className,
+    node: _node,
+    ...imageAttributes
+  }: MarkdownImageProps) {
     return renderMarkdownImage({
       alt,
+      imageAttributes,
       imageUrls,
       setExpandedImageIndex,
       src,

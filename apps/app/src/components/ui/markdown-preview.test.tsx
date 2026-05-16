@@ -82,7 +82,7 @@ describe("MarkdownPreview", () => {
     expect(container.querySelector("style")).toBeNull();
   });
 
-  it("resolves raw HTML picture color-scheme sources from the app theme", () => {
+  it("resolves raw HTML picture sources and preserves layout attributes", () => {
     setupMatchMedia();
     setPreferredTheme("dark");
 
@@ -90,15 +90,19 @@ describe("MarkdownPreview", () => {
       <MarkdownPreview
         allowHtml
         content={[
+          '<p align="center">',
           "<picture>",
           '  <source media="(prefers-color-scheme: dark)" srcset="https://example.test/dark.png">',
           '  <source media="(prefers-color-scheme: light)" srcset="https://example.test/light.png">',
           '  <img alt="bb" src="https://example.test/light.png" width="128">',
           "</picture>",
+          "</p>",
         ].join("\n")}
       />,
     );
 
+    const image = screen.getByRole("img", { name: "bb" });
+    const paragraph = image.closest("p");
     const sourceElements = Array.from(container.querySelectorAll("source"));
     const darkSource = sourceElements.find(
       (sourceElement) =>
@@ -111,6 +115,8 @@ describe("MarkdownPreview", () => {
         "https://example.test/light.png",
     );
 
+    expect(paragraph?.getAttribute("align")).toBe("center");
+    expect(image.getAttribute("width")).toBe("128");
     expect(darkSource?.getAttribute("media")).toBe("all");
     expect(lightSource?.getAttribute("media")).toBe("not all");
   });
