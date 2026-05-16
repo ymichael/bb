@@ -9,9 +9,13 @@ export {
   formatPendingInteractionSubjectDetailLines,
   summarizePendingInteractionRequestedPermissions,
 } from "./pending-interaction-formatting.js";
-export { formatPendingInteractionSummary } from "./pending-interaction-presentation.js";
+export {
+  formatPendingInteractionSummary,
+  formatPendingInteractionUserQuestionOptionLabel,
+} from "./pending-interaction-presentation.js";
 export type {
   FormatPendingInteractionSummaryArgs,
+  FormatPendingInteractionUserQuestionOptionLabelArgs,
   PendingInteractionPresentationSurface,
 } from "./pending-interaction-presentation.js";
 

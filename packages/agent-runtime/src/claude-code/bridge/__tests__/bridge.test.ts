@@ -20,7 +20,11 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 }));
 
 import { buildSessionOptions, handleLine } from "../bridge.js";
-import type { ClaudePermissionMode } from "../../interactive-contract.js";
+import {
+  CLAUDE_USER_QUESTION_REQUEST_METHOD,
+  type ClaudePermissionMode,
+  type ClaudeUserQuestionInput,
+} from "../../interactive-contract.js";
 import { listClaudeCodeBridgeModels } from "../model-list.js";
 import {
   createBridgeJsonRpcTestHarness,
@@ -31,6 +35,9 @@ type BridgeSessionOptions = ReturnType<typeof buildSessionOptions>;
 type BridgeSessionHooks = NonNullable<BridgeSessionOptions["hooks"]>;
 type BridgePreToolUseHooks = NonNullable<BridgeSessionHooks["PreToolUse"]>;
 type BridgePreToolUseHook = BridgePreToolUseHooks[number]["hooks"][number];
+type BridgeJsonRpcTestHarness = ReturnType<
+  typeof createBridgeJsonRpcTestHarness
+>;
 type SdkResultUsage = Extract<SDKMessage, { type: "result" }>["usage"];
 
 interface ReadonlyBashHookArgs {
@@ -108,6 +115,28 @@ interface TempClaudeExecutable {
 }
 
 const tempDirs: string[] = [];
+
+interface StartBridgeThreadArgs {
+  bridge: BridgeJsonRpcTestHarness;
+  threadId: string;
+}
+
+interface StopBridgeThreadArgs {
+  bridge: BridgeJsonRpcTestHarness;
+  queries: ControlledClaudeQuery[];
+  threadId: string;
+}
+
+interface ForwardAskUserQuestionArgs {
+  bridge: BridgeJsonRpcTestHarness;
+  input?: ClaudeUserQuestionInput;
+  toolUseID: string;
+}
+
+interface ForwardedAskUserQuestion {
+  questionRequest: BridgeJsonRpcOutputMessage;
+  resultPromise: ReturnType<CanUseTool>;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -348,6 +377,73 @@ function createTempClaudeExecutable(): TempClaudeExecutable {
   writeFileSync(executablePath, "#!/bin/sh\nexit 0\n");
   chmodSync(executablePath, 0o755);
   return { binDir, executablePath };
+}
+
+function createBridgeUserQuestionInput(): ClaudeUserQuestionInput {
+  return {
+    questions: [
+      {
+        question: "Which deployment target should I use?",
+        header: "Target",
+        options: [
+          {
+            label: "Staging",
+            description: "Deploy to staging.",
+          },
+          {
+            label: "Production",
+            description: "Deploy to production.",
+          },
+        ],
+        multiSelect: false,
+      },
+    ],
+  };
+}
+
+async function startBridgeThread(args: StartBridgeThreadArgs): Promise<void> {
+  args.bridge.sendRequest(1, "thread/start", {
+    baseInstructions: "test",
+    cwd: "/tmp/worktree",
+    instructionMode: "append",
+    permissionEscalation: "ask",
+    permissionMode: "default",
+    threadId: args.threadId,
+  });
+  await args.bridge.waitForResponse(1);
+}
+
+async function stopBridgeThread(args: StopBridgeThreadArgs): Promise<void> {
+  args.bridge.sendRequest(2, "thread/stop", {
+    threadId: args.threadId,
+  });
+  await args.bridge.flushWork();
+  args.queries[0]?.finish();
+  await args.bridge.waitForResponse(2);
+}
+
+async function forwardAskUserQuestion({
+  bridge,
+  input = createBridgeUserQuestionInput(),
+  toolUseID,
+}: ForwardAskUserQuestionArgs): Promise<ForwardedAskUserQuestion> {
+  const canUseTool = getLastCanUseTool();
+  const resultPromise = canUseTool("AskUserQuestion", input, {
+    signal: new AbortController().signal,
+    toolUseID,
+  });
+  await bridge.flushWork();
+
+  const questionRequest = bridge.messages.find(
+    (message) => message.method === CLAUDE_USER_QUESTION_REQUEST_METHOD,
+  );
+  if (questionRequest?.id === undefined) {
+    throw new Error("Expected AskUserQuestion JSON-RPC request id");
+  }
+  return {
+    questionRequest,
+    resultPromise,
+  };
 }
 
 describe("bridge", () => {
@@ -1000,6 +1096,233 @@ describe("bridge", () => {
         bridge.restore();
       }
     });
+  });
+
+  it("forwards AskUserQuestion through canUseTool and returns the answer payload", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      const threadId = "thread-ask-user-question";
+      const toolUseID = "tool-question-1";
+      const questionInput = createBridgeUserQuestionInput();
+      const updatedInput = {
+        questions: questionInput.questions,
+        answers: {
+          "Which deployment target should I use?": "Staging",
+        },
+      };
+
+      await startBridgeThread({ bridge, threadId });
+      const { questionRequest, resultPromise } = await forwardAskUserQuestion({
+        bridge,
+        input: questionInput,
+        toolUseID,
+      });
+
+      expect(questionRequest).toMatchObject({
+        method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+        params: {
+          threadId,
+          itemId: toolUseID,
+          questions: questionInput.questions,
+        },
+      });
+
+      handleLine(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: questionRequest.id,
+          result: {
+            kind: "user_question",
+            behavior: "allow",
+            updatedInput,
+          },
+        }),
+      );
+
+      await expect(resultPromise).resolves.toMatchObject({
+        behavior: "allow",
+        toolUseID,
+        updatedInput,
+      });
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("denies invalid AskUserQuestion input before forwarding to bb", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      const threadId = "thread-invalid-ask-user-question-input";
+      await startBridgeThread({ bridge, threadId });
+
+      const canUseTool = getLastCanUseTool();
+      await expect(
+        canUseTool(
+          "AskUserQuestion",
+          { questions: [] },
+          {
+            signal: new AbortController().signal,
+            toolUseID: "tool-question-invalid-input",
+          },
+        ),
+      ).resolves.toMatchObject({
+        behavior: "deny",
+        message: "Invalid AskUserQuestion input",
+      });
+      expect(
+        bridge.messages.some(
+          (message) => message.method === CLAUDE_USER_QUESTION_REQUEST_METHOD,
+        ),
+      ).toBe(false);
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("denies AskUserQuestion when bb returns an interactive request error", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      const threadId = "thread-ask-user-question-error";
+      const toolUseID = "tool-question-error";
+      await startBridgeThread({ bridge, threadId });
+      const { questionRequest, resultPromise } = await forwardAskUserQuestion({
+        bridge,
+        toolUseID,
+      });
+
+      handleLine(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: questionRequest.id,
+          error: {
+            code: -32000,
+            message: "No interactive request handler is configured",
+          },
+        }),
+      );
+
+      await expect(resultPromise).resolves.toMatchObject({
+        behavior: "deny",
+        message: "No interactive request handler is configured",
+        toolUseID,
+      });
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("denies AskUserQuestion when bb returns an invalid response payload", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      const threadId = "thread-ask-user-question-invalid-response";
+      const toolUseID = "tool-question-invalid-response";
+      await startBridgeThread({ bridge, threadId });
+      const { questionRequest, resultPromise } = await forwardAskUserQuestion({
+        bridge,
+        toolUseID,
+      });
+
+      handleLine(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: questionRequest.id,
+          result: {
+            kind: "user_question",
+            behavior: "allow",
+            updatedInput: {
+              questions: [],
+              answers: {},
+            },
+          },
+        }),
+      );
+
+      await expect(resultPromise).resolves.toMatchObject({
+        behavior: "deny",
+        message: "Invalid interactive response payload",
+        toolUseID,
+      });
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("denies AskUserQuestion when bb returns a mismatched response kind", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      const threadId = "thread-ask-user-question-kind-mismatch";
+      const toolUseID = "tool-question-kind-mismatch";
+      await startBridgeThread({ bridge, threadId });
+      const { questionRequest, resultPromise } = await forwardAskUserQuestion({
+        bridge,
+        toolUseID,
+      });
+
+      handleLine(
+        JSON.stringify({
+          jsonrpc: "2.0",
+          id: questionRequest.id,
+          result: {
+            kind: "permission_request",
+            behavior: "deny",
+            message: "Denied",
+          },
+        }),
+      );
+
+      await expect(resultPromise).resolves.toMatchObject({
+        behavior: "deny",
+        message: "Interactive response kind mismatch",
+        toolUseID,
+      });
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
   });
 
   it("returns the bridge-owned Claude model list from the SDK probe", async () => {

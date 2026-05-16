@@ -9,6 +9,7 @@ import type {
   PendingInteractionResolution,
   ToolCallRequest,
 } from "@bb/domain";
+import { isApprovalPendingInteractionPayload } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import {
@@ -94,6 +95,11 @@ function scopeProviderRequestId(
 function buildDeniedInteractiveResolution(
   payload: PendingInteractionPayload,
 ): PendingInteractionResolution {
+  if (!isApprovalPendingInteractionPayload(payload)) {
+    throw new ProviderResponseEncodeError(
+      "User-question interactive requests cannot be auto-denied",
+    );
+  }
   if (!payload.availableDecisions.includes("deny")) {
     throw new ProviderResponseEncodeError(
       "Interactive request cannot be auto-denied because deny is unavailable",
@@ -336,12 +342,16 @@ function handleInteractiveProviderRequest(
   });
 
   const executionOptions = args.getThreadExecutionOptions(resolvedThreadId);
-  if (
-    (executionOptions
+  const isApprovalRequest = isApprovalPendingInteractionPayload(
+    interactiveReq.payload,
+  );
+  const shouldAutoDenyApprovalRequest =
+    isApprovalRequest &&
+    ((executionOptions
       ? shouldAutoDenyInteractiveRequest(executionOptions)
       : false) ||
-    !args.onInteractiveRequest
-  ) {
+      !args.onInteractiveRequest);
+  if (shouldAutoDenyApprovalRequest) {
     try {
       const resolution = buildDeniedInteractiveResolution(
         interactiveReq.payload,
@@ -389,6 +399,26 @@ function handleInteractiveProviderRequest(
         message: error instanceof Error ? error.message : String(error),
       });
     }
+    return true;
+  }
+
+  if (!args.onInteractiveRequest) {
+    const errorMessage =
+      "No interactive request handler is configured for user-question interactions";
+    args.emitCapture({
+      kind: "interactive-result",
+      capturedAt: Date.now(),
+      providerId,
+      requestCaptureId: captureId,
+      requestId: scopedInteractiveReq.providerRequestId,
+      success: false,
+      errorMessage,
+    });
+    sendJsonRpcError({
+      child: args.providerProcess.child,
+      id: args.parsedId,
+      message: errorMessage,
+    });
     return true;
   }
 

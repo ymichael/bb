@@ -1,15 +1,15 @@
 import type {
+  ApprovalPendingInteractionPayload,
   ApprovalPendingInteractionResolution,
   PendingInteractionApprovalDecision,
   PendingInteractionCommandAction,
-  PendingInteractionCreate,
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
+  UserQuestionPendingInteractionPayload,
+  UserQuestionPendingInteractionResolution,
 } from "@bb/domain";
 
 type PendingInteractionFileChangeWriteScope = string;
-
-type ApprovalPayload = PendingInteractionCreate["payload"];
 
 type CommandApprovalPayloadOptions = {
   itemId?: string;
@@ -37,6 +37,20 @@ type PermissionGrantApprovalPayloadOptions = {
   availableDecisions?: PendingInteractionApprovalDecision[];
 };
 
+type UserQuestionPayloadOptions = {
+  allowFreeText?: boolean;
+  interactionLabel?: string;
+  multiSelect?: boolean;
+  prompt?: string;
+  questionId?: string;
+};
+
+type UserAnswerResolutionOptions = {
+  freeText?: string;
+  questionId?: string;
+  selected?: string[];
+};
+
 const defaultAvailableDecisions: PendingInteractionApprovalDecision[] = [
   "allow_once",
   "allow_for_session",
@@ -56,8 +70,9 @@ export const defaultGrantablePermissions: PendingInteractionGrantablePermissionP
 
 export function createCommandApprovalPayload(
   options: CommandApprovalPayloadOptions = {},
-): ApprovalPayload {
+): ApprovalPendingInteractionPayload {
   return {
+    kind: "approval",
     subject: {
       kind: "command",
       itemId: options.itemId ?? "item-command-approval",
@@ -77,8 +92,9 @@ export function createCommandApprovalPayload(
 
 export function createFileChangeApprovalPayload(
   options: FileChangeApprovalPayloadOptions = {},
-): ApprovalPayload {
+): ApprovalPendingInteractionPayload {
   return {
+    kind: "approval",
     subject: {
       kind: "file_change",
       itemId: options.itemId ?? "item-file-change-approval",
@@ -96,9 +112,10 @@ export function createFileChangeApprovalPayload(
 
 export function createPermissionGrantApprovalPayload(
   options: PermissionGrantApprovalPayloadOptions = {},
-): ApprovalPayload {
+): ApprovalPendingInteractionPayload {
   const permissions = options.permissions ?? defaultGrantablePermissions;
   return {
+    kind: "approval",
     subject: {
       kind: "permission_grant",
       itemId: options.itemId ?? "item-permission-grant",
@@ -107,6 +124,41 @@ export function createPermissionGrantApprovalPayload(
     },
     reason: options.reason ?? "Grant permission",
     availableDecisions: options.availableDecisions ?? defaultAvailableDecisions,
+  };
+}
+
+export function createUserQuestionPayload(
+  options: UserQuestionPayloadOptions = {},
+): UserQuestionPendingInteractionPayload {
+  return {
+    kind: "user_question",
+    questions: [
+      {
+        id: options.questionId ?? "question-1",
+        prompt: options.prompt ?? "Which deployment target should I use?",
+        shortLabel: options.interactionLabel ?? "Target",
+        multiSelect: options.multiSelect ?? false,
+        options: [
+          { value: "staging", label: "Staging" },
+          { value: "production", label: "Production" },
+        ],
+        allowFreeText: options.allowFreeText ?? true,
+      },
+    ],
+  };
+}
+
+export function createUserAnswerResolution(
+  options: UserAnswerResolutionOptions = {},
+): UserQuestionPendingInteractionResolution {
+  return {
+    kind: "user_answer",
+    answers: {
+      [options.questionId ?? "question-1"]: {
+        selected: options.selected ?? ["staging"],
+        ...(options.freeText ? { freeText: options.freeText } : {}),
+      },
+    },
   };
 }
 

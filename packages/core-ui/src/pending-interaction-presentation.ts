@@ -1,4 +1,8 @@
-import type { PendingInteraction } from "@bb/domain";
+import type {
+  PendingInteraction,
+  PendingInteractionUserQuestionQuestion,
+} from "@bb/domain";
+import { isApprovalPendingInteractionPayload } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 import { summarizePendingInteractionRequestedPermissions } from "./pending-interaction-formatting.js";
 
@@ -9,10 +13,28 @@ export interface FormatPendingInteractionSummaryArgs {
   surface: PendingInteractionPresentationSurface;
 }
 
+export interface FormatPendingInteractionUserQuestionOptionLabelArgs {
+  question: PendingInteractionUserQuestionQuestion;
+  value: string;
+}
+
+export function formatPendingInteractionUserQuestionOptionLabel({
+  question,
+  value,
+}: FormatPendingInteractionUserQuestionOptionLabelArgs): string {
+  return (
+    question.options?.find((option) => option.value === value)?.label ?? value
+  );
+}
+
 export function formatPendingInteractionSummary(
   args: FormatPendingInteractionSummaryArgs,
 ): string {
   const { interaction, surface } = args;
+
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    return interaction.payload.questions[0]?.prompt ?? "User answer requested";
+  }
 
   if (interaction.payload.reason) {
     return interaction.payload.reason;

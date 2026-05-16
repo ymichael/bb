@@ -1,16 +1,18 @@
 import { threadScope, turnScope } from "@bb/domain";
 import type {
+  ApprovalPendingInteractionResolution,
   JsonObject,
   OwnershipChangeOperationAction,
-  PendingInteractionResolution,
   ThreadEventFileChange,
   ThreadEventItemStatus,
+  UserQuestionPendingInteractionResolution,
 } from "@bb/domain";
 import type {
   TimelineApprovalWorkRow,
   ThreadContextWindowUsage,
   TimelineFileChangeWorkRow,
   TimelineManagerAssignment,
+  TimelineQuestionWorkRow,
   TimelineRow,
   TimelineSystemRow,
   TimelineToolWorkRow,
@@ -62,7 +64,7 @@ interface SystemOperationEventArgs {
 
 interface PermissionGrantLifecycleEventArgs {
   interactionId?: string;
-  resolution?: PendingInteractionResolution | null;
+  resolution?: ApprovalPendingInteractionResolution | null;
   seq: number;
   status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
   statusReason?: string | null;
@@ -74,6 +76,15 @@ interface SystemErrorEventArgs {
   detail?: string;
   message: string;
   seq: number;
+}
+
+interface UserQuestionLifecycleEventArgs {
+  interactionId?: string;
+  questionPrompt?: string;
+  resolution?: UserQuestionPendingInteractionResolution | null;
+  seq: number;
+  status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+  statusReason?: string | null;
 }
 
 type BuildTimelineRowsThreadStatus = "active" | "idle";
@@ -308,6 +319,51 @@ function permissionGrantLifecycleEvent({
   };
 }
 
+function userQuestionLifecycleEvent({
+  interactionId = "pi-user-question",
+  questionPrompt,
+  resolution = null,
+  seq,
+  status = "pending",
+  statusReason = null,
+}: UserQuestionLifecycleEventArgs): ThreadEventWithMeta {
+  return {
+    event: {
+      type: "system/userQuestion/lifecycle",
+      threadId: "thread-1",
+      scope: turnScope("turn-1"),
+      interactionId,
+      providerId: "claude-code",
+      providerRequestId: "request-user-question",
+      status,
+      resolution,
+      statusReason,
+      payload: {
+        kind: "user_question",
+        questions: [
+          {
+            id: "question-1",
+            prompt:
+              questionPrompt ?? "Which deployment target should I use?",
+            shortLabel: "Target",
+            multiSelect: false,
+            options: [
+              { value: "staging", label: "Staging" },
+              { value: "production", label: "Production" },
+            ],
+            allowFreeText: true,
+          },
+        ],
+      },
+    },
+    meta: {
+      id: `event-${seq}`,
+      seq,
+      createdAt: seq,
+    },
+  };
+}
+
 function buildContextWindowUsage(
   contextWindowEvents: ThreadEventWithMeta[],
 ): ThreadContextWindowUsage | null {
@@ -411,6 +467,26 @@ function collectApprovalRows(
     }
   }
   return approvalRows;
+}
+
+function collectQuestionRows(
+  rows: readonly TimelineRow[],
+): TimelineQuestionWorkRow[] {
+  const questionRows: TimelineQuestionWorkRow[] = [];
+  for (const row of rows) {
+    if (row.kind === "work" && row.workKind === "question") {
+      questionRows.push(row);
+      continue;
+    }
+    if (row.kind === "turn" && row.children) {
+      questionRows.push(...collectQuestionRows(row.children));
+      continue;
+    }
+    if (row.kind === "work" && row.workKind === "delegation") {
+      questionRows.push(...collectQuestionRows(row.childRows));
+    }
+  }
+  return questionRows;
 }
 
 function collectSystemRows(rows: readonly TimelineRow[]): TimelineSystemRow[] {
@@ -675,7 +751,7 @@ describe("buildThreadTimelineFromEvents", () => {
     },
   ] satisfies Array<{
     expectedGrantScope: "turn" | "session";
-    resolution: PendingInteractionResolution;
+    resolution: ApprovalPendingInteractionResolution;
   }>)(
     "preserves permission grant $expectedGrantScope scope on timeline rows",
     ({ expectedGrantScope, resolution }) => {
@@ -739,6 +815,225 @@ describe("buildThreadTimelineFromEvents", () => {
           approvalKind: "permission-grant",
           grantScope: null,
           lifecycle: expectedLifecycle,
+          status: expectedStatus,
+          statusReason,
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    {
+      expectedAnswers: null,
+      expectedLifecycle: "pending",
+      expectedStatus: "pending",
+      resolution: null,
+      status: "pending",
+      statusReason: null,
+    },
+    {
+      expectedAnswers: {
+        "question-1": {
+          selected: ["staging"],
+          freeText: "Use staging until QA signs off.",
+        },
+      },
+      expectedLifecycle: "resolving",
+      expectedStatus: "pending",
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging"],
+            freeText: "Use staging until QA signs off.",
+          },
+        },
+      },
+      status: "resolving",
+      statusReason: null,
+    },
+    {
+      expectedAnswers: {
+        "question-1": {
+          selected: ["staging"],
+          freeText: "Use staging until QA signs off.",
+        },
+      },
+      expectedLifecycle: "answered",
+      expectedStatus: "completed",
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging"],
+            freeText: "Use staging until QA signs off.",
+          },
+        },
+      },
+      status: "resolved",
+      statusReason: null,
+    },
+    {
+      expectedAnswers: null,
+      expectedLifecycle: "interrupted",
+      expectedStatus: "interrupted",
+      resolution: null,
+      status: "interrupted",
+      statusReason: "Thread stopped by user request",
+    },
+    {
+      expectedAnswers: null,
+      expectedLifecycle: "expired",
+      expectedStatus: "error",
+      resolution: null,
+      status: "expired",
+      statusReason: "Pending interaction expired",
+    },
+  ] satisfies Array<{
+    expectedAnswers: UserQuestionPendingInteractionResolution["answers"] | null;
+    expectedLifecycle:
+      | "pending"
+      | "resolving"
+      | "answered"
+      | "interrupted"
+      | "expired";
+    expectedStatus: "pending" | "completed" | "interrupted" | "error";
+    resolution: UserQuestionPendingInteractionResolution | null;
+    status: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
+    statusReason: string | null;
+  }>)(
+    "projects user-question $expectedLifecycle lifecycle rows",
+    ({
+      expectedAnswers,
+      expectedLifecycle,
+      expectedStatus,
+      resolution,
+      status,
+      statusReason,
+    }) => {
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        userQuestionLifecycleEvent({
+          resolution,
+          seq: 1,
+          status,
+          statusReason,
+        }),
+      ]);
+
+      expect(collectQuestionRows(rows)).toEqual([
+        expect.objectContaining({
+          answers: expectedAnswers,
+          interactionId: "pi-user-question",
+          lifecycle: expectedLifecycle,
+          questions: [
+            expect.objectContaining({
+              id: "question-1",
+              prompt: "Which deployment target should I use?",
+            }),
+          ],
+          status: expectedStatus,
+          statusReason,
+          workKind: "question",
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    { lateStatus: "pending" },
+    { lateStatus: "resolving" },
+  ] satisfies Array<{ lateStatus: "pending" | "resolving" }>)(
+    "preserves answered user-question rows after late $lateStatus events",
+    ({ lateStatus }) => {
+      const answers = {
+        "question-1": {
+          selected: ["staging"],
+          freeText: "Use staging until QA signs off.",
+        },
+      };
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        userQuestionLifecycleEvent({
+          resolution: {
+            kind: "user_answer",
+            answers,
+          },
+          seq: 1,
+          status: "resolved",
+        }),
+        userQuestionLifecycleEvent({
+          questionPrompt: "Stale duplicate prompt",
+          seq: 2,
+          status: lateStatus,
+          statusReason: "Stale update",
+        }),
+      ]);
+
+      expect(collectQuestionRows(rows)).toEqual([
+        expect.objectContaining({
+          answers,
+          lifecycle: "answered",
+          questions: [
+            expect.objectContaining({
+              prompt: "Which deployment target should I use?",
+            }),
+          ],
+          sourceSeqEnd: 2,
+          status: "completed",
+          statusReason: null,
+        }),
+      ]);
+    },
+  );
+
+  it.each([
+    {
+      expectedLifecycle: "interrupted",
+      expectedStatus: "interrupted",
+      status: "interrupted",
+      statusReason: "Thread stopped by user request",
+    },
+    {
+      expectedLifecycle: "expired",
+      expectedStatus: "error",
+      status: "expired",
+      statusReason: "Pending interaction expired",
+    },
+  ] satisfies Array<{
+    expectedLifecycle: "interrupted" | "expired";
+    expectedStatus: "interrupted" | "error";
+    status: "interrupted" | "expired";
+    statusReason: string;
+  }>)(
+    "preserves terminal user-question $status rows after late resolving events",
+    ({ expectedLifecycle, expectedStatus, status, statusReason }) => {
+      const rows = buildTimelineRows([
+        turnStartedEvent({ seq: 0 }),
+        userQuestionLifecycleEvent({
+          seq: 1,
+          status,
+          statusReason,
+        }),
+        userQuestionLifecycleEvent({
+          resolution: {
+            kind: "user_answer",
+            answers: {
+              "question-1": {
+                selected: ["production"],
+              },
+            },
+          },
+          seq: 2,
+          status: "resolving",
+        }),
+      ]);
+
+      expect(collectQuestionRows(rows)).toEqual([
+        expect.objectContaining({
+          answers: null,
+          lifecycle: expectedLifecycle,
+          sourceSeqEnd: 2,
           status: expectedStatus,
           statusReason,
         }),

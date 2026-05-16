@@ -40,6 +40,7 @@ const CODEX_CAPABILITIES: ProviderCapabilities = {
   supportsArchive: true,
   supportsRename: true,
   supportsServiceTier: true,
+  supportsUserQuestion: false,
   supportedPermissionModes: ["full", "workspace-write", "readonly"],
 };
 
@@ -47,6 +48,7 @@ const CLAUDE_CAPABILITIES: ProviderCapabilities = {
   supportsArchive: false,
   supportsRename: false,
   supportsServiceTier: false,
+  supportsUserQuestion: true,
   supportedPermissionModes: ["full", "workspace-write", "readonly"],
 };
 
@@ -54,6 +56,7 @@ const PI_CAPABILITIES: ProviderCapabilities = {
   supportsArchive: false,
   supportsRename: false,
   supportsServiceTier: false,
+  supportsUserQuestion: false,
   supportedPermissionModes: ["full"],
 };
 
@@ -172,6 +175,7 @@ function cloneCapabilities(
     supportsArchive: capabilities.supportsArchive,
     supportsRename: capabilities.supportsRename,
     supportsServiceTier: capabilities.supportsServiceTier,
+    supportsUserQuestion: capabilities.supportsUserQuestion,
     supportedPermissionModes: [...capabilities.supportedPermissionModes],
   };
 }

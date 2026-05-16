@@ -1102,6 +1102,7 @@ describe("host-daemon session schemas", () => {
           providerThreadId: "provider-thread-123",
           providerRequestId: "request-123",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item_123",

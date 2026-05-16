@@ -5,6 +5,7 @@ import {
   turnScope,
 } from "@bb/domain";
 import type {
+  ApprovalPendingInteractionResolution,
   ClientTurnRequestId,
   PromptInput,
   ProviderRawEvent,
@@ -12,7 +13,6 @@ import type {
   ResolvedThreadExecutionOptions,
   SystemThreadProvisioningStatus,
   JsonValue,
-  PendingInteractionResolution,
   ThreadEventRow,
   ThreadEventRowOfType,
   ThreadEventUserContent,
@@ -233,7 +233,7 @@ interface PermissionGrantLifecycleArgs extends DefaultTurnEventOptions {
   itemId?: string;
   providerId?: string;
   providerRequestId?: string;
-  resolution?: PendingInteractionResolution | null;
+  resolution?: ApprovalPendingInteractionResolution | null;
   status?: "pending" | "resolving" | "resolved" | "interrupted" | "expired";
   statusReason?: string | null;
   toolName?: string;

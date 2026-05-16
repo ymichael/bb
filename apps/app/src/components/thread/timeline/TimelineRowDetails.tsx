@@ -4,6 +4,7 @@ import { TerminalOutputBlock } from "./TerminalOutputBlock.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { TimelineFileDiffBlock } from "./TimelineFileDiffBlock.js";
 import { ToolCallDetailBlock } from "./ToolCallDetailBlock.js";
+import { QuestionWorkRowBody } from "./QuestionWorkRowBody.js";
 import type { ThreadTimelineTheme } from "./types.js";
 
 export interface WorkRowBodyProps {
@@ -81,6 +82,8 @@ export function WorkRowBody({
       // a delegation-tier scroll container. This branch is unreachable for
       // the App renderer; kept exhaustive for the type.
       return null;
+    case "question":
+      return <QuestionWorkRowBody row={row} />;
     case "approval":
     case "web-search":
     case "web-fetch":

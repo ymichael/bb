@@ -12,6 +12,7 @@ import type {
   TimelineFileChangeWorkRow,
   TimelineManagerAssignment,
   TimelinePermissionGrantApprovalGrantScope,
+  TimelineQuestionWorkRow,
   TimelineRow,
   TimelineRowBase,
   TimelineRowStatus,
@@ -135,10 +136,26 @@ export interface ApprovalRowArgs {
   turnId?: string | null;
 }
 
+export interface QuestionRowArgs {
+  answers?: TimelineQuestionWorkRow["answers"];
+  id?: string;
+  interactionId?: string;
+  lifecycle?: TimelineQuestionWorkRow["lifecycle"];
+  questions?: TimelineQuestionWorkRow["questions"];
+  seq?: number;
+  sourceSeqEnd?: number;
+  sourceSeqStart?: number;
+  status?: TimelineRowStatus;
+  statusReason?: string | null;
+  turnId?: string | null;
+}
+
 type PermissionGrantApprovalLifecycle = Extract<
   TimelineApprovalWorkRow,
   { approvalKind: "permission-grant" }
 >["lifecycle"];
+
+type QuestionLifecycle = TimelineQuestionWorkRow["lifecycle"];
 
 export interface SystemRowArgs {
   completedAt?: number | null;
@@ -223,6 +240,7 @@ const DEFAULT_COMMAND_ID = "command-1";
 const DEFAULT_CONVERSATION_ID = "conversation-1";
 const DEFAULT_DELEGATION_ID = "delegation-1";
 const DEFAULT_FILE_CHANGE_ID = "file-change-1";
+const DEFAULT_QUESTION_ID = "question-1";
 const DEFAULT_SYSTEM_ID = "system-1";
 const DEFAULT_TOOL_ID = "tool-1";
 const DEFAULT_TURN_ROW_ID = "turn-summary-1";
@@ -259,6 +277,37 @@ function permissionGrantLifecycleFromStatus(
       return "expired";
     case "interrupted":
       return "interrupted";
+  }
+}
+
+function questionLifecycleFromStatus(
+  status: TimelineRowStatus,
+): QuestionLifecycle {
+  switch (status) {
+    case "pending":
+      return "pending";
+    case "completed":
+      return "answered";
+    case "error":
+      return "expired";
+    case "interrupted":
+      return "interrupted";
+  }
+}
+
+function questionStatusFromLifecycle(
+  lifecycle: QuestionLifecycle,
+): TimelineRowStatus {
+  switch (lifecycle) {
+    case "pending":
+    case "resolving":
+      return "pending";
+    case "answered":
+      return "completed";
+    case "interrupted":
+      return "interrupted";
+    case "expired":
+      return "error";
   }
 }
 
@@ -585,6 +634,46 @@ export function approvalRow({
       itemId,
       toolName,
     },
+  };
+}
+
+export function questionRow({
+  answers = null,
+  id = DEFAULT_QUESTION_ID,
+  interactionId = "question-interaction-1",
+  lifecycle,
+  questions = [
+    {
+      id: "question-1",
+      prompt: "Which path should I take?",
+      shortLabel: "Path",
+      multiSelect: false,
+      options: [
+        { value: "simple", label: "Simple" },
+        { value: "complete", label: "Complete" },
+      ],
+      allowFreeText: true,
+    },
+  ],
+  seq,
+  sourceSeqEnd,
+  sourceSeqStart,
+  status,
+  statusReason = null,
+  turnId,
+}: QuestionRowArgs = {}): TimelineQuestionWorkRow {
+  const resolvedLifecycle =
+    lifecycle ?? questionLifecycleFromStatus(status ?? "pending");
+  return {
+    ...baseRow({ id, seq, sourceSeqEnd, sourceSeqStart, turnId }),
+    kind: "work",
+    workKind: "question",
+    status: status ?? questionStatusFromLifecycle(resolvedLifecycle),
+    interactionId,
+    lifecycle: resolvedLifecycle,
+    questions,
+    answers,
+    statusReason,
   };
 }
 

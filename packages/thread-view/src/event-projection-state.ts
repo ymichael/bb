@@ -213,6 +213,12 @@ function finalizePendingMessageForInterruptedTurn(
         message.lifecycle = "interrupted";
       }
       return;
+    case "user-question-lifecycle":
+      if (message.status === "pending") {
+        message.status = "interrupted";
+        message.lifecycle = "interrupted";
+      }
+      return;
     case "assistant-text":
     case "debug/raw-event":
     case "delegation":

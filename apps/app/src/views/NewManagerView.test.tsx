@@ -219,6 +219,7 @@ function createDefaultSystemProviders(): ProviderInfo[] {
       capabilities: {
         supportsArchive: false,
         supportsServiceTier: true,
+        supportsUserQuestion: false,
         supportedPermissionModes: ["full"],
       },
       displayName: "Pi",

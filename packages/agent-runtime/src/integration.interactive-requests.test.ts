@@ -10,6 +10,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import {
+  isApprovalPendingInteractionPayload,
+  type PendingInteractionApprovalDecision,
+  type PendingInteractionApprovalSubject,
+  type PendingInteractionCreate,
+} from "@bb/domain";
 import { listAvailableProviderInfos } from "./provider-registry.js";
 import {
   cleanup,
@@ -29,6 +35,35 @@ import {
   waitForThreadTurnCompleted,
   waitForThreadTurnCompletedCount,
 } from "./test/runtime-integration-harness.js";
+
+function describePendingInteractionPayload(
+  request: PendingInteractionCreate,
+): string {
+  if (isApprovalPendingInteractionPayload(request.payload)) {
+    return request.payload.subject.kind;
+  }
+  return request.payload.kind;
+}
+
+function hasApprovalSubjectKind(
+  request: PendingInteractionCreate,
+  subjectKind: PendingInteractionApprovalSubject["kind"],
+): boolean {
+  return (
+    isApprovalPendingInteractionPayload(request.payload) &&
+    request.payload.subject.kind === subjectKind
+  );
+}
+
+function hasAvailableApprovalDecision(
+  request: PendingInteractionCreate,
+  decision: PendingInteractionApprovalDecision,
+): boolean {
+  return (
+    isApprovalPendingInteractionPayload(request.payload) &&
+    request.payload.availableDecisions.includes(decision)
+  );
+}
 
 describe("interactive request scenarios", () => {
   it.concurrent(
@@ -92,9 +127,12 @@ describe("interactive request scenarios", () => {
       const expectedLine = getFirstNonEmptyLine(hostsPath);
       const ctx = createTestRuntime("claude-code", {
         onInteractiveRequest: async (request) => {
-          if (request.payload.subject.kind !== "permission_grant") {
+          if (
+            !isApprovalPendingInteractionPayload(request.payload) ||
+            request.payload.subject.kind !== "permission_grant"
+          ) {
             throw new Error(
-              `Expected permission grant approval, got ${request.payload.subject.kind}`,
+              `Expected permission grant approval, got ${describePendingInteractionPayload(request)}`,
             );
           }
 
@@ -588,8 +626,8 @@ describe("interactive request scenarios", () => {
 
         const fileChangeApproval = ctx.interactiveRequests.find(
           (request) =>
-            request.payload.subject.kind === "file_change" &&
-            request.payload.availableDecisions.includes("allow_once"),
+            hasApprovalSubjectKind(request, "file_change") &&
+            hasAvailableApprovalDecision(request, "allow_once"),
         );
         expect(
           fileChangeApproval,
@@ -599,6 +637,7 @@ describe("interactive request scenarios", () => {
         ).toBeDefined();
         if (
           !fileChangeApproval ||
+          !isApprovalPendingInteractionPayload(fileChangeApproval.payload) ||
           fileChangeApproval.payload.subject.kind !== "file_change"
         ) {
           throw new Error("Expected a semantic file-change approval");
@@ -636,9 +675,12 @@ describe("interactive request scenarios", () => {
     async () => {
       const ctx = createTestRuntime("codex", {
         onInteractiveRequest: async (request) => {
-          if (request.payload.subject.kind !== "command") {
+          if (
+            !isApprovalPendingInteractionPayload(request.payload) ||
+            request.payload.subject.kind !== "command"
+          ) {
             throw new Error(
-              `Expected command approval, got ${request.payload.subject.kind}`,
+              `Expected command approval, got ${describePendingInteractionPayload(request)}`,
             );
           }
           if (!request.payload.availableDecisions.includes("deny")) {
@@ -700,7 +742,7 @@ describe("interactive request scenarios", () => {
 
         expect(
           ctx.interactiveRequests.some(
-            (request) => request.payload.subject.kind === "command",
+            (request) => hasApprovalSubjectKind(request, "command"),
           ),
         ).toBe(true);
         expect(hasDeniedCommandExecution(ctx.events)).toBe(true);
@@ -823,8 +865,8 @@ describe("interactive request scenarios", () => {
 
         const commandApproval = ctx.interactiveRequests.find(
           (request) =>
-            request.payload.subject.kind === "command" &&
-            request.payload.availableDecisions.includes("allow_once"),
+            hasApprovalSubjectKind(request, "command") &&
+            hasAvailableApprovalDecision(request, "allow_once"),
         );
         expect(
           commandApproval,
@@ -834,6 +876,7 @@ describe("interactive request scenarios", () => {
         ).toBeDefined();
         if (
           !commandApproval ||
+          !isApprovalPendingInteractionPayload(commandApproval.payload) ||
           commandApproval.payload.subject.kind !== "command"
         ) {
           throw new Error("Expected a semantic command approval");
@@ -904,13 +947,14 @@ describe("interactive request scenarios", () => {
 
         const commandApproval = ctx.interactiveRequests.find(
           (request) =>
-            request.payload.subject.kind === "command" &&
-            request.payload.availableDecisions.includes("allow_once") &&
-            request.payload.availableDecisions.includes("deny"),
+            hasApprovalSubjectKind(request, "command") &&
+            hasAvailableApprovalDecision(request, "allow_once") &&
+            hasAvailableApprovalDecision(request, "deny"),
         );
         expect(commandApproval).toBeDefined();
         if (
           !commandApproval ||
+          !isApprovalPendingInteractionPayload(commandApproval.payload) ||
           commandApproval.payload.subject.kind !== "command"
         ) {
           throw new Error("Expected a semantic command approval");
@@ -987,13 +1031,14 @@ describe("interactive request scenarios", () => {
 
         const fileChangeApproval = ctx.interactiveRequests.find(
           (request) =>
-            request.payload.subject.kind === "file_change" &&
-            request.payload.availableDecisions.includes("allow_once") &&
-            request.payload.availableDecisions.includes("deny"),
+            hasApprovalSubjectKind(request, "file_change") &&
+            hasAvailableApprovalDecision(request, "allow_once") &&
+            hasAvailableApprovalDecision(request, "deny"),
         );
         expect(fileChangeApproval).toBeDefined();
         if (
           !fileChangeApproval ||
+          !isApprovalPendingInteractionPayload(fileChangeApproval.payload) ||
           fileChangeApproval.payload.subject.kind !== "file_change"
         ) {
           throw new Error("Expected a semantic file-change approval");
@@ -1067,10 +1112,20 @@ describe("interactive request scenarios", () => {
         const firstRequestCount = ctx.interactiveRequests.length;
         expect(
           ctx.interactiveRequests.some(
-            (request) =>
-              request.payload.subject.kind === "permission_grant" &&
-              request.payload.subject.toolName === "WebFetch" &&
-              request.payload.availableDecisions.includes("allow_for_session"),
+            (request) => {
+              if (
+                !isApprovalPendingInteractionPayload(request.payload) ||
+                request.payload.subject.kind !== "permission_grant"
+              ) {
+                return false;
+              }
+              return (
+                request.payload.subject.toolName === "WebFetch" &&
+                request.payload.availableDecisions.includes(
+                  "allow_for_session",
+                )
+              );
+            },
           ),
           `Expected a session-capable WebFetch permission approval; got ${JSON.stringify(
             ctx.interactiveRequests.map((request) => request.payload),
@@ -1175,7 +1230,7 @@ describe("interactive request scenarios", () => {
 
         expect(
           ctx.interactiveRequests.some(
-            (request) => request.payload.subject.kind === "command",
+            (request) => hasApprovalSubjectKind(request, "command"),
           ),
         ).toBe(true);
         expect(existsSync(filePath)).toBe(false);

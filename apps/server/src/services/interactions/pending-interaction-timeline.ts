@@ -1,12 +1,20 @@
 import { assertNever } from "@bb/core-ui";
 import type {
+  ApprovalPendingInteractionResolution,
   PendingInteraction,
   PendingInteractionApprovalSubject,
   PendingInteractionPermissionGrantApprovalSubject,
   ThreadEventItemApprovalStatus,
   ThreadEventItem,
+  UserQuestionPendingInteractionResolution,
 } from "@bb/domain";
-import { turnScope } from "@bb/domain";
+import {
+  isApprovalPendingInteractionPayload,
+  isApprovalPendingInteractionResolution,
+  isUserQuestionPendingInteractionPayload,
+  isUserQuestionPendingInteractionResolution,
+  turnScope,
+} from "@bb/domain";
 import { getThread, type DbNotifier, type DbTransaction } from "@bb/db";
 import type { AppDeps } from "../../types.js";
 import {
@@ -28,6 +36,34 @@ type ApprovalTimelineItemStatus = Extract<
   "pending" | "interrupted"
 >;
 
+function getApprovalResolution(
+  interaction: PendingInteraction,
+): ApprovalPendingInteractionResolution | null {
+  if (interaction.resolution === null) {
+    return null;
+  }
+  if (isApprovalPendingInteractionResolution(interaction.resolution)) {
+    return interaction.resolution;
+  }
+  throw new Error(
+    `Interaction ${interaction.id} has a user-answer resolution on an approval timeline event`,
+  );
+}
+
+function getUserQuestionResolution(
+  interaction: PendingInteraction,
+): UserQuestionPendingInteractionResolution | null {
+  if (interaction.resolution === null) {
+    return null;
+  }
+  if (isUserQuestionPendingInteractionResolution(interaction.resolution)) {
+    return interaction.resolution;
+  }
+  throw new Error(
+    `Interaction ${interaction.id} has an approval resolution on a user-question timeline event`,
+  );
+}
+
 function appendPermissionGrantTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
@@ -41,7 +77,7 @@ function appendPermissionGrantTimelineEvent(
     scope: turnScope(interaction.turnId),
     data: {
       status: interaction.status,
-      resolution: interaction.resolution,
+      resolution: getApprovalResolution(interaction),
       interactionId: interaction.id,
       providerId: interaction.providerId,
       providerRequestId: interaction.providerRequestId,
@@ -64,7 +100,7 @@ function appendPermissionGrantTimelineEventInTransaction(
     scope: turnScope(interaction.turnId),
     data: {
       status: interaction.status,
-      resolution: interaction.resolution,
+      resolution: getApprovalResolution(interaction),
       interactionId: interaction.id,
       providerId: interaction.providerId,
       providerRequestId: interaction.providerRequestId,
@@ -75,6 +111,57 @@ function appendPermissionGrantTimelineEventInTransaction(
   deps.hub.notifyThread(interaction.threadId, ["events-appended"], {
     eventTypes: ["system/permissionGrant/lifecycle"],
   });
+}
+
+function appendUserQuestionTimelineEvent(
+  deps: Pick<AppDeps, "db" | "hub">,
+  interaction: PendingInteraction,
+): void {
+  if (!isUserQuestionPendingInteractionPayload(interaction.payload)) {
+    return;
+  }
+  const thread = getThread(deps.db, interaction.threadId);
+  appendThreadEvent(deps, {
+    threadId: interaction.threadId,
+    environmentId: thread?.environmentId ?? null,
+    type: "system/userQuestion/lifecycle",
+    scope: turnScope(interaction.turnId),
+    data: {
+      status: interaction.status,
+      resolution: getUserQuestionResolution(interaction),
+      interactionId: interaction.id,
+      providerId: interaction.providerId,
+      providerRequestId: interaction.providerRequestId,
+      statusReason: interaction.statusReason,
+      payload: interaction.payload,
+    },
+  });
+}
+
+function appendUserQuestionTimelineEventInTransaction(
+  deps: PendingInteractionTimelineTransactionDeps,
+  interaction: PendingInteraction,
+): void {
+  if (!isUserQuestionPendingInteractionPayload(interaction.payload)) {
+    return;
+  }
+  const thread = getThread(deps.db, interaction.threadId);
+  appendThreadEventInTransaction(deps.db, {
+    threadId: interaction.threadId,
+    environmentId: thread?.environmentId ?? null,
+    type: "system/userQuestion/lifecycle",
+    scope: turnScope(interaction.turnId),
+    data: {
+      status: interaction.status,
+      resolution: getUserQuestionResolution(interaction),
+      interactionId: interaction.id,
+      providerId: interaction.providerId,
+      providerRequestId: interaction.providerRequestId,
+      statusReason: interaction.statusReason,
+      payload: interaction.payload,
+    },
+  });
+  deps.hub.notifyThread(interaction.threadId, ["events-appended"]);
 }
 
 function appendApprovalItemEvent(
@@ -251,7 +338,7 @@ function appendItemLifecycleTimelineEvent(
     case "resolving":
       return;
     case "resolved":
-      if (interaction.resolution?.decision === "deny") {
+      if (getApprovalResolution(interaction)?.decision === "deny") {
         appendApprovalSubjectItemEvent(
           deps,
           interaction,
@@ -295,7 +382,7 @@ function appendItemLifecycleTimelineEventInTransaction(
     case "resolving":
       return;
     case "resolved":
-      if (interaction.resolution?.decision === "deny") {
+      if (getApprovalResolution(interaction)?.decision === "deny") {
         appendApprovalSubjectItemEventInTransaction(
           deps,
           interaction,
@@ -322,6 +409,10 @@ export function appendPendingInteractionTimelineEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   interaction: PendingInteraction,
 ): void {
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    appendUserQuestionTimelineEvent(deps, interaction);
+    return;
+  }
   const subject = interaction.payload.subject;
   switch (subject.kind) {
     case "permission_grant":
@@ -340,6 +431,10 @@ export function appendPendingInteractionTimelineEventInTransaction(
   deps: PendingInteractionTimelineTransactionDeps,
   interaction: PendingInteraction,
 ): void {
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    appendUserQuestionTimelineEventInTransaction(deps, interaction);
+    return;
+  }
   const subject = interaction.payload.subject;
   switch (subject.kind) {
     case "permission_grant":

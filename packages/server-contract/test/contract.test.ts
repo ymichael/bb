@@ -600,6 +600,7 @@ describe("server-contract canonical schemas", () => {
           providerRequestId: "request-123",
           status: "pending",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item_123",

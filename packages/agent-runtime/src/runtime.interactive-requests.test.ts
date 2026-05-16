@@ -9,6 +9,7 @@ import type {
   ToolCallResponse,
 } from "@bb/domain";
 import type { AgentRuntimeCaptureEntry } from "./capture-types.js";
+import type { DecodedInteractiveRequest } from "./provider-adapter.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
 import { handleRuntimeProviderRequest } from "./runtime-provider-requests.js";
 import {
@@ -250,7 +251,9 @@ rl.on("line", (line) => {
     );
     const adapter = {
       ...baseAdapter,
-      decodeInteractiveRequest(request: ProviderInboundRequest) {
+      decodeInteractiveRequest(
+        request: ProviderInboundRequest,
+      ): DecodedInteractiveRequest | null {
         const decoded = baseAdapter.decodeInteractiveRequest?.(request);
         return decoded ? { ...decoded, turnId: null } : null;
       },
@@ -475,6 +478,219 @@ rl.on("line", (line) => {
 
     expect(requests).toEqual([]);
     await runtime.shutdown();
+  });
+
+  it("routes user-question interactive requests through the handler when permission escalation is deny", async () => {
+    const child = spawn(process.execPath, [
+      "-e",
+      "process.stdin.pipe(process.stdout)",
+    ]);
+    const baseAdapter = createInteractiveRequestAdapter(
+      join(tmpDir, "unused-user-question-provider.cjs"),
+    );
+    const adapter = {
+      ...baseAdapter,
+      decodeInteractiveRequest(
+        request: ProviderInboundRequest,
+      ): DecodedInteractiveRequest | null {
+        if (request.method !== "request_user_question") {
+          return null;
+        }
+        if (typeof request.id !== "string" && typeof request.id !== "number") {
+          return null;
+        }
+        return {
+          requestId: request.id,
+          method: request.method,
+          providerThreadId: "prov-1",
+          turnId: "turn-1",
+          payload: {
+            kind: "user_question",
+            questions: [
+              {
+                id: "q1",
+                prompt: "Which deployment target?",
+                shortLabel: "Target",
+                multiSelect: false,
+                options: [{ value: "staging", label: "Staging" }],
+                allowFreeText: true,
+              },
+            ],
+          },
+        };
+      },
+    };
+    const captures: AgentRuntimeCaptureEntry[] = [];
+    const userAnswerResolution: PendingInteractionResolution = {
+      kind: "user_answer",
+      answers: {
+        q1: {
+          selected: ["staging"],
+        },
+      },
+    };
+    const onInteractiveRequest = vi.fn(async () => userAnswerResolution);
+    const rawRequest = {
+      jsonrpc: "2.0",
+      id: 78,
+      method: "request_user_question",
+      params: {},
+    } satisfies JsonRpcMessage;
+
+    try {
+      handleRuntimeProviderRequest({
+        createCaptureId: () => "cap-user-question",
+        emitCapture: (entry) => captures.push(entry),
+        getActiveTurnId: () => undefined,
+        getThreadExecutionOptions: () => ({
+          ...fullRuntimeOptions,
+          permissionMode: "readonly",
+          permissionEscalation: "deny",
+        }),
+        line: JSON.stringify(rawRequest),
+        onInteractiveRequest,
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "tool result" }],
+          success: true,
+        }),
+        parsedId: rawRequest.id,
+        parsedMethod: rawRequest.method,
+        providerProcess: {
+          adapter,
+          child,
+          interactiveRequestScope: "scope-1",
+        },
+        rawRequest,
+        resolveThreadId: () => "t1",
+      });
+
+      const parsed = parseJsonRpcLine((await readChildStdoutLine(child)).trim());
+      if (parsed.kind !== "response") {
+        throw new Error(`Expected JSON-RPC response, got ${parsed.kind}`);
+      }
+      expect(parsed.parsed).toMatchObject({
+        jsonrpc: "2.0",
+        id: 78,
+        result: {
+          resolution: {
+            kind: "user_answer",
+            answers: {
+              q1: {
+                selected: ["staging"],
+              },
+            },
+          },
+        },
+      });
+      expect(onInteractiveRequest).toHaveBeenCalledTimes(1);
+      expect(captures).toContainEqual(
+        expect.objectContaining({
+          kind: "interactive-result",
+          success: true,
+        }),
+      );
+    } finally {
+      child.kill();
+    }
+  });
+
+  it("sends a provider error for user-question interactive requests without a handler", async () => {
+    const child = spawn(process.execPath, [
+      "-e",
+      "process.stdin.pipe(process.stdout)",
+    ]);
+    const baseAdapter = createInteractiveRequestAdapter(
+      join(tmpDir, "unused-missing-user-question-handler.cjs"),
+    );
+    const adapter = {
+      ...baseAdapter,
+      decodeInteractiveRequest(
+        request: ProviderInboundRequest,
+      ): DecodedInteractiveRequest | null {
+        if (request.method !== "request_user_question") {
+          return null;
+        }
+        if (typeof request.id !== "string" && typeof request.id !== "number") {
+          return null;
+        }
+        return {
+          requestId: request.id,
+          method: request.method,
+          providerThreadId: "prov-1",
+          turnId: "turn-1",
+          payload: {
+            kind: "user_question",
+            questions: [
+              {
+                id: "q1",
+                prompt: "Which deployment target?",
+                shortLabel: "Target",
+                multiSelect: false,
+                options: [{ value: "staging", label: "Staging" }],
+                allowFreeText: true,
+              },
+            ],
+          },
+        };
+      },
+    };
+    const captures: AgentRuntimeCaptureEntry[] = [];
+    const rawRequest = {
+      jsonrpc: "2.0",
+      id: 79,
+      method: "request_user_question",
+      params: {},
+    } satisfies JsonRpcMessage;
+
+    try {
+      handleRuntimeProviderRequest({
+        createCaptureId: () => "cap-missing-user-question-handler",
+        emitCapture: (entry) => captures.push(entry),
+        getActiveTurnId: () => undefined,
+        getThreadExecutionOptions: () => undefined,
+        line: JSON.stringify(rawRequest),
+        onInteractiveRequest: undefined,
+        onToolCall: async () => ({
+          contentItems: [{ type: "inputText", text: "tool result" }],
+          success: true,
+        }),
+        parsedId: rawRequest.id,
+        parsedMethod: rawRequest.method,
+        providerProcess: {
+          adapter,
+          child,
+          interactiveRequestScope: "scope-1",
+        },
+        rawRequest,
+        resolveThreadId: () => "t1",
+      });
+
+      const parsed = parseJsonRpcLine((await readChildStdoutLine(child)).trim());
+      if (parsed.kind !== "response") {
+        throw new Error(`Expected JSON-RPC response, got ${parsed.kind}`);
+      }
+      expect(parsed.parsed).toMatchObject({
+        jsonrpc: "2.0",
+        id: 79,
+        error: {
+          code: -32000,
+          message: expect.stringContaining(
+            "No interactive request handler is configured",
+          ),
+        },
+      });
+      expect(captures).toContainEqual(
+        expect.objectContaining({
+          kind: "interactive-result",
+          success: false,
+          errorMessage: expect.stringContaining(
+            "No interactive request handler is configured",
+          ),
+        }),
+      );
+    } finally {
+      child.kill();
+    }
   });
 
   it("sends JSON-RPC error back when onInteractiveRequest throws", async () => {

@@ -1,6 +1,14 @@
 import { createQueuedThreadMessage } from "@bb/db";
-import { turnScope } from "@bb/domain";
+import {
+  turnScope,
+  USER_QUESTION_MAX_FREE_TEXT_LENGTH,
+  USER_QUESTION_MAX_SELECTED,
+} from "@bb/domain";
 import type { PendingInteractionCreate } from "@bb/domain";
+import type {
+  PendingInteractionResolution,
+  UserQuestionPendingInteractionPayload,
+} from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import type { AppDeps } from "../../src/types.js";
 import type { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
@@ -16,6 +24,7 @@ import {
   createDenyResolution,
   createFileChangeApprovalPayload,
   createPermissionGrantApprovalPayload,
+  createUserQuestionPayload,
 } from "../helpers/pending-interactions.js";
 import {
   seedEnvironment,
@@ -44,6 +53,194 @@ function registerPendingInteraction(
     sessionId,
   });
 }
+
+interface InvalidUserQuestionResolutionCase {
+  createPayload: () => UserQuestionPendingInteractionPayload;
+  expectedMessage: string;
+  id: string;
+  name: string;
+  resolution: PendingInteractionResolution;
+}
+
+const invalidUserQuestionResolutionCases: InvalidUserQuestionResolutionCase[] = [
+  {
+    id: "wrong-kind",
+    name: "wrong resolution kind",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      decision: "deny",
+    },
+    expectedMessage: "Approval resolutions can only resolve approval interactions",
+  },
+  {
+    id: "unknown-question",
+    name: "unknown question id",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "missing-question": {
+          selected: ["staging"],
+        },
+        "question-1": {
+          selected: ["staging"],
+        },
+      },
+    },
+    expectedMessage: "Answer references unknown question 'missing-question'",
+  },
+  {
+    id: "missing-answer",
+    name: "missing answer",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {},
+    },
+    expectedMessage: "Missing answer for question 'question-1'",
+  },
+  {
+    id: "duplicate-selections",
+    name: "duplicate selections",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: ["staging", "staging"],
+        },
+      },
+    },
+    expectedMessage: "Answer for question 'question-1' contains duplicate selections",
+  },
+  {
+    id: "single-select-multiple",
+    name: "multiple selections for single-select",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: ["staging", "production"],
+        },
+      },
+    },
+    expectedMessage: "Question 'question-1' accepts only one selected option",
+  },
+  {
+    id: "unavailable-option",
+    name: "unavailable selected option",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: ["qa"],
+        },
+      },
+    },
+    expectedMessage:
+      "Answer for question 'question-1' selected an unavailable option",
+  },
+  {
+    id: "more-selections-than-options",
+    name: "more selections than available options",
+    createPayload: () =>
+      createUserQuestionPayload({
+        multiSelect: true,
+      }),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: ["staging", "production", "qa"],
+        },
+      },
+    },
+    expectedMessage:
+      "Answer for question 'question-1' selects more options than are available",
+  },
+  {
+    id: "too-many-selections",
+    name: "too many selections",
+    createPayload: () =>
+      createUserQuestionPayload({
+        multiSelect: true,
+      }),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: Array.from(
+            { length: USER_QUESTION_MAX_SELECTED + 1 },
+            (_, index) => `option-${index}`,
+          ),
+        },
+      },
+    },
+    expectedMessage: `User question selected choices cannot exceed ${USER_QUESTION_MAX_SELECTED}`,
+  },
+  {
+    id: "free-text-disallowed",
+    name: "free text disallowed",
+    createPayload: () => createUserQuestionPayload({ allowFreeText: false }),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: ["staging"],
+          freeText: "Use staging first.",
+        },
+      },
+    },
+    expectedMessage: "Question 'question-1' does not accept free-text answers",
+  },
+  {
+    id: "empty-answer",
+    name: "empty answer",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: [],
+        },
+      },
+    },
+    expectedMessage:
+      "Question 'question-1' must include a selected option or free-text answer",
+  },
+  {
+    id: "blank-free-text",
+    name: "blank free text",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: [],
+          freeText: "   ",
+        },
+      },
+    },
+    expectedMessage: "User question free text cannot be blank",
+  },
+  {
+    id: "oversized-free-text",
+    name: "oversized free text",
+    createPayload: () => createUserQuestionPayload(),
+    resolution: {
+      kind: "user_answer",
+      answers: {
+        "question-1": {
+          selected: [],
+          freeText: "x".repeat(USER_QUESTION_MAX_FREE_TEXT_LENGTH + 1),
+        },
+      },
+    },
+    expectedMessage: `User question free text cannot exceed ${USER_QUESTION_MAX_FREE_TEXT_LENGTH} characters`,
+  },
+];
 
 describe("public thread interaction routes", () => {
   it("lists, gets, and resolves thread-owned interactions", async () => {
@@ -102,6 +299,7 @@ describe("public thread interaction routes", () => {
           threadId: thread.id,
           status: "pending",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               command: "git push",
@@ -594,6 +792,77 @@ describe("public thread interaction routes", () => {
       await harness.cleanup();
     }
   });
+
+  it.each(invalidUserQuestionResolutionCases)(
+    "rejects invalid user-question resolutions: $name",
+    async (testCase) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host, session } = seedHostSession(harness.deps, {
+          id: `host-public-thread-question-${testCase.id}`,
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          providerId: "claude-code",
+        });
+
+        const userQuestion = registerPendingInteraction(
+          harness.deps,
+          harness.deps.pendingInteractions,
+          {
+            threadId: thread.id,
+            turnId: `turn-question-${testCase.id}`,
+            providerId: "claude-code",
+            providerThreadId: `provider-thread-question-${testCase.id}`,
+            providerRequestId: `request-question-${testCase.id}`,
+            payload: testCase.createPayload(),
+          },
+          session.id,
+        );
+        if (userQuestion.outcome === "rejected") {
+          throw new Error(
+            `Expected user-question interaction registration to succeed: ${userQuestion.reason}`,
+          );
+        }
+
+        const resolveResponse = await harness.app.request(
+          `/api/v1/threads/${thread.id}/interactions/${userQuestion.interaction.id}/resolve`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify(testCase.resolution),
+          },
+        );
+        expect(resolveResponse.status).toBe(400);
+        await expect(readJson(resolveResponse)).resolves.toEqual({
+          code: "invalid_request",
+          message: testCase.expectedMessage,
+        });
+
+        const getResponse = await harness.app.request(
+          `/api/v1/threads/${thread.id}/interactions/${userQuestion.interaction.id}`,
+        );
+        expect(getResponse.status).toBe(200);
+        await expect(readJson(getResponse)).resolves.toMatchObject({
+          id: userQuestion.interaction.id,
+          resolution: null,
+          status: "pending",
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
 
   it("rejects send and queued-message send while a thread awaits user interaction", async () => {
     const harness = await createTestAppHarness();

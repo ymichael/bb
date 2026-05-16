@@ -17,6 +17,8 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
     case "web-fetch":
     case "approval":
       return false;
+    case "question":
+      return true;
     case "command":
     case "tool":
       return !hasTimelineExplorationIntent(row);

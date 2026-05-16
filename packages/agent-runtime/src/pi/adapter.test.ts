@@ -166,6 +166,7 @@ describe("pi provider adapter", () => {
       supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
+      supportsUserQuestion: false,
       supportedPermissionModes: ["full"],
     });
   });

@@ -20,6 +20,7 @@ import {
   createAllowOnceResolution,
   createCommandApprovalPayload,
   createPermissionGrantApprovalPayload,
+  createUserQuestionPayload,
 } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -224,6 +225,113 @@ describe("internal interactive request lifecycle", () => {
         id: interactionId,
         status: "resolved",
         resolution: createAllowOnceResolution(),
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("rejects user-question interactive requests when the feature flag is disabled", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-user-question-disabled",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "claude-code",
+      });
+
+      const response = await registerInteractiveRequest({
+        harness,
+        body: {
+          sessionId: session.id,
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-user-question-disabled",
+            providerId: "claude-code",
+            providerThreadId: "provider-thread-user-question-disabled",
+            providerRequestId: "request-user-question-disabled",
+            payload: createUserQuestionPayload(),
+          },
+        },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        outcome: "rejected",
+        reason: "Ask User Question feature is disabled",
+      });
+      expect(
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id),
+      ).toEqual([]);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("persists user-question interactive requests when the feature flag is enabled", async () => {
+    const harness = await createTestAppHarness({
+      featureFlags: {
+        askUserQuestion: true,
+      },
+    });
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-user-question-enabled",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "claude-code",
+      });
+
+      const response = await registerInteractiveRequest({
+        harness,
+        body: {
+          sessionId: session.id,
+          interaction: {
+            threadId: thread.id,
+            turnId: "turn-user-question-enabled",
+            providerId: "claude-code",
+            providerThreadId: "provider-thread-user-question-enabled",
+            providerRequestId: "request-user-question-enabled",
+            payload: createUserQuestionPayload(),
+          },
+        },
+      });
+
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toMatchObject({
+        outcome: "created",
+        status: "pending",
+      });
+
+      const [interaction] =
+        harness.deps.pendingInteractions.listThreadInteractions(thread.id);
+      if (!interaction) {
+        throw new Error("Expected user-question interaction to be persisted");
+      }
+      expect(interaction).toMatchObject({
+        payload: {
+          kind: "user_question",
+        },
+        status: "pending",
       });
     } finally {
       await harness.cleanup();

@@ -135,6 +135,7 @@ export function createInteractiveRequestAdapter(
           providerThreadId: params.threadId,
           turnId: params.turnId,
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: params.itemId,
@@ -156,6 +157,7 @@ export function createInteractiveRequestAdapter(
           providerThreadId: params.threadId,
           turnId: params.turnId,
           payload: {
+            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: params.itemId,
@@ -204,6 +206,7 @@ export function createWarningEventAdapter(scriptPath: string): ProviderAdapter {
       supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
+      supportsUserQuestion: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     },
     process: {
@@ -311,6 +314,7 @@ export function createStartedEventAdapter(scriptPath: string): ProviderAdapter {
       supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
+      supportsUserQuestion: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     },
     process: {

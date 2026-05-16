@@ -1149,6 +1149,7 @@ describe("public thread data routes", () => {
                 supportsArchive: true,
                 supportsRename: true,
                 supportsServiceTier: true,
+                supportsUserQuestion: true,
                 supportedPermissionModes: [
                   "full",
                   "workspace-write",
@@ -1206,6 +1207,9 @@ describe("public thread data routes", () => {
       });
       expect(bootstrap.queuedMessages).toHaveLength(1);
       expect(bootstrap.executionOptions.providers).toHaveLength(1);
+      expect(
+        bootstrap.executionOptions.providers[0]?.capabilities.supportsUserQuestion,
+      ).toBe(false);
       expect(bootstrap.executionOptions.models[0]?.model).toBe("gpt-5.5");
       expect(bootstrap.queuedMessages[0]?.content).toEqual([
         { type: "text", text: "Queued message" },

@@ -52,6 +52,11 @@ export type TimelineViewWorkRow =
   | TimelineViewLeafWorkRow
   | TimelineViewDelegationWorkRow;
 
+export type TimelineQuestionViewWorkRow = Extract<
+  TimelineViewWorkRow,
+  { workKind: "question" }
+>;
+
 export type TimelineViewSourceRow =
   | TimelineConversationRow
   | TimelineViewWorkRow
@@ -260,6 +265,7 @@ export function summarizeTimelineWork(
       case "delegation":
         counts.delegations += 1;
         break;
+      case "question":
       case "approval":
         break;
       default:
@@ -335,6 +341,7 @@ function approvalStatusSummaryLabel(
         tools += 1;
         break;
       case "approval":
+      case "question":
       case "delegation":
       case "web-fetch":
       case "web-search":
@@ -382,6 +389,7 @@ function getTimelineWorkSummaryCategory(
     case "delegation":
       return "delegations";
     case "approval":
+    case "question":
       return null;
     default:
       return assertNever(row);
@@ -650,7 +658,11 @@ function summarizeRange(
 function isSummarizableWorkRow(
   row: ThreadTimelineViewRow,
 ): row is TimelineViewWorkRow {
-  return row.kind === "work" && row.workKind !== "approval";
+  return (
+    row.kind === "work" &&
+    row.workKind !== "approval" &&
+    row.workKind !== "question"
+  );
 }
 
 /**
@@ -688,7 +700,8 @@ function rowConcept(row: TimelineViewWorkRow): TimelineWorkSummaryCategory {
     case "web-fetch":
       return "webResearch";
     case "approval":
-      // approval rows aren't summarizable; this branch is unreachable in
+    case "question":
+      // Approval and question rows aren't summarizable; these branches are unreachable in
       // practice because callers filter via isSummarizableWorkRow.
       return "tools";
     default:

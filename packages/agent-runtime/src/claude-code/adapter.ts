@@ -13,11 +13,20 @@ import type {
   PendingInteractionApprovalDecision,
   PendingInteractionApprovalSubject,
   PendingInteractionGrantedPermissionProfile,
+  PendingInteractionUserQuestionQuestion,
   ProviderCapabilities,
   ThreadEvent,
   ThreadEventItem,
+  UserQuestionPendingInteractionPayload,
+  UserQuestionPendingInteractionResolution,
 } from "@bb/domain";
 import { jsonValueSchema, threadScope } from "@bb/domain";
+import {
+  isApprovalPendingInteractionPayload,
+  isApprovalPendingInteractionResolution,
+  isUserQuestionPendingInteractionPayload,
+  isUserQuestionPendingInteractionResolution,
+} from "@bb/domain";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
 import { resolveAdapterPermissionPolicy } from "../shared/permission-policy.js";
 import { resolveBridgeProcessArgs } from "../shared/bridge-path.js";
@@ -72,9 +81,14 @@ import {
 import {
   buildClaudeSessionPermissionUpdates,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  CLAUDE_USER_QUESTION_REQUEST_METHOD,
   isClaudeConcreteFileChangeToolName,
+  type ClaudeUserQuestion,
+  type ClaudeUserQuestionOutput,
+  type ClaudeUserQuestionRequestParams,
   type ClaudePermissionRequestApprovalParams,
   claudePermissionRequestApprovalParamsSchema,
+  claudeUserQuestionRequestParamsSchema,
   toClaudePermissionMode,
 } from "./interactive-contract.js";
 import {
@@ -252,6 +266,150 @@ function buildClaudeApprovalSubject(
     itemId: args.itemId,
     toolName: args.toolName,
     permissions: args.permissions,
+  };
+}
+
+function buildClaudeUserQuestionId(
+  itemId: string,
+  questionIndex: number,
+): string {
+  return `${itemId}:question-${questionIndex + 1}`;
+}
+
+function buildClaudeUserQuestionOptionValue(
+  questionId: string,
+  optionIndex: number,
+): string {
+  return `${questionId}:option-${optionIndex + 1}`;
+}
+
+function buildClaudeUserQuestionPayload(
+  args: ClaudeUserQuestionRequestParams,
+): UserQuestionPendingInteractionPayload {
+  return {
+    kind: "user_question",
+    questions: args.questions.map((question, questionIndex) => {
+      const questionId = buildClaudeUserQuestionId(args.itemId, questionIndex);
+      return {
+        id: questionId,
+        prompt: question.question,
+        shortLabel: question.header,
+        multiSelect: question.multiSelect,
+        options: question.options.map((option, optionIndex) => ({
+          value: buildClaudeUserQuestionOptionValue(questionId, optionIndex),
+          label: option.label,
+          description: option.description,
+        })),
+        allowFreeText: true,
+      };
+    }),
+  };
+}
+
+function buildClaudeUserQuestion(
+  question: PendingInteractionUserQuestionQuestion,
+): ClaudeUserQuestion {
+  if (!question.options || question.options.length === 0) {
+    throw new ProviderResponseEncodeError(
+      `User question '${question.id}' has no options to return to Claude`,
+    );
+  }
+  return {
+    question: question.prompt,
+    header: question.shortLabel ?? question.prompt.slice(0, 12),
+    options: question.options.map((option) => ({
+      label: option.label,
+      description: option.description ?? option.label,
+    })),
+    multiSelect: question.multiSelect,
+  };
+}
+
+function buildClaudeUserQuestionAnswerText(
+  question: PendingInteractionUserQuestionQuestion,
+  resolution: UserQuestionPendingInteractionResolution,
+): string {
+  const answer = resolution.answers[question.id];
+  if (!answer) {
+    throw new ProviderResponseEncodeError(
+      `Missing answer for user question '${question.id}'`,
+    );
+  }
+  const options = question.options ?? [];
+  const selectedLabels = answer.selected.map((selectedValue) => {
+    const option = options.find(
+      (candidate) => candidate.value === selectedValue,
+    );
+    if (!option) {
+      throw new ProviderResponseEncodeError(
+        `Unknown selected option '${selectedValue}' for user question '${question.id}'`,
+      );
+    }
+    return option.label;
+  });
+  if (selectedLabels.length > 0) {
+    const selectedText = selectedLabels.join(", ");
+    return answer.freeText
+      ? `${selectedText}; ${answer.freeText}`
+      : selectedText;
+  }
+  if (answer.freeText) {
+    return answer.freeText;
+  }
+  throw new ProviderResponseEncodeError(
+    `Answer for user question '${question.id}' is empty`,
+  );
+}
+
+function buildClaudeUserQuestionAnnotations(
+  payload: UserQuestionPendingInteractionPayload,
+  resolution: UserQuestionPendingInteractionResolution,
+): ClaudeUserQuestionOutput["annotations"] {
+  const annotations: NonNullable<ClaudeUserQuestionOutput["annotations"]> = {};
+  for (const question of payload.questions) {
+    const answer = resolution.answers[question.id];
+    if (
+      answer &&
+      answer.selected.length > 0 &&
+      answer.freeText !== undefined
+    ) {
+      annotations[question.prompt] = { notes: answer.freeText };
+    }
+  }
+  return Object.keys(annotations).length > 0 ? annotations : undefined;
+}
+
+function validateUniqueClaudeUserQuestionPrompts(
+  payload: UserQuestionPendingInteractionPayload,
+): void {
+  const prompts = new Set<string>();
+  for (const question of payload.questions) {
+    if (prompts.has(question.prompt)) {
+      throw new ProviderResponseEncodeError(
+        `Claude user-question prompts must be unique; duplicate prompt '${question.prompt}'`,
+      );
+    }
+    prompts.add(question.prompt);
+  }
+}
+
+function buildClaudeUserQuestionOutput(
+  payload: UserQuestionPendingInteractionPayload,
+  resolution: UserQuestionPendingInteractionResolution,
+): ClaudeUserQuestionOutput {
+  validateUniqueClaudeUserQuestionPrompts(payload);
+  const answers: ClaudeUserQuestionOutput["answers"] = {};
+  for (const question of payload.questions) {
+    answers[question.prompt] = buildClaudeUserQuestionAnswerText(
+      question,
+      resolution,
+    );
+  }
+  const annotations = buildClaudeUserQuestionAnnotations(payload, resolution);
+  return {
+    questions: payload.questions.map(buildClaudeUserQuestion),
+    answers,
+    ...(annotations ? { annotations } : {}),
   };
 }
 
@@ -556,6 +714,7 @@ export function createClaudeCodeProviderAdapter(
     supportsArchive: providerInfo.capabilities.supportsArchive,
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
+    supportsUserQuestion: providerInfo.capabilities.supportsUserQuestion,
     supportedPermissionModes:
       providerInfo.capabilities.supportedPermissionModes,
   };
@@ -1027,6 +1186,7 @@ export function createClaudeCodeProviderAdapter(
             providerThreadId: parsed.data.providerThreadId,
             turnId,
             payload: {
+              kind: "approval",
               subject: buildClaudeApprovalSubject(parsed.data),
               reason: parsed.data.reason,
               availableDecisions: buildClaudeApprovalAvailableDecisions(
@@ -1035,12 +1195,58 @@ export function createClaudeCodeProviderAdapter(
             },
           };
         }
+        case CLAUDE_USER_QUESTION_REQUEST_METHOD: {
+          const parsed = claudeUserQuestionRequestParamsSchema.safeParse(
+            request.params,
+          );
+          if (!parsed.success) {
+            return null;
+          }
+          const turnId = resolveClaudeInteractiveRequestTurnId({
+            threadId: parsed.data.threadId,
+            turnId: parsed.data.turnId,
+          });
+          if (turnId === null) {
+            return null;
+          }
+          return {
+            requestId: request.id,
+            method: request.method,
+            threadId: parsed.data.threadId,
+            providerThreadId: parsed.data.providerThreadId,
+            turnId,
+            payload: buildClaudeUserQuestionPayload(parsed.data),
+          };
+        }
         default:
           return null;
       }
     },
 
     buildInteractiveResponse(args) {
+      if (
+        isUserQuestionPendingInteractionPayload(args.request.payload) &&
+        isUserQuestionPendingInteractionResolution(args.resolution)
+      ) {
+        return {
+          kind: "user_question",
+          behavior: "allow",
+          updatedInput: buildClaudeUserQuestionOutput(
+            args.request.payload,
+            args.resolution,
+          ),
+        };
+      }
+
+      if (
+        !isApprovalPendingInteractionPayload(args.request.payload) ||
+        !isApprovalPendingInteractionResolution(args.resolution)
+      ) {
+        throw new ProviderResponseEncodeError(
+          "Claude Code interactive response kind does not match the request payload",
+        );
+      }
+
       if (args.resolution.decision === "deny") {
         return {
           kind: "permission_request",

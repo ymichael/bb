@@ -74,6 +74,7 @@ export const MANAGER_CONVERSATION_TIMELINE_EVENT_SELECTION = {
     "system/manager/user_message",
     "system/operation",
     "system/permissionGrant/lifecycle",
+    "system/userQuestion/lifecycle",
     "system/thread/interrupted",
     "system/thread-provisioning",
     "thread/compacted",
@@ -607,6 +608,20 @@ function convertMessage(
           grantScope: message.grantScope,
           statusReason: message.statusReason,
           target: message.approvalTarget,
+        },
+      ];
+    case "user-question-lifecycle":
+      return [
+        {
+          ...buildTimelineRowBase(message, options.rowIdPrefix),
+          kind: "work",
+          workKind: "question",
+          status: message.status,
+          interactionId: message.interactionId,
+          lifecycle: message.lifecycle,
+          questions: message.questions,
+          answers: message.answers,
+          statusReason: message.statusReason,
         },
       ];
     case "operation": {

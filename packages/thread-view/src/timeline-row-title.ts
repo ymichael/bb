@@ -34,6 +34,7 @@ import {
   type ThreadTimelineViewRow,
   type TimelineWorkSummaryRow,
   type TimelineViewDelegationWorkRow,
+  type TimelineQuestionViewWorkRow,
   type TimelineViewTurnRow,
   type TimelineViewWorkRow,
 } from "./timeline-view.js";
@@ -867,6 +868,58 @@ function mapApprovalTitle(row: TimelineApprovalWorkRow): TimelineTitle {
   }
 }
 
+function firstQuestionPrompt(row: TimelineQuestionViewWorkRow): string | null {
+  return row.questions[0]?.prompt ?? null;
+}
+
+function mapQuestionTitle(row: TimelineQuestionViewWorkRow): TimelineTitle {
+  const prompt = firstQuestionPrompt(row);
+  const reasonSegment = row.statusReason
+    ? segment(row.statusReason, { truncate: true })
+    : null;
+  switch (row.lifecycle) {
+    case "pending":
+      return makeTitle({
+        segments: filterNull([
+          segment("Waiting for answer", { shimmer: true }),
+          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+        ]),
+      });
+    case "resolving":
+      return makeTitle({
+        segments: filterNull([
+          segment("Delivering answer", { shimmer: true }),
+          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+        ]),
+      });
+    case "answered":
+      return makeTitle({
+        segments: filterNull([
+          segment("Answered"),
+          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+        ]),
+      });
+    case "interrupted":
+      return makeTitle({
+        segments: filterNull([
+          segment("Question interrupted"),
+          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+          reasonSegment,
+        ]),
+      });
+    case "expired":
+      return makeTitle({
+        segments: filterNull([
+          segment("Question expired"),
+          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+          reasonSegment,
+        ]),
+      });
+    default:
+      return assertNever(row.lifecycle);
+  }
+}
+
 function mapWorkTitle(
   row: TimelineViewWorkRow,
   options: BuildTimelineRowTitleOptions,
@@ -886,6 +939,8 @@ function mapWorkTitle(
         return mapDelegationTitle(row);
       case "approval":
         return mapApprovalTitle(row);
+      case "question":
+        return mapQuestionTitle(row);
       default:
         return assertNever(row);
     }

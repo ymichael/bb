@@ -15,6 +15,8 @@ import type {
   EventProjectionPermissionGrantGrantScope,
   EventProjectionPermissionGrantLifecycleMessage,
   EventProjectionPermissionGrantLifecycle,
+  EventProjectionUserQuestionLifecycle,
+  EventProjectionUserQuestionLifecycleMessage,
   EventProjectionOperationMessage,
   EventProjectionOwnershipChangeThreadOperationMetadata,
   EventProjectionThreadOperationMetadata,
@@ -30,6 +32,10 @@ type ParseOperationMessageOptions = Pick<
 type PermissionGrantLifecycleEvent = Extract<
   ThreadEvent,
   { type: "system/permissionGrant/lifecycle" }
+>;
+type UserQuestionLifecycleEvent = Extract<
+  ThreadEvent,
+  { type: "system/userQuestion/lifecycle" }
 >;
 
 function providerDisplayName(providerId: string): string {
@@ -266,6 +272,66 @@ function buildPermissionGrantLifecycleMessage(
   };
 }
 
+function userQuestionLifecycle(
+  decoded: UserQuestionLifecycleEvent,
+): EventProjectionUserQuestionLifecycle {
+  switch (decoded.status) {
+    case "pending":
+      return "pending";
+    case "resolving":
+      return "resolving";
+    case "resolved":
+      return "answered";
+    case "interrupted":
+      return "interrupted";
+    case "expired":
+      return "expired";
+    default:
+      return assertNever(decoded.status);
+  }
+}
+
+function userQuestionLifecycleStatus(
+  lifecycle: EventProjectionUserQuestionLifecycle,
+): EventProjectionUserQuestionLifecycleMessage["status"] {
+  switch (lifecycle) {
+    case "pending":
+    case "resolving":
+      return "pending";
+    case "answered":
+      return "completed";
+    case "interrupted":
+      return "interrupted";
+    case "expired":
+      return "error";
+    default:
+      return assertNever(lifecycle);
+  }
+}
+
+function buildUserQuestionLifecycleMessage(
+  decoded: UserQuestionLifecycleEvent,
+  meta: EventMeta,
+): EventProjectionUserQuestionLifecycleMessage {
+  const lifecycle = userQuestionLifecycle(decoded);
+  return {
+    kind: "user-question-lifecycle",
+    id: messageId(decoded.threadId, "question", decoded.interactionId),
+    threadId: decoded.threadId,
+    sourceSeqStart: meta.seq,
+    sourceSeqEnd: meta.seq,
+    createdAt: meta.createdAt,
+    startedAt: meta.createdAt,
+    scope: decoded.scope,
+    interactionId: decoded.interactionId,
+    lifecycle,
+    status: userQuestionLifecycleStatus(lifecycle),
+    questions: decoded.payload.questions,
+    answers: decoded.resolution?.answers ?? null,
+    statusReason: decoded.statusReason,
+  };
+}
+
 /** Build the common scaffolding shared by all operation messages. */
 function op(
   decoded: ThreadEvent,
@@ -319,6 +385,7 @@ export function parseOperationMessage(
 ):
   | EventProjectionOperationMessage
   | EventProjectionPermissionGrantLifecycleMessage
+  | EventProjectionUserQuestionLifecycleMessage
   | null {
   if (decoded.type === "provider/unhandled") {
     if (options?.includeProviderUnhandledOperations !== true) {
@@ -423,6 +490,10 @@ export function parseOperationMessage(
 
   if (decoded.type === "system/permissionGrant/lifecycle") {
     return buildPermissionGrantLifecycleMessage(decoded, meta);
+  }
+
+  if (decoded.type === "system/userQuestion/lifecycle") {
+    return buildUserQuestionLifecycleMessage(decoded, meta);
   }
 
   if (decoded.type === "thread/compacted") {

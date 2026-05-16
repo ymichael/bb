@@ -1,6 +1,8 @@
 import type {
   JsonObject,
   OwnershipChangeOperationMetadata,
+  PendingInteractionUserAnswer,
+  PendingInteractionUserQuestionQuestion,
   Thread,
   ThreadEventRow,
   ThreadEventScope,
@@ -41,6 +43,15 @@ export const eventProjectionPermissionGrantLifecycleValues = [
 ] as const;
 export type EventProjectionPermissionGrantLifecycle =
   (typeof eventProjectionPermissionGrantLifecycleValues)[number];
+export const eventProjectionUserQuestionLifecycleValues = [
+  "pending",
+  "resolving",
+  "answered",
+  "interrupted",
+  "expired",
+] as const;
+export type EventProjectionUserQuestionLifecycle =
+  (typeof eventProjectionUserQuestionLifecycleValues)[number];
 
 export interface EventProjectionMessageBase {
   id: string;
@@ -301,6 +312,19 @@ export interface EventProjectionPermissionGrantLifecycleMessage extends EventPro
   statusReason: string | null;
 }
 
+export interface EventProjectionUserQuestionLifecycleMessage extends EventProjectionMessageBase {
+  kind: "user-question-lifecycle";
+  interactionId: string;
+  lifecycle: EventProjectionUserQuestionLifecycle;
+  status: Extract<
+    EventProjectionMessageStatus,
+    "pending" | "completed" | "error" | "interrupted"
+  >;
+  questions: PendingInteractionUserQuestionQuestion[];
+  answers: Record<string, PendingInteractionUserAnswer> | null;
+  statusReason: string | null;
+}
+
 export interface EventProjectionDelegationMessage
   extends EventProjectionMessageBase, EventProjectionDelegationMetadata {
   kind: "delegation";
@@ -341,6 +365,7 @@ export type EventProjectionMessage =
   | EventProjectionFileEditMessage
   | EventProjectionOperationMessage
   | EventProjectionPermissionGrantLifecycleMessage
+  | EventProjectionUserQuestionLifecycleMessage
   | EventProjectionDelegationMessage
   | EventProjectionErrorMessage
   | EventProjectionDebugRawEventMessage;

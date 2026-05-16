@@ -1,30 +1,41 @@
 import { existsSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  isUserQuestionPendingInteractionPayload,
+  isUserQuestionPendingInteractionResolution,
   threadScope,
   threadEventItemSchema,
   turnScope,
   type AvailableModel,
+  type PendingInteractionUserQuestionOption,
+  type ProviderCapabilities,
   type ThreadEvent,
 } from "@bb/domain";
 import type {
   AdapterCommand,
+  BuildInteractiveResponseArgs,
+  DecodedInteractiveRequest,
   DecodedToolCallRequest,
   ProviderAdapter,
   ProviderCommandPlan,
+  ProviderInteractiveResponse,
 } from "../provider-adapter.js";
 import { noPreparedProviderCommandDispatch } from "../provider-adapter.js";
 import type {
   ProviderInboundRequest,
   ProviderRuntimeEvent,
 } from "../runtime-json-rpc.js";
+import { ProviderResponseEncodeError } from "../runtime-json-rpc.js";
 import { parseAvailableModelList } from "../shared/available-models.js";
 import { decodeNormalizedProviderToolCallRequest } from "../shared/provider-tool-call-contract.js";
+
+type FakeUserQuestionCapability = ProviderCapabilities["supportsUserQuestion"];
 
 export interface CreateFakeProviderExecutionContext {
   displayName?: string;
   id?: string;
   scriptPath?: string;
+  supportsUserQuestion?: FakeUserQuestionCapability;
 }
 
 interface FakeEventMessage {
@@ -34,6 +45,7 @@ interface FakeEventMessage {
 
 const DEFAULT_ADAPTER_ID = "fake";
 const DEFAULT_DISPLAY_NAME = "Fake Provider";
+const FAKE_USER_QUESTION_REQUEST_METHOD = "interaction/user_question";
 
 function resolveTsxLoaderSpecifier(): string {
   return import.meta.resolve("tsx");
@@ -168,6 +180,70 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+function stringParam(
+  params: Record<string, unknown>,
+  key: string,
+): string | null {
+  const value = params[key];
+  return typeof value === "string" ? value : null;
+}
+
+function optionalStringParam(
+  params: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = params[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function booleanParam(params: Record<string, unknown>, key: string): boolean {
+  const value = params[key];
+  return typeof value === "boolean" ? value : false;
+}
+
+function turnIdParam(
+  params: Record<string, unknown>,
+): string | null | undefined {
+  const value = params.turnId;
+  if (value === null) {
+    return null;
+  }
+  if (typeof value === "string") {
+    return value;
+  }
+  return undefined;
+}
+
+function parseFakeQuestionOptions(
+  value: unknown,
+): PendingInteractionUserQuestionOption[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const options: PendingInteractionUserQuestionOption[] = [];
+  for (const optionValue of value) {
+    if (!isRecord(optionValue)) {
+      return null;
+    }
+
+    const optionValueId = stringParam(optionValue, "value");
+    const label = stringParam(optionValue, "label");
+    if (!optionValueId || !label) {
+      return null;
+    }
+
+    const description = optionalStringParam(optionValue, "description");
+    options.push(
+      description
+        ? { value: optionValueId, label, description }
+        : { value: optionValueId, label },
+    );
+  }
+
+  return options;
+}
+
 function toFakeEventMessage(
   event: ProviderRuntimeEvent,
 ): FakeEventMessage | null {
@@ -275,6 +351,62 @@ function decodeToolCallRequest(
   );
 }
 
+function decodeInteractiveRequest(
+  request: ProviderInboundRequest,
+): DecodedInteractiveRequest | null {
+  if (
+    request.method !== FAKE_USER_QUESTION_REQUEST_METHOD ||
+    (typeof request.id !== "string" && typeof request.id !== "number") ||
+    !isRecord(request.params)
+  ) {
+    return null;
+  }
+
+  const providerThreadId = stringParam(request.params, "providerThreadId");
+  const turnId = turnIdParam(request.params);
+  const prompt = stringParam(request.params, "prompt");
+  const options = parseFakeQuestionOptions(request.params.options);
+  if (!providerThreadId || turnId === undefined || !prompt || !options) {
+    return null;
+  }
+
+  return {
+    requestId: request.id,
+    method: request.method,
+    providerThreadId,
+    turnId,
+    threadId: optionalStringParam(request.params, "threadId"),
+    payload: {
+      kind: "user_question",
+      questions: [
+        {
+          id: `${String(request.id)}:question-1`,
+          prompt,
+          shortLabel: optionalStringParam(request.params, "shortLabel"),
+          multiSelect: booleanParam(request.params, "multiSelect"),
+          options,
+          allowFreeText: booleanParam(request.params, "allowFreeText"),
+        },
+      ],
+    },
+  };
+}
+
+function buildInteractiveResponse(
+  args: BuildInteractiveResponseArgs,
+): ProviderInteractiveResponse {
+  if (
+    !isUserQuestionPendingInteractionPayload(args.request.payload) ||
+    !isUserQuestionPendingInteractionResolution(args.resolution)
+  ) {
+    throw new ProviderResponseEncodeError(
+      "Fake provider interactive response kind does not match the request payload",
+    );
+  }
+
+  return args.resolution;
+}
+
 function parseModelListResult(result: unknown): {
   models: AvailableModel[];
   selectedOnlyModels: AvailableModel[];
@@ -293,17 +425,24 @@ export function createFakeAdapter(
    * - `call_tool_unresolved:<name>` emits the same tool call with a null
    *   `turnId`, matching the canonical bridge wire form for providers that
    *   cannot resolve the BB turn id.
+   * - `ask_user` emits a provider-scoped user-question interactive request
+   *   when the adapter is configured with `supportsUserQuestion: true`.
    * - remaining text is echoed back as `Response to: ...`.
    */
+  const supportsUserQuestion = options.supportsUserQuestion ?? false;
+
   return {
     buildCommandPlan,
     capabilities: {
       supportsArchive: true,
       supportsRename: true,
       supportsServiceTier: false,
+      supportsUserQuestion,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     },
     decodeToolCallRequest,
+    decodeInteractiveRequest:
+      supportsUserQuestion ? decodeInteractiveRequest : undefined,
     displayName: options.displayName ?? DEFAULT_DISPLAY_NAME,
     id: options.id ?? DEFAULT_ADAPTER_ID,
     parseModelListResult,
@@ -318,5 +457,7 @@ export function createFakeAdapter(
     translateAcceptedCommand() {
       return [];
     },
+    buildInteractiveResponse:
+      supportsUserQuestion ? buildInteractiveResponse : undefined,
   };
 }

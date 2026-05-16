@@ -8,6 +8,7 @@ import type {
   PendingInteractionResolution,
   PendingInteractionRequestedPermissionProfile,
 } from "@bb/domain";
+import { isApprovalPendingInteractionPayload } from "@bb/domain";
 import { assertNever } from "./assert-never.js";
 
 type PendingInteractionPermissionSummaryProfile =
@@ -130,6 +131,9 @@ function formatPermissionSummaryLine(
 export function formatPendingInteractionSubjectDetailLines(
   interaction: PendingInteraction,
 ): string[] {
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    return interaction.payload.questions.map((question) => question.prompt);
+  }
   switch (interaction.payload.subject.kind) {
     case "command": {
       const actionLines = summarizeCommandActions(
@@ -210,6 +214,9 @@ function resolveGrantedPermissionsForApproval(
   interaction: PendingInteraction,
   decision: PendingInteractionApprovalDecision,
 ): PendingInteractionGrantedPermissionProfile | null {
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    return null;
+  }
   if (interaction.payload.subject.kind === "permission_grant") {
     return toGrantedPermissions(interaction.payload.subject.permissions);
   }

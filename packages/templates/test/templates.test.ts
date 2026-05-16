@@ -81,6 +81,7 @@ describe("@bb/templates", () => {
       "You are a manager in a project inside bb, an agent orchestration tool.",
     );
     expect(rendered).toContain("agent orchestration tool");
+    expect(rendered).toContain("Ask the user a blocking question only when");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
 
@@ -91,6 +92,13 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("America/Los_Angeles");
     expect(rendered).toContain("/tmp/test-thread-storage");
     expect(rendered).toContain("No preferences yet.");
+  });
+
+  it("renders standardAgentInstructions without user-question guidance", () => {
+    const rendered = renderTemplate("standardAgentInstructions", {});
+
+    expect(rendered).toContain("You are a coding agent");
+    expect(rendered).not.toContain("Ask the user a blocking question only when");
   });
 
   it("renders all templates without error", () => {

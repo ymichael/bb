@@ -224,6 +224,57 @@ describe("useThreadCreationOptions", () => {
     expect(result.current.supportsServiceTier).toBe(false);
   });
 
+  it("filters permission modes by provider capabilities and falls back to full", async () => {
+    const projectId = "project-pi";
+    localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.permission-mode", projectId),
+      "readonly",
+    );
+
+    mockExecutionOptions({
+      providers: [
+        createTestSystemProvider({
+          capabilities: {
+            supportsArchive: false,
+            supportsRename: false,
+            supportsServiceTier: false,
+            supportsUserQuestion: false,
+            supportedPermissionModes: ["full"],
+          },
+          displayName: "Pi",
+          id: "pi",
+        }),
+      ],
+      models: [
+        makeModel({
+          displayName: "pi",
+          id: "pi",
+          model: "pi",
+        }),
+      ],
+    });
+
+    const { wrapper } = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          projectId,
+          scope: "new-thread",
+        }),
+      { wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedProviderId).toBe("pi");
+    });
+
+    expect(result.current.permissionMode).toBe("full");
+    expect(result.current.supportsPermissionModeSelection).toBe(false);
+    expect(result.current.permissionModeOptions).toEqual([
+      PERMISSION_MODE_OPTIONS[0],
+    ]);
+  });
+
   it("persists new-thread selections to project-scoped local storage", async () => {
     const projectId = "project-storage";
 

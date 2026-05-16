@@ -18,6 +18,8 @@ import {
   createCommandApprovalPayload,
   createFileChangeApprovalPayload,
   createPermissionGrantApprovalPayload,
+  createUserAnswerResolution,
+  createUserQuestionPayload,
 } from "../helpers/pending-interactions.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
@@ -207,6 +209,140 @@ describe("pending interaction lifecycle", () => {
           interactionId: corrupt.interaction.id,
         }),
       ).toThrow("Stored pending interaction resolution is invalid");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("resolves user-question interactions with user answers", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-user-question-answer",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "claude-code",
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-user-question-answer",
+          providerId: "claude-code",
+          providerThreadId: "provider-thread-user-question-answer",
+          providerRequestId: "request-user-question-answer",
+          payload: createUserQuestionPayload(),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
+      }
+
+      const answerResolution = createUserAnswerResolution({
+        freeText: "Use staging until QA signs off.",
+      });
+      const resolving =
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: answerResolution,
+        });
+
+      expect(resolving).toMatchObject({
+        id: created.interaction.id,
+        resolution: answerResolution,
+        status: "resolving",
+      });
+
+      const completed =
+        harness.deps.pendingInteractions.completeResolvingInteraction({
+          interactionId: created.interaction.id,
+          resolution: answerResolution,
+        });
+
+      expect(completed).toMatchObject({
+        id: created.interaction.id,
+        resolution: answerResolution,
+        status: "resolved",
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("interrupts pending user-question interactions without orphaning state", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-pending-interaction-user-question-interrupted",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "claude-code",
+      });
+
+      const created = registerPendingInteraction(
+        harness.deps,
+        harness.deps.pendingInteractions,
+        {
+          threadId: thread.id,
+          turnId: "turn-user-question-interrupted",
+          providerId: "claude-code",
+          providerThreadId: "provider-thread-user-question-interrupted",
+          providerRequestId: "request-user-question-interrupted",
+          payload: createUserQuestionPayload(),
+        },
+        session.id,
+      );
+      if (created.outcome === "rejected") {
+        throw new Error(
+          `Expected interaction registration to succeed: ${created.reason}`,
+        );
+      }
+
+      const interrupted =
+        harness.deps.pendingInteractions.interruptPendingInteraction({
+          interactionId: created.interaction.id,
+          reason: "Provider exited",
+        });
+
+      expect(interrupted).toMatchObject({
+        id: created.interaction.id,
+        resolution: null,
+        status: "interrupted",
+        statusReason: "Provider exited",
+      });
+      expect(() =>
+        harness.deps.pendingInteractions.resolvePendingInteraction({
+          threadId: thread.id,
+          interactionId: created.interaction.id,
+          resolution: createUserAnswerResolution(),
+        }),
+      ).toThrowError(
+        `Pending interaction ${created.interaction.id} is already interrupted`,
+      );
     } finally {
       await harness.cleanup();
     }

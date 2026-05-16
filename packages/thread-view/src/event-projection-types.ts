@@ -35,6 +35,8 @@ export type {
   EventProjectionThreadOperationKind,
   EventProjectionThreadOperationMetadata,
   EventProjectionThreadOperationStatus,
+  EventProjectionUserQuestionLifecycle,
+  EventProjectionUserQuestionLifecycleMessage,
   EventProjectionToolCallMessage,
   EventProjectionToolParsedIntent,
   EventProjectionUserMessage,

@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { jsonValueSchema, type JsonObject } from "@bb/domain";
+import {
+  jsonValueSchema,
+  pendingInteractionUserAnswerSchema,
+  pendingInteractionUserQuestionQuestionSchema,
+  type JsonObject,
+} from "@bb/domain";
 
 export const timelineRowStatusValues = [
   "pending",
@@ -323,6 +328,13 @@ export const timelinePermissionGrantApprovalLifecycleValues = [
   "interrupted",
   "expired",
 ] as const;
+export const timelineQuestionLifecycleValues = [
+  "pending",
+  "resolving",
+  "answered",
+  "interrupted",
+  "expired",
+] as const;
 export const timelinePermissionGrantApprovalGrantScopeValues = [
   "turn",
   "session",
@@ -370,6 +382,18 @@ export type TimelineApprovalWorkRow = z.infer<
   typeof timelineApprovalWorkRowSchema
 >;
 
+export const timelineQuestionWorkRowSchema = timelineWorkRowBaseSchema.extend({
+  workKind: z.literal("question"),
+  interactionId: z.string(),
+  lifecycle: z.enum(timelineQuestionLifecycleValues),
+  questions: z.array(pendingInteractionUserQuestionQuestionSchema),
+  answers: z.record(z.string(), pendingInteractionUserAnswerSchema).nullable(),
+  statusReason: z.string().nullable(),
+});
+export type TimelineQuestionWorkRow = z.infer<
+  typeof timelineQuestionWorkRowSchema
+>;
+
 export interface TimelineDelegationWorkRow extends TimelineWorkRowBase {
   workKind: "delegation";
   callId: string;
@@ -400,6 +424,7 @@ export type TimelineWorkRow =
   | TimelineWebSearchWorkRow
   | TimelineWebFetchWorkRow
   | TimelineApprovalWorkRow
+  | TimelineQuestionWorkRow
   | TimelineDelegationWorkRow;
 
 export const timelineWorkRowSchema: z.ZodType<TimelineWorkRow> = z.union([
@@ -409,6 +434,7 @@ export const timelineWorkRowSchema: z.ZodType<TimelineWorkRow> = z.union([
   timelineWebSearchWorkRowSchema,
   timelineWebFetchWorkRowSchema,
   timelineApprovalWorkRowSchema,
+  timelineQuestionWorkRowSchema,
   timelineDelegationWorkRowSchema,
 ]);
 

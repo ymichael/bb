@@ -3,9 +3,20 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { threadScope, turnScope } from "@bb/domain";
+import type {
+  PendingInteractionResolution,
+  UserQuestionPendingInteractionPayload,
+  UserQuestionPendingInteractionResolution,
+} from "@bb/domain";
 import { createClaudeCodeProviderAdapter } from "./adapter.js";
-import { CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD } from "./interactive-contract.js";
-import type { ProviderExecutionContext } from "../provider-adapter.js";
+import {
+  CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  CLAUDE_USER_QUESTION_REQUEST_METHOD,
+} from "./interactive-contract.js";
+import type {
+  DecodedInteractiveRequest,
+  ProviderExecutionContext,
+} from "../provider-adapter.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "../__fixtures__/claude-code");
@@ -33,6 +44,88 @@ const workspaceWriteProviderExecutionContext = {
   permissionMode: "workspace-write",
   permissionEscalation: "deny",
 } satisfies ProviderExecutionContext;
+
+function createClaudeUserQuestionPayload(): UserQuestionPendingInteractionPayload {
+  return {
+    kind: "user_question",
+    questions: [
+      {
+        id: "toolu_question:question-1",
+        prompt: "Which deployment target should I use?",
+        shortLabel: "Target",
+        multiSelect: false,
+        options: [
+          {
+            value: "toolu_question:question-1:option-1",
+            label: "Staging",
+            description: "Deploy to the staging environment.",
+          },
+          {
+            value: "toolu_question:question-1:option-2",
+            label: "Production",
+            description: "Deploy to production.",
+          },
+        ],
+        allowFreeText: true,
+      },
+    ],
+  };
+}
+
+function createClaudeUserQuestionRequest(
+  payload: UserQuestionPendingInteractionPayload,
+): DecodedInteractiveRequest {
+  return {
+    requestId: "req-question",
+    method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+    threadId: "thr_1",
+    providerThreadId: "claude-session-1",
+    turnId: "turn-1",
+    payload,
+  };
+}
+
+interface InvalidClaudeUserQuestionAnswerCase {
+  expectedMessage: string;
+  name: string;
+  resolution: UserQuestionPendingInteractionResolution;
+}
+
+const invalidClaudeUserQuestionAnswerCases: InvalidClaudeUserQuestionAnswerCase[] =
+  [
+    {
+      name: "missing answer",
+      resolution: {
+        kind: "user_answer",
+        answers: {},
+      },
+      expectedMessage: "Missing answer for user question",
+    },
+    {
+      name: "unknown selected option",
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "toolu_question:question-1": {
+            selected: ["toolu_question:question-1:option-missing"],
+          },
+        },
+      },
+      expectedMessage: "Unknown selected option",
+    },
+    {
+      name: "empty answer",
+      resolution: {
+        kind: "user_answer",
+        answers: {
+          "toolu_question:question-1": {
+            selected: [],
+          },
+        },
+      },
+      expectedMessage: "Answer for user question",
+    },
+  ];
 
 describe("claude-code provider adapter", () => {
   // -- Identity & capabilities ---------------------------------------------
@@ -70,6 +163,7 @@ describe("claude-code provider adapter", () => {
       supportsArchive: false,
       supportsRename: false,
       supportsServiceTier: false,
+      supportsUserQuestion: true,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     });
   });
@@ -701,6 +795,7 @@ describe("claude-code provider adapter", () => {
       providerThreadId: "claude-session-1",
       turnId: "turn-provider",
       payload: {
+        kind: "approval",
         subject: {
           kind: "permission_grant",
           itemId: "toolu_1",
@@ -759,6 +854,7 @@ describe("claude-code provider adapter", () => {
     ).toMatchObject({
       turnId: "turn-1",
       payload: {
+        kind: "approval",
         subject: {
           kind: "permission_grant",
           itemId: "toolu_1",
@@ -818,6 +914,7 @@ describe("claude-code provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
+        kind: "approval",
         subject: {
           kind: "command",
           itemId: "toolu_bash",
@@ -866,6 +963,7 @@ describe("claude-code provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
+        kind: "approval",
         subject: {
           kind: "file_change",
           itemId: "toolu_edit",
@@ -906,6 +1004,120 @@ describe("claude-code provider adapter", () => {
     ).toBeNull();
   });
 
+  it("decodes Claude AskUserQuestion requests into user-question interactions", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        id: "req-question",
+        method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "turn-question",
+          itemId: "toolu_question",
+          questions: [
+            {
+              question: "Which deployment target should I use?",
+              header: "Target",
+              options: [
+                {
+                  label: "Staging",
+                  description: "Deploy to the staging environment.",
+                },
+                {
+                  label: "Production",
+                  description: "Deploy to production.",
+                  preview: "prod",
+                },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      requestId: "req-question",
+      method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+      threadId: "thr_1",
+      providerThreadId: "claude-session-1",
+      turnId: "turn-question",
+      payload: {
+        kind: "user_question",
+        questions: [
+          {
+            id: "toolu_question:question-1",
+            prompt: "Which deployment target should I use?",
+            shortLabel: "Target",
+            multiSelect: false,
+            options: [
+              {
+                value: "toolu_question:question-1:option-1",
+                label: "Staging",
+                description: "Deploy to the staging environment.",
+              },
+              {
+                value: "toolu_question:question-1:option-2",
+                label: "Production",
+                description: "Deploy to production.",
+              },
+            ],
+            allowFreeText: true,
+          },
+        ],
+      },
+    });
+  });
+
+  it("rejects Claude AskUserQuestion requests with duplicate prompts", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.decodeInteractiveRequest?.({
+        id: "req-question-duplicate-prompt",
+        method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+        params: {
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "turn-question",
+          itemId: "toolu_question",
+          questions: [
+            {
+              question: "Which deployment target should I use?",
+              header: "Target",
+              options: [
+                {
+                  label: "Staging",
+                  description: "Deploy to the staging environment.",
+                },
+                {
+                  label: "Production",
+                  description: "Deploy to production.",
+                },
+              ],
+              multiSelect: false,
+            },
+            {
+              question: "Which deployment target should I use?",
+              header: "Fallback",
+              options: [
+                {
+                  label: "Rollback",
+                  description: "Rollback to the previous release.",
+                },
+                {
+                  label: "Pause",
+                  description: "Pause deployment.",
+                },
+              ],
+              multiSelect: false,
+            },
+          ],
+        },
+      }),
+    ).toBeNull();
+  });
+
   it("builds Claude permission approval responses", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -918,6 +1130,7 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "turn-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "permission_grant",
               itemId: "toolu_3",
@@ -954,6 +1167,360 @@ describe("claude-code provider adapter", () => {
     });
   });
 
+  it("builds Claude AskUserQuestion answer responses", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-question",
+          method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "turn-1",
+          payload: {
+            kind: "user_question",
+            questions: [
+              {
+                id: "toolu_question:question-1",
+                prompt: "Which deployment target should I use?",
+                shortLabel: "Target",
+                multiSelect: false,
+                options: [
+                  {
+                    value: "toolu_question:question-1:option-1",
+                    label: "Staging",
+                    description: "Deploy to the staging environment.",
+                  },
+                  {
+                    value: "toolu_question:question-1:option-2",
+                    label: "Production",
+                    description: "Deploy to production.",
+                  },
+                ],
+                allowFreeText: true,
+              },
+            ],
+          },
+        },
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "toolu_question:question-1": {
+              selected: ["toolu_question:question-1:option-1"],
+              freeText: "Use staging until QA signs off.",
+            },
+          },
+        },
+      }),
+    ).toEqual({
+      kind: "user_question",
+      behavior: "allow",
+      updatedInput: {
+        questions: [
+          {
+            question: "Which deployment target should I use?",
+            header: "Target",
+            options: [
+              {
+                label: "Staging",
+                description: "Deploy to the staging environment.",
+              },
+              {
+                label: "Production",
+                description: "Deploy to production.",
+              },
+            ],
+            multiSelect: false,
+          },
+        ],
+        answers: {
+          "Which deployment target should I use?":
+            "Staging; Use staging until QA signs off.",
+        },
+        annotations: {
+          "Which deployment target should I use?": {
+            notes: "Use staging until QA signs off.",
+          },
+        },
+      },
+    });
+  });
+
+  it("keeps free-text-only Claude AskUserQuestion answers in the primary answer text", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-question-free-text",
+          method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "turn-1",
+          payload: {
+            kind: "user_question",
+            questions: [
+              {
+                id: "toolu_question:question-1",
+                prompt: "Which deployment target should I use?",
+                shortLabel: "Target",
+                multiSelect: false,
+                options: [
+                  {
+                    value: "toolu_question:question-1:option-1",
+                    label: "Staging",
+                    description: "Deploy to the staging environment.",
+                  },
+                ],
+                allowFreeText: true,
+              },
+            ],
+          },
+        },
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "toolu_question:question-1": {
+              selected: [],
+              freeText: "Use the target from the release ticket.",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      updatedInput: {
+        answers: {
+          "Which deployment target should I use?":
+            "Use the target from the release ticket.",
+        },
+      },
+    });
+  });
+
+  it("combines multi-select and free-text Claude AskUserQuestion answers", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: {
+          requestId: "req-question-multi-select",
+          method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+          threadId: "thr_1",
+          providerThreadId: "claude-session-1",
+          turnId: "turn-1",
+          payload: {
+            kind: "user_question",
+            questions: [
+              {
+                id: "toolu_question:question-1",
+                prompt: "Which deployment targets should I use?",
+                shortLabel: "Targets",
+                multiSelect: true,
+                options: [
+                  {
+                    value: "toolu_question:question-1:option-1",
+                    label: "Staging",
+                    description: "Deploy to the staging environment.",
+                  },
+                  {
+                    value: "toolu_question:question-1:option-2",
+                    label: "Production",
+                    description: "Deploy to production.",
+                  },
+                ],
+                allowFreeText: true,
+              },
+            ],
+          },
+        },
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "toolu_question:question-1": {
+              selected: [
+                "toolu_question:question-1:option-1",
+                "toolu_question:question-1:option-2",
+              ],
+              freeText: "Use staging first.",
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      updatedInput: {
+        answers: {
+          "Which deployment targets should I use?":
+            "Staging, Production; Use staging first.",
+        },
+        annotations: {
+          "Which deployment targets should I use?": {
+            notes: "Use staging first.",
+          },
+        },
+      },
+    });
+  });
+
+  it("rejects Claude AskUserQuestion responses with duplicate prompts", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const payload = createClaudeUserQuestionPayload();
+    const firstQuestion = payload.questions[0];
+    if (!firstQuestion) {
+      throw new Error("Expected user-question helper to create a question");
+    }
+    const duplicatePromptPayload: UserQuestionPendingInteractionPayload = {
+      ...payload,
+      questions: [
+        firstQuestion,
+        {
+          ...firstQuestion,
+          id: "toolu_question:question-2",
+        },
+      ],
+    };
+
+    expect(() =>
+      adapter.buildInteractiveResponse?.({
+        request: createClaudeUserQuestionRequest(duplicatePromptPayload),
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "toolu_question:question-1": {
+              selected: ["toolu_question:question-1:option-1"],
+            },
+            "toolu_question:question-2": {
+              selected: ["toolu_question:question-1:option-2"],
+            },
+          },
+        },
+      }),
+    ).toThrow(
+      "Claude user-question prompts must be unique; duplicate prompt 'Which deployment target should I use?'",
+    );
+  });
+
+  it.each(invalidClaudeUserQuestionAnswerCases)(
+    "rejects invalid Claude AskUserQuestion answers: $name",
+    (testCase) => {
+      const adapter = createClaudeCodeProviderAdapter();
+
+      expect(() =>
+        adapter.buildInteractiveResponse?.({
+          request: createClaudeUserQuestionRequest(
+            createClaudeUserQuestionPayload(),
+          ),
+          resolution: testCase.resolution,
+        }),
+      ).toThrow(testCase.expectedMessage);
+    },
+  );
+
+  it("rejects Claude AskUserQuestion responses whose resolution kind does not match", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const resolution: PendingInteractionResolution = {
+      decision: "deny",
+    };
+
+    expect(() =>
+      adapter.buildInteractiveResponse?.({
+        request: createClaudeUserQuestionRequest(createClaudeUserQuestionPayload()),
+        resolution,
+      }),
+    ).toThrow(
+      "Claude Code interactive response kind does not match the request payload",
+    );
+  });
+
+  it("rejects Claude AskUserQuestion response payloads without returnable options", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const payload: UserQuestionPendingInteractionPayload = {
+      kind: "user_question",
+      questions: [
+        {
+          id: "toolu_question:question-1",
+          prompt: "Which deployment target should I use?",
+          shortLabel: "Target",
+          multiSelect: false,
+          allowFreeText: true,
+        },
+      ],
+    };
+
+    expect(() =>
+      adapter.buildInteractiveResponse?.({
+        request: createClaudeUserQuestionRequest(payload),
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "toolu_question:question-1": {
+              selected: [],
+              freeText: "Use the target from the release ticket.",
+            },
+          },
+        },
+      }),
+    ).toThrow("has no options to return to Claude");
+  });
+
+  it("fills missing Claude AskUserQuestion option descriptions with option labels", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+    const payload: UserQuestionPendingInteractionPayload = {
+      kind: "user_question",
+      questions: [
+        {
+          id: "toolu_question:question-1",
+          prompt: "Which deployment target should I use?",
+          shortLabel: "Target",
+          multiSelect: false,
+          options: [
+            {
+              value: "toolu_question:question-1:option-1",
+              label: "Staging",
+            },
+            {
+              value: "toolu_question:question-1:option-2",
+              label: "Production",
+            },
+          ],
+          allowFreeText: true,
+        },
+      ],
+    };
+
+    expect(
+      adapter.buildInteractiveResponse?.({
+        request: createClaudeUserQuestionRequest(payload),
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "toolu_question:question-1": {
+              selected: ["toolu_question:question-1:option-1"],
+            },
+          },
+        },
+      }),
+    ).toMatchObject({
+      kind: "user_question",
+      updatedInput: {
+        questions: [
+          {
+            options: [
+              {
+                label: "Staging",
+                description: "Staging",
+              },
+              {
+                label: "Production",
+                description: "Production",
+              },
+            ],
+          },
+        ],
+      },
+    });
+  });
+
   it("builds Claude session permission updates for command approvals", () => {
     const adapter = createClaudeCodeProviderAdapter();
 
@@ -966,6 +1533,7 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "turn-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "toolu_3b",
@@ -1021,6 +1589,7 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "turn-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: "toolu_3d",
@@ -1074,6 +1643,7 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "turn-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: "toolu_3e",
@@ -1104,6 +1674,7 @@ describe("claude-code provider adapter", () => {
           providerThreadId: "claude-session-1",
           turnId: "turn-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "toolu_3c",

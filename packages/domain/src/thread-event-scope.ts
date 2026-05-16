@@ -153,6 +153,7 @@ export const threadEventScopeDefinitionByType = {
       "Thread-management operation event; ownership and lifecycle operations are not turn transcript content.",
   },
   "system/permissionGrant/lifecycle": { policy: "turn" },
+  "system/userQuestion/lifecycle": { policy: "turn" },
   "system/thread-provisioning": {
     policy: "thread",
     rationale:

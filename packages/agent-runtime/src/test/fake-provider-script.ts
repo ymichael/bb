@@ -14,6 +14,11 @@ interface PendingToolCall {
   threadId: string;
 }
 
+interface PendingUserQuestion {
+  delayMs: number;
+  threadId: string;
+}
+
 type ToolTurnIdMode = "active" | "unresolved";
 
 interface ThreadState {
@@ -25,6 +30,7 @@ interface ThreadState {
 
 interface TurnPlan {
   delayMs: number;
+  questionRequested: boolean;
   responseText: string;
   toolName: string | null;
   toolTurnIdMode: ToolTurnIdMode;
@@ -34,9 +40,12 @@ const rl = createInterface({ input: process.stdin });
 
 const threads = new Map<string, ThreadState>();
 const pendingToolCalls = new Map<JsonRpcId, PendingToolCall>();
+const pendingUserQuestions = new Map<JsonRpcId, PendingUserQuestion>();
 
 let nextProviderThreadId = 1;
 let nextToolCallId = 1;
+let nextUserQuestionId = 10_000;
+const USER_QUESTION_METHOD = "interaction/user_question";
 const defaultModelList = {
   models: [
     {
@@ -127,6 +136,7 @@ function parseUserContent(input: unknown): JsonRecord[] {
 
 function parseTurnPlan(inputText: string): TurnPlan {
   const delayMatch = /(?:^|\s)delay:(\d+)(?:\s|$)/.exec(inputText);
+  const userQuestionMatch = /(?:^|\s)ask_user(?:\s|$)/.exec(inputText);
   const unresolvedToolMatch =
     /(?:^|\s)call_tool_unresolved:([^\s]+)(?:\s|$)/.exec(inputText);
   const toolMatch =
@@ -143,6 +153,7 @@ function parseTurnPlan(inputText: string): TurnPlan {
 
   return {
     delayMs,
+    questionRequested: Boolean(userQuestionMatch),
     responseText: inputText ? `Response to: ${inputText}` : "Response complete",
     toolName,
     toolTurnIdMode,
@@ -252,6 +263,49 @@ function scheduleTurnCompletion(
   }, delayMs);
 }
 
+function requestUserQuestion(
+  threadId: string,
+  turnId: string,
+  delayMs: number,
+): void {
+  const thread = getThreadState(threadId);
+  if (!thread || !thread.activeTurn) {
+    return;
+  }
+
+  const requestId = nextUserQuestionId++;
+  pendingUserQuestions.set(requestId, {
+    delayMs,
+    threadId,
+  });
+  send({
+    jsonrpc: "2.0",
+    id: requestId,
+    method: USER_QUESTION_METHOD,
+    params: {
+      threadId,
+      turnId,
+      providerThreadId: thread.providerThreadId,
+      prompt: "Which deployment path should the fake provider use?",
+      shortLabel: "Path",
+      multiSelect: false,
+      options: [
+        {
+          value: "staging",
+          label: "Staging",
+          description: "Deploy to staging first.",
+        },
+        {
+          value: "production",
+          label: "Production",
+          description: "Deploy directly to production.",
+        },
+      ],
+      allowFreeText: true,
+    },
+  });
+}
+
 function beginTurn(threadId: string, input: unknown): void {
   const thread = getThreadState(threadId);
   if (!thread) {
@@ -280,6 +334,11 @@ function beginTurn(threadId: string, input: unknown): void {
     },
   });
   emitUserMessage(threadId, turnId, input);
+
+  if (plan.questionRequested) {
+    requestUserQuestion(threadId, turnId, plan.delayMs);
+    return;
+  }
 
   if (plan.toolName) {
     const toolCallId = nextToolCallId++;
@@ -385,8 +444,53 @@ function handleToolResult(message: JsonRecord): boolean {
   return true;
 }
 
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter((item): item is string => typeof item === "string");
+}
+
+function describeUserQuestionAnswer(result: unknown): string {
+  if (!isJsonRecord(result) || !isJsonRecord(result.answers)) {
+    return "no answer";
+  }
+
+  const firstAnswer = Object.values(result.answers).find(isJsonRecord);
+  if (!firstAnswer) {
+    return "no answer";
+  }
+
+  const selected = stringArray(firstAnswer.selected);
+  const freeText = getString(firstAnswer.freeText);
+  return [...selected, freeText].filter((part) => part.length > 0).join(", ");
+}
+
+function handleUserQuestionResult(message: JsonRecord): boolean {
+  const messageId = getJsonRpcId(message.id);
+  if (messageId === undefined || typeof message.method === "string") {
+    return false;
+  }
+
+  const pendingUserQuestion = pendingUserQuestions.get(messageId);
+  if (!pendingUserQuestion) {
+    return false;
+  }
+
+  pendingUserQuestions.delete(messageId);
+  scheduleTurnCompletion(
+    pendingUserQuestion.threadId,
+    `Question answered: ${describeUserQuestionAnswer(message.result)}`,
+    pendingUserQuestion.delayMs,
+  );
+  return true;
+}
+
 function handleMessage(message: JsonRecord): void {
   if (handleToolResult(message)) {
+    return;
+  }
+  if (handleUserQuestionResult(message)) {
     return;
   }
 

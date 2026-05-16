@@ -908,6 +908,7 @@ describe("public environment and system routes", () => {
               supportsArchive: true,
               supportsRename: true,
               supportsServiceTier: true,
+              supportsUserQuestion: false,
               supportedPermissionModes: ["full", "workspace-write", "readonly"],
             },
             available: true,
@@ -924,6 +925,7 @@ describe("public environment and system routes", () => {
             supportsArchive: true,
             supportsRename: true,
             supportsServiceTier: true,
+            supportsUserQuestion: false,
             supportedPermissionModes: ["full", "workspace-write", "readonly"],
           },
           available: true,
@@ -947,6 +949,7 @@ describe("public environment and system routes", () => {
               supportsArchive: true,
               supportsRename: true,
               supportsServiceTier: true,
+              supportsUserQuestion: false,
               supportedPermissionModes: ["full", "workspace-write", "readonly"],
             },
             available: true,
@@ -958,6 +961,7 @@ describe("public environment and system routes", () => {
               supportsArchive: true,
               supportsRename: true,
               supportsServiceTier: false,
+              supportsUserQuestion: true,
               supportedPermissionModes: ["full"],
             },
             available: true,
@@ -1014,6 +1018,9 @@ describe("public environment and system routes", () => {
           }),
           expect.objectContaining({
             id: "claude-code",
+            capabilities: expect.objectContaining({
+              supportsUserQuestion: false,
+            }),
           }),
         ],
         models: [
@@ -1048,6 +1055,7 @@ describe("public environment and system routes", () => {
               supportsArchive: true,
               supportsRename: true,
               supportsServiceTier: false,
+              supportsUserQuestion: true,
               supportedPermissionModes: ["full"],
             },
             available: true,
@@ -1072,11 +1080,81 @@ describe("public environment and system routes", () => {
         providers: [
           expect.objectContaining({
             id: "claude-code",
+            capabilities: expect.objectContaining({
+              supportsUserQuestion: false,
+            }),
           }),
         ],
         models: [],
         selectedOnlyModels: [],
       });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it.each([
+    {
+      askUserQuestion: false,
+      expectedCapability: false,
+      name: "masks user-question provider capability when the flag is disabled",
+    },
+    {
+      askUserQuestion: true,
+      expectedCapability: true,
+      name: "preserves user-question provider capability when the flag is enabled",
+    },
+  ])("$name", async ({ askUserQuestion, expectedCapability }) => {
+    const harness = await createTestAppHarness({
+      featureFlags: {
+        askUserQuestion,
+      },
+    });
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: `host-system-provider-question-${askUserQuestion ? "enabled" : "disabled"}`,
+      });
+
+      const providersPromise = harness.app.request(
+        `/api/v1/system/providers?hostId=${host.id}`,
+      );
+      const providersCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "provider.list",
+      );
+      await reportQueuedCommandSuccess(harness, providersCommand, {
+        providers: [
+          {
+            id: "claude-code",
+            displayName: "Claude Code",
+            capabilities: {
+              supportsArchive: false,
+              supportsRename: false,
+              supportsServiceTier: false,
+              supportsUserQuestion: true,
+              supportedPermissionModes: ["full", "workspace-write", "readonly"],
+            },
+            available: true,
+          },
+        ],
+      });
+
+      const providersResponse = await providersPromise;
+      expect(providersResponse.status).toBe(200);
+      await expect(readJson(providersResponse)).resolves.toEqual([
+        {
+          id: "claude-code",
+          displayName: "Claude Code",
+          capabilities: {
+            supportsArchive: false,
+            supportsRename: false,
+            supportsServiceTier: false,
+            supportsUserQuestion: expectedCapability,
+            supportedPermissionModes: ["full", "workspace-write", "readonly"],
+          },
+          available: true,
+        },
+      ]);
     } finally {
       await harness.cleanup();
     }
@@ -1125,6 +1203,7 @@ describe("public environment and system routes", () => {
                 supportsArchive: true,
                 supportsRename: true,
                 supportsServiceTier: true,
+                supportsUserQuestion: false,
                 supportedPermissionModes: [
                   "full",
                   "workspace-write",
@@ -1198,6 +1277,7 @@ describe("public environment and system routes", () => {
                 supportsArchive: true,
                 supportsRename: true,
                 supportsServiceTier: true,
+                supportsUserQuestion: false,
                 supportedPermissionModes: [
                   "full",
                   "workspace-write",

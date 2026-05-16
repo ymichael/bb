@@ -1,4 +1,5 @@
 import type { SystemExecutionOptionsResponse } from "@bb/server-contract";
+import type { FeatureFlags, ProviderInfo } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
@@ -8,6 +9,34 @@ export interface SystemExecutionOptionsRequest {
   environmentId?: string;
   hostId?: string;
   providerId?: string;
+}
+
+interface ApplyProviderFeatureFlagsArgs {
+  featureFlags: FeatureFlags;
+  providers: ProviderInfo[];
+}
+
+export function applyProviderFeatureFlags({
+  featureFlags,
+  providers,
+}: ApplyProviderFeatureFlagsArgs): ProviderInfo[] {
+  if (featureFlags.askUserQuestion) {
+    return providers;
+  }
+
+  return providers.map((provider) => {
+    if (!provider.capabilities.supportsUserQuestion) {
+      return provider;
+    }
+
+    return {
+      ...provider,
+      capabilities: {
+        ...provider.capabilities,
+        supportsUserQuestion: false,
+      },
+    };
+  });
 }
 
 export async function resolveSystemExecutionOptions(
@@ -27,7 +56,10 @@ export async function resolveSystemExecutionOptions(
 
   if (!modelsProviderId) {
     return {
-      providers,
+      providers: applyProviderFeatureFlags({
+        featureFlags: deps.config.featureFlags,
+        providers,
+      }),
       models: [],
       selectedOnlyModels: [],
     };
@@ -43,7 +75,10 @@ export async function resolveSystemExecutionOptions(
   });
 
   return {
-    providers,
+    providers: applyProviderFeatureFlags({
+      featureFlags: deps.config.featureFlags,
+      providers,
+    }),
     models,
     selectedOnlyModels,
   };

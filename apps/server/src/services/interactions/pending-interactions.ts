@@ -22,6 +22,7 @@ import {
   type DbTransaction,
 } from "@bb/db";
 import {
+  isApprovalPendingInteractionPayload,
   type PendingInteraction,
   type PendingInteractionCreate,
   type PendingInteractionResolution,
@@ -146,6 +147,9 @@ function buildResolveConflictError(interaction: PendingInteraction): ApiError {
 function getUnsupportedPendingInteractionReason(
   interaction: PendingInteractionCreate,
 ): string | null {
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    return null;
+  }
   if (interaction.payload.availableDecisions.length === 0) {
     return "Approvals must include at least one available decision";
   }

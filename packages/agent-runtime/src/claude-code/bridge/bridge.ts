@@ -65,9 +65,14 @@ import {
   type ClaudePermissionMode,
   type ClaudePermissionRequestApprovalParams,
   type ClaudePermissionUpdate,
+  type ClaudeUserQuestionInput,
+  type ClaudeUserQuestionRequestParams,
   CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD,
+  CLAUDE_USER_QUESTION_REQUEST_METHOD,
+  CLAUDE_USER_QUESTION_TOOL_NAME,
   claudeInteractiveResponseSchema,
   claudePermissionUpdateSchema,
+  claudeUserQuestionInputSchema,
   shouldRequestClaudePermissionApproval,
   toPendingInteractionPermissionProfile,
 } from "../interactive-contract.js";
@@ -126,14 +131,25 @@ interface CreateSdkCallbackArgs {
   threadIdRef: ThreadIdRef;
 }
 
-interface PendingInteractiveRequest {
+interface PendingInteractiveRequestBase {
   itemId: string;
+  resolve: (value: PermissionResult) => void;
+}
+
+interface PendingPermissionRequest extends PendingInteractiveRequestBase {
   kind: "permission_request";
   originalInput: Record<string, unknown>;
   permissions: PendingInteractionGrantedPermissionProfile;
-  resolve: (value: PermissionResult) => void;
   toolName: string;
 }
+
+interface PendingUserQuestionRequest extends PendingInteractiveRequestBase {
+  kind: "user_question";
+}
+
+type PendingInteractiveRequest =
+  | PendingPermissionRequest
+  | PendingUserQuestionRequest;
 
 interface ClaudeSessionPermissionGrant {
   permissions: PendingInteractionGrantedPermissionProfile;
@@ -236,6 +252,18 @@ interface ForwardInteractiveRequestArgs extends BuildInteractiveRequestParamsArg
   signal: AbortSignal;
 }
 
+interface BuildUserQuestionRequestParamsArgs {
+  input: ClaudeUserQuestionInput;
+  providerThreadId: string;
+  threadId: string;
+  toolUseId: string;
+}
+
+interface ForwardUserQuestionRequestArgs
+  extends BuildUserQuestionRequestParamsArgs {
+  signal: AbortSignal;
+}
+
 const sessions = new Map<string, ThreadSession>();
 const closingSessions = new Map<string, Promise<void>>();
 let sessionSerialCounter = 0;
@@ -333,6 +361,7 @@ function shouldCacheClaudeSessionPermission(
   response: ClaudeInteractiveResponse,
 ): boolean {
   return (
+    response.kind === "permission_request" &&
     response.behavior === "allow" &&
     (response.decisionClassification === "user_permanent" ||
       response.updatedPermissions !== undefined)
@@ -780,20 +809,31 @@ function buildInteractiveRequestParams(
   };
 }
 
+function buildUserQuestionRequestParams(
+  args: BuildUserQuestionRequestParamsArgs,
+): ClaudeUserQuestionRequestParams {
+  return {
+    threadId: args.threadId,
+    providerThreadId: args.providerThreadId,
+    turnId: null,
+    itemId: args.toolUseId,
+    questions: args.input.questions,
+  };
+}
+
 function buildInteractivePermissionResult(
   pending: PendingInteractiveRequest,
   response: ClaudeInteractiveResponse,
 ): PermissionResult {
-  if (pending.kind !== response.kind) {
-    return {
-      behavior: "deny",
-      message: "Interactive response kind mismatch",
-      toolUseID: pending.itemId,
-    };
-  }
-
-  switch (response.kind) {
+  switch (pending.kind) {
     case "permission_request":
+      if (response.kind !== "permission_request") {
+        return {
+          behavior: "deny",
+          message: "Interactive response kind mismatch",
+          toolUseID: pending.itemId,
+        };
+      }
       if (response.behavior === "deny") {
         return {
           behavior: "deny",
@@ -816,6 +856,19 @@ function buildInteractivePermissionResult(
         ...(response.decisionClassification === undefined
           ? {}
           : { decisionClassification: response.decisionClassification }),
+        toolUseID: pending.itemId,
+      };
+    case "user_question":
+      if (response.kind !== "user_question") {
+        return {
+          behavior: "deny",
+          message: "Interactive response kind mismatch",
+          toolUseID: pending.itemId,
+        };
+      }
+      return {
+        behavior: "allow",
+        updatedInput: response.updatedInput,
         toolUseID: pending.itemId,
       };
   }
@@ -886,9 +939,62 @@ function createForwardInteractiveRequest(
     });
 }
 
+function createForwardUserQuestionRequest(
+  threadIdRef: ThreadIdRef,
+): (args: ForwardUserQuestionRequestArgs) => Promise<PermissionResult> {
+  return (args) =>
+    new Promise<PermissionResult>((resolve) => {
+      const threadSession = sessions.get(threadIdRef.current);
+      if (!threadSession) {
+        resolve({
+          behavior: "deny",
+          message: "Thread session not found",
+          toolUseID: args.toolUseId,
+        });
+        return;
+      }
+
+      const params = buildUserQuestionRequestParams(args);
+      toolCallRequestIdCounter += 1;
+      const requestId = toolCallRequestIdCounter;
+
+      const finish = (result: PermissionResult): void => {
+        args.signal.removeEventListener("abort", onAbort);
+        resolve(result);
+      };
+
+      const onAbort = (): void => {
+        if (!threadSession.pendingInteractiveRequests.delete(requestId)) {
+          return;
+        }
+        finish({
+          behavior: "deny",
+          message: "User question request cancelled",
+          toolUseID: args.toolUseId,
+        });
+      };
+
+      args.signal.addEventListener("abort", onAbort, { once: true });
+      threadSession.pendingInteractiveRequests.set(requestId, {
+        itemId: args.toolUseId,
+        kind: "user_question",
+        resolve: finish,
+      });
+
+      send({
+        jsonrpc: "2.0",
+        id: requestId,
+        method: CLAUDE_USER_QUESTION_REQUEST_METHOD,
+        params,
+      });
+    });
+}
+
 function createCanUseTool(threadIdRef: ThreadIdRef): CanUseTool {
   const forwardInteractiveRequest =
     createForwardInteractiveRequest(threadIdRef);
+  const forwardUserQuestionRequest =
+    createForwardUserQuestionRequest(threadIdRef);
 
   return async (toolName, input, options) => {
     const threadSession = sessions.get(threadIdRef.current);
@@ -899,6 +1005,25 @@ function createCanUseTool(threadIdRef: ThreadIdRef): CanUseTool {
         toolUseID: options.toolUseID,
       };
     }
+
+    if (toolName === CLAUDE_USER_QUESTION_TOOL_NAME) {
+      const parsedInput = claudeUserQuestionInputSchema.safeParse(input);
+      if (!parsedInput.success) {
+        return {
+          behavior: "deny",
+          message: "Invalid AskUserQuestion input",
+          toolUseID: options.toolUseID,
+        };
+      }
+      return forwardUserQuestionRequest({
+        threadId: threadIdRef.current,
+        providerThreadId: threadSession.providerThreadId ?? threadIdRef.current,
+        toolUseId: options.toolUseID,
+        input: parsedInput.data,
+        signal: options.signal,
+      });
+    }
+
     const suggestions = parseClaudePermissionUpdates(options.suggestions);
 
     const requestContext: ClaudeCanUseToolDecisionContext = {
@@ -1233,7 +1358,10 @@ export function handleLine(line: string): void {
     }
 
     const interactiveResponse = parsedResponse.data;
-    if (shouldCacheClaudeSessionPermission(interactiveResponse)) {
+    if (
+      pending.kind === "permission_request" &&
+      shouldCacheClaudeSessionPermission(interactiveResponse)
+    ) {
       threadSession.sessionPermissionGrants.push({
         permissions: pending.permissions,
         toolName: pending.toolName,

@@ -24,6 +24,7 @@ function createInteraction(
 describe("pending interaction presentation", () => {
   it("formats command approval summaries differently per surface", () => {
     const interaction = createInteraction({
+      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item_123",
@@ -52,6 +53,7 @@ describe("pending interaction presentation", () => {
 
   it("formats permission request summaries differently per surface", () => {
     const interaction = createInteraction({
+      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_123",

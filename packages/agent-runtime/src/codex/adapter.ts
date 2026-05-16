@@ -863,6 +863,7 @@ export function createCodexProviderAdapter(
     supportsArchive: providerInfo.capabilities.supportsArchive,
     supportsRename: providerInfo.capabilities.supportsRename,
     supportsServiceTier: providerInfo.capabilities.supportsServiceTier,
+    supportsUserQuestion: providerInfo.capabilities.supportsUserQuestion,
     supportedPermissionModes:
       providerInfo.capabilities.supportedPermissionModes,
   };

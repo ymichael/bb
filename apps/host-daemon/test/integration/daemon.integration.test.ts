@@ -445,6 +445,7 @@ function createInteractiveRequestAdapter(scriptPath: string): ProviderAdapter {
         providerThreadId: params.threadId,
         turnId: params.turnId,
         payload: {
+          kind: "approval",
           subject: {
             kind: "command",
             itemId: params.itemId,
@@ -825,6 +826,7 @@ describe("host daemon integration", () => {
           providerId: "fake",
           providerThreadId: "prov-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item-host-daemon",

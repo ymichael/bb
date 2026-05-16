@@ -1,15 +1,40 @@
 import {
+  type ApprovalPendingInteractionPayload,
+  type ApprovalPendingInteractionResolution,
   type PendingInteraction,
   type PendingInteractionApprovalDecision,
   type PendingInteractionGrantedPermissionProfile,
   type PendingInteractionResolution,
+  type UserQuestionPendingInteractionPayload,
+  isApprovalPendingInteractionPayload,
+  isApprovalPendingInteractionResolution,
+  isUserQuestionPendingInteractionPayload,
+  isUserQuestionPendingInteractionResolution,
 } from "@bb/domain";
 import { ApiError } from "../../errors.js";
 
 type GrantedPendingInteractionResolution = Extract<
-  PendingInteractionResolution,
+  ApprovalPendingInteractionResolution,
   { decision: "allow_once" | "allow_for_session" }
 >;
+type ApprovalPendingInteraction = PendingInteraction & {
+  payload: ApprovalPendingInteractionPayload;
+};
+type UserQuestionPendingInteraction = PendingInteraction & {
+  payload: UserQuestionPendingInteractionPayload;
+};
+
+function isApprovalPendingInteraction(
+  interaction: PendingInteraction,
+): interaction is ApprovalPendingInteraction {
+  return isApprovalPendingInteractionPayload(interaction.payload);
+}
+
+function isUserQuestionPendingInteraction(
+  interaction: PendingInteraction,
+): interaction is UserQuestionPendingInteraction {
+  return isUserQuestionPendingInteractionPayload(interaction.payload);
+}
 
 function stringSetEquals(
   left: readonly string[],
@@ -68,12 +93,42 @@ function hasGrantedPermissions(
   );
 }
 
+function hasNonWhitespaceText(value: string): boolean {
+  return value.trim().length > 0;
+}
+
 export function pendingInteractionResolutionEquals(
   left: PendingInteraction["resolution"],
   right: PendingInteraction["resolution"],
 ): boolean {
   if (left === null || right === null) {
     return left === right;
+  }
+  if (
+    isUserQuestionPendingInteractionResolution(left) ||
+    isUserQuestionPendingInteractionResolution(right)
+  ) {
+    if (
+      !isUserQuestionPendingInteractionResolution(left) ||
+      !isUserQuestionPendingInteractionResolution(right)
+    ) {
+      return false;
+    }
+    const leftKeys = Object.keys(left.answers);
+    const rightKeys = Object.keys(right.answers);
+    if (!stringSetEquals(leftKeys, rightKeys)) {
+      return false;
+    }
+    return leftKeys.every((questionId) => {
+      const leftAnswer = left.answers[questionId];
+      const rightAnswer = right.answers[questionId];
+      return (
+        leftAnswer !== undefined &&
+        rightAnswer !== undefined &&
+        stringSetEquals(leftAnswer.selected, rightAnswer.selected) &&
+        leftAnswer.freeText === rightAnswer.freeText
+      );
+    });
   }
 
   switch (left.decision) {
@@ -92,7 +147,7 @@ export function pendingInteractionResolutionEquals(
 }
 
 function validateAvailableDecision(
-  interaction: PendingInteraction,
+  interaction: ApprovalPendingInteraction,
   decision: PendingInteractionApprovalDecision,
 ): void {
   if (interaction.payload.availableDecisions.includes(decision)) {
@@ -107,7 +162,7 @@ function validateAvailableDecision(
 }
 
 function getRequestedPermissions(
-  interaction: PendingInteraction,
+  interaction: ApprovalPendingInteraction,
   decision: PendingInteractionApprovalDecision,
 ): PendingInteractionGrantedPermissionProfile | null {
   if (interaction.payload.subject.kind === "permission_grant") {
@@ -126,7 +181,7 @@ function getRequestedPermissions(
 }
 
 function validateGrantedPermissions(
-  interaction: PendingInteraction,
+  interaction: ApprovalPendingInteraction,
   decision: PendingInteractionApprovalDecision,
   permissions: PendingInteractionGrantedPermissionProfile,
 ): void {
@@ -187,7 +242,7 @@ function validateGrantedPermissions(
 }
 
 function validateCommandOrFileChangeSessionGrant(
-  interaction: PendingInteraction,
+  interaction: ApprovalPendingInteraction,
   permissions: PendingInteractionGrantedPermissionProfile,
 ): void {
   if (
@@ -215,6 +270,24 @@ export function validatePendingInteractionResolution(
   interaction: PendingInteraction,
   resolution: PendingInteractionResolution,
 ): void {
+  if (isUserQuestionPendingInteraction(interaction)) {
+    validateUserQuestionResolution(interaction, resolution);
+    return;
+  }
+  if (!isApprovalPendingInteraction(interaction)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      `Unsupported pending interaction payload for interaction ${interaction.id}`,
+    );
+  }
+  if (!isApprovalPendingInteractionResolution(resolution)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "User-answer resolutions can only resolve user-question interactions",
+    );
+  }
   validateAvailableDecision(interaction, resolution.decision);
   if (resolution.decision !== "deny") {
     if (resolution.grantedPermissions !== null) {
@@ -244,6 +317,110 @@ export function validatePendingInteractionResolution(
         400,
         "invalid_request",
         "Session approval resolutions must include granted permissions",
+      );
+    }
+  }
+}
+
+function validateUserQuestionResolution(
+  interaction: UserQuestionPendingInteraction,
+  resolution: PendingInteractionResolution,
+): void {
+  if (!isUserQuestionPendingInteractionResolution(resolution)) {
+    throw new ApiError(
+      400,
+      "invalid_request",
+      "Approval resolutions can only resolve approval interactions",
+    );
+  }
+
+  const questionById = new Map(
+    interaction.payload.questions.map((question) => [question.id, question]),
+  );
+  for (const answerQuestionId of Object.keys(resolution.answers)) {
+    if (!questionById.has(answerQuestionId)) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Answer references unknown question '${answerQuestionId}'`,
+      );
+    }
+  }
+
+  for (const question of interaction.payload.questions) {
+    const answer = resolution.answers[question.id];
+    if (!answer) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Missing answer for question '${question.id}'`,
+      );
+    }
+
+    const selectedValues = new Set(answer.selected);
+    if (selectedValues.size !== answer.selected.length) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Answer for question '${question.id}' contains duplicate selections`,
+      );
+    }
+
+    const optionCount = question.options?.length ?? 0;
+    if (answer.selected.length > optionCount) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Answer for question '${question.id}' selects more options than are available`,
+      );
+    }
+
+    if (!question.multiSelect && answer.selected.length > 1) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Question '${question.id}' accepts only one selected option`,
+      );
+    }
+
+    const optionValues = new Set(
+      (question.options ?? []).map((option) => option.value),
+    );
+    for (const selectedValue of answer.selected) {
+      if (!optionValues.has(selectedValue)) {
+        throw new ApiError(
+          400,
+          "invalid_request",
+          `Answer for question '${question.id}' selected an unavailable option`,
+        );
+      }
+    }
+
+    if (!question.allowFreeText && answer.freeText !== undefined) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Question '${question.id}' does not accept free-text answers`,
+      );
+    }
+
+    if (
+      question.allowFreeText &&
+      answer.freeText !== undefined &&
+      !hasNonWhitespaceText(answer.freeText)
+    ) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        "User question free text cannot be blank",
+      );
+    }
+
+    if (answer.selected.length === 0 && answer.freeText === undefined) {
+      throw new ApiError(
+        400,
+        "invalid_request",
+        `Question '${question.id}' must include a selected option or free-text answer`,
       );
     }
   }

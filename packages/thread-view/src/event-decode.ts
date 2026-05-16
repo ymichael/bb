@@ -45,6 +45,7 @@ export function getEventProviderThreadId(
     case "system/thread/interrupted":
     case "system/operation":
     case "system/permissionGrant/lifecycle":
+    case "system/userQuestion/lifecycle":
     case "system/thread-provisioning":
       return undefined;
     default:
@@ -90,6 +91,7 @@ export function getEventParentToolCallId(
     case "system/thread/interrupted":
     case "system/operation":
     case "system/permissionGrant/lifecycle":
+    case "system/userQuestion/lifecycle":
     case "system/thread-provisioning":
       return undefined;
     default:

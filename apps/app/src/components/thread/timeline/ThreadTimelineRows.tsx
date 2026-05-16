@@ -975,20 +975,23 @@ function TimelineRowsList({
       )}
       data-timeline-row-list={spacing}
     >
-      {items.map((item) =>
-        item.kind === "unread-divider" ? (
-          <TimelineUnreadDivider key={item.id} />
-        ) : (
-          <MemoizedTimelineRowView
-            key={item.row.id}
-            activeLatestBundleId={activeLatestBundleId}
-            row={item.row}
-            scopeActive={scopeActive}
-            spacing={spacing}
-            compactActivityIntents={compactActivityIntents}
-          />
-        ),
-      )}
+      {items.map((item) => {
+        if (item.kind === "unread-divider") {
+          return <TimelineUnreadDivider key={item.id} />;
+        }
+
+        return (
+          <div key={item.row.id} data-timeline-row-id={item.row.id}>
+            <MemoizedTimelineRowView
+              activeLatestBundleId={activeLatestBundleId}
+              row={item.row}
+              scopeActive={scopeActive}
+              spacing={spacing}
+              compactActivityIntents={compactActivityIntents}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 }

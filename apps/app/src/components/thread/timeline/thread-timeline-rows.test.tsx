@@ -14,11 +14,14 @@ import {
   conversationRow,
   delegationRow,
   fileChangeRow,
+  questionRow,
   readIntent,
   searchIntent,
   systemRow,
   toolRow,
   turnRow,
+  webFetchRow,
+  webSearchRow,
 } from "@/test/fixtures/thread-timeline-rows";
 import {
   ThreadTimelineRows,
@@ -326,6 +329,101 @@ describe("ThreadTimelineRows", () => {
     );
 
     expect(view.container.textContent ?? "").toContain("rg timeline apps/app");
+  });
+
+  it("does not render web search and fetch leaves as expandable rows", () => {
+    const view = renderTimelineRows({
+      timelineRows: [webSearchRow(), webFetchRow()],
+    });
+
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button"));
+
+    expect(view.container.textContent ?? "").toContain("Ran web search");
+    expect(view.container.textContent ?? "").toContain("Fetched");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("renders pending user questions as read-only status rows", () => {
+    const row = questionRow({
+      interactionId: "pi_question_1",
+      questions: [
+        {
+          id: "area",
+          prompt: "Which areas should I focus on?",
+          shortLabel: "Area",
+          multiSelect: true,
+          options: [
+            { value: "bug", label: "Bug fix" },
+            { value: "docs", label: "Docs" },
+          ],
+          allowFreeText: false,
+        },
+        {
+          id: "notes",
+          prompt: "Anything else I should know?",
+          shortLabel: "Notes",
+          multiSelect: false,
+          allowFreeText: true,
+        },
+      ],
+    });
+
+    renderTimelineRows({
+      timelineRows: [row],
+      overrides: {
+        initialExpanded: new Set([row.id]),
+      },
+    });
+
+    expect(screen.getAllByText("Waiting").length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Which areas should I focus on?").length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("Anything else I should know?").length,
+    ).toBeGreaterThan(0);
+    expect(screen.getByText("Bug fix")).not.toBeNull();
+    expect(screen.getByText("Docs")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
+    expect(screen.queryByLabelText("Bug fix")).toBeNull();
+    expect(screen.queryByLabelText("Notes answer")).toBeNull();
+  });
+
+  it("renders submitted user question answers read-only", () => {
+    const row = questionRow({
+      lifecycle: "answered",
+      questions: [
+        {
+          id: "direction",
+          prompt: "Which implementation direction?",
+          multiSelect: false,
+          options: [
+            { value: "simple", label: "Simple" },
+            { value: "complete", label: "Complete" },
+          ],
+          allowFreeText: true,
+        },
+      ],
+      answers: {
+        direction: {
+          selected: ["complete"],
+          freeText: "Include tests.",
+        },
+      },
+    });
+
+    renderTimelineRows({
+      timelineRows: [row],
+      overrides: {
+        initialExpanded: new Set([row.id]),
+      },
+    });
+
+    expect(screen.getAllByText("Answered").length).toBeGreaterThan(0);
+    expect(screen.getByText("Complete")).not.toBeNull();
+    expect(screen.getByText("Include tests.")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
   });
 
   it("groups completed work once a second completed row appends to the run", () => {

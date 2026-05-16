@@ -1,8 +1,10 @@
 import { z } from "zod";
 import {
+  approvalPendingInteractionResolutionSchema,
   pendingInteractionPermissionGrantApprovalSubjectSchema,
-  pendingInteractionResolutionSchema,
   pendingInteractionStatusSchema,
+  userQuestionPendingInteractionPayloadSchema,
+  userQuestionPendingInteractionResolutionSchema,
 } from "./pending-interactions.js";
 import {
   promptInputSchema,
@@ -20,6 +22,7 @@ export const systemEventTypeValues = [
   "system/thread/interrupted",
   "system/operation",
   "system/permissionGrant/lifecycle",
+  "system/userQuestion/lifecycle",
   "system/thread-provisioning",
 ] as const;
 export const systemEventTypeSchema = z.enum(systemEventTypeValues);
@@ -173,12 +176,29 @@ export const systemPermissionGrantLifecycleEventDataSchema = z.object({
   providerId: z.string(),
   providerRequestId: z.string(),
   status: pendingInteractionStatusSchema,
-  resolution: pendingInteractionResolutionSchema.nullable().default(null),
+  resolution: approvalPendingInteractionResolutionSchema.nullable().default(
+    null,
+  ),
   statusReason: z.string().nullable().default(null),
   subject: pendingInteractionPermissionGrantApprovalSubjectSchema,
 });
 export type SystemPermissionGrantLifecycleEventData = z.infer<
   typeof systemPermissionGrantLifecycleEventDataSchema
+>;
+
+export const systemUserQuestionLifecycleEventDataSchema = z.object({
+  interactionId: z.string(),
+  providerId: z.string(),
+  providerRequestId: z.string(),
+  status: pendingInteractionStatusSchema,
+  resolution: userQuestionPendingInteractionResolutionSchema.nullable().default(
+    null,
+  ),
+  statusReason: z.string().nullable().default(null),
+  payload: userQuestionPendingInteractionPayloadSchema,
+});
+export type SystemUserQuestionLifecycleEventData = z.infer<
+  typeof systemUserQuestionLifecycleEventDataSchema
 >;
 
 export const systemThreadInterruptedReasonValues = [
@@ -259,6 +279,7 @@ export type ThreadEventDataByType = {
   "system/thread/interrupted": SystemThreadInterruptedEventData;
   "system/operation": SystemOperationEventData;
   "system/permissionGrant/lifecycle": SystemPermissionGrantLifecycleEventData;
+  "system/userQuestion/lifecycle": SystemUserQuestionLifecycleEventData;
   "system/thread-provisioning": SystemThreadProvisioningEventData;
 };
 

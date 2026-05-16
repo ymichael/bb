@@ -5,6 +5,7 @@ import {
   systemManagerUserMessageEventDataSchema,
   systemOperationEventDataSchema,
   systemThreadProvisioningEventDataSchema,
+  systemUserQuestionLifecycleEventDataSchema,
   systemEventTypeValues,
   systemThreadInterruptedEventDataSchema,
   clientTurnLifecycleEventDataSchema,
@@ -508,6 +509,12 @@ const unscopedSystemEventSchema = z.union([
       threadId: z.string(),
     })
     .merge(systemPermissionGrantLifecycleEventDataSchema),
+  z
+    .object({
+      type: z.literal("system/userQuestion/lifecycle"),
+      threadId: z.string(),
+    })
+    .merge(systemUserQuestionLifecycleEventDataSchema),
   z
     .object({
       type: z.literal("system/thread-provisioning"),

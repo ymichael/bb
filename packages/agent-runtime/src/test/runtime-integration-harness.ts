@@ -20,7 +20,11 @@ import type {
   ToolCallRequest,
   ToolCallResponse,
 } from "@bb/domain";
-import { getThreadEventScopeTurnId } from "@bb/domain";
+import {
+  getThreadEventScopeTurnId,
+  isApprovalPendingInteractionPayload,
+  isUserQuestionPendingInteractionPayload,
+} from "@bb/domain";
 import { resolvePreferredTestModel } from "@bb/test-helpers";
 import type { AgentRuntimeCaptureEntry } from "../capture-types.js";
 import { createAgentRuntime } from "../runtime.js";
@@ -404,6 +408,11 @@ export function formatErrorEvent(event: ErrorThreadEvent): string {
 export function formatInteractiveRequest(
   request: PendingInteractionCreate,
 ): string {
+  if (isUserQuestionPendingInteractionPayload(request.payload)) {
+    const firstQuestion = request.payload.questions[0];
+    return `user_question:${previewText(firstQuestion?.prompt ?? "empty")}`;
+  }
+
   const { subject } = request.payload;
   switch (subject.kind) {
     case "command":
@@ -697,6 +706,14 @@ export function createTempFileName(prefix: string): string {
 export function expectSemanticApprovalRequest(
   request: PendingInteractionCreate,
 ): void {
+  if (!isApprovalPendingInteractionPayload(request.payload)) {
+    throw new Error(
+      `Expected approval interactive request, got ${formatInteractiveRequest(
+        request,
+      )}`,
+    );
+  }
+
   expect(["command", "file_change", "permission_grant"]).toContain(
     request.payload.subject.kind,
   );
@@ -717,6 +734,35 @@ export function expectSemanticApprovalRequest(
   for (const decision of request.payload.availableDecisions) {
     expect(["allow_once", "allow_for_session", "deny"]).toContain(decision);
   }
+}
+
+export function expectSemanticUserQuestionRequest(
+  request: PendingInteractionCreate,
+): void {
+  if (!isUserQuestionPendingInteractionPayload(request.payload)) {
+    throw new Error(
+      `Expected user-question interactive request, got ${formatInteractiveRequest(
+        request,
+      )}`,
+    );
+  }
+
+  expect(request.payload.questions.length).toBeGreaterThan(0);
+  for (const question of request.payload.questions) {
+    expect(question.id.length).toBeGreaterThan(0);
+    expect(question.prompt.length).toBeGreaterThan(0);
+  }
+}
+
+export function expectSemanticInteractiveRequest(
+  request: PendingInteractionCreate,
+): void {
+  if (isApprovalPendingInteractionPayload(request.payload)) {
+    expectSemanticApprovalRequest(request);
+    return;
+  }
+
+  expectSemanticUserQuestionRequest(request);
 }
 
 export interface TestContext {
@@ -829,13 +875,13 @@ export function createTestRuntime(
       return defaultToolHandler();
     },
     onInteractiveRequest: async (req) => {
-      expectSemanticApprovalRequest(req);
+      expectSemanticInteractiveRequest(req);
       interactiveRequests.push(req);
       if (opts?.onInteractiveRequest) {
         return opts.onInteractiveRequest(req);
       }
       throw new Error(
-        `Unexpected interactive request: ${req.payload.subject.kind}`,
+        `Unexpected interactive request: ${formatInteractiveRequest(req)}`,
       );
     },
     onStderr: () => {},
@@ -861,6 +907,14 @@ export function cleanup(ctx: TestContext): void {
 export async function createApprovalResolution(
   request: PendingInteractionCreate,
 ): Promise<PendingInteractionResolution> {
+  if (!isApprovalPendingInteractionPayload(request.payload)) {
+    throw new Error(
+      `Expected approval interactive request, got ${formatInteractiveRequest(
+        request,
+      )}`,
+    );
+  }
+
   return {
     decision: request.payload.availableDecisions.includes("allow_for_session")
       ? "allow_for_session"
@@ -879,6 +933,7 @@ export function isWriteApprovalRequest(
   request: PendingInteractionCreate,
 ): boolean {
   return (
+    isApprovalPendingInteractionPayload(request.payload) &&
     (request.payload.subject.kind === "command" ||
       request.payload.subject.kind === "file_change") &&
     request.payload.availableDecisions.includes("allow_once")

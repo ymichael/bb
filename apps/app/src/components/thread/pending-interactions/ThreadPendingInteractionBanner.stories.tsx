@@ -3,7 +3,7 @@ import { ThreadPendingInteractionBanner } from "@/components/thread/pending-inte
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
 export default {
-  title: "thread/Pending Interaction Banner",
+  title: "thread/Pending Interaction/Approval",
 };
 
 // Match production: ThreadDetailPromptArea renders inside PageShell's footer
@@ -31,6 +31,7 @@ function basePendingInteraction(): Omit<PendingInteraction, "payload"> {
 const commandApproval: PendingInteraction = {
   ...basePendingInteraction(),
   payload: {
+    kind: "approval",
     subject: {
       kind: "command",
       itemId: "item_cmd",
@@ -48,6 +49,7 @@ const longCommandApproval: PendingInteraction = {
   ...basePendingInteraction(),
   id: "pi_demo_long",
   payload: {
+    kind: "approval",
     subject: {
       kind: "command",
       itemId: "item_cmd_long",
@@ -76,6 +78,7 @@ const fileChange: PendingInteraction = {
   ...basePendingInteraction(),
   id: "pi_demo_file",
   payload: {
+    kind: "approval",
     subject: {
       kind: "file_change",
       itemId: "item_file",
@@ -91,6 +94,7 @@ const permissionGrant: PendingInteraction = {
   ...basePendingInteraction(),
   id: "pi_demo_perm",
   payload: {
+    kind: "approval",
     subject: {
       kind: "permission_grant",
       itemId: "item_perm",

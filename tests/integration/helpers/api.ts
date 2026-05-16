@@ -2,6 +2,7 @@ import type {
   AvailableModel,
   Environment,
   Host,
+  PendingInteraction,
   Thread,
   ThreadExecutionOptions,
   ThreadEventRow,
@@ -10,6 +11,7 @@ import type {
 import {
   environmentSchema,
   hostSchema,
+  pendingInteractionSchema,
   threadEventRowSchema,
   threadGitDiffResponseSchema,
   threadSchema,
@@ -23,7 +25,9 @@ import type {
   EnvironmentActionResponse,
   EnvironmentStatusResponse,
   ProjectResponse,
+  ResolvePendingInteractionRequest,
   SendMessageRequest,
+  ThreadPendingInteractionsResponse,
   ThreadTimelineResponse,
   ThreadResponse,
   UpdateEnvironmentRequest,
@@ -36,6 +40,7 @@ import {
   environmentStatusResponseSchema,
   projectResponseSchema,
   systemExecutionOptionsResponseSchema,
+  threadPendingInteractionsResponseSchema,
   threadResponseSchema,
   threadTimelineResponseSchema,
 } from "@bb/server-contract";
@@ -64,8 +69,10 @@ export interface CreateReuseThreadOptions {
   title?: string;
 }
 
-export interface CreateManagerThreadOptions
-  extends Omit<CreateManagerThreadRequest, "origin"> {
+export interface CreateManagerThreadOptions extends Omit<
+  CreateManagerThreadRequest,
+  "origin"
+> {
   origin?: CreateManagerThreadRequest["origin"];
 }
 
@@ -80,6 +87,10 @@ export interface SendTextMessageOptions {
   text: string;
 }
 
+export interface GetThreadTimelineOptions {
+  includeNestedRows?: boolean;
+}
+
 export interface GetAvailableModelsOptions {
   hostId?: string;
   providerId?: string;
@@ -89,6 +100,13 @@ type PublicApiClient = ReturnType<typeof createPublicApiClient>;
 const DEFAULT_THREAD_BOOTSTRAP_TEXT =
   "Reply with exactly READY and nothing else.";
 const DEFAULT_PUBLIC_TEST_THREAD_ORIGIN = "app";
+
+interface ResolveThreadInteractionArgs {
+  api: PublicApiClient;
+  interactionId: string;
+  resolution: ResolvePendingInteractionRequest;
+  threadId: string;
+}
 
 async function expectStatus(
   response: Response,
@@ -363,12 +381,45 @@ export async function getThreadOutput(
 export async function getThreadTimeline(
   api: PublicApiClient,
   threadId: string,
+  options: GetThreadTimelineOptions = {},
 ): Promise<ThreadTimelineResponse> {
   const response = await api.threads[":id"].timeline.$get({
     param: { id: threadId },
+    query:
+      options.includeNestedRows === undefined
+        ? {}
+        : { includeNestedRows: options.includeNestedRows ? "true" : "false" },
   });
   await expectStatus(response, 200, `get thread timeline ${threadId}`);
   return threadTimelineResponseSchema.parse(await response.json());
+}
+
+export async function listThreadInteractions(
+  api: PublicApiClient,
+  threadId: string,
+): Promise<ThreadPendingInteractionsResponse> {
+  const response = await api.threads[":id"].interactions.$get({
+    param: { id: threadId },
+  });
+  await expectStatus(response, 200, `list thread interactions ${threadId}`);
+  return threadPendingInteractionsResponseSchema.parse(await response.json());
+}
+
+export async function resolveThreadInteraction(
+  args: ResolveThreadInteractionArgs,
+): Promise<PendingInteraction> {
+  const response = await args.api.threads[":id"].interactions[
+    ":interactionId"
+  ].resolve.$post({
+    param: { id: args.threadId, interactionId: args.interactionId },
+    json: args.resolution,
+  });
+  await expectStatus(
+    response,
+    200,
+    `resolve thread interaction ${args.interactionId}`,
+  );
+  return pendingInteractionSchema.parse(await response.json());
 }
 
 export async function runEnvironmentAction(

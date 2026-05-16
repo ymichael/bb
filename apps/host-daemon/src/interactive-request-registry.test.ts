@@ -49,6 +49,7 @@ function createCommandApprovalRequest(
     providerThreadId: "provider-thread-registry",
     providerRequestId: args.providerRequestId ?? "request-registry",
     payload: {
+      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item-registry",

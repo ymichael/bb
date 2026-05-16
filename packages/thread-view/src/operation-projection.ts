@@ -5,6 +5,7 @@ import type {
   EventProjectionMessage,
   EventProjectionOperationMessage,
   EventProjectionPermissionGrantLifecycleMessage,
+  EventProjectionUserQuestionLifecycleMessage,
 } from "./event-projection-types.js";
 import type { CompactionLifecycleEvent } from "./compaction-lifecycle.js";
 import type { EventMeta } from "./event-decode.js";
@@ -44,6 +45,10 @@ export interface OperationProjectionState {
     string,
     EventProjectionPermissionGrantLifecycleMessage
   >;
+  userQuestionsByInteractionId: Map<
+    string,
+    EventProjectionUserQuestionLifecycleMessage
+  >;
   threadOperationsById: Map<string, EventProjectionOperationMessage>;
 }
 
@@ -56,6 +61,7 @@ export function createOperationProjectionState(
     finalizedCompactionKeys: new Set(),
     provisioningOperationsByKey: new Map(),
     permissionGrantsByInteractionId: new Map(),
+    userQuestionsByInteractionId: new Map(),
     threadOperationsById: new Map(),
     fileEditsByCallId: new Map(),
     fileEditStdoutBuffersByCallId: new Map(),
@@ -83,7 +89,8 @@ type LifecycleStatus = Extract<
 
 type LifecycleEventProjectionMessage =
   | EventProjectionOperationMessage
-  | EventProjectionPermissionGrantLifecycleMessage;
+  | EventProjectionPermissionGrantLifecycleMessage
+  | EventProjectionUserQuestionLifecycleMessage;
 type EventProjectionMessageScopeFields = ReturnType<
   | typeof eventProjectionMessageThreadScopeFields
   | typeof eventProjectionMessageTurnScopeFields
@@ -267,6 +274,36 @@ export function upsertPermissionGrantLifecycleMessage(
     mergeExisting: mergePermissionGrantLifecycleMessage,
     state,
   });
+}
+
+export function upsertUserQuestionLifecycleMessage(
+  state: OperationProjectionState,
+  incoming: EventProjectionUserQuestionLifecycleMessage,
+): void {
+  upsertKeyedLifecycleMessage({
+    index: state.userQuestionsByInteractionId,
+    incoming,
+    key: incoming.interactionId,
+    mergeExisting: mergeUserQuestionLifecycleMessage,
+    state,
+  });
+}
+
+function mergeUserQuestionLifecycleMessage(
+  existing: EventProjectionUserQuestionLifecycleMessage,
+  incoming: EventProjectionUserQuestionLifecycleMessage,
+): void {
+  const wasTerminal = isTerminalLifecycleStatus(existing.status);
+  const mergedStatus = mergeLifecycleStatus(existing.status, incoming.status);
+  existing.status = mergedStatus;
+  if (wasTerminal) {
+    return;
+  }
+
+  existing.lifecycle = incoming.lifecycle;
+  existing.questions = incoming.questions;
+  existing.answers = incoming.answers;
+  existing.statusReason = incoming.statusReason;
 }
 
 function mergePermissionGrantLifecycleMessage(

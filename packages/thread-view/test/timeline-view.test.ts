@@ -625,7 +625,7 @@ describe("buildTimelineViewRows", () => {
     expect(
       childSummary.children.map((child) => ({
         id: child.id,
-        callId: child.workKind === "approval" ? null : child.callId,
+        callId: child.workKind === "command" ? child.callId : null,
         command: child.workKind === "command" ? child.command : null,
       })),
     ).toEqual([

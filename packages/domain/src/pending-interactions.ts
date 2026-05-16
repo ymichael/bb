@@ -183,6 +183,7 @@ export type PendingInteractionApprovalSubject = z.infer<
 >;
 
 export const approvalPendingInteractionPayloadSchema = z.object({
+  kind: z.literal("approval"),
   subject: pendingInteractionApprovalSubjectSchema,
   reason: z.string().nullable(),
   availableDecisions: z.array(pendingInteractionApprovalDecisionSchema).min(1),
@@ -191,11 +192,163 @@ export type ApprovalPendingInteractionPayload = z.infer<
   typeof approvalPendingInteractionPayloadSchema
 >;
 
-export const pendingInteractionPayloadSchema =
-  approvalPendingInteractionPayloadSchema;
+export const USER_QUESTION_MAX_QUESTIONS = 4;
+export const USER_QUESTION_MAX_OPTIONS = 4;
+export const USER_QUESTION_MAX_SELECTED = 4;
+export const USER_QUESTION_MAX_FREE_TEXT_LENGTH = 4096;
+
+const pendingInteractionUserQuestionIdSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, {
+    message: "User question ids cannot be blank",
+  });
+
+const pendingInteractionUserQuestionPromptSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, {
+    message: "User question prompts cannot be blank",
+  });
+
+const pendingInteractionUserQuestionShortLabelSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, {
+    message: "User question short labels cannot be blank",
+  });
+
+const pendingInteractionUserQuestionOptionValueSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, {
+    message: "User question option values cannot be blank",
+  });
+
+const pendingInteractionUserQuestionOptionLabelSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, {
+    message: "User question option labels cannot be blank",
+  });
+
+const pendingInteractionUserQuestionOptionDescriptionSchema = z
+  .string()
+  .min(1)
+  .refine((value) => value.trim().length > 0, {
+    message: "User question option descriptions cannot be blank",
+  });
+
+const pendingInteractionUserQuestionFreeTextSchema = z
+  .string()
+  .min(1)
+  .max(
+    USER_QUESTION_MAX_FREE_TEXT_LENGTH,
+    `User question free text cannot exceed ${USER_QUESTION_MAX_FREE_TEXT_LENGTH} characters`,
+  )
+  .refine((value) => value.trim().length > 0, {
+    message: "User question free text cannot be blank",
+  });
+
+export const pendingInteractionUserQuestionOptionSchema = z.object({
+  value: pendingInteractionUserQuestionOptionValueSchema,
+  label: pendingInteractionUserQuestionOptionLabelSchema,
+  description: pendingInteractionUserQuestionOptionDescriptionSchema.optional(),
+});
+export type PendingInteractionUserQuestionOption = z.infer<
+  typeof pendingInteractionUserQuestionOptionSchema
+>;
+
+export const pendingInteractionUserQuestionQuestionSchema = z
+  .object({
+    id: pendingInteractionUserQuestionIdSchema,
+    prompt: pendingInteractionUserQuestionPromptSchema,
+    shortLabel: pendingInteractionUserQuestionShortLabelSchema.optional(),
+    multiSelect: z.boolean(),
+    options: z
+      .array(pendingInteractionUserQuestionOptionSchema)
+      .max(
+        USER_QUESTION_MAX_OPTIONS,
+        `User questions cannot include more than ${USER_QUESTION_MAX_OPTIONS} options`,
+      )
+      .optional(),
+    allowFreeText: z.boolean(),
+  })
+  .superRefine((question, context) => {
+    const optionValues = new Set<string>();
+    question.options?.forEach((option, index) => {
+      if (optionValues.has(option.value)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "User question option values must be unique",
+          path: ["options", index, "value"],
+        });
+        return;
+      }
+      optionValues.add(option.value);
+    });
+  })
+  .refine(
+    (question) =>
+      question.allowFreeText || (question.options?.length ?? 0) > 0,
+    {
+      message:
+        "User questions must allow free text or provide at least one option",
+      path: ["options"],
+    },
+  );
+export type PendingInteractionUserQuestionQuestion = z.infer<
+  typeof pendingInteractionUserQuestionQuestionSchema
+>;
+
+export const userQuestionPendingInteractionPayloadSchema = z
+  .object({
+    kind: z.literal("user_question"),
+    questions: z
+      .array(pendingInteractionUserQuestionQuestionSchema)
+      .min(1)
+      .max(
+        USER_QUESTION_MAX_QUESTIONS,
+        `User questions cannot include more than ${USER_QUESTION_MAX_QUESTIONS} questions`,
+      ),
+  })
+  .superRefine((payload, context) => {
+    const questionIds = new Set<string>();
+    payload.questions.forEach((question, index) => {
+      if (questionIds.has(question.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "User question ids must be unique",
+          path: ["questions", index, "id"],
+        });
+        return;
+      }
+      questionIds.add(question.id);
+    });
+  });
+export type UserQuestionPendingInteractionPayload = z.infer<
+  typeof userQuestionPendingInteractionPayloadSchema
+>;
+
+export const pendingInteractionPayloadSchema = z.discriminatedUnion("kind", [
+  approvalPendingInteractionPayloadSchema,
+  userQuestionPendingInteractionPayloadSchema,
+]);
 export type PendingInteractionPayload = z.infer<
   typeof pendingInteractionPayloadSchema
 >;
+
+export function isApprovalPendingInteractionPayload(
+  payload: PendingInteractionPayload,
+): payload is ApprovalPendingInteractionPayload {
+  return payload.kind === "approval";
+}
+
+export function isUserQuestionPendingInteractionPayload(
+  payload: PendingInteractionPayload,
+): payload is UserQuestionPendingInteractionPayload {
+  return payload.kind === "user_question";
+}
 
 const approvalDecisionDiscriminatorError =
   "Invalid discriminator value. Expected 'allow_once' | 'allow_for_session' | 'deny'";
@@ -223,11 +376,50 @@ export type ApprovalPendingInteractionResolution = z.infer<
   typeof approvalPendingInteractionResolutionSchema
 >;
 
-export const pendingInteractionResolutionSchema =
-  approvalPendingInteractionResolutionSchema;
+export const pendingInteractionUserAnswerSchema = z
+  .object({
+    selected: z
+      .array(z.string().min(1))
+      .max(
+        USER_QUESTION_MAX_SELECTED,
+        `User question selected choices cannot exceed ${USER_QUESTION_MAX_SELECTED}`,
+      ),
+    freeText: pendingInteractionUserQuestionFreeTextSchema.optional(),
+  });
+export type PendingInteractionUserAnswer = z.infer<
+  typeof pendingInteractionUserAnswerSchema
+>;
+
+export const userQuestionPendingInteractionResolutionSchema = z.object({
+  kind: z.literal("user_answer"),
+  answers: z.record(z.string().min(1), pendingInteractionUserAnswerSchema),
+});
+export type UserQuestionPendingInteractionResolution = z.infer<
+  typeof userQuestionPendingInteractionResolutionSchema
+>;
+
+export const pendingInteractionResolutionSchema = z.union(
+  [
+    approvalPendingInteractionResolutionSchema,
+    userQuestionPendingInteractionResolutionSchema,
+  ],
+  approvalDecisionDiscriminatorError,
+);
 export type PendingInteractionResolution = z.infer<
   typeof pendingInteractionResolutionSchema
 >;
+
+export function isApprovalPendingInteractionResolution(
+  resolution: PendingInteractionResolution,
+): resolution is ApprovalPendingInteractionResolution {
+  return "decision" in resolution;
+}
+
+export function isUserQuestionPendingInteractionResolution(
+  resolution: PendingInteractionResolution,
+): resolution is UserQuestionPendingInteractionResolution {
+  return "kind" in resolution && resolution.kind === "user_answer";
+}
 
 export const pendingInteractionCreateSchema = z.object({
   threadId: z.string().min(1),

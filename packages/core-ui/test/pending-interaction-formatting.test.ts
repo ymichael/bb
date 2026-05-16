@@ -67,6 +67,7 @@ describe("pending interaction formatting", () => {
 
   it("builds session approval resolutions with explicit command session grants", () => {
     const interaction = createInteraction({
+      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item_123",
@@ -112,6 +113,7 @@ describe("pending interaction formatting", () => {
 
   it("builds approval resolutions with explicit permission-grant permissions", () => {
     const interaction = createInteraction({
+      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_123",

@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  USER_QUESTION_MAX_OPTIONS,
+  USER_QUESTION_MAX_QUESTIONS,
+} from "@bb/domain";
 import type {
   PendingInteractionGrantedPermissionProfile,
   PendingInteractionGrantablePermissionProfile,
@@ -7,6 +11,8 @@ import type { ResolvedAdapterPermissionPolicy } from "../shared/permission-polic
 
 export const CLAUDE_PERMISSION_REQUEST_APPROVAL_METHOD =
   "item/permissions/requestApproval";
+export const CLAUDE_USER_QUESTION_TOOL_NAME = "AskUserQuestion";
+export const CLAUDE_USER_QUESTION_REQUEST_METHOD = "item/userQuestion/request";
 
 export const claudePermissionModeSchema = z.enum([
   "default",
@@ -194,6 +200,79 @@ export type ClaudePermissionRequestApprovalParams = z.infer<
   typeof claudePermissionRequestApprovalParamsSchema
 >;
 
+export const claudeUserQuestionOptionSchema = z.object({
+  label: z.string().min(1),
+  description: z.string().min(1),
+  preview: z.string().optional(),
+});
+export type ClaudeUserQuestionOption = z.infer<
+  typeof claudeUserQuestionOptionSchema
+>;
+
+export const claudeUserQuestionSchema = z.object({
+  question: z.string().min(1),
+  header: z.string().min(1),
+  options: z
+    .array(claudeUserQuestionOptionSchema)
+    .min(2)
+    .max(USER_QUESTION_MAX_OPTIONS),
+  multiSelect: z.boolean(),
+});
+export type ClaudeUserQuestion = z.infer<typeof claudeUserQuestionSchema>;
+
+const claudeUserQuestionListSchema = z
+  .array(claudeUserQuestionSchema)
+  .min(1)
+  .max(USER_QUESTION_MAX_QUESTIONS)
+  .superRefine((questions, context) => {
+    const prompts = new Set<string>();
+    questions.forEach((question, index) => {
+      if (prompts.has(question.question)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Claude user-question prompts must be unique",
+          path: [index, "question"],
+        });
+        return;
+      }
+      prompts.add(question.question);
+    });
+  });
+
+export const claudeUserQuestionInputSchema = z.object({
+  questions: claudeUserQuestionListSchema,
+});
+export type ClaudeUserQuestionInput = z.infer<
+  typeof claudeUserQuestionInputSchema
+>;
+
+export const claudeUserQuestionRequestParamsSchema = z.object({
+  threadId: z.string(),
+  providerThreadId: z.string(),
+  turnId: z.string().min(1).nullable(),
+  itemId: z.string(),
+  questions: claudeUserQuestionListSchema,
+});
+export type ClaudeUserQuestionRequestParams = z.infer<
+  typeof claudeUserQuestionRequestParamsSchema
+>;
+
+const claudeUserQuestionAnnotationSchema = z.object({
+  preview: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const claudeUserQuestionOutputSchema = z.object({
+  questions: claudeUserQuestionListSchema,
+  answers: z.record(z.string().min(1), z.string().min(1)),
+  annotations: z
+    .record(z.string().min(1), claudeUserQuestionAnnotationSchema)
+    .optional(),
+});
+export type ClaudeUserQuestionOutput = z.infer<
+  typeof claudeUserQuestionOutputSchema
+>;
+
 const claudePermissionDecisionClassificationSchema = z.enum([
   "user_temporary",
   "user_permanent",
@@ -221,8 +300,16 @@ const claudePermissionApprovalResponseSchema = z.discriminatedUnion(
   ],
 );
 
-export const claudeInteractiveResponseSchema =
-  claudePermissionApprovalResponseSchema;
+const claudeUserQuestionResponseSchema = z.object({
+  kind: z.literal("user_question"),
+  behavior: z.literal("allow"),
+  updatedInput: claudeUserQuestionOutputSchema,
+});
+
+export const claudeInteractiveResponseSchema = z.union([
+  claudePermissionApprovalResponseSchema,
+  claudeUserQuestionResponseSchema,
+]);
 export type ClaudeInteractiveResponse = z.infer<
   typeof claudeInteractiveResponseSchema
 >;

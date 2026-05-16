@@ -57,6 +57,7 @@ function createCommandApprovalInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
+      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item_1",
@@ -71,10 +72,22 @@ function createCommandApprovalInteraction(): PendingInteraction {
   };
 }
 
+function createResolvingCommandApprovalInteraction(): PendingInteraction {
+  return {
+    ...createCommandApprovalInteraction(),
+    status: "resolving",
+    resolution: {
+      decision: "allow_for_session",
+      grantedPermissions: null,
+    },
+  };
+}
+
 function createFileChangeInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
+      kind: "approval",
       subject: {
         kind: "file_change",
         itemId: "item_2",
@@ -91,6 +104,7 @@ function createPermissionRequestInteraction(): PendingInteraction {
   return {
     ...createPendingInteractionBase(),
     payload: {
+      kind: "approval",
       subject: {
         kind: "permission_grant",
         itemId: "item_3",
@@ -105,6 +119,76 @@ function createPermissionRequestInteraction(): PendingInteraction {
       },
       reason: "Need repo write access",
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
+    },
+  };
+}
+
+function createUserQuestionInteraction(): PendingInteraction {
+  return {
+    ...createPendingInteractionBase(),
+    payload: {
+      kind: "user_question",
+      questions: [
+        {
+          id: "question-1",
+          prompt: "Which implementation path should I take?",
+          shortLabel: "Path",
+          multiSelect: false,
+          options: [
+            { value: "simple", label: "Simple" },
+            { value: "complete", label: "Complete" },
+          ],
+          allowFreeText: true,
+        },
+      ],
+    },
+  };
+}
+
+function createMultiUserQuestionInteraction(): PendingInteraction {
+  return {
+    ...createPendingInteractionBase(),
+    payload: {
+      kind: "user_question",
+      questions: [
+        {
+          id: "area",
+          prompt: "Which areas should I focus on?",
+          shortLabel: "Area",
+          multiSelect: true,
+          options: [
+            { value: "bug", label: "Bug fix" },
+            { value: "docs", label: "Docs" },
+          ],
+          allowFreeText: false,
+        },
+        {
+          id: "notes",
+          prompt: "Anything else I should know?",
+          shortLabel: "Notes",
+          multiSelect: false,
+          allowFreeText: true,
+        },
+      ],
+    },
+  };
+}
+
+function createFreeTextUserQuestionInteraction(): PendingInteraction {
+  return {
+    ...createPendingInteractionBase(),
+    id: "pi_keyboard",
+    payload: {
+      kind: "user_question",
+      questions: [
+        {
+          id: "notes",
+          prompt: "Anything else I should know?",
+          shortLabel: "Notes",
+          multiSelect: false,
+          allowFreeText: true,
+        },
+      ],
     },
   };
 }
@@ -266,4 +350,128 @@ describe("ThreadPendingInteractionBanner", () => {
     expect(submitButton.hasAttribute("disabled")).toBe(false);
   });
 
+  it("shows resolving interactions as submitted instead of actionable", () => {
+    renderBanner({
+      interaction: createResolvingCommandApprovalInteraction(),
+    });
+
+    expect(screen.getByText("Delivering")).not.toBeNull();
+    expect(
+      screen.getByText("Answer submitted. Delivering it to the provider."),
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: /Submit/ })).toBeNull();
+  });
+
+  it("submits user question answers from the banner", async () => {
+    const interaction = createMultiUserQuestionInteraction();
+    vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
+      ...interaction,
+      status: "resolving",
+      resolution: {
+        kind: "user_answer",
+        answers: {},
+      },
+    });
+
+    renderBanner({ interaction });
+
+    const submitButton = screen.getByRole("button", {
+      name: "Submit answer",
+    });
+    expect(submitButton.hasAttribute("disabled")).toBe(true);
+
+    fireEvent.click(screen.getByLabelText("Bug fix"));
+    fireEvent.change(screen.getByLabelText("Notes answer"), {
+      target: { value: "Keep the public API stable." },
+    });
+    const form = submitButton.closest("form");
+    if (!form) {
+      throw new Error("Expected question controls to render inside a form");
+    }
+    fireEvent.submit(form);
+
+    await waitFor(() => {
+      expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
+        "thr_1",
+        "pi_1",
+        {
+          kind: "user_answer",
+          answers: {
+            area: {
+              selected: ["bug"],
+            },
+            notes: {
+              selected: [],
+              freeText: "Keep the public API stable.",
+            },
+          },
+        },
+      );
+    });
+  });
+
+  it("submits user question free text with command-enter but keeps bare enter for newlines", async () => {
+    const interaction = createFreeTextUserQuestionInteraction();
+    vi.mocked(api.resolveThreadPendingInteraction).mockResolvedValue({
+      ...interaction,
+      status: "resolving",
+      resolution: {
+        kind: "user_answer",
+        answers: {},
+      },
+    });
+
+    renderBanner({ interaction });
+
+    const notesInput = screen.getByLabelText("Notes answer");
+    fireEvent.change(notesInput, {
+      target: { value: "Keep the public API stable." },
+    });
+    fireEvent.keyDown(notesInput, { key: "Enter" });
+    expect(api.resolveThreadPendingInteraction).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(notesInput, {
+      key: "Enter",
+      metaKey: true,
+      isComposing: true,
+    });
+    expect(api.resolveThreadPendingInteraction).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(notesInput, { key: "Enter", ctrlKey: true });
+
+    await waitFor(() => {
+      expect(api.resolveThreadPendingInteraction).toHaveBeenCalledWith(
+        "thr_1",
+        "pi_keyboard",
+        {
+          kind: "user_answer",
+          answers: {
+            notes: {
+              selected: [],
+              freeText: "Keep the public API stable.",
+            },
+          },
+        },
+      );
+    });
+  });
+
+  it("shows resolving user questions as submitted instead of actionable", () => {
+    renderBanner({
+      interaction: {
+        ...createUserQuestionInteraction(),
+        status: "resolving",
+        resolution: {
+          kind: "user_answer",
+          answers: {},
+        },
+      },
+    });
+
+    expect(screen.getByText("Delivering")).not.toBeNull();
+    expect(
+      screen.getByText("Answer submitted. Delivering it to the provider."),
+    ).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
+  });
 });

@@ -271,6 +271,7 @@ describe("codex provider adapter", () => {
       supportsArchive: true,
       supportsRename: true,
       supportsServiceTier: true,
+      supportsUserQuestion: false,
       supportedPermissionModes: ["full", "workspace-write", "readonly"],
     });
   });
@@ -3963,6 +3964,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-1",
       payload: {
+        kind: "approval",
         subject: {
           kind: "command",
           itemId: "item-1",
@@ -4008,6 +4010,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-1",
       payload: {
+        kind: "approval",
         subject: {
           kind: "command",
           itemId: "item-1",
@@ -4202,6 +4205,7 @@ describe("codex provider adapter", () => {
       }),
     ).toMatchObject({
       payload: {
+        kind: "approval",
         subject: {
           kind: "command",
           command: "git push",
@@ -4301,6 +4305,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-file-change",
       payload: {
+        kind: "approval",
         subject: {
           kind: "file_change",
           itemId: "item-file-change",
@@ -4339,6 +4344,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-file-change",
       payload: {
+        kind: "approval",
         subject: {
           kind: "file_change",
           itemId: "item-file-change",
@@ -4377,6 +4383,7 @@ describe("codex provider adapter", () => {
       providerThreadId: "t1",
       turnId: "turn-permissions",
       payload: {
+        kind: "approval",
         subject: {
           kind: "permission_grant",
           itemId: "item-permissions",
@@ -4405,6 +4412,7 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-1",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item-1",
@@ -4437,6 +4445,7 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-3",
           payload: {
+            kind: "approval",
             subject: {
               kind: "command",
               itemId: "item-3",
@@ -4468,6 +4477,7 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-file-change",
           payload: {
+            kind: "approval",
             subject: {
               kind: "file_change",
               itemId: "item-file-change",
@@ -4498,6 +4508,7 @@ describe("codex provider adapter", () => {
           providerThreadId: "t1",
           turnId: "turn-permissions",
           payload: {
+            kind: "approval",
             subject: {
               kind: "permission_grant",
               itemId: "item-permissions",

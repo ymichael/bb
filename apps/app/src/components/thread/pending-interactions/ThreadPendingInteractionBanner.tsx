@@ -2,18 +2,29 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   assertNever,
   buildPendingInteractionApprovalResolution,
+  formatPendingInteractionSummary,
   formatPendingInteractionSubjectDetailLines,
 } from "@bb/core-ui";
 import { extractShellCommandFromString } from "@bb/thread-view";
 import {
+  isApprovalPendingInteractionPayload,
+  isUserQuestionPendingInteractionPayload,
+} from "@bb/domain";
+import {
+  type ApprovalPendingInteractionPayload,
   type PendingInteraction,
   type PendingInteractionApprovalDecision,
   type PendingInteractionResolution,
+  type UserQuestionPendingInteractionPayload,
 } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { ExpandableLine } from "@/components/ui/expandable-line.js";
 import { Pill } from "@/components/ui/pill.js";
 import { getDetailScrollMaxHeightClass } from "@/components/ui/detail-scroll-size.js";
+import {
+  UserQuestionAnswerForm,
+  UserQuestionLifecycleNotice,
+} from "@/components/thread/user-questions/UserQuestionInteractionContent.js";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
@@ -35,10 +46,55 @@ interface BannerModel {
   skip: BannerOption | null;
 }
 
+interface ApprovalPendingInteractionBannerProps {
+  interaction: PendingInteraction;
+  payload: ApprovalPendingInteractionPayload;
+  threadId: string;
+}
+
+interface UserQuestionPendingInteractionBannerProps {
+  interaction: PendingInteraction;
+  payload: UserQuestionPendingInteractionPayload;
+  threadId: string;
+}
+
+interface BuildBannerModelInput {
+  interaction: PendingInteraction;
+  payload: ApprovalPendingInteractionPayload;
+}
+
 export function ThreadPendingInteractionBanner({
   interaction,
   threadId,
 }: ThreadPendingInteractionBannerProps) {
+  if (isUserQuestionPendingInteractionPayload(interaction.payload)) {
+    return (
+      <ThreadUserQuestionPendingInteractionBanner
+        interaction={interaction}
+        payload={interaction.payload}
+        threadId={threadId}
+      />
+    );
+  }
+
+  if (!isApprovalPendingInteractionPayload(interaction.payload)) {
+    return assertNever(interaction.payload);
+  }
+
+  return (
+    <ApprovalPendingInteractionBanner
+      interaction={interaction}
+      payload={interaction.payload}
+      threadId={threadId}
+    />
+  );
+}
+
+function ApprovalPendingInteractionBanner({
+  interaction,
+  payload,
+  threadId,
+}: ApprovalPendingInteractionBannerProps) {
   const resolvePendingInteraction = useResolveThreadPendingInteraction();
   const [selectedIndex, setSelectedIndex] = useState(0);
   const isResolving = interaction.status === "resolving";
@@ -47,7 +103,10 @@ export function ThreadPendingInteractionBanner({
     setSelectedIndex(0);
   }, [interaction.id]);
 
-  const model = useMemo(() => buildBannerModel(interaction), [interaction]);
+  const model = useMemo(
+    () => buildBannerModel({ interaction, payload }),
+    [interaction, payload],
+  );
   const mutationErrorMessage = resolvePendingInteraction.error
     ? getMutationErrorMessage({
         error: resolvePendingInteraction.error,
@@ -159,8 +218,53 @@ export function ThreadPendingInteractionBanner({
   );
 }
 
-function buildBannerModel(interaction: PendingInteraction): BannerModel {
-  const options = interaction.payload.availableDecisions.map((decision) => ({
+function ThreadUserQuestionPendingInteractionBanner({
+  interaction,
+  payload,
+  threadId,
+}: UserQuestionPendingInteractionBannerProps) {
+  const isResolving = interaction.status === "resolving";
+  const title = formatPendingInteractionSummary({
+    interaction,
+    surface: "app",
+  });
+
+  return (
+    <div className="mb-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+      <div className="flex min-w-0 items-center gap-2">
+        <h3 className="min-w-0 flex-1 text-sm font-semibold text-foreground">
+          <ExpandableLine fullText={title} collapsedClassName="line-clamp-2">
+            {title}
+          </ExpandableLine>
+        </h3>
+        {isResolving ? <Pill variant="secondary">Delivering</Pill> : null}
+      </div>
+
+      {isResolving ? (
+        <div className="mt-3">
+          <UserQuestionLifecycleNotice
+            message="Answer submitted. Delivering it to the provider."
+            statusReason={interaction.statusReason}
+            tone="default"
+          />
+        </div>
+      ) : (
+        <UserQuestionAnswerForm
+          className="mt-3"
+          interactionId={interaction.id}
+          questions={payload.questions}
+          threadId={threadId}
+        />
+      )}
+    </div>
+  );
+}
+
+function buildBannerModel({
+  interaction,
+  payload,
+}: BuildBannerModelInput): BannerModel {
+  const options = payload.availableDecisions.map((decision) => ({
     label: labelForApprovalDecision(decision),
     resolution: buildPendingInteractionApprovalResolution(
       interaction,
@@ -168,9 +272,9 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
     ),
   }));
 
-  switch (interaction.payload.subject.kind) {
+  switch (payload.subject.kind) {
     case "command": {
-      const rawCommand = interaction.payload.subject.command;
+      const rawCommand = payload.subject.command;
       const command = rawCommand
         ? (extractShellCommandFromString(rawCommand) ?? rawCommand)
         : null;
@@ -182,7 +286,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
           <pre
             className={cn(
               getDetailScrollMaxHeightClass("base"),
-              "overflow-auto whitespace-pre px-4 py-3 font-mono ui-text-sm leading-tight text-foreground",
+              "overflow-auto whitespace-pre px-4 py-3 font-mono text-sm leading-tight text-foreground",
             )}
           >
             $ {command}
@@ -198,7 +302,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
       ) : null;
 
       return {
-        title: interaction.payload.reason ?? "Do you want to run this command?",
+        title: payload.reason ?? "Do you want to run this command?",
         subject,
         options,
         skip: null,
@@ -208,8 +312,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
       const detailLines =
         formatPendingInteractionSubjectDetailLines(interaction);
       return {
-        title:
-          interaction.payload.reason ?? "Do you want to make these changes?",
+        title: payload.reason ?? "Do you want to make these changes?",
         subject:
           detailLines.length > 0 ? (
             <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
@@ -226,8 +329,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
       const detailLines =
         formatPendingInteractionSubjectDetailLines(interaction);
       return {
-        title:
-          interaction.payload.reason ?? "Do you want to grant this permission?",
+        title: payload.reason ?? "Do you want to grant this permission?",
         subject:
           detailLines.length > 0 ? (
             <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
@@ -241,7 +343,7 @@ function buildBannerModel(interaction: PendingInteraction): BannerModel {
       };
     }
     default:
-      return assertNever(interaction.payload.subject);
+      return assertNever(payload.subject);
   }
 }
 

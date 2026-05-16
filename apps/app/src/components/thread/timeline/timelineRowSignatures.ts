@@ -165,6 +165,44 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         row.target.itemId,
         row.target.toolName,
       ]);
+    case "question":
+      return joinSignatureParts([
+        ...baseParts,
+        row.interactionId,
+        row.lifecycle,
+        row.statusReason,
+        row.questions
+          .map((question) =>
+            joinSignatureParts([
+              question.id,
+              question.prompt,
+              question.shortLabel,
+              question.multiSelect,
+              question.allowFreeText,
+              question.options
+                ?.map((option) =>
+                  joinSignatureParts([
+                    option.value,
+                    option.label,
+                    option.description,
+                  ]),
+                )
+                .join("\u001d"),
+            ]),
+          )
+          .join("\u001e"),
+        row.answers
+          ? Object.entries(row.answers)
+              .map(([questionId, answer]) =>
+                joinSignatureParts([
+                  questionId,
+                  answer.selected.join("\u001d"),
+                  answer.freeText,
+                ]),
+              )
+              .join("\u001e")
+          : null,
+      ]);
     default:
       return assertNever(row);
   }

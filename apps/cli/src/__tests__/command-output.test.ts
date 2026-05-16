@@ -5,6 +5,7 @@ import {
   turnScope,
   type Environment,
   type PendingInteraction,
+  type PendingInteractionApprovalDecision,
   type Thread,
 } from "@bb/domain";
 import type {
@@ -174,6 +175,7 @@ function makePendingInteraction(
   return {
     createdAt: Date.now(),
     payload: {
+      kind: "approval",
       subject: {
         kind: "command",
         itemId: "item-1",
@@ -195,13 +197,14 @@ function makePendingInteraction(
 
 function makeCommandApprovalPayload(
   itemId: string,
-  availableDecisions: PendingInteraction["payload"]["availableDecisions"] = [
+  availableDecisions: PendingInteractionApprovalDecision[] = [
     "allow_once",
     "allow_for_session",
     "deny",
   ],
 ): PendingInteraction["payload"] {
   return {
+    kind: "approval",
     subject: {
       kind: "command",
       itemId,
@@ -219,6 +222,7 @@ function makeFileChangeApprovalPayload(
   itemId: string,
 ): PendingInteraction["payload"] {
   return {
+    kind: "approval",
     subject: {
       kind: "file_change",
       itemId,
@@ -230,10 +234,56 @@ function makeFileChangeApprovalPayload(
   };
 }
 
+function makeUserQuestionPayload(): PendingInteraction["payload"] {
+  return {
+    kind: "user_question",
+    questions: [
+      {
+        id: "question-1",
+        prompt: "Which deployment path?",
+        shortLabel: "Path",
+        multiSelect: false,
+        options: [
+          { value: "staging", label: "Staging" },
+          { value: "production", label: "Production" },
+        ],
+        allowFreeText: true,
+      },
+    ],
+  };
+}
+
+function makeMultiUserQuestionPayload(): PendingInteraction["payload"] {
+  return {
+    kind: "user_question",
+    questions: [
+      {
+        id: "question-1",
+        prompt: "Which deployment path?",
+        shortLabel: "Path",
+        multiSelect: false,
+        options: [
+          { value: "staging", label: "Staging" },
+          { value: "production", label: "Production" },
+        ],
+        allowFreeText: false,
+      },
+      {
+        id: "question-2",
+        prompt: "Any rollout notes?",
+        shortLabel: "Notes",
+        multiSelect: false,
+        allowFreeText: true,
+      },
+    ],
+  };
+}
+
 function makePermissionGrantApprovalPayload(
   itemId: string,
 ): PendingInteraction["payload"] {
   return {
+    kind: "approval",
     subject: {
       kind: "permission_grant",
       itemId,
@@ -3512,6 +3562,437 @@ describe("CLI JSON output contracts", () => {
       "  Prompt: Approve command",
       "  Decisions: allow_once, allow_for_session, deny",
     ]);
+  });
+
+  it("bb thread interactions show prints user question details", async () => {
+    vi.stubEnv("BB_THREAD_ID", "thread-show-question");
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question",
+        providerId: "claude-code",
+        providerRequestId: "request-question",
+        providerThreadId: "provider-thread-question",
+        threadId: "thread-show-question",
+        turnId: "turn-question",
+        status: "resolved",
+        resolvedAt: Date.now(),
+        payload: makeUserQuestionPayload(),
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "question-1": {
+              selected: ["staging"],
+              freeText: "Use staging url=https://staging.example.com first.",
+            },
+          },
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "interactions", "show", "int-question"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    const lines = collectLogLines(vi.mocked(console.log));
+    expect(lines).toContain("  Kind: question");
+    expect(lines).toContain("  Questions:");
+    expect(lines).toContain("    - Path: Which deployment path?");
+    expect(lines).toContain("      Options: Staging, Production");
+    expect(lines).toContain("      Free text: allowed");
+    expect(lines).toContain("Answers:");
+    expect(lines).toContain(
+      "  Path: Staging, Use staging url=https://staging.example.com first.",
+    );
+  });
+
+  it("bb thread interactions answer resolves single-question interactions with shorthand flags", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question-answer",
+        providerId: "claude-code",
+        providerRequestId: "request-question-answer",
+        providerThreadId: "provider-thread-question-answer",
+        threadId: "thread-question-answer",
+        turnId: "turn-question-answer",
+        payload: makeUserQuestionPayload(),
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question-answer",
+        providerId: "claude-code",
+        providerRequestId: "request-question-answer",
+        providerThreadId: "provider-thread-question-answer",
+        threadId: "thread-question-answer",
+        turnId: "turn-question-answer",
+        payload: makeUserQuestionPayload(),
+        status: "resolving",
+        resolvedAt: null,
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "question-1": {
+              selected: ["staging"],
+              freeText: "Use staging first.",
+            },
+          },
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "interactions",
+        "answer",
+        "int-question-answer",
+        "thread-question-answer",
+        "--choice",
+        "staging",
+        "--text",
+        "Use staging url=https://staging.example.com first.",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-question-answer",
+        interactionId: "int-question-answer",
+      },
+      json: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["staging"],
+            freeText: "Use staging url=https://staging.example.com first.",
+          },
+        },
+      },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Interaction int-question-answer submitted (answered); delivering to provider",
+    ]);
+  });
+
+  it("bb thread interactions answer resolves multi-question interactions with explicit question ids", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question-multi",
+        providerId: "claude-code",
+        providerRequestId: "request-question-multi",
+        providerThreadId: "provider-thread-question-multi",
+        threadId: "thread-question-multi",
+        turnId: "turn-question-multi",
+        payload: makeMultiUserQuestionPayload(),
+      }),
+    );
+    const resolveInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question-multi",
+        providerId: "claude-code",
+        providerRequestId: "request-question-multi",
+        providerThreadId: "provider-thread-question-multi",
+        threadId: "thread-question-multi",
+        turnId: "turn-question-multi",
+        payload: makeMultiUserQuestionPayload(),
+        status: "resolving",
+        resolvedAt: null,
+        resolution: {
+          kind: "user_answer",
+          answers: {
+            "question-1": {
+              selected: ["production"],
+            },
+            "question-2": {
+              selected: [],
+              freeText: "Wait for url=https://qa.example.com.",
+            },
+          },
+        },
+      }),
+    );
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      [
+        "thread",
+        "interactions",
+        "answer",
+        "int-question-multi",
+        "thread-question-multi",
+        "--choice",
+        "question-1=production",
+        "--text",
+        "question-2=Wait for url=https://qa.example.com.",
+      ],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(resolveInteraction).toHaveBeenCalledWith({
+      param: {
+        id: "thread-question-multi",
+        interactionId: "int-question-multi",
+      },
+      json: {
+        kind: "user_answer",
+        answers: {
+          "question-1": {
+            selected: ["production"],
+          },
+          "question-2": {
+            selected: [],
+            freeText: "Wait for url=https://qa.example.com.",
+          },
+        },
+      },
+    });
+  });
+
+  it("bb thread interactions answer rejects shorthand for multi-question interactions", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question-shorthand",
+        providerId: "claude-code",
+        providerRequestId: "request-question-shorthand",
+        providerThreadId: "provider-thread-question-shorthand",
+        threadId: "thread-question-shorthand",
+        turnId: "turn-question-shorthand",
+        payload: makeMultiUserQuestionPayload(),
+      }),
+    );
+    const resolveInteraction = vi.fn();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "interactions",
+          "answer",
+          "int-question-shorthand",
+          "thread-question-shorthand",
+          "--choice",
+          "staging",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+    expect(resolveInteraction).not.toHaveBeenCalled();
+    expect(collectLogLines(vi.mocked(console.error)).join("\n")).toContain(
+      "shorthand can only be used for single-question interactions",
+    );
+  });
+
+  it("bb thread interactions answer rejects unknown explicit text question ids", async () => {
+    const getInteraction = vi.fn(async () =>
+      makePendingInteraction({
+        id: "int-question-unknown-text",
+        providerId: "claude-code",
+        providerRequestId: "request-question-unknown-text",
+        providerThreadId: "provider-thread-question-unknown-text",
+        threadId: "thread-question-unknown-text",
+        turnId: "turn-question-unknown-text",
+        payload: makeMultiUserQuestionPayload(),
+      }),
+    );
+    const resolveInteraction = vi.fn();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "interactions",
+          "answer",
+          "int-question-unknown-text",
+          "thread-question-unknown-text",
+          "--text",
+          "question-missing=Use staging",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+    expect(resolveInteraction).not.toHaveBeenCalled();
+    expect(collectLogLines(vi.mocked(console.error)).join("\n")).toContain(
+      "Answer references unknown question 'question-missing'",
+    );
+  });
+
+  it("bb thread interactions answer rejects approvals and invalid question choices before posting", async () => {
+    const getInteraction = vi
+      .fn()
+      .mockResolvedValueOnce(
+        makePendingInteraction({
+          id: "int-answer-approval",
+          providerId: "codex",
+          providerRequestId: "request-answer-approval",
+          providerThreadId: "provider-thread-answer-approval",
+          threadId: "thread-answer-approval",
+          turnId: "turn-answer-approval",
+        }),
+      )
+      .mockResolvedValueOnce(
+        makePendingInteraction({
+          id: "int-answer-invalid-choice",
+          providerId: "claude-code",
+          providerRequestId: "request-answer-invalid-choice",
+          providerThreadId: "provider-thread-answer-invalid-choice",
+          threadId: "thread-answer-invalid-choice",
+          turnId: "turn-answer-invalid-choice",
+          payload: makeUserQuestionPayload(),
+        }),
+      );
+    const resolveInteraction = vi.fn();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            threads: {
+              ":id": {
+                interactions: {
+                  ":interactionId": {
+                    $get: getInteraction,
+                    resolve: {
+                      $post: resolveInteraction,
+                    },
+                  },
+                },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "interactions",
+          "answer",
+          "int-answer-approval",
+          "thread-answer-approval",
+          "--choice",
+          "staging",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+    await expect(
+      runCommand(
+        [
+          "thread",
+          "interactions",
+          "answer",
+          "int-answer-invalid-choice",
+          "thread-answer-invalid-choice",
+          "--choice",
+          "qa",
+        ],
+        (program) => registerThreadCommands(program, () => "http://server"),
+      ),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(resolveInteraction).not.toHaveBeenCalled();
+    const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
+    expect(errorOutput).toContain("cannot be answered with this command");
+    expect(errorOutput).toContain("does not offer choice 'qa'");
   });
 
   it("bb thread interactions show indicates when resolution delivery is in progress", async () => {

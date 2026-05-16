@@ -54,6 +54,7 @@ import {
   onCompactionBegin,
   onCompactionEnd,
   upsertPermissionGrantLifecycleMessage,
+  upsertUserQuestionLifecycleMessage,
   upsertFileEdit,
   upsertProvisioningOperation,
   upsertThreadOperationMessage,
@@ -489,6 +490,10 @@ function buildFlatProjectionData(
       }
       if (operation.kind === "permission-grant-lifecycle") {
         upsertPermissionGrantLifecycleMessage(state, operation);
+        continue;
+      }
+      if (operation.kind === "user-question-lifecycle") {
+        upsertUserQuestionLifecycleMessage(state, operation);
         continue;
       }
       state.messages.push(operation);

@@ -18,7 +18,10 @@ import { listAvailableSandboxBackends } from "../services/hosts/sandbox-backends
 import { isSandboxProvisioningConfigured } from "../services/hosts/sandbox-config.js";
 import { transcribeVoiceInput } from "../services/ai/voice-transcription.js";
 import { fetchGithubRepos } from "../services/github/repos.js";
-import { resolveSystemExecutionOptions } from "../services/system/execution-options.js";
+import {
+  applyProviderFeatureFlags,
+  resolveSystemExecutionOptions,
+} from "../services/system/execution-options.js";
 import { resolveSystemLookupHostId } from "../services/system/host-lookup.js";
 
 export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
@@ -141,7 +144,12 @@ export function registerSystemRoutes(app: Hono, deps: AppDeps): void {
         timeoutMs: COMMAND_TIMEOUT_MS,
         command: { type: "provider.list" },
       });
-      return context.json(result.providers);
+      return context.json(
+        applyProviderFeatureFlags({
+          featureFlags: deps.config.featureFlags,
+          providers: result.providers,
+        }),
+      );
     },
   );
 

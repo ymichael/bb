@@ -70,6 +70,10 @@ export type {
 export {
   approvalPendingInteractionPayloadSchema,
   approvalPendingInteractionResolutionSchema,
+  isApprovalPendingInteractionPayload,
+  isApprovalPendingInteractionResolution,
+  isUserQuestionPendingInteractionPayload,
+  isUserQuestionPendingInteractionResolution,
   pendingInteractionApprovalDecisionSchema,
   pendingInteractionApprovalSubjectSchema,
   pendingInteractionCommandActionSchema,
@@ -86,6 +90,15 @@ export {
   pendingInteractionSchema,
   pendingInteractionStatusSchema,
   pendingInteractionNetworkPermissionsSchema,
+  pendingInteractionUserAnswerSchema,
+  pendingInteractionUserQuestionOptionSchema,
+  pendingInteractionUserQuestionQuestionSchema,
+  USER_QUESTION_MAX_FREE_TEXT_LENGTH,
+  USER_QUESTION_MAX_OPTIONS,
+  USER_QUESTION_MAX_QUESTIONS,
+  USER_QUESTION_MAX_SELECTED,
+  userQuestionPendingInteractionPayloadSchema,
+  userQuestionPendingInteractionResolutionSchema,
 } from "./pending-interactions.js";
 export type {
   ApprovalPendingInteractionPayload,
@@ -110,6 +123,11 @@ export type {
   PendingInteractionRequestedPermissionProfile,
   PendingInteractionResolution,
   PendingInteractionStatus,
+  PendingInteractionUserAnswer,
+  PendingInteractionUserQuestionOption,
+  PendingInteractionUserQuestionQuestion,
+  UserQuestionPendingInteractionPayload,
+  UserQuestionPendingInteractionResolution,
 } from "./pending-interactions.js";
 
 export {
@@ -348,6 +366,7 @@ export {
   systemThreadProvisioningStatusSchema,
   systemThreadProvisioningStatusValues,
   systemThreadInterruptedEventDataSchema,
+  systemUserQuestionLifecycleEventDataSchema,
   clientTurnLifecycleEventDataSchema,
   threadEnvironmentStartReasonSchema,
   threadEnvironmentStartReasonValues,
@@ -373,6 +392,7 @@ export type {
   SystemThreadProvisioningEventData,
   SystemThreadProvisioningStatus,
   SystemThreadInterruptedEventData,
+  SystemUserQuestionLifecycleEventData,
   ClientTurnLifecycleEventData,
   ThreadEnvironmentStartReason,
   ThreadEventData,

@@ -314,6 +314,7 @@ function formatWorkBody(
     case "web-fetch":
       return lines;
     case "approval":
+    case "question":
       return lines;
     case "delegation":
       if (row.childRows.length > 0) {

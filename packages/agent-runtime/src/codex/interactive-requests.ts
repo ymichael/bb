@@ -26,6 +26,10 @@ import type {
   PendingInteractionApprovalDecision,
   PendingInteractionGrantablePermissionProfile,
 } from "@bb/domain";
+import {
+  isApprovalPendingInteractionPayload,
+  isApprovalPendingInteractionResolution,
+} from "@bb/domain";
 
 export type CodexInteractiveResponse =
   | CommandExecutionRequestApprovalResponse
@@ -116,6 +120,7 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
+          kind: "approval",
           subject: {
             kind: "command",
             itemId: parsed.data.itemId,
@@ -157,6 +162,7 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
+          kind: "approval",
           subject: {
             kind: "file_change",
             itemId: parsed.data.itemId,
@@ -187,6 +193,7 @@ export function decodeCodexInteractiveRequest(
         providerThreadId: parsed.data.threadId,
         turnId: parsed.data.turnId,
         payload: {
+          kind: "approval",
           subject: {
             kind: "permission_grant",
             itemId: parsed.data.itemId,
@@ -206,6 +213,15 @@ export function decodeCodexInteractiveRequest(
 export function buildCodexInteractiveResponse(
   args: BuildInteractiveResponseArgs,
 ): CodexInteractiveResponse {
+  if (
+    !isApprovalPendingInteractionPayload(args.request.payload) ||
+    !isApprovalPendingInteractionResolution(args.resolution)
+  ) {
+    throw new ProviderResponseEncodeError(
+      "Codex user-question interactive requests are unsupported",
+    );
+  }
+
   switch (args.request.payload.subject.kind) {
     case "command": {
       const response: CommandExecutionRequestApprovalResponse = {
