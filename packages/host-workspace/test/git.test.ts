@@ -1,11 +1,104 @@
-import { describe, expect, it } from "vitest";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   parseBranchStatus,
   parseNameStatusEntries,
   parseNumstatEntriesZ,
   parsePorcelainEntries,
+  readGitBlob,
+  runGit,
   summarizeNumstat,
 } from "../src/git.js";
+
+const tempDirs: string[] = [];
+
+async function initReadGitBlobRepo() {
+  const repoPath = await fs.mkdtemp(
+    path.join(os.tmpdir(), "bb-read-git-blob-"),
+  );
+  tempDirs.push(repoPath);
+  await runGit(["init", "-b", "main"], { cwd: repoPath });
+  await runGit(["config", "user.name", "BB Tests"], { cwd: repoPath });
+  await runGit(["config", "user.email", "bb@example.com"], { cwd: repoPath });
+  await fs.mkdir(path.join(repoPath, "docs"));
+  await fs.writeFile(path.join(repoPath, "README.md"), "hello\n", "utf8");
+  await fs.writeFile(path.join(repoPath, "docs", "index.md"), "docs\n", "utf8");
+  await fs.writeFile(path.join(repoPath, "large.txt"), "0123456789\n", "utf8");
+  await runGit(["add", "."], { cwd: repoPath });
+  await runGit(["commit", "-m", "Initial commit"], { cwd: repoPath });
+  return repoPath;
+}
+
+afterEach(async () => {
+  await Promise.all(
+    tempDirs
+      .splice(0)
+      .map((dir) => fs.rm(dir, { recursive: true, force: true })),
+  );
+});
+
+describe("readGitBlob", () => {
+  it("reads a blob at a git ref and reports the returned byte size", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    const blob = await readGitBlob(repoPath, "HEAD", "README.md", 1024);
+
+    expect(blob.contents?.toString("utf8")).toBe("hello\n");
+    expect(blob.sizeBytes).toBe(Buffer.byteLength("hello\n"));
+  });
+
+  it("returns null contents for a missing blob path", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    await expect(
+      readGitBlob(repoPath, "HEAD", "missing.txt", 1024),
+    ).resolves.toEqual({
+      contents: null,
+      sizeBytes: 0,
+    });
+  });
+
+  it("returns null contents for a missing ref", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    await expect(
+      readGitBlob(repoPath, "missing-ref", "README.md", 1024),
+    ).resolves.toEqual({
+      contents: null,
+      sizeBytes: 0,
+    });
+  });
+
+  it("rejects non-blob git objects instead of treating them as missing", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    await expect(readGitBlob(repoPath, "HEAD", "docs", 1024)).rejects
+      .toMatchObject({
+        code: "git_command_failed",
+      });
+  });
+
+  it("allows blobs exactly at the byte cap", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    const blob = await readGitBlob(repoPath, "HEAD", "large.txt", 11);
+
+    expect(blob.contents?.toString("utf8")).toBe("0123456789\n");
+    expect(blob.sizeBytes).toBe(11);
+  });
+
+  it("rejects oversized blobs during size preflight", async () => {
+    const repoPath = await initReadGitBlobRepo();
+
+    await expect(readGitBlob(repoPath, "HEAD", "large.txt", 4)).rejects
+      .toMatchObject({
+        code: "blob_too_large",
+        message: "Blob size 11 bytes exceeds the 0 MB limit",
+      });
+  });
+});
 
 describe("parseBranchStatus", () => {
   it("parses branch names and ahead/behind counts", () => {

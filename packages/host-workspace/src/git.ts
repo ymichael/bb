@@ -77,6 +77,35 @@ function getExitCode(error: ExecFileException | undefined): number {
   return 1;
 }
 
+function isMaxBufferExceededError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    error.code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"
+  );
+}
+
+function isMissingGitBlobTargetError(stderr: string): boolean {
+  return (
+    /^fatal: path '.+' does not exist in '.+'$/u.test(stderr) ||
+    /^fatal: invalid object name '.+'\.$/u.test(stderr) ||
+    /^fatal: Not a valid object name .+$/u.test(stderr)
+  );
+}
+
+function createGitCommandFailedError(
+  args: string[],
+  stderr: string,
+  cause?: unknown,
+): WorkspaceError {
+  const detail = stderr ? `: ${stderr}` : "";
+  return new WorkspaceError(
+    "git_command_failed",
+    `git ${args.join(" ")} failed${detail}`,
+    { cause },
+  );
+}
+
 export async function runGit(
   args: string[],
   options: RunGitOptions,
@@ -569,16 +598,14 @@ export async function revParse(cwd: string, ref: string): Promise<string> {
 export interface ReadGitBlobResult {
   /** Object bytes, or `null` if no blob exists at `<ref>:<relativePath>`. */
   contents: Buffer | null;
-  /** Bytes reported by `git cat-file -s` (0 when missing). */
+  /** Git blob byte size; equals `contents.byteLength`, or 0 when missing. */
   sizeBytes: number;
 }
 
 /**
  * Look up the byte size of a blob at `<ref>:<relativePath>`. Returns
- * `undefined` when the object does not exist (e.g. the file did not exist
- * at that ref, or the ref itself is unknown). Caller decides how to surface
- * "not found" — for context expansion we treat it as "no content on this
- * side" rather than an error.
+ * `undefined` only when git reports the ref/path/object target is absent.
+ * Non-blob objects and other git failures surface as `git_command_failed`.
  */
 export async function gitBlobSize(
   cwd: string,
@@ -586,22 +613,52 @@ export async function gitBlobSize(
   relativePath: string,
 ): Promise<number | undefined> {
   await ensureGitRepo(cwd);
-  const result = await runGit(
-    ["cat-file", "-s", `${ref}:${relativePath}`],
-    { cwd, allowFailure: true },
-  );
-  if (result.exitCode !== 0) {
-    return undefined;
+  const target = `${ref}:${relativePath}`;
+  const typeArgs = ["cat-file", "-t", target];
+  const typeResult = await runGit(typeArgs, { cwd, allowFailure: true });
+  if (typeResult.exitCode !== 0) {
+    const stderr = trimOutput(typeResult.stderr);
+    if (isMissingGitBlobTargetError(stderr)) {
+      return undefined;
+    }
+    throw createGitCommandFailedError(typeArgs, stderr);
   }
-  const parsed = Number.parseInt(trimOutput(result.stdout), 10);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : undefined;
+
+  const objectType = trimOutput(typeResult.stdout);
+  if (objectType !== "blob") {
+    throw new WorkspaceError(
+      "git_command_failed",
+      `git cat-file -t ${target} returned ${objectType || "unknown object type"}, expected blob`,
+    );
+  }
+
+  const sizeArgs = ["cat-file", "-s", target];
+  const sizeResult = await runGit(sizeArgs, { cwd, allowFailure: true });
+  if (sizeResult.exitCode !== 0) {
+    const stderr = trimOutput(sizeResult.stderr);
+    if (isMissingGitBlobTargetError(stderr)) {
+      return undefined;
+    }
+    throw createGitCommandFailedError(sizeArgs, stderr);
+  }
+
+  const parsed = Number.parseInt(trimOutput(sizeResult.stdout), 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    throw new WorkspaceError(
+      "git_command_failed",
+      `git cat-file -s ${target} returned invalid size ${trimOutput(
+        sizeResult.stdout,
+      )}`,
+    );
+  }
+  return parsed;
 }
 
 /**
- * Read a blob at `<ref>:<relativePath>` as raw bytes. Caller is responsible
- * for size capping — pass the same `maxBytes` they would apply to a disk
- * read so we can refuse to materialize very large blobs into memory. Returns
- * `{ contents: null, sizeBytes: 0 }` when the blob is missing.
+ * Read a blob at `<ref>:<relativePath>` as raw bytes. Returns
+ * `{ contents: null, sizeBytes: 0 }` only when git reports the target is
+ * absent. `sizeBytes` is the blob size reported by git and equals
+ * `contents.byteLength` when content is returned.
  */
 export async function readGitBlob(
   cwd: string,
@@ -609,6 +666,7 @@ export async function readGitBlob(
   relativePath: string,
   maxBytes: number,
 ): Promise<ReadGitBlobResult> {
+  const target = `${ref}:${relativePath}`;
   const size = await gitBlobSize(cwd, ref, relativePath);
   if (size === undefined) {
     return { contents: null, sizeBytes: 0 };
@@ -619,25 +677,34 @@ export async function readGitBlob(
       `Blob size ${size} bytes exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`,
     );
   }
+
   try {
     const result = await execFileAsync(
       "git",
-      ["cat-file", "blob", `${ref}:${relativePath}`],
+      ["cat-file", "blob", target],
       {
         cwd,
         encoding: "buffer",
         maxBuffer: maxBytes,
       },
     );
-    return { contents: Buffer.from(result.stdout), sizeBytes: size };
+    const contents = Buffer.from(result.stdout);
+    return { contents, sizeBytes: size };
   } catch (error) {
+    if (isMaxBufferExceededError(error)) {
+      throw new WorkspaceError(
+        "blob_too_large",
+        `Blob size exceeds the ${Math.floor(maxBytes / (1024 * 1024))} MB limit`,
+        { cause: error },
+      );
+    }
+
     const execError = toExecError(error);
     const stderr = trimOutput(execError?.stderr?.toString() ?? "");
-    const detail = stderr ? `: ${stderr}` : "";
-    throw new WorkspaceError(
-      "git_command_failed",
-      `git cat-file blob ${ref}:${relativePath} failed${detail}`,
-      { cause: error },
+    throw createGitCommandFailedError(
+      ["cat-file", "blob", target],
+      stderr,
+      error,
     );
   }
 }

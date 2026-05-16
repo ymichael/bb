@@ -42,6 +42,7 @@ type UnarchiveThreadArgs = Parameters<AgentRuntime["unarchiveThread"]>[0];
 type EnsureProviderArgs = Parameters<AgentRuntime["ensureProvider"]>[0];
 type ListModelsArgs = Parameters<AgentRuntime["listModels"]>[0];
 type ListModelsResult = Awaited<ReturnType<AgentRuntime["listModels"]>>;
+type GetDiffResult = Awaited<ReturnType<HostWorkspace["getDiff"]>>;
 
 async function makeTempDir(prefix: string): Promise<string> {
   const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), prefix));
@@ -632,7 +633,7 @@ describe("CommandRouter", () => {
     await handling;
   });
 
-  it("serializes workspace commands per environment", async () => {
+  it("waits for an in-flight write before starting a read for the same environment", async () => {
     const workspace = createFakeWorkspace("/tmp/env-1");
     const commitDeferred = createDeferred<{
       commitSha: string;
@@ -669,7 +670,7 @@ describe("CommandRouter", () => {
           environmentId: "env-1",
           workspaceContext: {
             workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged" as const,
+            workspaceProvisionType: "unmanaged",
           },
           message: "Commit",
         },
@@ -682,7 +683,7 @@ describe("CommandRouter", () => {
           environmentId: "env-1",
           workspaceContext: {
             workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "unmanaged" as const,
+            workspaceProvisionType: "unmanaged",
           },
           mergeBaseBranch: "main",
         },
@@ -701,6 +702,302 @@ describe("CommandRouter", () => {
     await handling;
 
     expect(workspace.getStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs read-only workspace commands concurrently for the same environment", async () => {
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const diffDeferred = createDeferred<GetDiffResult>();
+    workspace.getDiff.mockReturnValueOnce(diffDeferred.promise);
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => workspace,
+      createRuntime: () => createFakeRuntime(),
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "diff",
+        cursor: 1,
+        command: {
+          type: "workspace.diff",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          target: { type: "uncommitted" },
+          maxDiffBytes: 100_000,
+          maxFileListBytes: 100_000,
+        },
+      },
+      {
+        id: "status",
+        cursor: 2,
+        command: {
+          type: "workspace.status",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          mergeBaseBranch: "main",
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
+      expect(workspace.getStatus).toHaveBeenCalledTimes(1);
+    });
+
+    diffDeferred.resolve({
+      diff: "",
+      truncated: false,
+      shortstat: "",
+      files: "",
+      mergeBaseRef: null,
+    });
+    await handling;
+  });
+
+  it("waits for an in-flight read before starting a write for the same environment", async () => {
+    const calls: string[] = [];
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const diffDeferred = createDeferred<void>();
+    workspace.getDiff.mockImplementationOnce(async () => {
+      calls.push("read:start");
+      await diffDeferred.promise;
+      calls.push("read:done");
+      return {
+        diff: "",
+        truncated: false,
+        shortstat: "",
+        files: "",
+        mergeBaseRef: null,
+      };
+    });
+    workspace.commit.mockImplementationOnce(async () => {
+      calls.push("write");
+      return {
+        commitSha: "commit-1",
+        commitSubject: "subject",
+      };
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => workspace,
+      createRuntime: () => createFakeRuntime(),
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "diff",
+        cursor: 1,
+        command: {
+          type: "workspace.diff",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          target: { type: "uncommitted" },
+          maxDiffBytes: 100_000,
+          maxFileListBytes: 100_000,
+        },
+      },
+      {
+        id: "commit",
+        cursor: 2,
+        command: {
+          type: "workspace.commit",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          message: "Commit",
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
+    });
+    expect(workspace.commit).not.toHaveBeenCalled();
+
+    diffDeferred.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(workspace.commit).toHaveBeenCalledTimes(1);
+    });
+
+    await handling;
+    expect(calls).toEqual(["read:start", "read:done", "write"]);
+  });
+
+  it("preserves read-write-read ordering when a write is queued behind a read", async () => {
+    const calls: string[] = [];
+    const workspace = createFakeWorkspace("/tmp/env-1");
+    const diffDeferred = createDeferred<void>();
+    const commitDeferred = createDeferred<CommitResult>();
+    workspace.getDiff.mockImplementationOnce(async () => {
+      calls.push("read-1:start");
+      await diffDeferred.promise;
+      calls.push("read-1:done");
+      return {
+        diff: "",
+        truncated: false,
+        shortstat: "",
+        files: "",
+        mergeBaseRef: null,
+      };
+    });
+    workspace.commit.mockImplementationOnce(async () => {
+      calls.push("write:start");
+      await commitDeferred.promise;
+      calls.push("write:done");
+      return {
+        commitSha: "commit-1",
+        commitSubject: "subject",
+      };
+    });
+    workspace.getStatus.mockImplementationOnce(async () => {
+      calls.push("read-2");
+      return {
+        workingTree: {
+          hasUncommittedChanges: false,
+          state: "clean",
+          insertions: 0,
+          deletions: 0,
+          files: [],
+        },
+        branch: {
+          currentBranch: "main",
+          defaultBranch: "main",
+        },
+        mergeBase: null,
+      };
+    });
+
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => workspace,
+      createRuntime: () => createFakeRuntime(),
+    });
+    await manager.ensureEnvironment({
+      environmentId: "env-1",
+      workspacePath: "/tmp/env-1",
+    });
+
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger: createLogger(),
+    });
+    const handling = router.handleCommands([
+      {
+        id: "diff",
+        cursor: 1,
+        command: {
+          type: "workspace.diff",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          target: { type: "uncommitted" },
+          maxDiffBytes: 100_000,
+          maxFileListBytes: 100_000,
+        },
+      },
+      {
+        id: "commit",
+        cursor: 2,
+        command: {
+          type: "workspace.commit",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          message: "Commit",
+        },
+      },
+      {
+        id: "status",
+        cursor: 3,
+        command: {
+          type: "workspace.status",
+          environmentId: "env-1",
+          workspaceContext: {
+            workspacePath: "/tmp/env-1",
+            workspaceProvisionType: "unmanaged",
+          },
+          mergeBaseBranch: "main",
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(workspace.getDiff).toHaveBeenCalledTimes(1);
+    });
+    expect(workspace.commit).not.toHaveBeenCalled();
+    expect(workspace.getStatus).not.toHaveBeenCalled();
+
+    diffDeferred.resolve(undefined);
+    await vi.waitFor(() => {
+      expect(workspace.commit).toHaveBeenCalledTimes(1);
+    });
+    expect(workspace.getStatus).not.toHaveBeenCalled();
+
+    commitDeferred.resolve({
+      commitSha: "commit-1",
+      commitSubject: "subject",
+    });
+    await handling;
+
+    expect(workspace.getStatus).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([
+      "read-1:start",
+      "read-1:done",
+      "write:start",
+      "write:done",
+      "read-2",
+    ]);
   });
 
   it("serializes thread.archive before environment.destroy for the same environment", async () => {
@@ -1209,12 +1506,86 @@ describe("CommandRouter", () => {
       },
     ]);
 
-    expect(reported).toEqual(["cmd-1", "cmd-2"]);
+    await vi.waitFor(() => {
+      expect(reported).toEqual(["cmd-2", "cmd-1"]);
+    });
     expect(logger.warn).toHaveBeenCalledWith(
       {
         err: expect.any(Error),
       },
       "failed to report command result, will retry on next completion",
     );
+  });
+
+  it("reports later command results when an older pending result keeps failing", async () => {
+    const manager = new RuntimeManager({
+      provisionWorkspace: async () => createFakeWorkspace("/tmp/env-1"),
+      createRuntime: () => createFakeRuntime(),
+    });
+    const logger = createLogger();
+    const reported: string[] = [];
+    const router = new CommandRouter({
+      dataDir: "/tmp/bb-test-data",
+      fetchProjectAttachment: unexpectedProjectAttachmentFetch,
+      fetchRuntimeMaterial: vi.fn(),
+      readPersistedRuntimeMaterial: vi.fn(async () => null),
+      persistRuntimeMaterial: vi.fn(async () => undefined),
+      runtimeManager: manager,
+      eventSink: noopEventSink,
+      threadStorageRootPath: "/tmp/bb-test-thread-storage",
+      logger,
+      reportResult: async (result) => {
+        if (result.commandId === "cmd-1") {
+          throw new Error("stale report failed");
+        }
+        reported.push(result.commandId);
+      },
+    });
+
+    await router.handleCommands([
+      {
+        id: "cmd-1",
+        cursor: 1,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-1",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          requestId: nextClientRequestId(),
+          input: [{ type: "text", text: "start thread 1" }],
+        },
+      },
+    ]);
+
+    expect(reported).toEqual([]);
+
+    await router.handleCommands([
+      {
+        id: "cmd-2",
+        cursor: 2,
+        command: {
+          type: "thread.start",
+          environmentId: "env-1",
+          threadId: "thread-2",
+          ...createStandardRuntimeCommandContext({
+            workspacePath: "/tmp/env-1",
+          }),
+          requestId: nextClientRequestId(),
+          input: [{ type: "text", text: "start thread 2" }],
+        },
+      },
+    ]);
+
+    await vi.waitFor(() => {
+      expect(logger.warn).toHaveBeenCalledWith(
+        {
+          err: expect.any(Error),
+        },
+        "failed to report pending command result, will retry on next completion",
+      );
+    });
+    expect(reported).toEqual(["cmd-2"]);
   });
 });

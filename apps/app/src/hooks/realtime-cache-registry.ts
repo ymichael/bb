@@ -27,6 +27,9 @@ import {
   allThreadQueryKeyPrefix,
   allThreadTerminalsQueryKeyPrefix,
   allThreadTimelineQueryKeyPrefix,
+  environmentFilePreviewQueryKeyPrefix,
+  environmentGitDiffQueryKeyPrefix,
+  environmentWorkStatusQueryKeyPrefix,
   hostsQueryKey,
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
@@ -170,7 +173,7 @@ export const REALTIME_ENVIRONMENT_CHANGE_REGISTRY = {
   },
   "work-status-changed": {
     dirty: [
-      dirtyEnvironmentWorkspaceStateQueries, // Work status, git diff, and previews derive from workspace state.
+      dirtyEnvironmentLiveWorkspaceStateQueries, // Refresh live status/preview but keep active diff reads stable.
     ],
   },
   "git-refs-changed": {
@@ -473,6 +476,22 @@ function dirtyEnvironmentWorkspaceStateQueries(
   context: EnvironmentRealtimeDirtyContext,
 ): QueryKey[] {
   return getEnvironmentWorkspaceStateInvalidationQueryKeys(context);
+}
+
+function dirtyEnvironmentLiveWorkspaceStateQueries({
+  environmentId,
+  queryClient,
+}: EnvironmentRealtimeDirtyContext): void {
+  queryClient.invalidateQueries({
+    queryKey: environmentWorkStatusQueryKeyPrefix(environmentId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: environmentFilePreviewQueryKeyPrefix(environmentId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: environmentGitDiffQueryKeyPrefix(environmentId),
+    refetchType: "none",
+  });
 }
 
 function dirtyEnvironmentRefDerivedWorkspaceStateQueries({

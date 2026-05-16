@@ -9,6 +9,8 @@ import {
 import { createAppQueryClient } from "@/lib/query-client";
 import {
   archivedThreadsListQueryKey,
+  environmentGitDiffQueryKey,
+  environmentWorkStatusQueryKey,
   localPathExistenceQueryKey,
   projectFilesQueryKey,
   projectGithubBranchesQueryKey,
@@ -328,6 +330,59 @@ describe("createRealtimeCacheEffects", () => {
 
     unsubscribeThread();
     unsubscribeThreadList();
+    effects.dispose();
+  });
+
+  it("does not refetch active git diff queries for work-status changes", async () => {
+    vi.useFakeTimers();
+    const { effects, queryClient } = createRealtimeEffectsTestContext();
+    const gitDiffKey = environmentGitDiffQueryKey("env-1", "all", "main");
+    const workStatusKey = environmentWorkStatusQueryKey("env-1", "main");
+    queryClient.setQueryData(gitDiffKey, {
+      diff: "diff --git a/file.ts b/file.ts\n",
+      files: "M\tfile.ts\n",
+      mergeBaseRef: "base-ref",
+      shortstat: "1 file changed",
+      truncated: false,
+    });
+    queryClient.setQueryData(workStatusKey, null);
+    const gitDiffQueryFn = vi.fn(async () => ({
+      diff: "",
+      files: "",
+      mergeBaseRef: "base-ref",
+      shortstat: "",
+      truncated: false,
+    }));
+    const workStatusQueryFn = vi.fn(async () => null);
+    const gitDiffObserver = new QueryObserver(queryClient, {
+      queryKey: gitDiffKey,
+      queryFn: gitDiffQueryFn,
+      staleTime: Infinity,
+    });
+    const workStatusObserver = new QueryObserver(queryClient, {
+      queryKey: workStatusKey,
+      queryFn: workStatusQueryFn,
+      staleTime: Infinity,
+    });
+    const unsubscribeGitDiff = gitDiffObserver.subscribe(() => {});
+    const unsubscribeWorkStatus = workStatusObserver.subscribe(() => {});
+    gitDiffQueryFn.mockClear();
+    workStatusQueryFn.mockClear();
+
+    effects.handleChanged({
+      type: "changed",
+      entity: "environment",
+      id: "env-1",
+      changes: ["work-status-changed"],
+    });
+    await vi.advanceTimersByTimeAsync(250);
+
+    expect(gitDiffQueryFn).not.toHaveBeenCalled();
+    expect(workStatusQueryFn).toHaveBeenCalledTimes(1);
+    expect(queryClient.getQueryState(gitDiffKey)?.isInvalidated).toBe(true);
+
+    unsubscribeGitDiff();
+    unsubscribeWorkStatus();
     effects.dispose();
   });
 
