@@ -213,8 +213,8 @@ export function ProjectListActionButtons({
   const isNewManagerDisabled =
     !onNewManager || !selectedProjectId || isManagerActionPending;
   const newChatTitle = isNewChatDisabled
-    ? "Select a project to start a new chat"
-    : "New Chat";
+    ? "Select a project to start a new thread"
+    : "New Thread";
   const newManagerTitle =
     !onNewManager || !selectedProjectId
       ? "Select a project to hire a new manager"
@@ -234,7 +234,7 @@ export function ProjectListActionButtons({
         title={newChatTitle}
       >
         <Icon name="MessageSquarePlus" />
-        <span className="min-w-0 flex-1 truncate text-left">New Chat</span>
+        <span className="min-w-0 flex-1 truncate text-left">New Thread</span>
         <span
           className={PROJECT_LIST_ACTION_TRAILING_SLOT_CLASS}
           aria-hidden="true"
