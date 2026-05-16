@@ -35,6 +35,7 @@ import { isRunningThreadRuntimeDisplayStatus } from "./thread-runtime-status.js"
 import type {
   ThreadTimelineLocalFileLinkHandler,
   ThreadTimelineTheme,
+  ThreadTimelineUnreadDividerPlacement,
   UserAttachmentImageSrcResolver,
 } from "./types.js";
 import { ConversationMessageContent } from "./ConversationMessageContent.js";
@@ -53,6 +54,7 @@ import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 import { Button } from "../../ui/button.js";
 import { AutoHeightContainer } from "../../ui/height-transition.js";
 import { Icon } from "@/components/ui/icon.js";
+import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-body.js";
 import {
   joinSignatureParts,
   timelineRowRenderSignature,
@@ -79,6 +81,7 @@ export interface ThreadTimelineRowsProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  unreadDividerPlacement?: ThreadTimelineUnreadDividerPlacement | null;
   /**
    * Workspace root path the agent ran in (`environment.path`). Forwarded to
    * file-change rows so they can strip the prefix from `change.path` and
@@ -110,6 +113,7 @@ interface TimelineRowsListProps {
   scopeActive: boolean;
   spacing: TimelineRowsListSpacing;
   className?: string;
+  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
 interface TimelineRowViewProps {
@@ -144,6 +148,16 @@ interface TimelineSystemDetailBlockProps {
   detail: string;
   streaming: boolean;
   tone: "default" | "danger";
+}
+
+interface BuildTimelineRowsListItemsArgs {
+  rows: readonly ThreadTimelineViewRow[];
+  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
+}
+
+interface FindUnreadDividerIndexArgs {
+  rows: readonly ThreadTimelineViewRow[];
+  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
 }
 
 interface RequestLazyTurnRowsArgs {
@@ -190,6 +204,15 @@ type GetTimelineViewRows = (
   rows: TimelineRawRows,
   options?: BuildTimelineViewRowsOptions,
 ) => ThreadTimelineViewRow[];
+type TimelineRowsListItem =
+  | {
+      kind: "row";
+      row: ThreadTimelineViewRow;
+    }
+  | {
+      kind: "unread-divider";
+      id: "manager-unread-divider";
+    };
 
 interface ConversationRowProps {
   row: TimelineConversationViewRow;
@@ -476,6 +499,52 @@ function ConversationRow({ row }: ConversationRowProps) {
   );
 }
 
+function TimelineUnreadDivider() {
+  const bottomAnchor = useBottomAnchoredScroll();
+  const dividerRef = useRef<HTMLDivElement>(null);
+  const hasScrolledRef = useRef(false);
+
+  useEffect(() => {
+    if (!bottomAnchor || hasScrolledRef.current) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      const divider = dividerRef.current;
+      if (!divider) {
+        return;
+      }
+
+      hasScrolledRef.current = true;
+      bottomAnchor.scrollElementIntoView({
+        element: divider,
+        options: {
+          block: "center",
+          inline: "nearest",
+        },
+      });
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [bottomAnchor]);
+
+  return (
+    <div
+      ref={dividerRef}
+      role="separator"
+      aria-label="New messages"
+      className="flex items-center gap-3 py-1 text-xs font-medium text-primary"
+      data-testid="manager-unread-divider"
+    >
+      <span className="h-px min-w-0 flex-1 bg-primary/50" aria-hidden />
+      <span className="shrink-0 rounded-full border border-primary/30 bg-background px-2 py-0.5">
+        New
+      </span>
+      <span className="h-px min-w-0 flex-1 bg-primary/50" aria-hidden />
+    </div>
+  );
+}
+
 function TimelineSystemDetailBlock({
   detail,
   streaming,
@@ -529,6 +598,7 @@ function TimelineExpandableBody({
           scopeActive={false}
           compactActivityIntents={true}
           spacing="bundle"
+          unreadDividerPlacement={null}
         />
       );
       // Summaries whose children are themselves expandable (commands, tools
@@ -583,6 +653,7 @@ function TimelineExpandableBody({
                   scopeActive={delegationActive}
                   compactActivityIntents={false}
                   spacing="nested"
+                  unreadDividerPlacement={null}
                 />
               ) : null}
               {row.output.trim().length > 0 ? (
@@ -696,6 +767,7 @@ function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
         compactActivityIntents={compactActivityIntents}
         spacing="nested"
         className={NESTED_ROWS_GROUP_LINE_CLASS}
+        unreadDividerPlacement={null}
       />
     );
   }
@@ -838,16 +910,61 @@ const MemoizedTimelineExpandableRowView = memo(
   areTimelineExpandableRowViewPropsEqual,
 );
 
+function findUnreadDividerIndex({
+  rows,
+  unreadDividerPlacement,
+}: FindUnreadDividerIndexArgs): number {
+  if (unreadDividerPlacement === null) {
+    return -1;
+  }
+
+  switch (unreadDividerPlacement.kind) {
+    case "before-first":
+      return rows.length > 0 ? 0 : -1;
+    case "after-cutoff":
+      return rows.findIndex(
+        (row) => row.createdAt > unreadDividerPlacement.cutoffAt,
+      );
+    default:
+      assertNever(unreadDividerPlacement);
+  }
+}
+
+function buildTimelineRowsListItems({
+  rows,
+  unreadDividerPlacement,
+}: BuildTimelineRowsListItemsArgs): TimelineRowsListItem[] {
+  const items: TimelineRowsListItem[] = [];
+  const dividerIndex = findUnreadDividerIndex({
+    rows,
+    unreadDividerPlacement,
+  });
+
+  for (const [index, row] of rows.entries()) {
+    if (index === dividerIndex) {
+      items.push({ kind: "unread-divider", id: "manager-unread-divider" });
+    }
+    items.push({ kind: "row", row });
+  }
+
+  return items;
+}
+
 function TimelineRowsList({
   compactActivityIntents,
   rows,
   scopeActive,
   spacing,
   className,
+  unreadDividerPlacement,
 }: TimelineRowsListProps) {
   const activeLatestBundleId = useMemo(
     () => findActiveLatestBundleId(rows),
     [rows],
+  );
+  const items = useMemo(
+    () => buildTimelineRowsListItems({ rows, unreadDividerPlacement }),
+    [rows, unreadDividerPlacement],
   );
   return (
     <div
@@ -858,16 +975,20 @@ function TimelineRowsList({
       )}
       data-timeline-row-list={spacing}
     >
-      {rows.map((row) => (
-        <MemoizedTimelineRowView
-          key={row.id}
-          activeLatestBundleId={activeLatestBundleId}
-          row={row}
-          scopeActive={scopeActive}
-          spacing={spacing}
-          compactActivityIntents={compactActivityIntents}
-        />
-      ))}
+      {items.map((item) =>
+        item.kind === "unread-divider" ? (
+          <TimelineUnreadDivider key={item.id} />
+        ) : (
+          <MemoizedTimelineRowView
+            key={item.row.id}
+            activeLatestBundleId={activeLatestBundleId}
+            row={item.row}
+            scopeActive={scopeActive}
+            spacing={spacing}
+            compactActivityIntents={compactActivityIntents}
+          />
+        ),
+      )}
     </div>
   );
 }
@@ -983,6 +1104,7 @@ function ThreadTimelineRowsForIdentity(props: ThreadTimelineRowsProps) {
           scopeActive={scopeActive}
           compactActivityIntents={false}
           spacing="top-level"
+          unreadDividerPlacement={props.unreadDividerPlacement ?? null}
         />
       </AutoHeightContainer>
     </TimelineRendererContext.Provider>

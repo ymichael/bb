@@ -24,6 +24,7 @@ export { ToolCallDetailBlock } from "./ToolCallDetailBlock.js";
 export type {
   ThreadTimelineLocalFileLink,
   ThreadTimelineLocalFileLinkHandler,
+  ThreadTimelineUnreadDividerPlacement,
   ThreadTimelineTheme,
   UserAttachmentImageSrcResolver,
 } from "./types.js";

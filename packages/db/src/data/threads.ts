@@ -173,6 +173,10 @@ export interface MarkThreadDeletedArgs {
   threadId: string;
 }
 
+export interface MarkThreadAttentionRequestedArgs {
+  threadId: string;
+}
+
 export interface ListThreadEnvironmentAssignmentsOnHostArgs {
   hostId: string;
   threadIds: readonly string[];
@@ -214,11 +218,12 @@ const THREAD_STATUSES_ALLOWING_ERROR: ThreadStatus[] = [
 interface StatusTransition {
   currentStatus: ThreadStatus;
   newStatus: ThreadStatus;
+  threadType: ThreadType;
 }
 
 function statusTransitionNeedsAttention(args: StatusTransition): boolean {
   if (args.currentStatus === "active" && args.newStatus === "idle") {
-    return true;
+    return args.threadType !== "manager";
   }
 
   if (args.newStatus !== "error") {
@@ -581,6 +586,42 @@ export function updateThread(
   return updated ?? null;
 }
 
+export function markThreadAttentionRequested(
+  db: ThreadWriteConnection,
+  notifier: DbNotifier,
+  args: MarkThreadAttentionRequestedArgs,
+) {
+  const existing = db
+    .select()
+    .from(threads)
+    .where(eq(threads.id, args.threadId))
+    .get();
+  if (!existing) {
+    return null;
+  }
+
+  const now = Date.now();
+  if (now <= existing.latestAttentionAt) {
+    return existing;
+  }
+
+  const updated = db
+    .update(threads)
+    .set({
+      latestAttentionAt: now,
+      updatedAt: now,
+    })
+    .where(eq(threads.id, args.threadId))
+    .returning()
+    .get();
+  if (updated) {
+    notifier.notifyThread(args.threadId, ["read-state-changed"], {
+      projectId: existing.projectId,
+    });
+  }
+  return updated ?? null;
+}
+
 export function deleteThread(
   db: ThreadWriteConnection,
   notifier: DbNotifier,
@@ -733,7 +774,13 @@ function transitionThreadStatusRecord(
     status: newStatus,
     updatedAt: now,
   };
-  if (statusTransitionNeedsAttention({ currentStatus, newStatus })) {
+  if (
+    statusTransitionNeedsAttention({
+      currentStatus,
+      newStatus,
+      threadType: thread.type,
+    })
+  ) {
     set.latestAttentionAt = now;
   }
 
@@ -782,6 +829,7 @@ export function transitionThreadsToError(
       id: threads.id,
       projectId: threads.projectId,
       status: threads.status,
+      type: threads.type,
     })
     .from(threads)
     .where(
@@ -811,6 +859,7 @@ export function transitionThreadsToError(
       statusTransitionNeedsAttention({
         currentStatus: thread.status,
         newStatus: "error",
+        threadType: thread.type,
       })
     ) {
       set.latestAttentionAt = now;

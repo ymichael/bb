@@ -31,6 +31,7 @@ import { PAGE_SHELL_CONTENT_STYLE } from "./page-shell-content-style.js";
 export interface BottomAnchorContextValue {
   isAtBottom: boolean;
   scrollToBottom: () => void;
+  scrollElementIntoView: (args: ScrollElementIntoViewArgs) => void;
   // Snapshot the scroll area so the next height growth (e.g. prepending older
   // messages) keeps the visible row at the same Y position instead of jumping.
   captureScrollAnchor: () => void;
@@ -42,6 +43,16 @@ export interface BottomAnchoredScrollBodyProps {
   scrollAreaClassName?: string;
   contentClassName?: string;
   maxWidthClassName: string;
+}
+
+export interface ScrollElementIntoViewArgs {
+  element: HTMLElement;
+  options?: ScrollIntoViewOptions;
+}
+
+interface ElementVisibilityArgs {
+  element: HTMLElement;
+  scrollArea: HTMLElement;
 }
 
 const BOTTOM_ANCHOR_THRESHOLD_PX = 4;
@@ -80,6 +91,18 @@ function isScrolledNearBottom(element: HTMLElement) {
 
 function scrollElementToBottom(element: HTMLElement) {
   element.scrollTop = getMaxScrollOffset(element);
+}
+
+function isElementFullyVisibleInScrollArea({
+  element,
+  scrollArea,
+}: ElementVisibilityArgs) {
+  const elementRect = element.getBoundingClientRect();
+  const scrollAreaRect = scrollArea.getBoundingClientRect();
+  return (
+    elementRect.top >= scrollAreaRect.top &&
+    elementRect.bottom <= scrollAreaRect.bottom
+  );
 }
 
 function isScrollIntentKey(event: KeyboardEvent) {
@@ -181,6 +204,23 @@ export function BottomAnchoredScrollBody({
     queueBottomRestore();
   }, [queueBottomRestore]);
 
+  const scrollElementIntoView = useCallback(
+    ({ element, options }: ScrollElementIntoViewArgs) => {
+      const scrollArea = scrollAreaRef.current;
+      if (
+        scrollArea &&
+        isElementFullyVisibleInScrollArea({ element, scrollArea })
+      ) {
+        return;
+      }
+      shouldStickToBottomRef.current = false;
+      setIsAtBottom(false);
+      cancelQueuedRestore();
+      element.scrollIntoView(options);
+    },
+    [cancelQueuedRestore],
+  );
+
   const captureScrollAnchor = useCallback(() => {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) return;
@@ -251,9 +291,10 @@ export function BottomAnchoredScrollBody({
     () => ({
       isAtBottom,
       scrollToBottom,
+      scrollElementIntoView,
       captureScrollAnchor,
     }),
-    [isAtBottom, scrollToBottom, captureScrollAnchor],
+    [isAtBottom, scrollToBottom, scrollElementIntoView, captureScrollAnchor],
   );
 
   useEffect(() => {

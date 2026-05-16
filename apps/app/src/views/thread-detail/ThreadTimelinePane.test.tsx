@@ -36,6 +36,7 @@ function renderLoadingTimelinePane(): RenderResult {
       threadRuntimeDisplayStatus="idle"
       turnSummaryRowsIdentity="thread-1:default"
       turnSummaryRowsById={{}}
+      unreadDividerPlacement={null}
     />,
   );
 }
@@ -86,6 +87,7 @@ describe("ThreadTimelinePane", () => {
         threadRuntimeDisplayStatus="idle"
         turnSummaryRowsIdentity="thread-1:default"
         turnSummaryRowsById={{}}
+        unreadDividerPlacement={null}
       />,
     );
     act(() => vi.advanceTimersByTime(1));
@@ -114,6 +116,7 @@ describe("ThreadTimelinePane", () => {
         threadRuntimeDisplayStatus="active"
         turnSummaryRowsIdentity="thread-1:default"
         turnSummaryRowsById={{}}
+        unreadDividerPlacement={null}
       />,
     );
 
@@ -159,6 +162,7 @@ describe("ThreadTimelinePane", () => {
         threadRuntimeDisplayStatus="idle"
         turnSummaryRowsIdentity="thread-1:default"
         turnSummaryRowsById={{}}
+        unreadDividerPlacement={null}
       />,
     );
 

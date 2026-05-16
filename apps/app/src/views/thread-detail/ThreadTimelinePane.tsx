@@ -16,6 +16,7 @@ import { useBottomAnchoredScroll } from "@/components/ui/bottom-anchored-scroll-
 import {
   ThreadTimelineRows,
   type ThreadTimelineLocalFileLinkHandler,
+  type ThreadTimelineUnreadDividerPlacement,
   type TimelineTitleActionResolver,
 } from "@/components/thread/timeline";
 import { TimelineStatusIndicator } from "@/components/thread/timeline";
@@ -47,6 +48,7 @@ interface ThreadTimelinePaneProps {
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
   turnSummaryRowsIdentity: string;
   turnSummaryRowsById: Record<string, TimelineRow[]>;
+  unreadDividerPlacement: ThreadTimelineUnreadDividerPlacement | null;
   workspaceRootPath: string | undefined;
 }
 
@@ -145,6 +147,7 @@ export function ThreadTimelinePane({
   threadRuntimeDisplayStatus,
   turnSummaryRowsIdentity,
   turnSummaryRowsById,
+  unreadDividerPlacement,
   workspaceRootPath,
 }: ThreadTimelinePaneProps) {
   const preferredTheme = usePreferredTheme();
@@ -206,6 +209,7 @@ export function ThreadTimelinePane({
               threadRuntimeDisplayStatus={threadRuntimeDisplayStatus}
               turnSummaryRowsIdentity={turnSummaryRowsIdentity}
               turnSummaryRowsById={turnSummaryRowsById}
+              unreadDividerPlacement={unreadDividerPlacement}
               workspaceRootPath={workspaceRootPath}
             />
           ) : null}

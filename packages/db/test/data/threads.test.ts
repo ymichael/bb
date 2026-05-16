@@ -18,6 +18,7 @@ import {
   archiveThread,
   clearThreadStopRequested,
   markThreadDeleted,
+  markThreadAttentionRequested,
   markThreadStopRequested,
   unarchiveThread,
   transitionThreadStatus,
@@ -465,6 +466,45 @@ describe("threads", () => {
     }
   });
 
+  it("marks a thread as needing attention without changing read position", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const spy: DbNotifier = {
+        notifyThread: vi.fn(),
+        notifyEnvironment: vi.fn(),
+        notifyHost: vi.fn(),
+        notifyCommand: vi.fn(),
+        notifyProject: vi.fn(),
+        notifySystem: vi.fn(),
+      };
+      const thread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+      });
+      updateThread(db, noopNotifier, thread.id, {
+        lastReadAt: thread.latestAttentionAt,
+      });
+
+      vi.setSystemTime(2_000);
+      const updated = markThreadAttentionRequested(db, spy, {
+        threadId: thread.id,
+      });
+
+      expect(updated?.updatedAt).toBe(2_000);
+      expect(updated?.lastReadAt).toBe(1_000);
+      expect(updated?.latestAttentionAt).toBe(2_000);
+      expect(spy.notifyThread).toHaveBeenCalledWith(
+        thread.id,
+        ["read-state-changed"],
+        { projectId: project.id },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("deletes a thread", () => {
     const { db, project } = setup();
     const thread = createThread(db, noopNotifier, {
@@ -855,6 +895,37 @@ describe("transitionThreadStatus", () => {
       expect(activeAgainThread.updatedAt).toBe(3_000);
       expect(activeAgainThread.latestAttentionAt).toBe(2_000);
       expect(activeAgainThread.lastReadAt).toBe(2_000);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does not mark manager completion as unread by itself", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(1_000);
+      const { db, project } = setup();
+      const managerThread = createThread(db, noopNotifier, {
+        projectId: project.id,
+        providerId: "codex",
+        status: "active",
+        type: "manager",
+      });
+      updateThread(db, noopNotifier, managerThread.id, {
+        lastReadAt: managerThread.latestAttentionAt,
+      });
+
+      vi.setSystemTime(2_000);
+      const idleThread = transitionThreadStatus(
+        db,
+        noopNotifier,
+        managerThread.id,
+        "idle",
+      );
+
+      expect(idleThread.updatedAt).toBe(2_000);
+      expect(idleThread.latestAttentionAt).toBe(1_000);
+      expect(idleThread.lastReadAt).toBe(1_000);
     } finally {
       vi.useRealTimers();
     }

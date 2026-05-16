@@ -1,6 +1,5 @@
 import { z } from "zod";
 import {
-  appendStoredThreadEventInTransaction,
   appendStoredThreadEventsInTransaction,
   createEventId,
   getActiveStoredTurnId,
@@ -8,6 +7,8 @@ import {
   getLastStoredTurnRequestEvent,
   getThread,
   listStoredTurnStartedKeys,
+  markThreadAttentionRequested,
+  noopNotifier,
   type StoredTurnRequestEventRow,
 } from "@bb/db";
 import {
@@ -35,6 +36,8 @@ import type {
   SystemThreadInterruptedReason,
   ThreadEventScope,
   ThreadTurnInitiator,
+  ThreadChangeKind,
+  ThreadChangeMetadata,
 } from "@bb/domain";
 import { ApiError, TurnStartGuardError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
@@ -225,6 +228,27 @@ function buildClientTurnRequestedEventData(
 
 type AppendClientTurnEvent = (args: AppendThreadEventArgs) => number;
 
+interface ManagerUserMessageAttentionResult {
+  attentionChanged: boolean;
+  projectId: string;
+  threadId: string;
+}
+
+interface AppendThreadEventTransactionResult {
+  attentionResult: ManagerUserMessageAttentionResult | null;
+  sequence: number;
+}
+
+interface AppendThreadEventsTransactionResult {
+  attentionResults: readonly ManagerUserMessageAttentionResult[];
+  sequences: number[];
+}
+
+interface BuildAppendThreadEventNotificationMetadataArgs {
+  attentionResult: ManagerUserMessageAttentionResult | null;
+  eventType: ThreadEventType;
+}
+
 function createClientTurnRequestId(): ClientTurnRequestId {
   const bytes = randomBytes(CLIENT_TURN_REQUEST_ID_SUFFIX_LENGTH);
   return encodeClientTurnRequestIdAlphabetIndexes({
@@ -260,6 +284,90 @@ function appendBuiltClientTurnEvent(
       return { requestId, sequence };
     }
   }
+}
+
+function isManagerUserMessageAttentionResult(
+  result: ManagerUserMessageAttentionResult | null,
+): result is ManagerUserMessageAttentionResult {
+  return result !== null;
+}
+
+function requestManagerUserMessageAttentionInTransaction(
+  db: DbTransaction,
+  args: AppendThreadEventArgs,
+): ManagerUserMessageAttentionResult | null {
+  if (args.type !== "system/manager/user_message") {
+    return null;
+  }
+
+  const previousThread = getThread(db, args.threadId);
+  const updatedThread = markThreadAttentionRequested(db, noopNotifier, {
+    threadId: args.threadId,
+  });
+  if (!previousThread || !updatedThread) {
+    return null;
+  }
+
+  return {
+    attentionChanged:
+      updatedThread.latestAttentionAt !== previousThread.latestAttentionAt,
+    projectId: updatedThread.projectId,
+    threadId: updatedThread.id,
+  };
+}
+
+function appendThreadEventsInTransactionWithAttention(
+  db: DbTransaction,
+  args: readonly AppendThreadEventArgs[],
+): AppendThreadEventsTransactionResult {
+  assertStoredTurnStartedForEvents(db, args);
+  const sequences = appendStoredThreadEventsInTransaction(db, args);
+  const attentionResults = args
+    .map((eventArgs) =>
+      requestManagerUserMessageAttentionInTransaction(db, eventArgs),
+    )
+    .filter(isManagerUserMessageAttentionResult);
+
+  return { attentionResults, sequences };
+}
+
+function appendThreadEventInTransactionWithAttention(
+  db: DbTransaction,
+  args: AppendThreadEventArgs,
+): AppendThreadEventTransactionResult {
+  const result = appendThreadEventsInTransactionWithAttention(db, [args]);
+  const sequence = result.sequences[0];
+  if (sequence === undefined) {
+    throw new Error("Expected one appended thread event sequence");
+  }
+
+  return {
+    attentionResult: result.attentionResults[0] ?? null,
+    sequence,
+  };
+}
+
+function buildAppendThreadEventNotificationChanges(
+  attentionResult: ManagerUserMessageAttentionResult | null,
+): ThreadChangeKind[] {
+  const changes: ThreadChangeKind[] = ["events-appended"];
+  if (attentionResult?.attentionChanged === true) {
+    changes.push("read-state-changed");
+  }
+  return changes;
+}
+
+function buildAppendThreadEventNotificationMetadata({
+  attentionResult,
+  eventType,
+}: BuildAppendThreadEventNotificationMetadataArgs): ThreadChangeMetadata {
+  const metadata: ThreadChangeMetadata = {
+    eventTypes: [eventType],
+  };
+  if (attentionResult?.attentionChanged === true) {
+    metadata.projectId = attentionResult.projectId;
+  }
+  return metadata;
 }
 
 function getTurnStartKey(args: TurnStartKey): string {
@@ -349,17 +457,19 @@ export function appendThreadEvent(
   deps: Pick<AppDeps, "db" | "hub">,
   args: AppendThreadEventArgs,
 ): number {
-  const sequence = deps.db.transaction(
-    (tx) => {
-      assertStoredTurnStartedForEvents(tx, [args]);
-      return appendStoredThreadEventInTransaction(tx, args);
-    },
+  const result = deps.db.transaction(
+    (tx) => appendThreadEventInTransactionWithAttention(tx, args),
     { behavior: "immediate" },
   );
-  deps.hub.notifyThread(args.threadId, ["events-appended"], {
-    eventTypes: [args.type],
-  });
-  return sequence;
+  deps.hub.notifyThread(
+    args.threadId,
+    buildAppendThreadEventNotificationChanges(result.attentionResult),
+    buildAppendThreadEventNotificationMetadata({
+      attentionResult: result.attentionResult,
+      eventType: args.type,
+    }),
+  );
+  return result.sequence;
 }
 
 export function appendThreadEventInTransaction<TType extends ThreadEventType>(
@@ -370,16 +480,14 @@ export function appendThreadEventInTransaction(
   db: DbTransaction,
   args: AppendThreadEventArgs,
 ): number {
-  assertStoredTurnStartedForEvents(db, [args]);
-  return appendStoredThreadEventInTransaction(db, args);
+  return appendThreadEventInTransactionWithAttention(db, args).sequence;
 }
 
 export function appendThreadEventsInTransaction(
   db: DbTransaction,
   args: readonly AppendThreadEventArgs[],
 ): number[] {
-  assertStoredTurnStartedForEvents(db, args);
-  return appendStoredThreadEventsInTransaction(db, args);
+  return appendThreadEventsInTransactionWithAttention(db, args).sequences;
 }
 
 export function appendClientTurnEvent(

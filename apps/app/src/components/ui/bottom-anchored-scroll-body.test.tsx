@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   BottomAnchoredScrollBody,
@@ -11,6 +12,15 @@ interface ScrollMetrics {
   scrollHeight: number;
   clientHeight: number;
   scrollTop: number;
+}
+
+interface TestRect {
+  bottom: number;
+  height: number;
+  left: number;
+  right: number;
+  top: number;
+  width: number;
 }
 
 let nextAnimationFrameId = 1;
@@ -102,17 +112,39 @@ function getResizeObserverInstance() {
   return instance;
 }
 
+function buildDomRect(rect: TestRect): DOMRect {
+  return new DOMRect(rect.left, rect.top, rect.width, rect.height);
+}
+
 function BottomAnchorProbe() {
   const bottomAnchor = useBottomAnchoredScroll();
+  const targetRef = useRef<HTMLDivElement>(null);
   return (
     <div>
       <output data-testid="bottom-state">
         {bottomAnchor ? (bottomAnchor.isAtBottom ? "bottom" : "away") : "null"}
       </output>
+      <div ref={targetRef} data-testid="scroll-target">
+        Scroll target
+      </div>
       {bottomAnchor ? (
-        <button type="button" onClick={bottomAnchor.scrollToBottom}>
-          Scroll to bottom
-        </button>
+        <>
+          <button type="button" onClick={bottomAnchor.scrollToBottom}>
+            Scroll to bottom
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (targetRef.current) {
+                bottomAnchor.scrollElementIntoView({
+                  element: targetRef.current,
+                });
+              }
+            }}
+          >
+            Scroll target into view
+          </button>
+        </>
       ) : null}
     </div>
   );
@@ -220,6 +252,45 @@ describe("BottomAnchoredScrollBody", () => {
 
     expect(scrollArea.scrollTop).toBe(900);
     expect(screen.getByTestId("bottom-state").textContent).toBe("bottom");
+  });
+
+  it("keeps bottom state when scrolling an already visible element into view", () => {
+    const { scrollArea, content } = renderBody();
+    const target = screen.getByTestId("scroll-target");
+    setScrollMetrics(scrollArea, {
+      scrollHeight: 1_000,
+      clientHeight: 100,
+      scrollTop: 900,
+    });
+    vi.spyOn(scrollArea, "getBoundingClientRect").mockReturnValue(
+      buildDomRect({
+        bottom: 100,
+        height: 100,
+        left: 0,
+        right: 100,
+        top: 0,
+        width: 100,
+      }),
+    );
+    vi.spyOn(target, "getBoundingClientRect").mockReturnValue(
+      buildDomRect({
+        bottom: 40,
+        height: 20,
+        left: 0,
+        right: 100,
+        top: 20,
+        width: 100,
+      }),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Scroll target into view" }),
+    );
+
+    expect(screen.getByTestId("bottom-state").textContent).toBe("bottom");
+    expect(content.classList.contains("scroll-bottom-anchor-content")).toBe(
+      true,
+    );
   });
 
   it("restores bottom after observed layout changes while sticking", () => {

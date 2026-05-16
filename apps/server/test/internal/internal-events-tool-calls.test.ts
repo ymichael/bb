@@ -5,7 +5,7 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   type HostDaemonEventEnvelope,
 } from "@bb/host-daemon-contract";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { internalAuthHeaders } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -588,7 +588,9 @@ describe("internal event and tool-call routes", () => {
 
   it("accepts message_user tool calls after the turn start is stored", async () => {
     const harness = await createTestAppHarness();
+    vi.useFakeTimers();
     try {
+      vi.setSystemTime(1_000);
       const { host, session } = seedHostSession(harness.deps);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -614,6 +616,7 @@ describe("internal event and tool-call routes", () => {
         },
       });
 
+      vi.setSystemTime(2_000);
       const response = await harness.app.request(
         "/internal/session/tool-call",
         {
@@ -642,7 +645,15 @@ describe("internal event and tool-call routes", () => {
         .all();
       expect(storedEvents).toHaveLength(2);
       expect(storedEvents[1]?.type).toBe("system/manager/user_message");
+      const updatedManagerThread = harness.db
+        .select()
+        .from(threads)
+        .where(eq(threads.id, managerThread.id))
+        .get();
+      expect(updatedManagerThread?.lastReadAt).toBe(1_000);
+      expect(updatedManagerThread?.latestAttentionAt).toBe(2_000);
     } finally {
+      vi.useRealTimers();
       await harness.cleanup();
     }
   });

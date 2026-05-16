@@ -122,6 +122,92 @@ afterEach(() => {
 });
 
 describe("ThreadTimelineRows", () => {
+  it("renders an unread divider before the first row newer than the frozen read cutoff", () => {
+    renderTimelineRows({
+      overrides: {
+        unreadDividerPlacement: { kind: "after-cutoff", cutoffAt: 15 },
+      },
+      timelineRows: [
+        conversationRow({
+          id: "old-message",
+          sourceSeqStart: 10,
+          text: "Read before cutoff",
+        }),
+        conversationRow({
+          id: "new-message",
+          sourceSeqStart: 20,
+          text: "Manager update after cutoff",
+        }),
+      ],
+    });
+
+    const divider = screen.getByRole("separator", { name: "New messages" });
+    const oldMessage = screen.getByText("Read before cutoff");
+    const newMessage = screen.getByText("Manager update after cutoff");
+    expect(
+      oldMessage.compareDocumentPosition(divider) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+    expect(
+      divider.compareDocumentPosition(newMessage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+  });
+
+  it("renders an unread divider before the first row for explicit before-first placement", () => {
+    renderTimelineRows({
+      overrides: {
+        unreadDividerPlacement: { kind: "before-first" },
+      },
+      timelineRows: [
+        conversationRow({
+          id: "first-unread-message",
+          sourceSeqStart: 20,
+          text: "First unread manager update",
+        }),
+      ],
+    });
+
+    const divider = screen.getByRole("separator", { name: "New messages" });
+    const firstMessage = screen.getByText("First unread manager update");
+    expect(
+      divider.compareDocumentPosition(firstMessage) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).not.toBe(0);
+  });
+
+  it("omits the unread divider when no rows are newer than the cutoff", () => {
+    renderTimelineRows({
+      overrides: {
+        unreadDividerPlacement: { kind: "after-cutoff", cutoffAt: 20 },
+      },
+      timelineRows: [
+        conversationRow({
+          id: "read-message",
+          sourceSeqStart: 20,
+          text: "Read manager update",
+        }),
+      ],
+    });
+
+    expect(
+      screen.queryByRole("separator", { name: "New messages" }),
+    ).toBeNull();
+  });
+
+  it("omits the unread divider when before-first placement has no row to precede", () => {
+    renderTimelineRows({
+      overrides: {
+        unreadDividerPlacement: { kind: "before-first" },
+      },
+      timelineRows: [],
+    });
+
+    expect(
+      screen.queryByRole("separator", { name: "New messages" }),
+    ).toBeNull();
+  });
+
   it("keeps same-props timeline rerenders from re-resolving attachment image sources", () => {
     const erroredTurnSummaryIds = new Set<string>();
     const loadingTurnSummaryIds = new Set<string>();
