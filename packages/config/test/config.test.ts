@@ -100,7 +100,7 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
     expect(serverConfig.featureFlags).toEqual({
       askUserQuestion: false,
-      terminals: false,
+      terminals: true,
     });
     expect(serverConfig.BB_INFERENCE_MODEL).toBe("openai/gpt-4o-mini");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");

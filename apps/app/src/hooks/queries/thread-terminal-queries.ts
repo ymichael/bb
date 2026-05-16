@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
+  CloseThreadTerminalRequest,
   CreateThreadTerminalRequest,
   TerminalSession,
   ThreadTerminalListResponse,
@@ -24,6 +25,7 @@ interface RenameThreadTerminalMutationRequest
 }
 
 interface CloseThreadTerminalMutationRequest {
+  mode: CloseThreadTerminalRequest["mode"];
   terminalId: string;
   threadId: string;
 }
@@ -142,12 +144,19 @@ export function useCloseThreadTerminal() {
     meta: {
       errorMessage: "Failed to close terminal.",
     },
-    mutationFn: ({ terminalId, threadId }: CloseThreadTerminalMutationRequest) =>
-      api.closeThreadTerminal(threadId, terminalId, { reason: "user" }),
+    mutationFn: ({
+      mode,
+      terminalId,
+      threadId,
+    }: CloseThreadTerminalMutationRequest) =>
+      api.closeThreadTerminal(threadId, terminalId, { mode, reason: "user" }),
     onSuccess: (session: TerminalSession, variables) => {
       queryClient.setQueryData<ThreadTerminalListResponse>(
         threadTerminalsQueryKey(session.threadId),
-        (current) => removeTerminalSession(current, variables.terminalId),
+        (current) =>
+          session.status === "exited"
+            ? removeTerminalSession(current, variables.terminalId)
+            : upsertTerminalSession(current, session),
       );
       queryClient.invalidateQueries({
         queryKey: threadTerminalsQueryKey(session.threadId),

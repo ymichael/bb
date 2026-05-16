@@ -22,6 +22,9 @@ interface Journal {
   entries: JournalEntry[];
 }
 
+const latestSquashedMigrationWhen = 1779139300000;
+const baselineTag = "0000_baseline";
+
 function readJournal(): Journal {
   return JSON.parse(fs.readFileSync(journalPath, "utf-8")) as Journal;
 }
@@ -71,5 +74,22 @@ describe("migration journal integrity", () => {
     }
 
     expect(missing).toEqual([]);
+  });
+
+  it("keeps post-baseline migrations after the squashed migration history", () => {
+    const { entries } = readJournal();
+    const baseline = entries.find((entry) => entry.tag === baselineTag);
+
+    expect(baseline).toBeDefined();
+
+    const violations = entries
+      .filter((entry) => entry.tag !== baselineTag)
+      .filter((entry) => entry.when <= latestSquashedMigrationWhen)
+      .map(
+        (entry) =>
+          `${entry.tag} has when=${entry.when}, expected > ${latestSquashedMigrationWhen}`,
+      );
+
+    expect(violations).toEqual([]);
   });
 });

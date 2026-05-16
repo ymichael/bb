@@ -11,6 +11,7 @@ import {
   markHostDisconnectedTerminalSessionsExited,
   markTerminalSessionExited,
   markTerminalSessionRunning,
+  markTerminalSessionUserInput,
   markThreadTerminalSessionsExited,
   updateTerminalSessionSize,
   updateTerminalSessionTitle,
@@ -222,6 +223,10 @@ export interface CloseDeletedThreadTerminalsArgs {
   threadId: string;
 }
 
+export interface CloseArchivedThreadTerminalsArgs {
+  threadId: string;
+}
+
 export interface CloseDestroyedEnvironmentTerminalsArgs {
   environmentId: string;
 }
@@ -293,6 +298,7 @@ export function toTerminalSession(row: TerminalSessionRow): TerminalSession {
     closeReason: row.closeReason,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    lastUserInputAt: row.lastUserInputAt,
   };
 }
 
@@ -490,6 +496,9 @@ export class TerminalSessionLifecycle {
     if (current.status === "exited") {
       return toTerminalSession(current);
     }
+    if (args.payload.mode === "if-clean" && current.lastUserInputAt !== null) {
+      return toTerminalSession(current);
+    }
     if (
       current.daemonSessionId !== null &&
       (current.status === "starting" || current.status === "running")
@@ -531,6 +540,27 @@ export class TerminalSessionLifecycle {
     this.publishLifecycleTerminalExits({
       code: "terminal_closed",
       message: "Terminal session closed because the thread was deleted",
+      previousSessionsById: buildTerminalSessionMap(currentSessions),
+      sessions: exitedSessions,
+    });
+  }
+
+  closeArchivedThreadTerminals(args: CloseArchivedThreadTerminalsArgs): void {
+    const currentSessions = listTerminalSessionsByThread(
+      this.options.db,
+      args.threadId,
+    );
+    this.requestTerminalCloses({
+      closeReason: "thread-archived",
+      sessions: currentSessions,
+    });
+    const exitedSessions = markThreadTerminalSessionsExited(this.options.db, {
+      threadId: args.threadId,
+      closeReason: "thread-archived",
+    });
+    this.publishLifecycleTerminalExits({
+      code: "terminal_closed",
+      message: "Terminal session closed because the thread was archived",
       previousSessionsById: buildTerminalSessionMap(currentSessions),
       sessions: exitedSessions,
     });
@@ -686,7 +716,7 @@ export class TerminalSessionLifecycle {
         this.closeThreadTerminal({
           threadId: args.threadId,
           terminalId: args.terminalId,
-          payload: { reason: args.message.reason },
+          payload: { mode: "force", reason: args.message.reason },
         });
         return;
     }
@@ -824,6 +854,18 @@ export class TerminalSessionLifecycle {
     const current = this.getRunningBrowserTerminal(args);
     if (!current) {
       return;
+    }
+    const markedInput = markTerminalSessionUserInput(this.options.db, {
+      terminalId: current.id,
+      threadId: args.threadId,
+    });
+    if (markedInput) {
+      const session = toTerminalSession(markedInput);
+      this.notifyThreadTerminalsChanged(markedInput.threadId);
+      this.options.hub.sendTerminalClientMessage(markedInput.id, {
+        type: "session-updated",
+        session,
+      });
     }
     const sent = this.options.hub.sendDaemonSessionMessage(
       current.daemonSessionId,

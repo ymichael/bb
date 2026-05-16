@@ -21,7 +21,7 @@ import {
   type PublicApiSchema,
 } from "@bb/server-contract";
 import type { Hono } from "hono";
-import type { AppDeps, ServerAppDeps } from "../../types.js";
+import type { AppDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { parseOptionalInteger } from "../../services/lib/validation.js";
 import {
@@ -102,7 +102,7 @@ function buildThreadResponse(
   return response;
 }
 
-export function registerThreadBaseRoutes(app: Hono, deps: ServerAppDeps): void {
+export function registerThreadBaseRoutes(app: Hono, deps: AppDeps): void {
   const { get, post, patch, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });

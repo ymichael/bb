@@ -7,7 +7,7 @@ import { cors } from "hono/cors";
 import { buildLocalAppOrigins } from "@bb/config/local-app-origins";
 import { devEnvConfig } from "@bb/config/dev-env";
 import { serverConfig } from "@bb/config/server";
-import type { AppDeps, ServerAppDeps } from "./types.js";
+import type { AppDeps } from "./types.js";
 import { ApiError, errorToResponse } from "./errors.js";
 import { registerAutomationRoutes } from "./routes/automations.js";
 import { registerEnvironmentRoutes } from "./routes/environments.js";
@@ -140,7 +140,7 @@ function closeWebSocketServer(args: CloseWebSocketServerArgs): Promise<void> {
 }
 
 export function createApp(
-  deps: ServerAppDeps,
+  deps: AppDeps,
   options?: CreateAppOptions,
 ): ServerApp {
   const app = new Hono();

@@ -227,6 +227,7 @@ const terminalCloseReasonSchema = z.enum([
   "process-exit",
   "daemon-disconnect",
   "environment-destroyed",
+  "thread-archived",
   "thread-deleted",
   "open-timeout",
 ]);

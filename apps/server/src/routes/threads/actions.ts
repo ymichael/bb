@@ -63,7 +63,10 @@ function shouldCleanupAfterArchive(
   });
 }
 
-export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
+export function registerThreadActionRoutes(
+  app: Hono,
+  deps: AppDeps,
+): void {
   const { post, del } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
@@ -180,6 +183,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       context.req.param("id"),
     );
     if (thread.archivedAt !== null) {
+      deps.terminalSessions.closeArchivedThreadTerminals({
+        threadId: thread.id,
+      });
       return context.json({ ok: true });
     }
     const shouldRequestCleanup = shouldCleanupAfterArchive(deps, thread);
@@ -188,6 +194,9 @@ export function registerThreadActionRoutes(app: Hono, deps: AppDeps): void {
       throw new ApiError(404, "thread_not_found", "Thread not found");
     }
     const { archivedThread } = archiveResult;
+    deps.terminalSessions.closeArchivedThreadTerminals({
+      threadId: archivedThread.id,
+    });
     requestThreadStopIfNeeded(deps, archivedThread, environment);
     queueSettledArchivedThreadProviderArchiveCommand(deps, {
       threadId: archivedThread.id,

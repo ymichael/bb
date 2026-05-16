@@ -194,6 +194,9 @@ function buildTerminalEnv(args: BuildTerminalEnvArgs): NodeJS.ProcessEnv {
     BB_TERMINAL_SESSION_ID: args.terminalId,
     COLORTERM: "truecolor",
     DISABLE_AUTO_TITLE: "true",
+    // zsh emits a highlighted "%" by default when a prompt follows output
+    // without a newline. It becomes noisy when scrollback is replayed.
+    PROMPT_EOL_MARK: "",
     TERM: "xterm-256color",
   };
 }

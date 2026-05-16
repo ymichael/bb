@@ -14,7 +14,6 @@ import type { Environment, ThreadStatus } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
-  ServerAppDeps,
 } from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
 import {
@@ -51,7 +50,7 @@ interface AdvanceProjectThreadsForDeletionArgs {
 }
 
 type ProjectDeletionDeps = LoggedPendingInteractionWorkSessionDeps &
-  Pick<ServerAppDeps, "terminalSessions">;
+  Pick<AppDeps, "terminalSessions">;
 
 function isProjectDeletionActive(
   deps: Pick<AppDeps, "db">,

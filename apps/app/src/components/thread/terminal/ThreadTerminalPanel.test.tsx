@@ -96,6 +96,7 @@ function makeTerminalSession(
     exitCode: null,
     closeReason: null,
     createdAt: 1,
+    lastUserInputAt: null,
     updatedAt: 1,
     ...overrides,
   };
@@ -141,6 +142,9 @@ async function closeTerminal(
     status: "exited",
     updatedAt: current.updatedAt + 1,
   };
+  if (request.mode === "if-clean" && current.lastUserInputAt !== null) {
+    return current;
+  }
   serverSessions = serverSessions.map((session) => {
     return session.id === terminalId ? closed : session;
   });
@@ -241,6 +245,7 @@ describe("ThreadTerminalPanel", () => {
         THREAD_ID,
         "term_1",
         {
+          mode: "if-clean",
           reason: "user",
         },
       );
@@ -257,6 +262,30 @@ describe("ThreadTerminalPanel", () => {
     expect(apiMocks.closeThreadTerminal).not.toHaveBeenCalled();
   });
 
+  it("closes a clean terminal when the panel is hidden after remount", async () => {
+    const mounted = renderPanel();
+
+    fireEvent.click(screen.getByText("Show panel"));
+    expect(await screen.findByText("Terminal 1")).toBeTruthy();
+
+    mounted.unmount();
+    renderPanel();
+    expect(await screen.findByText("Terminal 1")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Hide panel"));
+
+    await waitFor(() => {
+      expect(apiMocks.closeThreadTerminal).toHaveBeenCalledWith(
+        THREAD_ID,
+        "term_1",
+        {
+          mode: "if-clean",
+          reason: "user",
+        },
+      );
+    });
+  });
+
   it("allows closing the last tab without starting a replacement", async () => {
     serverSessions = [makeTerminalSession()];
     renderPanel();
@@ -271,6 +300,7 @@ describe("ThreadTerminalPanel", () => {
         THREAD_ID,
         "term_1",
         {
+          mode: "force",
           reason: "user",
         },
       );

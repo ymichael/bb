@@ -5,7 +5,7 @@ import {
   type HostDaemonInternalSchema,
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
-import type { ServerAppDeps } from "../types.js";
+import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
 import { runWithDaemonCommandWaitForbidden } from "../services/hosts/command-wait-context.js";
 import { getAuthenticatedDaemon } from "./auth.js";
@@ -14,7 +14,7 @@ import { requireAuthorizedActiveSession } from "./session-state.js";
 
 export function registerInternalCommandResultRoutes(
   app: Hono,
-  deps: ServerAppDeps,
+  deps: AppDeps,
 ): void {
   const { post } = typedRoutes<HostDaemonInternalSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),

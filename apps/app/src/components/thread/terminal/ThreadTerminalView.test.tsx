@@ -142,6 +142,7 @@ const terminalSession: TerminalSession = {
   exitCode: null,
   closeReason: null,
   createdAt: 1,
+  lastUserInputAt: null,
   updatedAt: 1,
 };
 

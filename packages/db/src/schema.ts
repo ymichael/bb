@@ -586,6 +586,7 @@ export const terminalSessions = sqliteTable(
     closeReason: text("close_reason").$type<TerminalSessionCloseReason>(),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
+    lastUserInputAt: integer("last_user_input_at"),
     lastConnectedAt: integer("last_connected_at"),
     exitedAt: integer("exited_at"),
   },

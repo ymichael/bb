@@ -25,7 +25,7 @@ import {
 } from "@bb/domain";
 import type { ThreadEventScope } from "@bb/domain";
 import type { InteractiveLifecycleCoordinationDeps } from "../lifecycle-coordination-deps.js";
-import type { ServerAppDeps } from "../types.js";
+import type { AppDeps } from "../types.js";
 import {
   completeEnvironmentDestroyForCommand,
   failEnvironmentDestroyForCommand,
@@ -65,7 +65,7 @@ import {
 import { tryTransitionInTransaction } from "../services/threads/thread-transitions.js";
 
 export type CommandResultSideEffectsDeps = InteractiveLifecycleCoordinationDeps &
-  Pick<ServerAppDeps, "terminalSessions">;
+  Pick<AppDeps, "terminalSessions">;
 export type CommandResultSettlementDeps = Omit<
   CommandResultSideEffectsDeps,
   "db" | "hub"

@@ -1024,6 +1024,7 @@ export const terminalSessionSchema = z.object({
   closeReason: terminalSessionCloseReasonSchema.nullable(),
   createdAt: z.number().int().nonnegative(),
   updatedAt: z.number().int().nonnegative(),
+  lastUserInputAt: z.number().int().nonnegative().nullable(),
 });
 export type TerminalSession = z.infer<typeof terminalSessionSchema>;
 
@@ -1046,6 +1047,7 @@ export type CreateThreadTerminalRequest = z.infer<
 
 export const closeThreadTerminalRequestSchema = z
   .object({
+    mode: z.enum(["force", "if-clean"]),
     reason: z.literal("user"),
   })
   .strict();

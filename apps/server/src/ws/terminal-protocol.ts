@@ -3,10 +3,10 @@ import {
   terminalServerMessageSchema,
 } from "@bb/server-contract";
 import { ApiError } from "../errors.js";
-import type { ServerAppDeps } from "../types.js";
+import type { AppDeps } from "../types.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
-type TerminalProtocolDeps = Pick<ServerAppDeps, "terminalSessions">;
+type TerminalProtocolDeps = Pick<AppDeps, "terminalSessions">;
 
 interface TerminalSocket {
   close(code?: number, reason?: string): void;

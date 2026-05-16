@@ -7,6 +7,7 @@ import {
   listTerminalSessionsByThread,
   markDaemonTerminalSessionsDisconnected,
   markEnvironmentTerminalSessionsExited,
+  markTerminalSessionUserInput,
   markTerminalSessionRunning,
   markThreadTerminalSessionsExited,
 } from "../../src/data/terminal-sessions.js";
@@ -149,6 +150,35 @@ describe("terminal sessions", () => {
         closeReason: "thread-deleted",
         daemonSessionId: null,
         status: "exited",
+      }),
+    ]);
+  });
+
+  it("marks a terminal dirty on first user input only", () => {
+    const fixture = setup();
+    const terminal = createStartingTerminal(fixture);
+
+    const firstInput = markTerminalSessionUserInput(fixture.db, {
+      terminalId: terminal.id,
+      threadId: fixture.thread.id,
+      now: 10,
+    });
+    const secondInput = markTerminalSessionUserInput(fixture.db, {
+      terminalId: terminal.id,
+      threadId: fixture.thread.id,
+      now: 20,
+    });
+
+    expect(firstInput).toMatchObject({
+      id: terminal.id,
+      lastUserInputAt: 10,
+      updatedAt: 10,
+    });
+    expect(secondInput).toBeNull();
+    expect(listTerminalSessionsByThread(fixture.db, fixture.thread.id)).toEqual([
+      expect.objectContaining({
+        id: terminal.id,
+        lastUserInputAt: 10,
       }),
     ]);
   });

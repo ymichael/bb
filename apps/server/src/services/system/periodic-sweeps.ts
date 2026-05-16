@@ -32,7 +32,6 @@ import { activeLifecycleOperationStates } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
-  ServerAppDeps,
   LoggedWorkSessionDeps,
 } from "../../types.js";
 import { sweepDueAutomations } from "../scheduling/automation-sweep.js";
@@ -140,7 +139,7 @@ export async function runManagedEnvironmentArchiveCleanupSweep(
 
 export async function runProjectDeletionSweep(
   deps: Pick<
-    ServerAppDeps,
+    AppDeps,
     | "config"
     | "db"
     | "hostLifecycle"
@@ -311,7 +310,7 @@ export async function runThreadLifecycleSweep(
 
 export async function runPeriodicSweeps(
   deps: Pick<
-    ServerAppDeps,
+    AppDeps,
     | "config"
     | "db"
     | "hostLifecycle"

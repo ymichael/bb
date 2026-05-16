@@ -13,7 +13,7 @@ import {
 import { DAEMON_DISCONNECT_GRACE_MS } from "../constants.js";
 import { ApiError } from "../errors.js";
 import { verifyAuthenticatedDaemon } from "../internal/auth.js";
-import type { AppDeps, ServerAppDeps } from "../types.js";
+import type { AppDeps } from "../types.js";
 import { requireAuthorizedActiveSession } from "../internal/session-state.js";
 import { decodeSocketPayload } from "./decode-payload.js";
 
@@ -65,7 +65,7 @@ export async function validateDaemonWebSocket(
 }
 
 export function onDaemonSocketOpen(
-  deps: Pick<ServerAppDeps, "config" | "hub" | "logger" | "terminalSessions">,
+  deps: Pick<AppDeps, "config" | "hub" | "logger" | "terminalSessions">,
   args: { hostId: string; sessionId: string; socket: DaemonSocket },
 ): void {
   deps.logger.info(
@@ -82,7 +82,7 @@ export function onDaemonSocketOpen(
 }
 
 export function onDaemonSocketMessage(
-  deps: Pick<ServerAppDeps, "config" | "db" | "logger" | "terminalSessions">,
+  deps: Pick<AppDeps, "config" | "db" | "logger" | "terminalSessions">,
   args: DaemonSocketMessageArgs,
 ): void {
   let decoded: unknown;
@@ -144,7 +144,7 @@ export function onDaemonSocketMessage(
 
 export function onDaemonSocketClose(
   deps: Pick<
-    ServerAppDeps,
+    AppDeps,
     "db" | "hub" | "logger" | "pendingInteractions" | "terminalSessions"
   >,
   sessionId: string,

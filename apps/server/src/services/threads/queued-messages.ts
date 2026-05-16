@@ -16,7 +16,10 @@ import type {
   SendMessageRequest,
   SendQueuedMessageMode,
 } from "@bb/server-contract";
-import type { AppDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedPendingInteractionWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { scheduleAfterDaemonIngressResponse } from "../hosts/command-wait-context.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
@@ -142,7 +145,7 @@ function isQueuedMessageClaimLostError(error: unknown): boolean {
 }
 
 async function sendClaimedQueuedMessage(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageArgs,
 ): Promise<ThreadQueuedMessage> {
   const { thread } = requireThreadEnvironment(deps.db, args.threadId);
@@ -154,7 +157,7 @@ async function sendClaimedQueuedMessage(
 }
 
 async function sendClaimedQueuedMessageForIdleProviderThread(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage | null> {
   if (args.mode !== "auto") {
@@ -269,7 +272,7 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
 }
 
 async function sendClaimedQueuedMessageForThread(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendClaimedQueuedMessageForThreadArgs,
 ): Promise<ThreadQueuedMessage> {
   const sent = await sendClaimedQueuedMessageForIdleProviderThread(deps, args);
@@ -299,7 +302,7 @@ async function sendClaimedQueuedMessageForThread(
 }
 
 export async function sendQueuedMessage(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendQueuedMessageArgs,
 ): Promise<ThreadQueuedMessage> {
   const queuedMessage = claimQueuedThreadMessageForSend(deps, args);
@@ -319,7 +322,7 @@ export async function sendQueuedMessage(
 }
 
 export async function sendNextQueuedMessageIfPresent(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: { threadId: string },
 ): Promise<boolean> {
   const thread = getThread(deps.db, args.threadId);
@@ -369,7 +372,7 @@ export async function sendNextQueuedMessageIfPresent(
 }
 
 export async function runQueuedMessageAutoSendForThread(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueuedMessageAutoSendArgs,
 ): Promise<void> {
   await deps.lifecycleDedupers.queuedMessageAutoSend.run(
@@ -383,7 +386,7 @@ export async function runQueuedMessageAutoSendForThread(
 }
 
 export function requestQueuedMessageAutoSendForThread(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueuedMessageAutoSendRequestArgs,
 ): void {
   scheduleAfterDaemonIngressResponse({
@@ -401,7 +404,7 @@ export function requestQueuedMessageAutoSendForThread(
 }
 
 export async function runQueuedMessageAutoSendSweep(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
   releaseStaleQueuedMessageClaims(deps.db, deps.hub, {
     claimedBefore: Date.now() - STALE_QUEUED_MESSAGE_CLAIM_MS,

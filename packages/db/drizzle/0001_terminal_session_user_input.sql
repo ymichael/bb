@@ -1,0 +1,1 @@
+ALTER TABLE `terminal_sessions` ADD `last_user_input_at` integer;

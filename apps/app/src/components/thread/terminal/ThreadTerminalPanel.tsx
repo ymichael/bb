@@ -37,10 +37,6 @@ interface TerminalTabProps {
   session: TerminalSession;
 }
 
-interface StartTerminalArgs {
-  markUnused: boolean;
-}
-
 interface NormalizeTerminalTitleArgs {
   title: string;
 }
@@ -163,8 +159,8 @@ export function ThreadTerminalPanel({
   const panelState = useThreadTerminalPanelState(threadId);
   const updatePanelState = useUpdateThreadTerminalPanelState(threadId);
   const setPanelOpen = useSetThreadTerminalPanelOpen(threadId);
-  const unusedTerminalIdsRef = useRef<Set<string>>(new Set());
-  const closingUnusedTerminalIdsRef = useRef<Set<string>>(new Set());
+  const dirtyTerminalIdsRef = useRef<Set<string>>(new Set());
+  const closingCleanTerminalIdsRef = useRef<Set<string>>(new Set());
   const wasPanelOpenRef = useRef(panelState.isOpen);
   const latestRequestedTitleRenameRef =
     useRef<TerminalTitleRenameRequest | null>(null);
@@ -222,7 +218,7 @@ export function ThreadTerminalPanel({
   }, []);
 
   const startTerminal = useCallback(
-    (args: StartTerminalArgs) => {
+    () => {
       if (!canCreateTerminal || createTerminal.isPending) {
         return;
       }
@@ -234,9 +230,6 @@ export function ThreadTerminalPanel({
         },
         {
           onSuccess: (session) => {
-            if (args.markUnused) {
-              unusedTerminalIdsRef.current.add(session.id);
-            }
             updatePanelState((current) => ({
               ...current,
               activeTerminalId: session.id,
@@ -264,7 +257,7 @@ export function ThreadTerminalPanel({
       return;
     }
     setShouldAutoStartOnOpen(false);
-    startTerminal({ markUnused: true });
+    startTerminal();
   }, [
     canCreateTerminal,
     createTerminal.isPending,
@@ -282,18 +275,18 @@ export function ThreadTerminalPanel({
     }
     for (const session of visibleSessions) {
       if (
-        !unusedTerminalIdsRef.current.has(session.id) ||
-        closingUnusedTerminalIdsRef.current.has(session.id)
+        session.lastUserInputAt !== null ||
+        dirtyTerminalIdsRef.current.has(session.id) ||
+        closingCleanTerminalIdsRef.current.has(session.id)
       ) {
         continue;
       }
-      closingUnusedTerminalIdsRef.current.add(session.id);
+      closingCleanTerminalIdsRef.current.add(session.id);
       closeTerminal.mutate(
-        { threadId, terminalId: session.id },
+        { mode: "if-clean", threadId, terminalId: session.id },
         {
           onSettled: () => {
-            closingUnusedTerminalIdsRef.current.delete(session.id);
-            unusedTerminalIdsRef.current.delete(session.id);
+            closingCleanTerminalIdsRef.current.delete(session.id);
           },
         },
       );
@@ -301,7 +294,7 @@ export function ThreadTerminalPanel({
   }, [closeTerminal, panelState.isOpen, threadId, visibleSessions]);
 
   const handleCreateTerminal = useCallback(() => {
-    startTerminal({ markUnused: true });
+    startTerminal();
   }, [startTerminal]);
 
   const handleSelectTerminal = useCallback(
@@ -318,11 +311,11 @@ export function ThreadTerminalPanel({
   const handleCloseTerminal = useCallback(
     (terminalId: string) => {
       closeTerminal.mutate(
-        { threadId, terminalId },
+        { mode: "force", threadId, terminalId },
         {
           onSuccess: () => {
-            unusedTerminalIdsRef.current.delete(terminalId);
-            closingUnusedTerminalIdsRef.current.delete(terminalId);
+            dirtyTerminalIdsRef.current.delete(terminalId);
+            closingCleanTerminalIdsRef.current.delete(terminalId);
           },
         },
       );
@@ -334,7 +327,7 @@ export function ThreadTerminalPanel({
     if (!activeTerminalId) {
       return;
     }
-    unusedTerminalIdsRef.current.delete(activeTerminalId);
+    dirtyTerminalIdsRef.current.add(activeTerminalId);
   }, [activeTerminalId]);
 
   const handleActiveTerminalTitleChange: TerminalTitleChangeHandler =

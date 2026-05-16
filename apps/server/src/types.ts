@@ -30,9 +30,6 @@ export interface AppDeps {
   logger: ServerLogger;
   machineAuth: MachineAuthService;
   pendingInteractions: PendingInteractionLifecycle;
-}
-
-export interface ServerAppDeps extends AppDeps {
   terminalSessions: TerminalSessionLifecycle;
 }
 

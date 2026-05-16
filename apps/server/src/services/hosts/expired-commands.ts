@@ -4,7 +4,7 @@ import {
   type HostDaemonCommand,
   type HostDaemonCommandResultReport,
 } from "@bb/host-daemon-contract";
-import type { ServerAppDeps } from "../../types.js";
+import type { AppDeps } from "../../types.js";
 import {
   buildCommandResultSettlementDeps,
   handleCommandResultSideEffects,
@@ -25,7 +25,7 @@ type LifecycleFailureReport =
   | Extract<HostDaemonCommandResultReport, { type: "interactive.resolve" }>;
 
 type ExpiredCommandDeps = Pick<
-  ServerAppDeps,
+  AppDeps,
   | "config"
   | "db"
   | "hostLifecycle"

@@ -9,7 +9,10 @@ import type {
 } from "@bb/domain";
 import type { SendMessageRequest } from "@bb/server-contract";
 import { renderTemplate } from "@bb/templates";
-import type { AppDeps } from "../../types.js";
+import type {
+  AppDeps,
+  LoggedPendingInteractionWorkSessionDeps,
+} from "../../types.js";
 import { ApiError } from "../../errors.js";
 import {
   buildExecutionOptions,
@@ -180,7 +183,7 @@ function formatAgentThreadInput(
 }
 
 export async function sendThreadMessage(
-  deps: AppDeps,
+  deps: LoggedPendingInteractionWorkSessionDeps,
   args: SendThreadMessageArgs,
 ): Promise<void> {
   const { environment, payload, thread } = args;

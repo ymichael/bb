@@ -1,4 +1,4 @@
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type {
   TerminalSessionCloseReason,
   TerminalSessionStatus,
@@ -64,6 +64,12 @@ export interface MarkTerminalSessionExitedArgs {
   terminalId: string;
 }
 
+export interface MarkTerminalSessionUserInputArgs {
+  now?: number;
+  terminalId: string;
+  threadId: string;
+}
+
 export interface MarkDaemonTerminalSessionExitedArgs {
   closeReason: TerminalSessionCloseReason;
   daemonSessionId: string;
@@ -127,6 +133,7 @@ export function createTerminalSession(
       closeReason: null,
       createdAt: now,
       updatedAt: now,
+      lastUserInputAt: null,
       lastConnectedAt: input.daemonSessionId === null ? null : now,
       exitedAt: null,
     })
@@ -265,6 +272,30 @@ export function updateTerminalSessionSize(
         and(
           eq(terminalSessions.id, args.terminalId),
           eq(terminalSessions.threadId, args.threadId),
+        ),
+      )
+      .returning()
+      .get() ?? null
+  );
+}
+
+export function markTerminalSessionUserInput(
+  db: TerminalSessionWriteConnection,
+  args: MarkTerminalSessionUserInputArgs,
+): TerminalSessionRow | null {
+  const now = args.now ?? Date.now();
+  return (
+    db
+      .update(terminalSessions)
+      .set({
+        lastUserInputAt: now,
+        updatedAt: now,
+      })
+      .where(
+        and(
+          eq(terminalSessions.id, args.terminalId),
+          eq(terminalSessions.threadId, args.threadId),
+          isNull(terminalSessions.lastUserInputAt),
         ),
       )
       .returning()
