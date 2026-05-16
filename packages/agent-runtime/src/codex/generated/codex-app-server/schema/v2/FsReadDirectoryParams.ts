@@ -6,7 +6,7 @@ import type { AbsolutePathBuf } from "../AbsolutePathBuf.js";
 /**
  * List direct child names for a directory.
  */
-export type FsReadDirectoryParams = { 
+export type FsReadDirectoryParams = {
 /**
  * Absolute directory path to read.
  */

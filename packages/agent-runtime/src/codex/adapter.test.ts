@@ -13,6 +13,8 @@ import { turnScope } from "@bb/domain";
 
 import { createCodexProviderAdapter } from "./adapter.js";
 import type { CodexEvent } from "./adapter.js";
+import type { ThreadItem } from "./generated/codex-app-server/schema/v2/ThreadItem.js";
+import type { Turn } from "./generated/codex-app-server/schema/v2/Turn.js";
 import { ProviderRequestDecodeError } from "../runtime-json-rpc.js";
 import type {
   AdapterCommand,
@@ -92,6 +94,13 @@ interface AcceptThreadCommandArgs {
   adapter: CodexProviderAdapter;
   command: ThreadResumeAdapterCommand | ThreadStartAdapterCommand;
   providerThreadId: string;
+}
+
+interface CodexTurnArgs {
+  error: Turn["error"];
+  id: string;
+  items?: ThreadItem[];
+  status: Turn["status"];
 }
 
 const optionalGitRootEscapeCases: readonly OptionalGitRootEscapeCase[] = [
@@ -236,6 +245,19 @@ function acceptThreadCommand(args: AcceptThreadCommandArgs): void {
   });
 }
 
+function codexTurn(args: CodexTurnArgs): Turn {
+  return {
+    id: args.id,
+    items: args.items ?? [],
+    itemsView: "full",
+    status: args.status,
+    error: args.error,
+    startedAt: 0,
+    completedAt: null,
+    durationMs: null,
+  };
+}
+
 describe("codex provider adapter", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -313,7 +335,7 @@ describe("codex provider adapter", () => {
       adapter.translateEvent(
         codexEvent("turn/started", {
           threadId: "provider-thread-1",
-          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+          turn: codexTurn({ id: "turn-1", status: "inProgress", error: null }),
         }),
       ),
     ).toEqual([
@@ -336,6 +358,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "provider-thread-1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "userMessage",
           id: "provider-user-1",
@@ -368,7 +391,7 @@ describe("codex provider adapter", () => {
       adapter.translateEvent(
         codexEvent("turn/started", {
           threadId: "provider-thread-1",
-          turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+          turn: codexTurn({ id: "turn-1", status: "inProgress", error: null }),
         }),
       ),
     ).toEqual([
@@ -388,6 +411,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "provider-thread-1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "userMessage",
           id: "provider-user-1",
@@ -1615,7 +1639,6 @@ describe("codex provider adapter", () => {
         sandboxPolicy: {
           type: "workspaceWrite",
           writableRoots: [],
-          readOnlyAccess: { type: "fullAccess" },
           networkAccess: true,
           excludeTmpdirEnvVar: false,
           excludeSlashTmp: false,
@@ -1676,7 +1699,6 @@ describe("codex provider adapter", () => {
         approvalPolicy: "on-request",
         sandboxPolicy: {
           type: "readOnly",
-          access: { type: "fullAccess" },
           networkAccess: false,
         },
       },
@@ -1777,7 +1799,7 @@ describe("codex provider adapter", () => {
     const events = adapter.translateEvent(
       codexEvent("turn/started", {
         threadId: "t1",
-        turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+        turn: codexTurn({ id: "turn-1", status: "inProgress", error: null }),
       }),
     );
     expect(events).toContainEqual(
@@ -1796,7 +1818,7 @@ describe("codex provider adapter", () => {
       method: "turn/started",
       params: {
         threadId: "t1",
-        turn: { id: "turn-1", items: [], status: "inProgress", error: null },
+        turn: codexTurn({ id: "turn-1", status: "inProgress", error: null }),
       },
     });
 
@@ -1847,16 +1869,15 @@ describe("codex provider adapter", () => {
     const events = adapter.translateEvent(
       codexEvent("turn/completed", {
         threadId: "t1",
-        turn: {
+        turn: codexTurn({
           id: "turn-1",
-          items: [],
           status: "failed",
           error: {
             message: "rate limited",
             codexErrorInfo: null,
             additionalDetails: "try again",
           },
-        },
+        }),
       }),
     );
     expect(events).toContainEqual(
@@ -1875,7 +1896,7 @@ describe("codex provider adapter", () => {
     const events = adapter.translateEvent(
       codexEvent("turn/completed", {
         threadId: "t1",
-        turn: { id: "turn-1", items: [], status: "interrupted", error: null },
+        turn: codexTurn({ id: "turn-1", status: "interrupted", error: null }),
       }),
     );
     expect(events).toContainEqual(
@@ -1894,6 +1915,8 @@ describe("codex provider adapter", () => {
       codexEvent("thread/started", {
         thread: {
           id: "codex-uuid-123",
+          sessionId: "session-1",
+          forkedFromId: null,
           preview: "Fix the tests",
           ephemeral: false,
           modelProvider: "openai",
@@ -1904,6 +1927,7 @@ describe("codex provider adapter", () => {
           cwd: "/tmp",
           cliVersion: "0.1",
           source: "appServer",
+          threadSource: null,
           agentNickname: null,
           agentRole: null,
           gitInfo: null,
@@ -1999,6 +2023,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "agentMessage",
           id: "item-1",
@@ -2025,6 +2050,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "userMessage",
           id: "user-1",
@@ -2046,6 +2072,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "imageView",
           id: "image-1",
@@ -2124,12 +2151,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "ls -la",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "file1\nfile2",
@@ -2202,12 +2231,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "echo hi",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "OUT-2\nOUT-3\n",
@@ -2273,12 +2304,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "printf 'prefix\\nOutput:\\nsuffix\\n'",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "Output:\nsuffix\n",
@@ -2339,12 +2372,14 @@ describe("codex provider adapter", () => {
         codexEvent("item/completed", {
           threadId: "t1",
           turnId: "turn-1",
+          completedAtMs: 0,
           item: {
             type: "commandExecution",
             id: callId,
             command: "echo alias",
             cwd: "/tmp",
             processId: null,
+            source: "agent",
             status: "completed",
             commandActions: [],
             aggregatedOutput: "",
@@ -2402,12 +2437,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "printf 'Chunk ID: abc\\nactual stdout\\n'",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "actual stdout\n",
@@ -2468,12 +2505,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "echo hi",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "provider output\n",
@@ -2552,12 +2591,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-a",
           command: "first",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "A-2\nA-3\n",
@@ -2570,12 +2611,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-b",
           command: "second",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "B-2\nB-3\n",
@@ -2666,7 +2709,7 @@ describe("codex provider adapter", () => {
     adapter.translateEvent(
       codexEvent("turn/completed", {
         threadId: "thread-a",
-        turn: { id: "turn-a", items: [], status: "completed", error: null },
+        turn: codexTurn({ id: "turn-a", status: "completed", error: null }),
       }),
     );
 
@@ -2674,12 +2717,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "thread-b",
         turnId: "turn-b",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-b",
           command: "second",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "B-2\n",
@@ -2742,12 +2787,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "thread-a",
         turnId: "turn-a",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-a",
           command: "echo hi",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "completed",
           commandActions: [],
           aggregatedOutput: "provider output\n",
@@ -2778,12 +2825,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "ls -la",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "declined",
           commandActions: [],
           aggregatedOutput: null,
@@ -2815,12 +2864,14 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "commandExecution",
           id: "cmd-1",
           command: "ls -la",
           cwd: "/tmp",
           processId: null,
+          source: "agent",
           status: "declined",
           commandActions: [],
           aggregatedOutput: null,
@@ -2853,6 +2904,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "fileChange",
           id: "fc-1",
@@ -2895,6 +2947,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "mcpToolCall",
           id: "mcp-1",
@@ -2932,6 +2985,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "fileChange",
           id: "edit-1",
@@ -2969,9 +3023,11 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "dynamicToolCall",
           id: "dyn-1",
+          namespace: null,
           tool: "bb_test_ping",
           arguments: {},
           status: "completed",
@@ -3010,6 +3066,7 @@ describe("codex provider adapter", () => {
         item: {
           type: "dynamicToolCall",
           id: "dyn-err-1",
+          namespace: null,
           tool: "bb_test_ping",
           arguments: {},
           status: "failed",
@@ -3043,9 +3100,11 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "dynamicToolCall",
           id: "dyn-img-1",
+          namespace: null,
           tool: "bb_test_image",
           arguments: {},
           status: "failed",
@@ -3084,6 +3143,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "collabAgentToolCall",
           id: "collab-1",
@@ -3170,6 +3230,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-1",
@@ -3200,6 +3261,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-start-1",
@@ -3239,6 +3301,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-open-start-1",
@@ -3272,6 +3335,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-find-start-1",
@@ -3309,6 +3373,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-open-1",
@@ -3347,6 +3412,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-find-1",
@@ -3389,6 +3455,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-placeholder-1",
@@ -3407,6 +3474,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-placeholder-completed-1",
@@ -3425,6 +3493,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "webSearch",
           id: "web-open-missing-url-1",
@@ -3455,6 +3524,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "reasoning",
           id: "reasoning-1",
@@ -3485,6 +3555,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/completed", {
         threadId: "t1",
         turnId: "turn-1",
+        completedAtMs: 0,
         item: {
           type: "plan",
           id: "plan-1",
@@ -3513,6 +3584,7 @@ describe("codex provider adapter", () => {
       codexEvent("item/started", {
         threadId: "t1",
         turnId: "turn-1",
+        startedAtMs: 0,
         item: {
           type: "contextCompaction",
           id: "compact-1",
@@ -3797,6 +3869,7 @@ describe("codex provider adapter", () => {
           secondary: null,
           credits: null,
           planType: null,
+          rateLimitReachedType: null,
         },
       }),
     );

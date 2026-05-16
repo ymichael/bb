@@ -201,7 +201,6 @@ function toWorkspaceWriteCodexSandboxPolicy(
   return {
     type: "workspaceWrite",
     writableRoots: [...writableRoots],
-    readOnlyAccess: { type: "fullAccess" },
     networkAccess: true,
     excludeTmpdirEnvVar: false,
     excludeSlashTmp: false,
@@ -211,7 +210,6 @@ function toWorkspaceWriteCodexSandboxPolicy(
 function toReadonlyCodexSandboxPolicy(): SandboxPolicy {
   return {
     type: "readOnly",
-    access: { type: "fullAccess" },
     networkAccess: false,
   };
 }
