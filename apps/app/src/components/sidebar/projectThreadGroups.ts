@@ -34,13 +34,14 @@ function compareByCreatedAtDescending(
   return left.id.localeCompare(right.id);
 }
 
-function compareByUpdatedAtDescending(
+function compareByLatestAttentionAtDescending(
   left: ThreadListEntry,
   right: ThreadListEntry,
 ): number {
-  const updatedAtDelta = right.updatedAt - left.updatedAt;
-  if (updatedAtDelta !== 0) {
-    return updatedAtDelta;
+  const latestAttentionAtDelta =
+    right.latestAttentionAt - left.latestAttentionAt;
+  if (latestAttentionAtDelta !== 0) {
+    return latestAttentionAtDelta;
   }
 
   return compareByCreatedAtDescending(left, right);
@@ -52,7 +53,8 @@ function compareStandardThreads(
 ): number {
   // Use durable thread.status for the active bucket, not ephemeral runtime
   // display state. Active rows stream frequent updates, so pin their position
-  // to createdAt; inactive rows use updatedAt recency.
+  // to createdAt; inactive rows use attention recency so read/archive metadata
+  // updates do not reshuffle the sidebar.
   const leftIsActive = left.status === "active";
   const rightIsActive = right.status === "active";
 
@@ -64,7 +66,7 @@ function compareStandardThreads(
     return compareByCreatedAtDescending(left, right);
   }
 
-  return compareByUpdatedAtDescending(left, right);
+  return compareByLatestAttentionAtDescending(left, right);
 }
 
 function getKnownManagerParentId({

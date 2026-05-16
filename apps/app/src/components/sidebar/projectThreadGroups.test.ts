@@ -47,6 +47,7 @@ describe("buildProjectThreadGroups", () => {
       createThread({
         id: "root-old",
         createdAt: 10,
+        latestAttentionAt: 10,
         updatedAt: 10,
       }),
       createThread({
@@ -65,6 +66,7 @@ describe("buildProjectThreadGroups", () => {
         id: "child-busy",
         parentThreadId: "manager-old",
         createdAt: 50,
+        latestAttentionAt: 80,
         updatedAt: 80,
         runtime: {
           displayStatus: "active",
@@ -75,12 +77,14 @@ describe("buildProjectThreadGroups", () => {
         id: "child-idle",
         parentThreadId: "manager-old",
         createdAt: 30,
+        latestAttentionAt: 90,
         updatedAt: 90,
       }),
       createThread({
         id: "orphan-child",
         parentThreadId: "missing-manager",
         createdAt: 60,
+        latestAttentionAt: 70,
         updatedAt: 70,
       }),
     ]);
@@ -108,12 +112,13 @@ describe("buildProjectThreadGroups", () => {
     ]);
   });
 
-  it("sorts unmanaged standard threads with active rows before inactive recency", () => {
+  it("sorts unmanaged standard threads with active rows before inactive attention recency", () => {
     const groups = buildProjectThreadGroups([
       createThread({
         id: "active-older-created",
         status: "active",
         createdAt: 10,
+        latestAttentionAt: 2_000,
         updatedAt: 1_000,
         runtime: {
           displayStatus: "active",
@@ -124,6 +129,7 @@ describe("buildProjectThreadGroups", () => {
         id: "active-newer-created",
         status: "active",
         createdAt: 20,
+        latestAttentionAt: 1_500,
         updatedAt: 500,
         runtime: {
           displayStatus: "active",
@@ -131,13 +137,15 @@ describe("buildProjectThreadGroups", () => {
         },
       }),
       createThread({
-        id: "idle-newer-update",
+        id: "idle-newer-attention",
         createdAt: 40,
+        latestAttentionAt: 900,
         updatedAt: 900,
       }),
       createThread({
-        id: "idle-older-update",
+        id: "idle-older-attention",
         createdAt: 30,
+        latestAttentionAt: 750,
         updatedAt: 750,
       }),
     ]);
@@ -145,8 +153,30 @@ describe("buildProjectThreadGroups", () => {
     expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
       "active-newer-created",
       "active-older-created",
-      "idle-newer-update",
-      "idle-older-update",
+      "idle-newer-attention",
+      "idle-older-attention",
+    ]);
+  });
+
+  it("keeps inactive rows stable when only maintenance updatedAt changes", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "older-attention-recently-maintained",
+        createdAt: 10,
+        latestAttentionAt: 100,
+        updatedAt: 1_000,
+      }),
+      createThread({
+        id: "newer-attention",
+        createdAt: 20,
+        latestAttentionAt: 200,
+        updatedAt: 300,
+      }),
+    ]);
+
+    expect(threadIds(groups.unmanagedStandardThreads)).toEqual([
+      "newer-attention",
+      "older-attention-recently-maintained",
     ]);
   });
 
@@ -175,21 +205,25 @@ describe("buildProjectThreadGroups", () => {
       createThread({
         id: "idle-created-a",
         createdAt: 10,
+        latestAttentionAt: 400,
         updatedAt: 400,
       }),
       createThread({
         id: "idle-created-b",
         createdAt: 20,
+        latestAttentionAt: 400,
         updatedAt: 400,
       }),
       createThread({
         id: "idle-id-b",
         createdAt: 5,
+        latestAttentionAt: 300,
         updatedAt: 300,
       }),
       createThread({
         id: "idle-id-a",
         createdAt: 5,
+        latestAttentionAt: 300,
         updatedAt: 300,
       }),
     ]);
@@ -204,7 +238,7 @@ describe("buildProjectThreadGroups", () => {
     ]);
   });
 
-  it("sorts managed children with active rows before inactive recency", () => {
+  it("sorts managed children with active rows before inactive attention recency", () => {
     const groups = buildProjectThreadGroups([
       createThread({
         id: "manager",
@@ -215,6 +249,7 @@ describe("buildProjectThreadGroups", () => {
         parentThreadId: "manager",
         status: "active",
         createdAt: 10,
+        latestAttentionAt: 2_000,
         updatedAt: 5_000,
         runtime: {
           displayStatus: "active",
@@ -226,6 +261,7 @@ describe("buildProjectThreadGroups", () => {
         parentThreadId: "manager",
         status: "active",
         createdAt: 20,
+        latestAttentionAt: 1_500,
         updatedAt: 500,
         runtime: {
           displayStatus: "active",
@@ -233,15 +269,17 @@ describe("buildProjectThreadGroups", () => {
         },
       }),
       createThread({
-        id: "idle-newer-update-child",
+        id: "idle-newer-attention-child",
         parentThreadId: "manager",
         createdAt: 40,
+        latestAttentionAt: 900,
         updatedAt: 900,
       }),
       createThread({
-        id: "idle-older-update-child",
+        id: "idle-older-attention-child",
         parentThreadId: "manager",
         createdAt: 30,
+        latestAttentionAt: 750,
         updatedAt: 750,
       }),
     ]);
@@ -251,8 +289,8 @@ describe("buildProjectThreadGroups", () => {
     ).toEqual([
       "active-newer-created-child",
       "active-older-created-child",
-      "idle-newer-update-child",
-      "idle-older-update-child",
+      "idle-newer-attention-child",
+      "idle-older-attention-child",
     ]);
   });
 
