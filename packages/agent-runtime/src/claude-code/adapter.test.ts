@@ -100,6 +100,49 @@ describe("claude-code provider adapter", () => {
     ]);
   });
 
+  it("queues accepted turn starts after a completed turn until the next turn starts", () => {
+    const adapter = createClaudeCodeProviderAdapter();
+
+    adapter.translateEvent(loadFixture("assistant-text.json"), {
+      threadId: "bb-thread-1",
+    });
+    adapter.translateEvent(loadFixture("result-success.json"), {
+      threadId: "bb-thread-1",
+    });
+
+    expect(
+      adapter.translateAcceptedCommand({
+        command: {
+          type: "turn/start",
+          threadId: "bb-thread-1",
+          providerThreadId: "claude-session-1",
+          clientRequestId: "creq_23456789ae",
+          input: [{ type: "text", text: "new turn" }],
+          options: fullProviderExecutionContext,
+        },
+      }),
+    ).toEqual([]);
+
+    const nextTurnEvents = adapter.translateEvent(
+      loadFixture("assistant-text.json"),
+      { threadId: "bb-thread-1" },
+    );
+
+    expect(nextTurnEvents).toContainEqual({
+      type: "turn/started",
+      threadId: "",
+      providerThreadId: "",
+      scope: turnScope("turn-2"),
+    });
+    expect(nextTurnEvents).toContainEqual({
+      type: "turn/input/accepted",
+      threadId: "",
+      providerThreadId: "",
+      scope: turnScope("turn-2"),
+      clientRequestId: "creq_23456789ae",
+    });
+  });
+
   // -- buildCommand --------------------------------------------------------
 
   it("buildCommand returns an unsupported no-op for thread/name/set", () => {

@@ -663,6 +663,99 @@ describe("buildThreadTimeline", () => {
     ]);
   });
 
+  it("builds a paged timeline when the selected window needs an earlier turn start", async () => {
+    const harness = await createTestAppHarness();
+    harnesses.push(harness);
+
+    const { environmentId, thread } = seedTimelineThread(harness, {
+      status: "idle",
+      type: "standard",
+    });
+
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 1,
+      requestId: "creq_23456789ab",
+      text: "Initial request",
+      target: { kind: "thread-start" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 2,
+      type: "turn/started",
+      data: {},
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      sequence: 3,
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_23456789ab",
+      },
+    });
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 4,
+      requestId: "creq_3456789abc",
+      text: "Boundary request",
+      target: { kind: "new-turn" },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 5,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-1"),
+      type: "turn/input/accepted",
+      data: {
+        clientRequestId: "creq_3456789abc",
+      },
+    });
+    seedEvent(harness.deps, {
+      threadId: thread.id,
+      environmentId,
+      providerThreadId: "provider-thread-1",
+      scope: turnScope("turn-2"),
+      sequence: 6,
+      type: "turn/started",
+      data: {},
+    });
+    seedTimelineClientTurnRequested(harness, {
+      threadId: thread.id,
+      environmentId,
+      sequence: 7,
+      requestId: "creq_456789abcd",
+      text: "Latest request",
+      target: { kind: "new-turn" },
+    });
+
+    const latestPage = buildThreadTimeline(harness.db, thread, {
+      isDevelopment: true,
+      page: {
+        kind: "latest",
+        segmentLimit: 1,
+      },
+    });
+    const userRows = latestPage.rows.filter(
+      (row) => row.kind === "conversation" && row.role === "user",
+    );
+
+    expect(latestPage.timelinePage).toMatchObject({
+      kind: "latest",
+      returnedSegmentCount: 1,
+      hasOlderRows: true,
+    });
+    expect(userRows.map((row) => row.text)).toEqual(["Latest request"]);
+  });
+
   it("keeps pending steers inside the active primary message segment", async () => {
     const harness = await createTestAppHarness();
     harnesses.push(harness);

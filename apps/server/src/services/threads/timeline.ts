@@ -200,6 +200,11 @@ interface TimelineEventRowSelection {
   strategy: ThreadTimelineEventSelectionStrategy;
 }
 
+interface EnsureTimelineWindowTurnStartedRowsArgs {
+  rows: readonly StoredEventRow[];
+  threadId: string;
+}
+
 export interface ResolveThreadTimelineServiceViewModeArgs {
   managerTimelineView: ManagerTimelineView | undefined;
   thread: Thread;
@@ -510,6 +515,65 @@ function selectFullTimelineEventRows(
   };
 }
 
+function collectTurnIdsMissingStartedRows(
+  rows: readonly StoredEventRow[],
+): string[] {
+  const startedTurnIds = new Set<string>();
+  const turnScopedIds = new Set<string>();
+
+  for (const row of rows) {
+    if (row.scopeKind !== "turn" || row.turnId === null) {
+      continue;
+    }
+
+    if (row.type === "turn/started") {
+      startedTurnIds.add(row.turnId);
+      continue;
+    }
+
+    turnScopedIds.add(row.turnId);
+  }
+
+  return [...turnScopedIds].filter((turnId) => !startedTurnIds.has(turnId));
+}
+
+function maxStoredEventSequence(rows: readonly StoredEventRow[]): number {
+  return rows.reduce(
+    (maxSequence, row) => Math.max(maxSequence, row.sequence),
+    0,
+  );
+}
+
+function ensureTimelineWindowTurnStartedRows(
+  db: DbConnection,
+  args: EnsureTimelineWindowTurnStartedRowsArgs,
+): StoredEventRow[] {
+  // Standard windows are selected by message anchors, while projection groups
+  // by turn roots. Add only the real lifecycle rows needed by selected events.
+  const missingTurnIds = collectTurnIdsMissingStartedRows(args.rows);
+  if (missingTurnIds.length === 0) {
+    return [...args.rows];
+  }
+
+  const turnStartedRows = listStoredTurnStartedRowsByTurnIdsUpToSequence(db, {
+    threadId: args.threadId,
+    sequenceCutoff: maxStoredEventSequence(args.rows),
+    turnIds: missingTurnIds,
+  });
+  if (turnStartedRows.length === 0) {
+    return [...args.rows];
+  }
+
+  const rowsById = new Map<string, StoredEventRow>();
+  for (const row of [...turnStartedRows, ...args.rows]) {
+    rowsById.set(row.id, row);
+  }
+
+  return [...rowsById.values()].sort(
+    (left, right) => left.sequence - right.sequence,
+  );
+}
+
 function isStandardTimelineAnchorCursorMatch(
   anchor: StandardTimelineSegmentAnchorRow,
   cursor: TimelinePaginationCursor,
@@ -574,11 +638,14 @@ function selectStandardTimelineEventRows(
       segmentLimit: page.segmentLimit,
     },
     responsePageKind: page.kind,
-    rows: listStoredTimelineWindowEventRows(db, {
-      beforeSequence,
-      excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
-      sequenceStart,
+    rows: ensureTimelineWindowTurnStartedRows(db, {
       threadId: thread.id,
+      rows: listStoredTimelineWindowEventRows(db, {
+        beforeSequence,
+        excludedTypes: THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+        sequenceStart,
+        threadId: thread.id,
+      }),
     }),
     strategy:
       sequenceStart === 0 && beforeSequence === undefined

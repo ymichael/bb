@@ -1364,13 +1364,12 @@ export function createPiProviderAdapter(
 
       if (command.type === "turn/start") {
         const state = turnState.getOrCreate({ threadId: command.threadId });
-        const turnId = turnState.getCurrentOrLastTurnId({ state });
-        if (turnId) {
+        if (state.currentTurnId !== undefined) {
           return buildAcceptedUserMessageEvent({
             clientRequestId: command.clientRequestId,
             providerThreadId: command.providerThreadId,
             threadId: command.threadId,
-            turnId,
+            turnId: state.currentTurnId,
           });
         }
         queueAcceptedUserMessage({

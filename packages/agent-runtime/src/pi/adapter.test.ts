@@ -196,6 +196,47 @@ describe("pi provider adapter", () => {
     ]);
   });
 
+  it("queues accepted turn starts after a completed turn until the next turn starts", () => {
+    const adapter = createPiProviderAdapter();
+
+    adapter.translateEvent(loadFixture("agent-start.json"), { threadId: "t1" });
+    adapter.translateEvent(loadFixture("agent-end-with-message.json"), {
+      threadId: "t1",
+    });
+
+    expect(
+      adapter.translateAcceptedCommand({
+        command: {
+          type: "turn/start",
+          threadId: "t1",
+          providerThreadId: "pi-1",
+          clientRequestId: "creq_23456789ae",
+          input: [{ type: "text", text: "new turn" }],
+          options: fullProviderExecutionContext,
+        },
+      }),
+    ).toEqual([]);
+
+    const nextTurnEvents = adapter.translateEvent(
+      loadFixture("agent-start.json"),
+      { threadId: "t1" },
+    );
+
+    expect(nextTurnEvents).toContainEqual({
+      type: "turn/started",
+      threadId: "",
+      providerThreadId: "",
+      scope: turnScope("turn-2"),
+    });
+    expect(nextTurnEvents).toContainEqual({
+      type: "turn/input/accepted",
+      threadId: "",
+      providerThreadId: "",
+      scope: turnScope("turn-2"),
+      clientRequestId: "creq_23456789ae",
+    });
+  });
+
   it("translateEvent completes a failed turn for thread-scoped bridge errors", () => {
     const adapter = createPiProviderAdapter();
 
