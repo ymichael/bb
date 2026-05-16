@@ -162,10 +162,27 @@ jobs:
 
       - name: Verify npm release
         if: ${{ !inputs.dry_run }}
+        env:
+          NPM_TAG: ${{ inputs.npm_tag }}
         run: |
-          sleep 5
-          npm view "bb-app@$PACKAGE_VERSION" version --json
-          npm view bb-app version dist-tags --json
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            package_version="$(npm view "bb-app@$PACKAGE_VERSION" version --json 2>/tmp/bb-app-version.err || true)"
+            tag_version="$(npm view "bb-app@$NPM_TAG" version --json 2>/tmp/bb-app-tag.err || true)"
+
+            if [ "$package_version" = "\"$PACKAGE_VERSION\"" ] && [ "$tag_version" = "\"$PACKAGE_VERSION\"" ]; then
+              echo "$package_version"
+              npm view bb-app version dist-tags --json
+              exit 0
+            fi
+
+            echo "Registry has not exposed bb-app@$PACKAGE_VERSION on tag $NPM_TAG yet; retrying ($attempt/12)."
+            cat /tmp/bb-app-version.err || true
+            cat /tmp/bb-app-tag.err || true
+            sleep 10
+          done
+
+          echo "::error::Timed out waiting for bb-app@$PACKAGE_VERSION to appear on npm tag $NPM_TAG."
+          exit 1
 
       - name: Summarize release
         run: |
