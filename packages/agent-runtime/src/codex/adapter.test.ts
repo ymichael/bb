@@ -1353,7 +1353,7 @@ describe("codex provider adapter", () => {
     });
   });
 
-  it("buildCommand thread/start disables provider user-input requests", () => {
+  it("buildCommand thread/start disables provider user-input requests without overriding web search", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "thread/start",
@@ -1369,14 +1369,10 @@ describe("codex provider adapter", () => {
       params: {
         config: {
           "features.default_mode_request_user_input": false,
-          "tools.web_search": {
-            allowed_domains: null,
-            context_size: null,
-            location: null,
-          },
         },
       },
     });
+    expect(JSON.stringify(cmd)).not.toContain("tools.web_search");
   });
 
   it("buildCommand thread/start appends instructions as developer instructions", () => {
