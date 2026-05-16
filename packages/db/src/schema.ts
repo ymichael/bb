@@ -8,7 +8,7 @@ import {
 } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
-import { threadStatusValues } from "@bb/domain";
+import { threadStatusValues } from "@bb/domain/thread-status";
 import type {
   EnvironmentOperationKind,
   EnvironmentCleanupMode,

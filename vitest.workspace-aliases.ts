@@ -37,9 +37,17 @@ export const workspaceTestAliases = {
     "packages/replay-capture/src/schema.ts",
   ),
   "@bb/config/common": path.resolve(repoRoot, "packages/config/src/common.ts"),
+  "@bb/config/defaults": path.resolve(
+    repoRoot,
+    "packages/config/src/defaults.ts",
+  ),
   "@bb/config/host-daemon": path.resolve(
     repoRoot,
     "packages/config/src/host-daemon.ts",
+  ),
+  "@bb/domain/thread-status": path.resolve(
+    repoRoot,
+    "packages/domain/src/thread-status.ts",
   ),
   "@bb/domain": path.resolve(repoRoot, "packages/domain/src/index.ts"),
   "@bb/templates": path.resolve(repoRoot, "packages/templates/src/index.ts"),

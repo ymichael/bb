@@ -7,6 +7,11 @@
       "source": "./src/index.ts",
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./thread-status": {
+      "source": "./src/thread-status.ts",
+      "types": "./src/thread-status.ts",
+      "default": "./src/thread-status.ts"
     }
   },
   "types": "./src/index.ts",

@@ -712,6 +712,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@bb/config':
+        specifier: workspace:*
+        version: link:../config
       '@bb/domain':
         specifier: workspace:*
         version: link:../domain

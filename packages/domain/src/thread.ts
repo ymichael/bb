@@ -6,16 +6,9 @@ import {
   reasoningLevelSchema,
   serviceTierSchema,
 } from "./shared-types.js";
-
-export const threadStatusValues = [
-  "created",
-  "provisioning",
-  "idle",
-  "active",
-  "error",
-] as const;
-export const threadStatusSchema = z.enum(threadStatusValues);
-export type ThreadStatus = z.infer<typeof threadStatusSchema>;
+import { threadStatusSchema, threadStatusValues } from "./thread-status.js";
+export { threadStatusSchema, threadStatusValues } from "./thread-status.js";
+export type { ThreadStatus } from "./thread-status.js";
 
 export const threadRuntimeDisplayStatusValues = [
   ...threadStatusValues,

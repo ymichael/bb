@@ -92,6 +92,13 @@
       "when": 1779053800000,
       "tag": "0012_safe_cleanup_only",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1779139200000,
+      "tag": "0013_rebuild_pending_interactions",
+      "breakpoints": true
     }
   ]
 }

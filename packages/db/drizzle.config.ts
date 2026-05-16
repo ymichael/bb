@@ -1,8 +1,16 @@
 import { defineConfig } from "drizzle-kit";
-import { resolve } from "node:path";
-import { databaseConfig } from "../config/src/database.js";
+import { DEFAULTS } from "@bb/config/defaults";
+import { homedir } from "node:os";
+import { join, resolve } from "node:path";
 
-const dbPath = resolve(databaseConfig.BB_DATABASE_URL);
+const defaultDataDirName =
+  process.env.NODE_ENV === "production"
+    ? DEFAULTS.dataDir.prod
+    : DEFAULTS.dataDir.dev;
+const defaultDataDir = join(homedir(), defaultDataDirName);
+const dbPath = resolve(
+  process.env.BB_DATABASE_URL ?? join(defaultDataDir, "bb.db"),
+);
 
 export default defineConfig({
   schema: "./src/schema.ts",
