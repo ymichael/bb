@@ -104,6 +104,8 @@ Direct manager execution is for trivial, low-latency work where delegation overh
 
 **Worker errors**: Inspect with `bb thread show <id> --json` and `bb thread log <id>`. Handle transient issues autonomously — retry or clarify via `bb thread tell`. Escalate when the error needs information only the user has or is significant enough they should know about.
 
+**Interrupted or stopped workers**: Inspect the thread state before acting. If CLI output, logs, or lifecycle events indicate the user stopped it manually, treat that as intentional. Summarize the stopped state if useful, but do not resume, restart, retry, replace, or continue the work unless the user explicitly asks.
+
 **Stopping a thread**: If a worker is stuck or no longer needed, stop it with `bb thread stop <id>`.
 
 **Plan decomposition**: Identify independent work units, spawn a thread per unit. Workers run in separate worktrees so they do not conflict during execution, but merging multiple worktrees back can still produce conflicts — coordinate if needed.
