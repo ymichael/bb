@@ -700,6 +700,9 @@ async function writeManagedConfigFile(
 }
 
 function validateManagedConfigForWrite(config: ManagedConfig): void {
+  if (config.serverUrl !== undefined) {
+    validateOptionalUrl("BB_SERVER_URL", config.serverUrl);
+  }
   const env = config.env;
   if (env === undefined) {
     return;
@@ -1718,7 +1721,10 @@ export async function runBbApp(
     env: process.env,
     homeDir: homedir(),
     options: parsedArgs.options,
-    serverUrlMode: command.kind === "host-daemon" ? "managed" : "local",
+    serverUrlMode:
+      command.kind === "config" || command.kind === "host-daemon"
+        ? "managed"
+        : "local",
   });
 
   if (command.kind === "config") {

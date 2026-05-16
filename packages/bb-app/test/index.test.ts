@@ -39,6 +39,14 @@ interface ConfigReloadTestServer {
   close(): Promise<void>;
   port: number;
   reloadCount(): number;
+  reloadRequests(): ConfigReloadRequest[];
+  url: string;
+}
+
+interface ConfigReloadRequest {
+  host: string | undefined;
+  method: string | undefined;
+  url: string | undefined;
 }
 
 interface InvalidConfigCommandCase {
@@ -58,6 +66,11 @@ const invalidConfigCommandCases: InvalidConfigCommandCase[] = [
   {
     expectedError: /BB_APP_URL must be a valid URL/u,
     key: "BB_APP_URL",
+    value: "not-a-url",
+  },
+  {
+    expectedError: /BB_SERVER_URL must be a valid URL/u,
+    key: "BB_SERVER_URL",
     value: "not-a-url",
   },
   {
@@ -85,14 +98,18 @@ function delay(args: DelayArgs): Promise<DelayResult> {
 }
 
 async function startConfigReloadTestServer(): Promise<ConfigReloadTestServer> {
-  let reloadRequests = 0;
+  const reloadRequests: ConfigReloadRequest[] = [];
   const server = createServer(
     (request: IncomingMessage, response: ServerResponse) => {
       if (
         request.method === "POST" &&
         request.url === "/api/v1/system/config/reload"
       ) {
-        reloadRequests += 1;
+        reloadRequests.push({
+          host: request.headers.host,
+          method: request.method,
+          url: request.url,
+        });
         response.writeHead(200, { "content-type": "application/json" });
         response.end(JSON.stringify({ ok: true }));
         return;
@@ -129,8 +146,12 @@ async function startConfigReloadTestServer(): Promise<ConfigReloadTestServer> {
     },
     port: addressInfo.port,
     reloadCount(): number {
-      return reloadRequests;
+      return reloadRequests.length;
     },
+    reloadRequests(): ConfigReloadRequest[] {
+      return [...reloadRequests];
+    },
+    url: `http://127.0.0.1:${addressInfo.port}`,
   };
 }
 
@@ -139,6 +160,16 @@ function readPackageMetadata(): PackageMetadata {
   return packageMetadataSchema.parse(
     JSON.parse(readFileSync(resolve(testDir, "..", "package.json"), "utf8")),
   );
+}
+
+function expectedConfigReloadRequest(
+  server: ConfigReloadTestServer,
+): ConfigReloadRequest {
+  return {
+    host: `127.0.0.1:${server.port}`,
+    method: "POST",
+    url: "/api/v1/system/config/reload",
+  };
 }
 
 describe("bb-app launcher", () => {
@@ -483,7 +514,9 @@ describe("bb-app launcher", () => {
         "test-openai-key",
       ]);
 
-      expect(server.reloadCount()).toBe(1);
+      expect(server.reloadRequests()).toEqual([
+        expectedConfigReloadRequest(server),
+      ]);
     } finally {
       await server.close();
     }
@@ -503,9 +536,106 @@ describe("bb-app launcher", () => {
         "refresh",
       ]);
 
-      expect(server.reloadCount()).toBe(1);
+      expect(server.reloadRequests()).toEqual([
+        expectedConfigReloadRequest(server),
+      ]);
     } finally {
       await server.close();
+    }
+  });
+
+  it("uses BB_SERVER_URL for config refresh when set", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-env-refresh-"));
+    const server = await startConfigReloadTestServer();
+    const previousServerUrl = process.env.BB_SERVER_URL;
+
+    try {
+      process.env.BB_SERVER_URL = server.url;
+
+      await runBbApp(["--data-dir", dataDir, "config", "refresh"]);
+
+      expect(server.reloadRequests()).toEqual([
+        expectedConfigReloadRequest(server),
+      ]);
+    } finally {
+      if (previousServerUrl === undefined) {
+        delete process.env.BB_SERVER_URL;
+      } else {
+        process.env.BB_SERVER_URL = previousServerUrl;
+      }
+      await server.close();
+    }
+  });
+
+  it("uses persisted BB_SERVER_URL for config refresh without env or flags", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-persisted-url-"));
+    const server = await startConfigReloadTestServer();
+
+    try {
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "config",
+        "BB_SERVER_URL",
+        server.url,
+      ]);
+
+      expect(JSON.parse(readFileSync(join(dataDir, "config.json"), "utf8")))
+        .toEqual({
+          serverUrl: server.url,
+        });
+      expect(server.reloadRequests()).toEqual([]);
+
+      await runBbApp(["--data-dir", dataDir, "config", "refresh"]);
+
+      expect(server.reloadRequests()).toEqual([
+        expectedConfigReloadRequest(server),
+      ]);
+    } finally {
+      await server.close();
+    }
+  });
+
+  it("uses --server-url over env and persisted config for config refresh", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-app-config-flag-url-"));
+    const configServer = await startConfigReloadTestServer();
+    const envServer = await startConfigReloadTestServer();
+    const flagServer = await startConfigReloadTestServer();
+    const previousServerUrl = process.env.BB_SERVER_URL;
+
+    try {
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "config",
+        "BB_SERVER_URL",
+        configServer.url,
+      ]);
+
+      process.env.BB_SERVER_URL = envServer.url;
+      await runBbApp([
+        "--data-dir",
+        dataDir,
+        "--server-url",
+        flagServer.url,
+        "config",
+        "refresh",
+      ]);
+
+      expect(configServer.reloadRequests()).toEqual([]);
+      expect(envServer.reloadRequests()).toEqual([]);
+      expect(flagServer.reloadRequests()).toEqual([
+        expectedConfigReloadRequest(flagServer),
+      ]);
+    } finally {
+      if (previousServerUrl === undefined) {
+        delete process.env.BB_SERVER_URL;
+      } else {
+        process.env.BB_SERVER_URL = previousServerUrl;
+      }
+      await flagServer.close();
+      await envServer.close();
+      await configServer.close();
     }
   });
 
