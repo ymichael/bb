@@ -1,6 +1,5 @@
 import {
   memo,
-  useCallback,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -20,7 +19,7 @@ import type {
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
-import { ImageLightbox, getWrappedImageIndex } from "./image-lightbox.js";
+import { ImageLightbox } from "./image-lightbox.js";
 import { CopyButton } from "./copy-button.js";
 import { Icon } from "./icon.js";
 import {
@@ -46,17 +45,15 @@ interface MarkdownAnchorProps
 }
 
 interface BuildMarkdownComponentsArgs {
-  imageUrls: readonly string[];
   preferredTheme: Theme;
-  setExpandedImageIndex: ExpandedImageIndexSetter;
+  setExpandedImageUrl: ExpandedImageUrlSetter;
   onOpenLocalFileLink?: MarkdownPreviewLocalFileLinkHandler;
 }
 
 interface MarkdownImageRendererArgs {
   alt: ComponentPropsWithoutRef<"img">["alt"];
   imageAttributes: MarkdownImageRenderAttributes;
-  imageUrls: readonly string[];
-  setExpandedImageIndex: ExpandedImageIndexSetter;
+  setExpandedImageUrl: ExpandedImageUrlSetter;
   src: ComponentPropsWithoutRef<"img">["src"];
 }
 
@@ -70,7 +67,7 @@ interface SetMarkdownContentWidthVariableArgs {
   width: number;
 }
 
-type ExpandedImageIndexSetter = Dispatch<SetStateAction<number | null>>;
+type ExpandedImageUrlSetter = Dispatch<SetStateAction<string | null>>;
 type MarkdownAnchorEvent = ReactMouseEvent<HTMLAnchorElement>;
 type MarkdownBlockquoteProps = ComponentPropsWithoutRef<"blockquote"> &
   ExtraProps;
@@ -113,21 +110,6 @@ const localFileAwareUrlTransform: UrlTransform = (value, key) => {
 
   return defaultUrlTransform(value);
 };
-
-function extractMarkdownImageUrls(markdown: string): string[] {
-  const imageUrls: string[] = [];
-  const markdownImagePattern =
-    /!\[[^\]]*\]\(([^)\s]+)(?:\s+["'][^"']*["'])?\)/gu;
-  let match: RegExpExecArray | null = markdownImagePattern.exec(markdown);
-  while (match) {
-    const imageUrl = match[1];
-    if (imageUrl) {
-      imageUrls.push(imageUrl);
-    }
-    match = markdownImagePattern.exec(markdown);
-  }
-  return imageUrls;
-}
 
 function MarkdownAnchor({
   children,
@@ -348,13 +330,11 @@ function MarkdownTableCell({ children }: MarkdownTableCellProps) {
 function renderMarkdownImage({
   alt,
   imageAttributes,
-  imageUrls,
-  setExpandedImageIndex,
+  setExpandedImageUrl,
   src,
 }: MarkdownImageRendererArgs) {
   const imageUrl = typeof src === "string" ? src : "";
   if (!imageUrl) return null;
-  const imageIndex = imageUrls.indexOf(imageUrl);
   return (
     <img
       {...imageAttributes}
@@ -362,7 +342,7 @@ function renderMarkdownImage({
       alt={typeof alt === "string" ? alt : "Image"}
       className="my-2 max-h-96 max-w-full cursor-zoom-in object-contain"
       loading="lazy"
-      onClick={() => setExpandedImageIndex(imageIndex >= 0 ? imageIndex : 0)}
+      onClick={() => setExpandedImageUrl(imageUrl)}
     />
   );
 }
@@ -393,10 +373,9 @@ function resolveMarkdownSourceMedia({
 }
 
 function buildMarkdownComponents({
-  imageUrls,
   onOpenLocalFileLink,
   preferredTheme,
-  setExpandedImageIndex,
+  setExpandedImageUrl,
 }: BuildMarkdownComponentsArgs): Components {
   function MarkdownLink(props: MarkdownAnchorProps) {
     return (
@@ -414,8 +393,7 @@ function buildMarkdownComponents({
     return renderMarkdownImage({
       alt,
       imageAttributes,
-      imageUrls,
-      setExpandedImageIndex,
+      setExpandedImageUrl,
       src,
     });
   }
@@ -511,48 +489,18 @@ function MarkdownPreviewComponent({
   imageLightboxTitle = "Expanded image preview",
   onOpenLocalFileLink,
 }: MarkdownPreviewProps) {
-  const imageUrls = useMemo(() => extractMarkdownImageUrls(content), [content]);
   const preferredTheme = usePreferredTheme();
   const contentRef = useMarkdownContentWidthVariable();
-  const [expandedImageIndex, setExpandedImageIndex] = useState<number | null>(
-    null,
-  );
-  const currentImageUrl =
-    expandedImageIndex !== null
-      ? (imageUrls[expandedImageIndex] ?? null)
-      : null;
+  const [expandedImageUrl, setExpandedImageUrl] = useState<string | null>(null);
   const markdownComponents = useMemo(
     () =>
       buildMarkdownComponents({
-        imageUrls,
         onOpenLocalFileLink,
         preferredTheme,
-        setExpandedImageIndex,
+        setExpandedImageUrl,
       }),
-    [imageUrls, onOpenLocalFileLink, preferredTheme, setExpandedImageIndex],
+    [onOpenLocalFileLink, preferredTheme],
   );
-
-  const showPreviousImage = useCallback(() => {
-    setExpandedImageIndex((currentIndex) => {
-      if (currentIndex === null || imageUrls.length <= 1) return currentIndex;
-      return getWrappedImageIndex({
-        currentIndex,
-        direction: "previous",
-        itemCount: imageUrls.length,
-      });
-    });
-  }, [imageUrls.length]);
-
-  const showNextImage = useCallback(() => {
-    setExpandedImageIndex((currentIndex) => {
-      if (currentIndex === null || imageUrls.length <= 1) return currentIndex;
-      return getWrappedImageIndex({
-        currentIndex,
-        direction: "next",
-        itemCount: imageUrls.length,
-      });
-    });
-  }, [imageUrls.length]);
 
   return (
     <>
@@ -576,13 +524,10 @@ function MarkdownPreviewComponent({
       </div>
 
       <ImageLightbox
-        imageSrc={currentImageUrl}
+        imageSrc={expandedImageUrl}
         imageAlt={expandedImageAlt}
         title={imageLightboxTitle}
-        hasMultipleImages={imageUrls.length > 1}
-        onPrevious={showPreviousImage}
-        onNext={showNextImage}
-        onClose={() => setExpandedImageIndex(null)}
+        onClose={() => setExpandedImageUrl(null)}
       />
     </>
   );

@@ -171,7 +171,7 @@ describe("MarkdownPreview", () => {
     expect(writeText).toHaveBeenCalledWith("const value = 1;");
   });
 
-  it("opens Markdown images in the lightbox and navigates between them", () => {
+  it("opens the clicked image in the lightbox", () => {
     setupMatchMedia();
     render(
       <MarkdownPreview
@@ -182,20 +182,29 @@ describe("MarkdownPreview", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("img", { name: "One" }));
+    fireEvent.click(screen.getByRole("img", { name: "Two" }));
 
-    expect(
-      screen.getByRole("img", { name: "Expanded image" }).getAttribute("src"),
-    ).toBe("https://example.test/one.png");
-
-    fireEvent.click(screen.getByRole("button", { name: "Next image" }));
     expect(
       screen.getByRole("img", { name: "Expanded image" }).getAttribute("src"),
     ).toBe("https://example.test/two.png");
+  });
 
-    fireEvent.click(screen.getByRole("button", { name: "Previous image" }));
+  it("opens the clicked HTML image in the lightbox", () => {
+    setupMatchMedia();
+    render(
+      <MarkdownPreview
+        allowHtml
+        content={[
+          '<img alt="First" src="https://example.test/first.png">',
+          '<img alt="Second" src="https://example.test/second.png">',
+        ].join("\n")}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("img", { name: "Second" }));
+
     expect(
       screen.getByRole("img", { name: "Expanded image" }).getAttribute("src"),
-    ).toBe("https://example.test/one.png");
+    ).toBe("https://example.test/second.png");
   });
 });
