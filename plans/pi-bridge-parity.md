@@ -1,5 +1,14 @@
 # Pi Bridge Parity
 
+Status: Phases 1–4 shipped. Remaining work is Phase 5 (re-capture fixtures + close out documentation). See "Shipped" below.
+
+## Shipped
+
+- `instructionMode` contract on `PiInstructionCommand` (`"append" | "replace"`) resolved at the adapter boundary in `packages/agent-runtime/src/pi/adapter.ts` (`resolvePiInstructionOverrides`).
+- Default is `"append"` (`packages/agent-runtime/src/pi/runtime.ts`). Worker threads append; explicit managers opt into `"replace"` via `packages/agent-runtime/src/pi/thread-runtime-config.ts`.
+- `packages/agent-runtime/src/pi/bridge/sdk-session.ts` now uses `appendSystemPromptOverride` on the append path. The destructive `systemPrompt + noExtensions/noSkills/noPromptTemplates/noThemes` loader path is reached only on explicit `"replace"`.
+- Net effect: a normal bb Pi session preserves Pi defaults (extensions, skills, templates, themes) and layers bb's instructions on top, matching native `pi` behavior. The previous "stripped custom mode" is now opt-in, not the default.
+
 ## Goal
 
 Make the bb Pi bridge behave as closely as practical to a normal Pi coding
@@ -8,7 +17,7 @@ difference.
 
 ## Why This Matters
 
-The provider audit now shows a persistent behavior gap:
+The provider audit showed a persistent behavior gap:
 
 - direct Pi sessions default to the coding tool set `read`, `bash`, `edit`,
   `write`
@@ -16,10 +25,11 @@ The provider audit now shows a persistent behavior gap:
 - when those extra tools are not enabled, Pi usually routes that work through
   `bash`
 
-That part is expected. The likely parity risk is that bb currently starts Pi in
+That part is expected. The parity risk was that bb used to start Pi in
 something closer to a custom stripped-down session than to a normal Pi session.
+That has been fixed via the `instructionMode` change above.
 
-## Current Evidence
+## Original Evidence (pre-fix; kept for context)
 
 ### Direct Pi CLI behavior
 
@@ -29,20 +39,17 @@ something closer to a custom stripped-down session than to a normal Pi session.
 - direct `pi --mode json --tools read,bash,edit,write,grep,find,ls ...` emits
   real `ls` and `find` tool calls
 
-### bb bridge behavior
+### bb bridge behavior (pre-fix)
 
-- [packages/agent-runtime/src/pi/adapter.ts](/Users/michael/.codex/worktrees/b282/bb/packages/agent-runtime/src/pi/adapter.ts)
-  always sends `baseInstructions` on `thread/start`
-- [packages/agent-runtime/src/pi/bridge/sdk-session.ts](/Users/michael/.codex/worktrees/b282/bb/packages/agent-runtime/src/pi/bridge/sdk-session.ts)
-  takes a custom `DefaultResourceLoader` path whenever a system prompt is
-  present
-- that loader path currently sets:
+- `packages/agent-runtime/src/pi/adapter.ts` always sent `baseInstructions` on `thread/start`
+- `packages/agent-runtime/src/pi/bridge/sdk-session.ts` took a custom `DefaultResourceLoader` path whenever a system prompt was present
+- that loader path set:
   - `noExtensions: true`
   - `noSkills: true`
   - `noPromptTemplates: true`
   - `noThemes: true`
 
-This is closer to running Pi with a custom system prompt plus
+This was closer to running Pi with a custom system prompt plus
 `--no-extensions --no-skills --no-prompt-templates --no-themes` than to a plain
 interactive Pi session.
 
@@ -59,65 +66,47 @@ interactive Pi session.
 
 ## Proposed Work
 
-### Phase 1: Reproduce the gap cleanly
+### Phase 1: Reproduce the gap cleanly — DONE
 
-- capture a small matrix of equivalent prompts in:
-  - direct interactive `pi`
-  - direct `pi --mode json`
-  - bb Pi bridge
-- compare:
-  - advertised tool access
-  - actual emitted tool calls
-  - presence or absence of skills, extensions, templates, and helper tools
+- captured tool-surface comparison across direct `pi`, `pi --mode json`, and the bb bridge.
 
-### Phase 2: Audit the bridge startup path
+### Phase 2: Audit the bridge startup path — DONE
 
-- trace how bb builds Pi session options
-- identify exactly why `baseInstructions` forces the custom loader path
-- document whether that behavior is necessary or just the easiest current
-  implementation
+- traced session-option construction; root cause was `systemPrompt` forcing the destructive loader path.
 
-### Phase 3: Design the parity target
+### Phase 3: Design the parity target — DONE
 
-- define the intended startup contract for bb Pi sessions
-- decide whether bb should:
-  - preserve Pi defaults and append bb instructions
-  - preserve Pi defaults but selectively disable specific surfaces
-  - keep the current custom mode and explicitly document it as intentional
+- decision: preserve Pi defaults and **append** bb instructions by default; allow explicit `"replace"` opt-in for managers that need a fully custom prompt surface.
 
-### Phase 4: Implement parity changes
+### Phase 4: Implement parity changes — DONE
 
-- update the bridge/session startup path to match the chosen contract
-- keep the change minimal and local to Pi startup/configuration
-- avoid changing audit rendering until provider behavior is verified
+- `instructionMode` plumbed through `PiInstructionCommand`; adapter resolves to `appendSystemPrompt` (default) or `baseInstructions` (replace).
+- `sdk-session.ts` uses `appendSystemPromptOverride` on the append path; the `noExtensions/noSkills/noPromptTemplates/noThemes` loader is reached only on explicit replace.
 
-### Phase 5: Re-capture and compare fixtures
+### Phase 5: Re-capture and compare fixtures — REMAINING
 
-- replay at least one targeted Pi audit capture before and after the parity
-  change
-- compare raw tool names, event shapes, and rendered output
-- update docs if the effective Pi surface changes
+- replay at least one targeted Pi fixture under the new append-default path.
+- compare raw tool names, event shapes, and rendered output against pre-fix captures.
+- Note: `packages/agent-provider-audit` was removed; audit/replay work now lives in `packages/replay-capture` and `packages/agent-fixtures`. Retarget any "audit doc" updates there.
 
 ## Exit Criteria
 
-This plan is complete only when all of the following are true:
+Closing this plan requires:
 
-- we can explain, with code references, whether bb Pi sessions are intended to
-  match normal Pi sessions or intentionally differ
-- the bridge startup path matches that intent
-- the observed tool surface in bb is no longer surprising relative to direct Pi
-  runs for the same prompt and repo state
-- any remaining differences are documented in
-  [packages/agent-provider-audit/README.md](/Users/michael/.codex/worktrees/b282/bb/packages/agent-provider-audit/README.md)
-- at least one targeted Pi fixture has been re-captured after the change and
-  reviewed end to end
+- a Pi fixture re-captured under append-default and compared end to end (Phase 5).
+- any remaining intentional differences between bb Pi sessions and direct Pi documented in the relevant package README under `packages/replay-capture/` or `packages/agent-fixtures/` (the old `packages/agent-provider-audit/README.md` no longer exists).
+
+Already satisfied:
+
+- bb Pi session intent (append by default, replace opt-in) is encoded in code at `pi/adapter.ts`, `pi/runtime.ts`, `pi/thread-runtime-config.ts`, and `pi/bridge/sdk-session.ts`.
+- the bridge startup path matches that intent.
 
 ## Validation
 
 ### Automated
 
-- `pnpm exec turbo run test --filter=@bb/agent-runtime --filter=@bb/agent-provider-audit --force`
-- `pnpm --filter @bb/agent-provider-audit run ladle:prepare`
+- `pnpm exec turbo run test --filter=@bb/agent-runtime --force`
+- (the old `@bb/agent-provider-audit` filter no longer exists)
 
 ### Manual
 

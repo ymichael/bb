@@ -5,6 +5,18 @@ referenced the old prompt/timeline layout; prompt composition now lives under
 `apps/app/src/components/promptbox/`, timeline rendering has its own memo/cache
 layer, and the diff panel already has batched parsing plus `content-visibility`.
 
+## Status (2026-05-16)
+
+- Phase 0 (baselines): not recorded. Required before phases that change memo boundaries.
+- Phase 1 (route + heavy-dep splitting): NOT STARTED. `App.tsx` still imports every route eagerly; no `React.lazy` in `apps/app/src`. `WorkerPoolContextProvider` still mounted in `main.tsx`. Highest-leverage phase per the plan.
+- Phase 2 (prompt-box boundaries): not verified. Requires Phase 0 profiles to know what's actually rerendering.
+- Phase 3 (queued follow-up rows): NOT STARTED. `QueuedMessagesList.tsx` still maps inline; no `QueuedMessageRow` memo extracted.
+- Phase 4 (timeline context split + containment): not verified.
+- Phase 5 (git diff panel): not verified.
+- Phase 6 (sidebar memo boundaries): not verified.
+
+Pick-up order: Phase 0 → Phase 1 → Phase 3 (independent, small) → Phase 2/4 after baselines.
+
 Conventions:
 
 - Line numbers are audit snapshots; verify before editing.
