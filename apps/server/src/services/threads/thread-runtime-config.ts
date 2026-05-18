@@ -10,6 +10,7 @@ import type {
   PermissionEscalation,
   PermissionMode,
   ProjectExecutionDefaults,
+  ReasoningLevel,
   ResolvedThreadExecutionOptions,
   Thread,
   ThreadExecutionOptions,
@@ -32,6 +33,15 @@ import {
 
 const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
 const NO_MANAGER_PREFERENCES = "(file does not exist)";
+type ReasoningPolicyProviderId = "claude-code" | "codex" | "pi";
+const SUPPORTED_REASONING_LEVELS_BY_PROVIDER: Record<
+  ReasoningPolicyProviderId,
+  readonly ReasoningLevel[]
+> = {
+  "claude-code": ["low", "medium", "high", "xhigh", "max"],
+  codex: ["low", "medium", "high", "xhigh"],
+  pi: ["low", "medium", "high", "xhigh"],
+};
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
   "standardAgentInstructions",
   {},
@@ -175,6 +185,26 @@ function validateProviderPermissionMode(
   );
 }
 
+function validateProviderReasoningLevel(
+  providerId: string | undefined,
+  reasoningLevel: ReasoningLevel,
+): void {
+  if (!providerId || !isAgentProviderId(providerId)) {
+    return;
+  }
+
+  const supportedLevels = SUPPORTED_REASONING_LEVELS_BY_PROVIDER[providerId];
+  if (supportedLevels.includes(reasoningLevel)) {
+    return;
+  }
+
+  throw new ApiError(
+    400,
+    "invalid_request",
+    `Provider ${providerId} does not support ${reasoningLevel} reasoning level. Supported reasoning levels: ${supportedLevels.join(", ")}.`,
+  );
+}
+
 export function resolvePermissionEscalation(
   args: ResolvePermissionEscalationArgs,
 ): PermissionEscalation {
@@ -223,6 +253,12 @@ export async function resolveExecutionOptions(
     thread,
   });
   validateProviderPermissionMode(thread.providerId, permissionMode);
+  const reasoningLevel =
+    args.requestedExecution.reasoningLevel ??
+    lastExecution?.reasoningLevel ??
+    projectExecution?.reasoningLevel ??
+    DEFAULT_REASONING_LEVEL;
+  validateProviderReasoningLevel(thread.providerId, reasoningLevel);
 
   return {
     model,
@@ -231,11 +267,7 @@ export async function resolveExecutionOptions(
       lastExecution?.serviceTier ??
       projectExecution?.serviceTier ??
       DEFAULT_SERVICE_TIER,
-    reasoningLevel:
-      args.requestedExecution.reasoningLevel ??
-      lastExecution?.reasoningLevel ??
-      projectExecution?.reasoningLevel ??
-      DEFAULT_REASONING_LEVEL,
+    reasoningLevel,
     permissionMode,
     source: args.requestedExecution.source,
   };

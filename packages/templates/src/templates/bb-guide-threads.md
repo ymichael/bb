@@ -19,7 +19,7 @@ Spawning:
     --parent-thread <id>           Parent thread (defaults to BB_THREAD_ID)
     --provider <id>                Provider override
     --model <model>                Model override
-    --reasoning-level <level>      Reasoning level: low, medium, high, xhigh, max
+    --reasoning-level <level>      Reasoning level: low, medium, high, xhigh, max (provider-dependent)
     --environment <id-or-path>     Attach to an existing environment (UUID or workspace path)
     --new-environment <kind>       Create a new environment (worktree)
     --service-tier <tier>          Service tier: fast, default

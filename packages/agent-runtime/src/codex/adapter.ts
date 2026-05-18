@@ -21,10 +21,12 @@ import type {
   PermissionEscalation,
   PromptInput,
   ProviderCapabilities,
+  ReasoningLevel,
   ServiceTier,
   ThreadEvent,
 } from "@bb/domain";
 import type { ClientRequest as CodexClientRequest } from "./generated/codex-app-server/schema/ClientRequest.js";
+import type { ReasoningEffort as CodexReasoningEffort } from "./generated/codex-app-server/schema/ReasoningEffort.js";
 import type { JsonValue } from "./generated/codex-app-server/schema/serde_json/JsonValue.js";
 import type { ServerNotification as CodexServerNotification } from "./generated/codex-app-server/schema/ServerNotification.js";
 import type { SandboxPolicy } from "./generated/codex-app-server/schema/v2/SandboxPolicy.js";
@@ -619,6 +621,23 @@ function toCodexServiceTier(tier: ServiceTier | undefined): "fast" | undefined {
   return tier === "fast" ? "fast" : undefined;
 }
 
+function toCodexReasoningEffort(
+  reasoningLevel: ReasoningLevel,
+): CodexReasoningEffort {
+  switch (reasoningLevel) {
+    case "low":
+      return "low";
+    case "medium":
+      return "medium";
+    case "high":
+      return "high";
+    case "xhigh":
+      return "xhigh";
+    case "max":
+      throw new Error("Codex does not support max reasoning level.");
+  }
+}
+
 function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
   return input.map((chunk): CodexUserInput => {
     switch (chunk.type) {
@@ -652,7 +671,9 @@ function buildCodexConfig(
     Object.assign(config, shellEnvironmentConfig);
   }
   if (args.options?.reasoningLevel) {
-    config["model_reasoning_effort"] = args.options.reasoningLevel;
+    config["model_reasoning_effort"] = toCodexReasoningEffort(
+      args.options.reasoningLevel,
+    );
   }
   config["features.default_mode_request_user_input"] = false;
   if (args.options?.permissionMode === "workspace-write") {

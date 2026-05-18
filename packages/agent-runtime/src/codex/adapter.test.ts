@@ -1478,6 +1478,25 @@ describe("codex provider adapter", () => {
     });
   });
 
+  it("buildCommand rejects max reasoning level because Codex does not support it", () => {
+    const adapter = createCodexProviderAdapter();
+
+    expect(() =>
+      adapter.buildCommandPlan({
+        type: "thread/start",
+        cwd: "/tmp/worktree",
+        threadId: "bb-thread-1",
+        input: [{ type: "text", text: "hello" }],
+        instructionMode: "append",
+        options: {
+          ...fullProviderExecutionContext,
+          model: "gpt-5.4",
+          reasoningLevel: "max",
+        },
+      }),
+    ).toThrow("Codex does not support max reasoning level.");
+  });
+
   it("buildCommand thread/start replaces instructions as base instructions", () => {
     const adapter = createCodexProviderAdapter();
     const cmd = adapter.buildCommandPlan({
