@@ -90,6 +90,9 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("Simple delegation");
     expect(rendered).toContain("write to `STATUS.html` instead");
     expect(rendered).toContain("the UI renders it in an unsandboxed iframe");
+    expect(rendered).toContain(
+      "Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind.",
+    );
     expect(rendered).toContain("bb guide styling");
     expect(rendered).not.toContain("--background: oklch(0.9551 0 0);");
 
@@ -111,6 +114,12 @@ describe("@bb/templates", () => {
     const rendered = renderTemplate("bbGuideStyling", {});
 
     expect(rendered).toContain("STATUS.html styling");
+    expect(rendered).toContain(
+      "Unless the user asks for a different visual direction, make `STATUS.html` look",
+    );
+    expect(rendered).toContain(
+      '<script src="https://cdn.tailwindcss.com"></script>',
+    );
     expect(rendered).toContain(
       "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap",
     );

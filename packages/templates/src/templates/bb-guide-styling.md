@@ -11,9 +11,15 @@ STATUS.html styling
 External resources such as Google Fonts, Tailwind CDN, images, and stylesheets
 load normally.
 
-Load bb's app fonts with:
+Unless the user asks for a different visual direction, make `STATUS.html` look
+like bb: dense, minimal, and built from the same tokens. Use Tailwind for layout,
+spacing, grids, flex rows, responsive behavior, and small utility styling, then
+use the bb CSS variables below for colors, fonts, borders, radius, and shadows.
+
+Load Tailwind and bb's app fonts with:
 
 ```html
+<script src="https://cdn.tailwindcss.com"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
