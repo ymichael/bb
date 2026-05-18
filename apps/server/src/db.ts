@@ -1,8 +1,14 @@
 import { createConnection, migrate } from "@bb/db";
-import type { DbConnection, SlowDbQueryLogger } from "@bb/db";
+import type {
+  DbConnection,
+  MigrationWarningLogger,
+  SlowDbQueryLogger,
+} from "@bb/db";
+
+export type InitDbLogger = MigrationWarningLogger & SlowDbQueryLogger;
 
 export interface InitDbOptions {
-  logger?: SlowDbQueryLogger;
+  logger?: InitDbLogger;
 }
 
 export function initDb(
@@ -12,6 +18,6 @@ export function initDb(
   const db = createConnection(databaseUrl, {
     slowQueryLogger: options.logger,
   });
-  migrate(db);
+  migrate(db, { logger: options.logger });
   return db;
 }

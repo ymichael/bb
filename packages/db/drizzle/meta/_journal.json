@@ -15,6 +15,13 @@
       "when": 1779139400000,
       "tag": "0001_terminal_session_user_input",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1779139400001,
+      "tag": "0002_closed_session_prune_indexes",
+      "breakpoints": true
     }
   ]
 }

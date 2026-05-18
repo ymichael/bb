@@ -510,6 +510,11 @@ export const hostDaemonSessions = sqliteTable(
       table.createdAt,
       table.id,
     ),
+    index("host_daemon_sessions_closed_prune_idx").on(
+      table.status,
+      table.closedAt,
+      table.id,
+    ),
   ],
 );
 
@@ -538,6 +543,7 @@ export const hostDaemonCommands = sqliteTable(
       table.hostId,
       table.cursor,
     ),
+    index("host_daemon_commands_session_idx").on(table.sessionId),
     index("host_daemon_commands_host_state_cursor_idx").on(
       table.hostId,
       table.state,

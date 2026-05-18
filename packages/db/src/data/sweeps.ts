@@ -63,6 +63,8 @@ type CompletedCommandDeleteParameters = [
   number,
   number,
 ];
+type ClosedSessionState = "closed";
+type ClosedSessionDeleteParameters = [ClosedSessionState, number, number];
 type CompletedEventOutputItemKind = Extract<
   ThreadEventItemType,
   "commandExecution" | "toolCall" | "webSearch" | "webFetch"
@@ -208,14 +210,16 @@ export function pruneClosedSessions(
   db: DbConnection,
   args: PruneClosedSessionsArgs,
 ): PruneClosedSessionsResult {
+  // Keep the prune plan pinned to the retention index; this path runs
+  // periodically and can otherwise regress into a scan plus temp sort.
   const result = db.$client
-    .prepare<[number, number]>(
+    .prepare<ClosedSessionDeleteParameters>(
       `
         DELETE FROM host_daemon_sessions
         WHERE id IN (
           SELECT id
-          FROM host_daemon_sessions
-          WHERE status = 'closed'
+          FROM host_daemon_sessions INDEXED BY host_daemon_sessions_closed_prune_idx
+          WHERE status = ?
             AND closed_at IS NOT NULL
             AND closed_at < ?
           ORDER BY closed_at
@@ -223,7 +227,7 @@ export function pruneClosedSessions(
         )
       `,
     )
-    .run(args.closedBefore, args.limit);
+    .run("closed", args.closedBefore, args.limit);
 
   return { deleted: result.changes };
 }

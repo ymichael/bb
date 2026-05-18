@@ -22,8 +22,13 @@ interface Journal {
   entries: JournalEntry[];
 }
 
-const latestSquashedMigrationWhen = 1779139300000;
+const latestSquashedMigrationWhen = 1778891867195;
 const baselineTag = "0000_baseline";
+const publishedMigrationWhens = new Map<string, number>([
+  ["0000_baseline", 1778891867195],
+  ["0001_terminal_session_user_input", 1779139400000],
+  ["0002_closed_session_prune_indexes", 1779139400001],
+]);
 
 function readJournal(): Journal {
   return JSON.parse(fs.readFileSync(journalPath, "utf-8")) as Journal;
@@ -74,6 +79,22 @@ describe("migration journal integrity", () => {
     }
 
     expect(missing).toEqual([]);
+  });
+
+  it("preserves published migration timestamps", () => {
+    const { entries } = readJournal();
+
+    const violations: string[] = [];
+    for (const entry of entries) {
+      const expectedWhen = publishedMigrationWhens.get(entry.tag);
+      if (expectedWhen !== undefined && entry.when !== expectedWhen) {
+        violations.push(
+          `${entry.tag} has when=${entry.when}, expected published when=${expectedWhen}`,
+        );
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 
   it("keeps post-baseline migrations after the squashed migration history", () => {

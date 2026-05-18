@@ -1,0 +1,2 @@
+CREATE INDEX `host_daemon_commands_session_idx` ON `host_daemon_commands` (`session_id`);--> statement-breakpoint
+CREATE INDEX `host_daemon_sessions_closed_prune_idx` ON `host_daemon_sessions` (`status`,`closed_at`,`id`);

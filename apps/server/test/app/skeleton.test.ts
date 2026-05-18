@@ -1,4 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { hosts } from "@bb/db";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { initDb } from "../../src/db.js";
@@ -147,5 +150,52 @@ describe("server skeleton", () => {
   it("initializes an in-memory database and applies migrations", () => {
     const db = initDb(":memory:");
     expect(db.select().from(hosts).all()).toEqual([]);
+    db.$client.close();
+  });
+
+  it("warns when startup finds future-dated applied migrations", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(1779139400001 + 10_000);
+
+    const dataDir = mkdtempSync(join(tmpdir(), "bb-server-db-startup-"));
+    try {
+      const dbPath = join(dataDir, "bb.db");
+      const futureCreatedAt = Date.now() + 60_000;
+      const seedDb = initDb(dbPath);
+      seedDb.$client
+        .prepare<[string, number]>(
+          `
+            INSERT INTO __drizzle_migrations (hash, created_at)
+            VALUES (?, ?)
+          `,
+        )
+        .run("future-migration-hash", futureCreatedAt);
+      seedDb.$client.close();
+
+      const logger = {
+        debug: vi.fn(),
+        warn: vi.fn(),
+      };
+      const db = initDb(dbPath, { logger });
+      try {
+        expect(logger.warn).toHaveBeenCalledWith(
+          {
+            migrations: [
+              {
+                createdAt: futureCreatedAt,
+                hash: "future-migration-hash",
+              },
+            ],
+            now: expect.any(Number),
+          },
+          "Applied database migrations have future timestamps",
+        );
+      } finally {
+        db.$client.close();
+      }
+    } finally {
+      rmSync(dataDir, { force: true, recursive: true });
+      vi.useRealTimers();
+    }
   });
 });

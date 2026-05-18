@@ -31,6 +31,12 @@ export {
 } from "./ids.js";
 
 export { migrate } from "./migrate.js";
+export type {
+  FutureAppliedMigration,
+  FutureAppliedMigrationWarningFields,
+  MigrateOptions,
+  MigrationWarningLogger,
+} from "./migrate.js";
 export {
   deriveStoredEventItemFields,
   deriveStoredEventItemFieldsFromSource,

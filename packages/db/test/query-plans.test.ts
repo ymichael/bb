@@ -22,10 +22,12 @@ import {
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
   pruneCompletedCommands,
   pruneCompletedCommandPayloads,
+  pruneClosedSessions,
   sweepExpiredCommands,
   truncateCompletedEventItemOutputs,
 } from "../src/data/sweeps.js";
 import { getDatabaseMaintenanceActivity } from "../src/data/maintenance.js";
+import { openSession } from "../src/data/sessions.js";
 import { upsertHost } from "../src/data/hosts.js";
 import { createProject } from "../src/data/projects.js";
 import { createThread } from "../src/data/threads.js";
@@ -34,6 +36,13 @@ import { queueCommand, reportCommandResult } from "../src/data/commands.js";
 
 type SqliteParameter = string | number | bigint | Buffer | null;
 type LoggedSqlPredicate = (fields: SlowDbQueryLogFields) => boolean;
+type CloseSessionAtParameters = ["closed", number, number, string];
+
+interface CloseSessionAtArgs {
+  closedAt: number;
+  db: DbConnection;
+  sessionId: string;
+}
 
 interface LoggedDebug {
   fields: SlowDbQueryLogFields;
@@ -113,6 +122,18 @@ function setup(): TestDb {
   });
   logger.clear();
   return { db, host, logger, thread };
+}
+
+function closeSessionAt(args: CloseSessionAtArgs): void {
+  args.db.$client
+    .prepare<CloseSessionAtParameters>(
+      `
+        UPDATE host_daemon_sessions
+        SET status = ?, closed_at = ?, updated_at = ?
+        WHERE id = ?
+      `,
+    )
+    .run("closed", args.closedAt, args.closedAt, args.sessionId);
 }
 
 function findOnlyDebugLog(args: FindOnlyDebugLogArgs): LoggedDebug {
@@ -216,6 +237,52 @@ describe("slow query index plans", () => {
       indexName: "host_daemon_commands_completed_prune_idx",
       params: ["success", "error", completedBefore, 100],
     });
+
+    db.$client.close();
+  });
+
+  it("uses the closed-session prune index for emitted delete SQL", () => {
+    const { db, host, logger } = setup();
+    const now = Date.now();
+    const staleSession = openSession(db, noopNotifier, {
+      hostId: host.id,
+      instanceId: "closed-prune-query-plan",
+      hostName: "query-plan-host",
+      hostType: "persistent",
+      dataDir: "/tmp/query-plan-host-data",
+      protocolVersion: 1,
+      heartbeatIntervalMs: 10_000,
+      leaseTimeoutMs: 30_000,
+    });
+    const closedBefore = now - 5_000;
+    closeSessionAt({
+      closedAt: now - 10_000,
+      db,
+      sessionId: staleSession.id,
+    });
+    logger.clear();
+
+    pruneClosedSessions(db, { closedBefore, limit: 100 });
+
+    const debugLog = findOnlyDebugLog({
+      logger,
+      predicate: (fields) =>
+        fields.operation === "run" &&
+        fields.sql.startsWith("DELETE FROM host_daemon_sessions"),
+    });
+    assertEmittedQueryPlanUsesIndex({
+      db,
+      debugLog,
+      indexName: "host_daemon_sessions_closed_prune_idx",
+      params: ["closed", closedBefore, 100],
+    });
+    const details = queryPlanDetails({
+      db,
+      params: ["closed", closedBefore, 100],
+      sql: debugLog.fields.sql,
+    });
+    expect(details).toContain("host_daemon_commands_session_idx");
+    expect(details).not.toContain("SCAN host_daemon_commands");
 
     db.$client.close();
   });

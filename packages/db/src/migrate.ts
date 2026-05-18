@@ -50,6 +50,32 @@ interface ExpectedIndex {
   unique: boolean;
 }
 
+export interface FutureAppliedMigration {
+  createdAt: number;
+  hash: string;
+}
+
+export interface FutureAppliedMigrationWarningFields {
+  migrations: FutureAppliedMigration[];
+  now: number;
+}
+
+export interface MigrationWarningLogger {
+  warn(
+    fields: FutureAppliedMigrationWarningFields,
+    message: string,
+  ): void;
+}
+
+export interface MigrateOptions {
+  logger?: MigrationWarningLogger;
+}
+
+interface AppliedMigrationRow {
+  createdAt: number;
+  hash: string;
+}
+
 const migrationModuleFilename = fileURLToPath(import.meta.url);
 const migrationModuleDirname = dirname(migrationModuleFilename);
 const migrationJournalPath = join("meta", "_journal.json");
@@ -406,7 +432,41 @@ function validatePendingInteractionsSchema(db: DbConnection): void {
   }
 }
 
-export function migrate(db: DbConnection): void {
+function warnAboutFutureAppliedMigrations(
+  db: DbConnection,
+  options: MigrateOptions,
+): void {
+  if (!options.logger) {
+    return;
+  }
+
+  const now = Date.now();
+  const migrations = db.$client
+    .prepare<[number], AppliedMigrationRow>(
+      `
+        SELECT hash, created_at AS createdAt
+        FROM __drizzle_migrations
+        WHERE created_at IS NOT NULL
+          AND created_at > ?
+        ORDER BY created_at
+      `,
+    )
+    .all(now);
+
+  if (migrations.length === 0) {
+    return;
+  }
+
+  options.logger.warn(
+    {
+      migrations,
+      now,
+    },
+    "Applied database migrations have future timestamps",
+  );
+}
+
+export function migrate(db: DbConnection, options: MigrateOptions = {}): void {
   const migrationsFolder = resolveMigrationsFolder();
   const sqlite = db.$client;
 
@@ -425,5 +485,6 @@ export function migrate(db: DbConnection): void {
     );
   }
 
+  warnAboutFutureAppliedMigrations(db, options);
   validatePendingInteractionsSchema(db);
 }
