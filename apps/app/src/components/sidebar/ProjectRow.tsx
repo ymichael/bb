@@ -176,7 +176,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
     createThreadInWorktree();
   }, [createThreadInWorktree, onProjectSelect]);
   return (
-    <div className="mt-2 space-y-0.5">
+    <div className="space-y-0.5">
       <EnvironmentThreadGroupHeader
         representativeThread={threads[0]}
         paddingClass={SIDEBAR_MANAGER_ROW_PADDING_CLASS}
@@ -215,7 +215,7 @@ function ManagedEnvironmentThreadSubGroup({
 }: ManagedEnvironmentThreadSubGroupProps) {
   const { threads } = environmentThreadGroup;
   return (
-    <div className="mt-2 space-y-0.5">
+    <div className="space-y-0.5">
       <EnvironmentThreadGroupHeader
         representativeThread={threads[0]}
         paddingClass={SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS}
