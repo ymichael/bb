@@ -119,7 +119,10 @@ export function ProjectMainView() {
     { enabled: isHostMode },
   );
   const activeBranchesQuery = hostBranchesQuery;
-  const branchOptions = activeBranchesQuery.data?.branches ?? [];
+  const branchOptions = useMemo(
+    () => activeBranchesQuery.data?.branches ?? [],
+    [activeBranchesQuery.data?.branches],
+  );
   // The branch this env will use if the user doesn't override:
   //   - host:local      → the primary checkout's HEAD (`current`)
   //   - host:worktree   → the repo's default branch (the server's `default`
