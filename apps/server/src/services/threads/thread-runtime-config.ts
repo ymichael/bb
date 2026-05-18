@@ -52,7 +52,7 @@ const MANAGER_DYNAMIC_TOOLS: DynamicTool[] = [
   {
     name: "message_user",
     description:
-      "Send a concise message that is visible to the user from the manager thread. Use this for status updates, questions, approval requests, blockers, and completion notes. Plain assistant text is internal and is not shown to users.",
+      "IMPORTANT: you need to call this for the user to see messages you send. Send a concise message that is visible to the user from the manager thread. Use this for status updates, questions, approval requests, blockers, and completion notes. Plain assistant text is internal and is not shown to users.",
     inputSchema: MESSAGE_USER_TOOL_SCHEMA,
   },
 ];
