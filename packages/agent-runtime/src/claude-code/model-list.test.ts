@@ -39,6 +39,36 @@ describe("listClaudeCodeModels", () => {
     );
   });
 
+  it("advertises Claude Code max effort for supported models", () => {
+    const { models } = listClaudeCodeModels();
+    const effortLevelsByModel = new Map(
+      models.map((model) => [
+        model.model,
+        model.supportedReasoningEfforts.map((effort) => effort.reasoningEffort),
+      ]),
+    );
+
+    expect(effortLevelsByModel.get("claude-opus-4-7")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "xhigh",
+      "max",
+    ]);
+    expect(effortLevelsByModel.get("claude-opus-4-6")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "max",
+    ]);
+    expect(effortLevelsByModel.get("claude-sonnet-4-6")).toEqual([
+      "low",
+      "medium",
+      "high",
+      "max",
+    ]);
+  });
+
   it("routes legacy moving aliases to the selected-only bucket", () => {
     const { models, selectedOnlyModels } = listClaudeCodeModels();
     const activeIds = models.map((model) => model.model);

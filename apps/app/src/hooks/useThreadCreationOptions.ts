@@ -35,6 +35,7 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   medium: "Medium",
   high: "High",
   xhigh: "Extra High",
+  max: "Max",
 };
 
 const PERMISSION_MODE_OPTIONS: PickerOption<PermissionMode>[] = [
@@ -108,7 +109,8 @@ function isReasoningLevel(value: unknown): value is ReasoningLevel {
     value === "low" ||
     value === "medium" ||
     value === "high" ||
-    value === "xhigh"
+    value === "xhigh" ||
+    value === "max"
   );
 }
 

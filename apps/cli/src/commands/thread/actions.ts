@@ -231,7 +231,7 @@ export function registerActionsCommands(
     .option("--model <model>", "Model ID for this message")
     .option(
       "--reasoning-level <level>",
-      "Reasoning level: low, medium, high, xhigh",
+      "Reasoning level: low, medium, high, xhigh, max (provider-dependent)",
     )
     .option("--permission-mode <mode>", PERMISSION_MODE_HELP)
     .option("--mode <mode>", "Message mode (e.g. steer)")

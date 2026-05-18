@@ -67,7 +67,7 @@ export function registerManagerCommands(
     )
     .option(
       "--reasoning-level <level>",
-      "Reasoning level (low, medium, high, xhigh)",
+      "Reasoning level (low, medium, high, xhigh, max; provider-dependent)",
     )
     .option("--permission-mode <mode>", MANAGED_PERMISSION_MODE_HELP)
     .option("--host <id>", "Host ID (defaults to local host)")

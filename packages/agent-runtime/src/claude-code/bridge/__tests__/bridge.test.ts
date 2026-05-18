@@ -1431,7 +1431,7 @@ describe("bridge", () => {
     }
   });
 
-  it("passes thread/start reasoningLevel through to Claude SDK effort and thinking display", async () => {
+  it("passes thread/start max reasoningLevel through to Claude SDK effort and thinking display", async () => {
     const bridge = createBridgeJsonRpcTestHarness(handleLine);
     const queries: ControlledClaudeQuery[] = [];
     queryMock.mockImplementation(() => {
@@ -1447,7 +1447,7 @@ describe("bridge", () => {
         instructionMode: "append",
         permissionEscalation: "ask",
         permissionMode: "default",
-        reasoningLevel: "xhigh",
+        reasoningLevel: "max",
         threadId: "thread-reasoning",
       });
       await bridge.waitForResponse(1);
@@ -1455,7 +1455,7 @@ describe("bridge", () => {
       expect(queryMock).toHaveBeenCalledWith(
         expect.objectContaining({
           options: expect.objectContaining({
-            effort: "xhigh",
+            effort: "max",
             thinking: {
               type: "adaptive",
               display: "summarized",

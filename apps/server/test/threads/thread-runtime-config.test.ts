@@ -250,6 +250,42 @@ describe("thread runtime config", () => {
     }
   });
 
+  it("rejects reasoning levels unsupported by the provider", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-runtime-reasoning-level-unsupported",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        providerId: "codex",
+      });
+
+      await expect(
+        resolveExecutionOptions(harness.deps, {
+          threadId: thread.id,
+          requestedExecution: {
+            model: "gpt-5.4",
+            reasoningLevel: "max",
+            source: "client/turn/requested",
+          },
+        }),
+      ).rejects.toThrow(
+        "Provider codex does not support max reasoning level. Supported reasoning levels: low, medium, high, xhigh.",
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("derives ask escalation only for direct user root-thread work", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -127,13 +127,13 @@ describe("SdkSession", () => {
     );
   });
 
-  it("forwards reasoning effort and thinking display to the SDK when configured", () => {
+  it("forwards max reasoning effort and thinking display to the SDK when configured", () => {
     const onMessage = vi.fn();
     const onDone = vi.fn();
     const session = new SdkSession(
       {
         ...defaultOptions,
-        effort: "xhigh",
+        effort: "max",
         thinking: {
           type: "adaptive",
           display: "summarized",
@@ -148,7 +148,7 @@ describe("SdkSession", () => {
     expect(queryMock).toHaveBeenCalledWith(
       expect.objectContaining({
         options: expect.objectContaining({
-          effort: "xhigh",
+          effort: "max",
           thinking: {
             type: "adaptive",
             display: "summarized",

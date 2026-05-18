@@ -15,7 +15,13 @@ export {
   requireThreadIdOrSelf,
 } from "../context-env.js";
 
-const REASONING_LEVELS: ReasoningLevel[] = ["low", "medium", "high", "xhigh"];
+const REASONING_LEVELS: ReasoningLevel[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
 
 export interface JsonOutputOptions {
   json?: boolean;

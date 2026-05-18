@@ -2,6 +2,7 @@ import type { AvailableModel, ModelReasoningEffort } from "@bb/domain";
 import {
   HIGH_REASONING_EFFORT,
   LOW_REASONING_EFFORT,
+  MAX_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
 } from "../shared/adapter-utils.js";
@@ -15,23 +16,26 @@ type ClaudeCodeCatalogEntry = {
   defaultReasoningEffort: AvailableModel["defaultReasoningEffort"];
 };
 
-const OPUS_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
+const OPUS_4_7_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   HIGH_REASONING_EFFORT,
   XHIGH_REASONING_EFFORT,
+  MAX_REASONING_EFFORT,
 ];
 
 const OPUS_4_6_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   HIGH_REASONING_EFFORT,
+  MAX_REASONING_EFFORT,
 ];
 
 const SONNET_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
   LOW_REASONING_EFFORT,
   MEDIUM_REASONING_EFFORT,
   HIGH_REASONING_EFFORT,
+  MAX_REASONING_EFFORT,
 ];
 
 const HAIKU_REASONING_EFFORTS: readonly ModelReasoningEffort[] = [
@@ -56,7 +60,7 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: withOneMillionContext(CLAUDE_OPUS_4_7_MODEL),
     displayName: "Opus 4.7 (1M)",
     description: "Opus 4.7 with 1M context for complex long coding sessions",
-    supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
+    supportedReasoningEfforts: OPUS_4_7_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
   {
@@ -64,7 +68,7 @@ const CLAUDE_CODE_CATALOG: readonly ClaudeCodeCatalogEntry[] = [
     model: CLAUDE_OPUS_4_7_MODEL,
     displayName: "Opus 4.7",
     description: "Opus 4.7 for complex coding tasks",
-    supportedReasoningEfforts: OPUS_REASONING_EFFORTS,
+    supportedReasoningEfforts: OPUS_4_7_REASONING_EFFORTS,
     defaultReasoningEffort: "medium",
   },
   {

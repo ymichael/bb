@@ -12,11 +12,7 @@ import {
   jsonRpcEnvelopeSchema,
   type BridgeToolCallRequest,
 } from "../../shared/bridge-tool-calls.js";
-import {
-  reasoningLevelValues,
-  type ReasoningLevel,
-  type ThreadEventContextWindowUsage,
-} from "@bb/domain";
+import type { ThreadEventContextWindowUsage } from "@bb/domain";
 import type {
   AgentSessionEvent,
   ContextUsage,
@@ -48,7 +44,7 @@ interface BuildPiSessionOptionsParams extends PiInstructionOverrideParams {
   cwd: string;
   model?: string;
   sessionPath?: string;
-  thinkingLevel?: ReasoningLevel;
+  thinkingLevel?: PiReasoningLevel;
 }
 
 interface BuildPiSessionOptionsArgs {
@@ -71,7 +67,9 @@ const piInstructionOverrideSchemaOptions = {
   path: ["appendSystemPrompt"],
 };
 
-const piReasoningLevelSchema = z.enum(reasoningLevelValues);
+const piReasoningLevelValues = ["low", "medium", "high", "xhigh"] as const;
+const piReasoningLevelSchema = z.enum(piReasoningLevelValues);
+type PiReasoningLevel = z.infer<typeof piReasoningLevelSchema>;
 
 const piThreadStartParamsSchema = z
   .object({

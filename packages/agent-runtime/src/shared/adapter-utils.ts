@@ -30,6 +30,10 @@ export const XHIGH_REASONING_EFFORT: ModelReasoningEffort = {
   reasoningEffort: "xhigh",
   description: "Extra high reasoning effort",
 };
+export const MAX_REASONING_EFFORT: ModelReasoningEffort = {
+  reasoningEffort: "max",
+  description: "Maximum reasoning effort",
+};
 
 export interface NormalizeProviderCommandOutputArgs {
   emptyPlaceholders: readonly string[];
