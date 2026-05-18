@@ -81,7 +81,6 @@ import {
   SecondaryPanelFilePreview,
   ThreadStorageFilePreview,
 } from "@/components/secondary-panel/ThreadStorageFilePreview";
-import { PINNED_STORAGE_FILE_PATH } from "@/components/secondary-panel/managerStorage";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
@@ -249,6 +248,7 @@ export function ThreadDetailView() {
     openStorageFilePaths,
     openWorkspaceFile,
     openWorkspaceFileTabs,
+    pinnedStorageFilePath,
   } = useThreadFileTabs({
     threadId,
     environmentId: thread?.environmentId,
@@ -444,7 +444,7 @@ export function ThreadDetailView() {
           id: `storage:${path}`,
           filename: path.split("/").at(-1) ?? path,
           isActive: path === activeStorageFilePath,
-          isPinned: path === PINNED_STORAGE_FILE_PATH,
+          isPinned: path === pinnedStorageFilePath,
           statusLabel: null,
           onSelect: () => activateStorageFileTab(path),
           onClose: () => closeStorageFileTab(path),
@@ -474,6 +474,7 @@ export function ThreadDetailView() {
     openHostFileTabs,
     openStorageFilePaths,
     openWorkspaceFileTabs,
+    pinnedStorageFilePath,
   ]);
   const requestedMergeBaseBranch =
     selectedMergeBaseBranch ?? environmentMergeBaseBranch;
@@ -949,6 +950,7 @@ export function ThreadDetailView() {
       filePreview={threadStorageFilePreview}
       isLoading={isThreadStorageFilePreviewLoading}
       onOpenInEditor={handleOpenStorageFileInEditor}
+      pinnedPath={pinnedStorageFilePath}
     />
   ) : undefined;
 

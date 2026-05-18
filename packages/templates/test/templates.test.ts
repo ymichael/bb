@@ -88,6 +88,8 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
+    expect(rendered).toContain("write to `STATUS.html` instead");
+    expect(rendered).toContain("the UI renders it in an unsandboxed iframe");
 
     // Variables rendered
     expect(rendered).toContain("test-thread-123");
@@ -102,7 +104,9 @@ describe("@bb/templates", () => {
     const rendered = renderTemplate("standardAgentInstructions", {});
 
     expect(rendered).toContain("You are a coding agent");
-    expect(rendered).not.toContain("Ask the user a blocking question only when");
+    expect(rendered).not.toContain(
+      "Ask the user a blocking question only when",
+    );
   });
 
   it("renders all templates without error", () => {

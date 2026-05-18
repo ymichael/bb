@@ -20,7 +20,10 @@ import {
   type ThreadSecondaryPanelState,
   type WorkspaceFileTabState,
 } from "@/lib/thread-secondary-panel-state";
-import { PINNED_STORAGE_FILE_PATH } from "./managerStorage";
+import {
+  isManagerStatusStorageFilePath,
+  resolvePinnedManagerStorageFilePath,
+} from "./managerStorage";
 
 interface UseThreadFileTabsParams {
   threadId: string | null | undefined;
@@ -28,6 +31,8 @@ interface UseThreadFileTabsParams {
   threadType: ThreadType | undefined;
   storageFiles: readonly { path: string }[] | undefined;
 }
+
+type StorageFilePaths = readonly string[];
 
 function upsertWorkspaceFileTab(
   tabs: readonly WorkspaceFileTabState[],
@@ -85,6 +90,23 @@ function removeHostFileTab(
   return nextTabs.length === tabs.length ? tabs : nextTabs;
 }
 
+function areStorageFilePathsEqual(
+  left: StorageFilePaths,
+  right: StorageFilePaths,
+): boolean {
+  return (
+    left.length === right.length &&
+    left.every((path, index) => path === right[index])
+  );
+}
+
+function areFileTabRefsEqual(
+  left: ThreadSecondaryPanelFileTabRef | null,
+  right: ThreadSecondaryPanelFileTabRef | null,
+): boolean {
+  return left?.type === right?.type && left?.path === right?.path;
+}
+
 function buildActiveWorkspaceFileTab(
   path: string,
 ): ThreadSecondaryPanelFileTabRef {
@@ -131,6 +153,8 @@ export function useThreadFileTabs({
   const setSecondaryPanel = useSetThreadSecondaryPanel(threadId);
   const isThreadResolved = threadType !== undefined;
   const isManagerThread = threadType === "manager";
+  const pinnedStorageFilePath =
+    resolvePinnedManagerStorageFilePath(storageFiles);
   const resolvedEnvironmentId = isThreadResolved
     ? (environmentId ?? null)
     : undefined;
@@ -159,37 +183,48 @@ export function useThreadFileTabs({
         isManagerThread,
         state,
       });
+      const storageWithoutManagerStatus =
+        normalizedState.fileTabs.storage.filter(
+          (path) => !isManagerStatusStorageFilePath(path),
+        );
+      const storage = [pinnedStorageFilePath, ...storageWithoutManagerStatus];
+      const active =
+        normalizedState.fileTabs.active?.type === "storage" &&
+        isManagerStatusStorageFilePath(normalizedState.fileTabs.active.path)
+          ? buildActiveStorageFileTab(pinnedStorageFilePath)
+          : (normalizedState.fileTabs.active ??
+            buildActiveStorageFileTab(pinnedStorageFilePath));
       if (
-        normalizedState.fileTabs.storage[0] === PINNED_STORAGE_FILE_PATH &&
-        normalizedState.fileTabs.active !== null
+        areStorageFilePathsEqual(storage, normalizedState.fileTabs.storage) &&
+        areFileTabRefsEqual(active, normalizedState.fileTabs.active)
       ) {
         return normalizedState;
       }
-      const storageWithoutPinned = normalizedState.fileTabs.storage.filter(
-        (path) => path !== PINNED_STORAGE_FILE_PATH,
-      );
-      const storage = [PINNED_STORAGE_FILE_PATH, ...storageWithoutPinned];
       return setFileTabs(normalizedState, {
         ...normalizedState.fileTabs,
         storage,
-        active:
-          normalizedState.fileTabs.active ??
-          buildActiveStorageFileTab(PINNED_STORAGE_FILE_PATH),
+        active,
       });
     });
-  }, [isManagerThread, updatePanelState]);
+  }, [isManagerThread, pinnedStorageFilePath, updatePanelState]);
 
   useEffect(() => {
     if (!isThreadResolved || !storageFiles) return;
     updatePanelState((state) =>
       pruneStorageFileTabs({
         isManagerThread,
-        pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
+        pinnedStorageFilePath,
         state,
         storageFiles,
       }),
     );
-  }, [isManagerThread, isThreadResolved, storageFiles, updatePanelState]);
+  }, [
+    isManagerThread,
+    isThreadResolved,
+    pinnedStorageFilePath,
+    storageFiles,
+    updatePanelState,
+  ]);
 
   const openWorkspaceFile = useCallback(
     ({ lineNumber, path, source, statusLabel }: WorkspaceFileTabState) => {
@@ -362,7 +397,7 @@ export function useThreadFileTabs({
 
   const closeStorageFileTab = useCallback(
     (path: string) => {
-      if (!isManagerThread || path === PINNED_STORAGE_FILE_PATH) return;
+      if (!isManagerThread || path === pinnedStorageFilePath) return;
       updatePanelState((state) => {
         const storage = removeStorageFileTab(state.fileTabs.storage, path);
         if (storage === state.fileTabs.storage) {
@@ -379,7 +414,7 @@ export function useThreadFileTabs({
         });
       });
     },
-    [isManagerThread, updatePanelState],
+    [isManagerThread, pinnedStorageFilePath, updatePanelState],
   );
 
   const activateStorageFileTab = useCallback(
@@ -444,5 +479,6 @@ export function useThreadFileTabs({
     openStorageFilePaths,
     openWorkspaceFile,
     openWorkspaceFileTabs: visibleWorkspaceFileTabs,
+    pinnedStorageFilePath,
   };
 }

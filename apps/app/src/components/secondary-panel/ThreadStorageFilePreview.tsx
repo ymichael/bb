@@ -1,12 +1,12 @@
 import { FilePreview as FilePreviewSurface } from "./FilePreview";
-import { PINNED_STORAGE_FILE_PATH } from "./managerStorage";
+import { MANAGER_STATUS_HTML_FILE_PATH } from "./managerStorage";
 import { HttpError } from "@/lib/api";
 import type {
   FilePreview,
   WorkspaceFilePreviewStatusLabel,
 } from "@/lib/file-preview";
 
-interface ThreadStorageFilePreviewProps {
+interface FilePreviewBaseProps {
   activePath: string;
   copyPath?: string | null;
   error?: Error | null;
@@ -16,7 +16,11 @@ interface ThreadStorageFilePreviewProps {
   onOpenInEditor?: (path: string) => void;
 }
 
-interface SecondaryPanelFilePreviewProps extends ThreadStorageFilePreviewProps {
+interface ThreadStorageFilePreviewProps extends FilePreviewBaseProps {
+  pinnedPath: string;
+}
+
+interface SecondaryPanelFilePreviewProps extends FilePreviewBaseProps {
   pendingNotFoundPath?: string;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
@@ -64,6 +68,27 @@ export function SecondaryPanelFilePreview({
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         state={{ kind: "loading" }}
+      />
+    );
+  }
+
+  if (
+    activePath === MANAGER_STATUS_HTML_FILE_PATH &&
+    filePreview.kind === "text"
+  ) {
+    return (
+      <FilePreviewSurface
+        path={activePath}
+        copyPath={copyPath}
+        onOpenInEditor={onOpenInEditor}
+        statusLabel={statusLabel}
+        state={{
+          kind: "html",
+          file: {
+            name: filePreview.name ?? activePath,
+            contents: filePreview.content,
+          },
+        }}
       />
     );
   }
@@ -132,6 +157,7 @@ export function ThreadStorageFilePreview({
   isLoading,
   lineNumber,
   onOpenInEditor,
+  pinnedPath,
 }: ThreadStorageFilePreviewProps) {
   return (
     <SecondaryPanelFilePreview
@@ -142,7 +168,7 @@ export function ThreadStorageFilePreview({
       isLoading={isLoading}
       lineNumber={lineNumber}
       onOpenInEditor={onOpenInEditor}
-      pendingNotFoundPath={PINNED_STORAGE_FILE_PATH}
+      pendingNotFoundPath={pinnedPath}
     />
   );
 }
