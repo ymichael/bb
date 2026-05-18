@@ -1,4 +1,10 @@
-import { type CSSProperties, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { File as PierreFile } from "@pierre/diffs/react";
 import type { SelectedLineRange, SupportedLanguages } from "@pierre/diffs";
 import { Button } from "@/components/ui/button.js";
@@ -23,6 +29,7 @@ export type FilePreviewState =
   | { kind: "manager-status-pending" }
   | { kind: "error"; message?: string }
   | { kind: "image"; url: string }
+  | { kind: "html"; file: FilePreviewFile }
   | { kind: "ready"; file: FilePreviewFile; lineNumber: number | null };
 
 export interface FilePreviewProps {
@@ -46,6 +53,10 @@ interface FilePreviewHeaderProps {
   statusLabel: WorkspaceFilePreviewStatusLabel | null;
   markdownMode: MarkdownViewMode | null;
   onMarkdownModeChange: (mode: MarkdownViewMode) => void;
+}
+
+interface HtmlFilePreviewProps {
+  file: FilePreviewFile;
 }
 
 type MarkdownViewMode = "preview" | "source";
@@ -73,6 +84,12 @@ const FILE_PREVIEW_WRAPPER_STYLE = {
   "--md-content-w": "100cqi",
 } as CSSProperties;
 
+const HTML_FILE_PREVIEW_IFRAME_STYLE = {
+  width: "100%",
+  height: "100%",
+  border: 0,
+} as CSSProperties;
+
 function isMarkdownFile(name: string): boolean {
   const extension = name.split(".").pop()?.toLowerCase();
   return extension !== undefined && MARKDOWN_EXTENSIONS.has(extension);
@@ -97,7 +114,14 @@ export function FilePreview({
   // Establish a `@container/page` scope so MarkdownPreview's `100cqw`-based
   // table breakout sizes against this panel, not the viewport.
   return (
-    <div className="@container/page" style={FILE_PREVIEW_WRAPPER_STYLE}>
+    <div
+      className={
+        state.kind === "html"
+          ? "@container/page flex h-full min-h-0 flex-col"
+          : "@container/page"
+      }
+      style={FILE_PREVIEW_WRAPPER_STYLE}
+    >
       <FilePreviewHeader
         path={path}
         copyPath={copyPath}
@@ -115,11 +139,7 @@ export function FilePreview({
   );
 }
 
-function FilePreviewBody({
-  state,
-  path,
-  markdownMode,
-}: FilePreviewBodyProps) {
+function FilePreviewBody({ state, path, markdownMode }: FilePreviewBodyProps) {
   if (state.kind === "loading") {
     return <FilePreviewLoading />;
   }
@@ -130,7 +150,9 @@ function FilePreviewBody({
     return <FilePreviewMessage message="File not found." role="alert" />;
   }
   if (state.kind === "manager-status-pending") {
-    return <FilePreviewMessage message="Manager hasn't written a status yet." />;
+    return (
+      <FilePreviewMessage message="Manager hasn't written a status yet." />
+    );
   }
   if (state.kind === "error") {
     return (
@@ -143,10 +165,15 @@ function FilePreviewBody({
   if (state.kind === "image") {
     return <FilePreviewImage url={state.url} alt={path} />;
   }
+  if (state.kind === "html") {
+    return <HtmlFilePreview file={state.file} />;
+  }
   if (isMarkdownFile(state.file.name) && markdownMode === "preview") {
     return <MarkdownFilePreview file={state.file} />;
   }
-  return <FilePreviewCode file={state.file} lineNumber={state.lineNumber ?? null} />;
+  return (
+    <FilePreviewCode file={state.file} lineNumber={state.lineNumber ?? null} />
+  );
 }
 
 function FilePreviewHeader({
@@ -249,6 +276,18 @@ function FilePreviewImage({ url, alt }: { url: string; alt: string }) {
         src={url}
         alt={alt}
         className="block max-h-[34rem] w-full object-contain"
+      />
+    </div>
+  );
+}
+
+function HtmlFilePreview({ file }: HtmlFilePreviewProps) {
+  return (
+    <div className="min-h-0 flex-1">
+      <iframe
+        title={file.name}
+        srcDoc={file.contents}
+        style={HTML_FILE_PREVIEW_IFRAME_STYLE}
       />
     </div>
   );

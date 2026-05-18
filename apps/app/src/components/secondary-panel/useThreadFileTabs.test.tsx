@@ -19,6 +19,10 @@ import {
   type ThreadSecondaryPanelState,
   type WorkspaceFileTabState,
 } from "@/lib/thread-secondary-panel-state";
+import {
+  MANAGER_STATUS_HTML_FILE_PATH,
+  MANAGER_STATUS_MARKDOWN_FILE_PATH,
+} from "./managerStorage";
 import { useThreadFileTabs } from "./useThreadFileTabs";
 
 const NOW = 1_700_000_000_000;
@@ -317,6 +321,79 @@ describe("useThreadFileTabs", () => {
       expect(result.current.openStorageFilePaths).toEqual(["STATUS.md"]);
     });
     expect(result.current.activeStorageFilePath).toBeNull();
+  });
+
+  it("prefers STATUS.html for the pinned manager storage tab when present", async () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: null,
+      threadType: "manager",
+      storageFiles: [
+        { path: MANAGER_STATUS_MARKDOWN_FILE_PATH },
+        { path: MANAGER_STATUS_HTML_FILE_PATH },
+        { path: "notes.md" },
+      ],
+      threadId: "thr-manager-html-status",
+    });
+
+    await waitFor(() => {
+      expect(result.current.openStorageFilePaths).toEqual([
+        MANAGER_STATUS_HTML_FILE_PATH,
+      ]);
+    });
+    expect(result.current.activeStorageFilePath).toBe(
+      MANAGER_STATUS_HTML_FILE_PATH,
+    );
+    expect(result.current.pinnedStorageFilePath).toBe(
+      MANAGER_STATUS_HTML_FILE_PATH,
+    );
+
+    act(() => {
+      result.current.openStorageFile(MANAGER_STATUS_MARKDOWN_FILE_PATH);
+    });
+
+    expect(result.current.openStorageFilePaths).toEqual([
+      MANAGER_STATUS_HTML_FILE_PATH,
+      MANAGER_STATUS_MARKDOWN_FILE_PATH,
+    ]);
+  });
+
+  it("uses STATUS.md for the pinned manager storage tab without STATUS.html", async () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: null,
+      threadType: "manager",
+      storageFiles: [{ path: MANAGER_STATUS_MARKDOWN_FILE_PATH }],
+      threadId: "thr-manager-md-status",
+    });
+
+    await waitFor(() => {
+      expect(result.current.openStorageFilePaths).toEqual([
+        MANAGER_STATUS_MARKDOWN_FILE_PATH,
+      ]);
+    });
+    expect(result.current.pinnedStorageFilePath).toBe(
+      MANAGER_STATUS_MARKDOWN_FILE_PATH,
+    );
+  });
+
+  it("keeps the STATUS.md pending tab when no status file exists", async () => {
+    const { result } = renderThreadFileTabsHook({
+      environmentId: null,
+      threadType: "manager",
+      storageFiles: [{ path: "notes.md" }],
+      threadId: "thr-manager-no-status",
+    });
+
+    await waitFor(() => {
+      expect(result.current.openStorageFilePaths).toEqual([
+        MANAGER_STATUS_MARKDOWN_FILE_PATH,
+      ]);
+    });
+    expect(result.current.activeStorageFilePath).toBe(
+      MANAGER_STATUS_MARKDOWN_FILE_PATH,
+    );
+    expect(result.current.pinnedStorageFilePath).toBe(
+      MANAGER_STATUS_MARKDOWN_FILE_PATH,
+    );
   });
 
   it("keeps seeded manager storage tabs while thread type is unresolved", async () => {
