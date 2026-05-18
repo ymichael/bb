@@ -20,17 +20,17 @@ export const MANAGER_TEMPLATE_DIR_NAME = "manager-templates";
 export const ACTIVE_MANAGER_TEMPLATE_FILE_NAME = "active";
 export const DEFAULT_MANAGER_TEMPLATE_NAME: ManagerTemplateName = "default";
 
-const DEFAULT_PREFERENCES_TEMPLATE = `# Preferences
+const DEFAULT_PREFERENCES_CONTENT = `# Preferences
 
 No user-specific preferences have been recorded yet. On first welcome, ask what the user prefers to be called and how they like updates, then replace this starter note with durable preferences.
 `;
 
-const DEFAULT_STATUS_TEMPLATE = `# Status
+const DEFAULT_STATUS_CONTENT = `# Status
 
 No active work yet.
 `;
 
-const DEFAULT_ASYNC_TEMPLATE = `---
+const DEFAULT_ASYNC_CONTENT = `---
 timezone: UTC
 schedules: []
 ---
@@ -106,15 +106,15 @@ const BUILT_IN_MANAGER_TEMPLATE_SETS: readonly BuiltInManagerTemplateSet[] = [
     files: [
       {
         fileName: "PREFERENCES.md",
-        content: DEFAULT_PREFERENCES_TEMPLATE,
+        content: DEFAULT_PREFERENCES_CONTENT,
       },
       {
         fileName: "STATUS.md",
-        content: DEFAULT_STATUS_TEMPLATE,
+        content: DEFAULT_STATUS_CONTENT,
       },
       {
         fileName: "ASYNC.md",
-        content: DEFAULT_ASYNC_TEMPLATE,
+        content: DEFAULT_ASYNC_CONTENT,
       },
     ],
   },
