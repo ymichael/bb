@@ -90,6 +90,8 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("Simple delegation");
     expect(rendered).toContain("write to `STATUS.html` instead");
     expect(rendered).toContain("the UI renders it in an unsandboxed iframe");
+    expect(rendered).toContain("bb guide styling");
+    expect(rendered).not.toContain("--background: oklch(0.9551 0 0);");
 
     // Variables rendered
     expect(rendered).toContain("test-thread-123");
@@ -98,6 +100,26 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("America/Los_Angeles");
     expect(rendered).toContain("/tmp/test-thread-storage");
     expect(rendered).toContain("No preferences yet.");
+  });
+
+  it("renders bbGuideStyling", () => {
+    const templates = listTemplates();
+    expect(templates.some((template) => template.id === "bbGuideStyling")).toBe(
+      true,
+    );
+
+    const rendered = renderTemplate("bbGuideStyling", {});
+
+    expect(rendered).toContain("STATUS.html styling");
+    expect(rendered).toContain(
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap",
+    );
+    expect(rendered).toContain("--background: oklch(0.9551 0 0);");
+    expect(rendered).toContain(
+      "@media (prefers-color-scheme: dark) {\n  :root {",
+    );
+    expect(rendered).toContain("--background: oklch(0.195 0 0);");
+    expect(rendered).toContain("--text-base: 0.9375rem;");
   });
 
   it("renders standardAgentInstructions without user-question guidance", () => {

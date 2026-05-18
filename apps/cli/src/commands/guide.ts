@@ -11,6 +11,7 @@ const guideChapters: Record<string, TemplateId> = {
   providers: "bbGuideProviders",
   projects: "bbGuideProjects",
   hosts: "bbGuideHosts",
+  styling: "bbGuideStyling",
 };
 
 export function registerGuideCommand(program: Command): void {
