@@ -42,7 +42,8 @@ const MESSAGE_USER_TOOL_SCHEMA = {
   properties: {
     text: {
       type: "string",
-      description: "User-visible message text.",
+      description:
+        "Exact message text to show to the user. Keep it concise, factual, and appropriate for the user conversation.",
     },
   },
   required: ["text"],
@@ -50,7 +51,8 @@ const MESSAGE_USER_TOOL_SCHEMA = {
 const MANAGER_DYNAMIC_TOOLS: DynamicTool[] = [
   {
     name: "message_user",
-    description: "Send a user-visible update from the manager thread.",
+    description:
+      "Send a concise message that is visible to the user from the manager thread. Use this for status updates, questions, approval requests, blockers, and completion notes. Plain assistant text is internal and is not shown to users.",
     inputSchema: MESSAGE_USER_TOOL_SCHEMA,
   },
 ];
