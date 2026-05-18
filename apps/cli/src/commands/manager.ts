@@ -23,6 +23,7 @@ interface ManagerHireCommandOptions {
   host?: string;
   provider?: string;
   model?: string;
+  template?: string;
   reasoningLevel?: string;
   permissionMode?: string;
 }
@@ -66,6 +67,10 @@ export function registerManagerCommands(
       "Model ID for the manager. Omit to use the remembered or server default for the resolved provider",
     )
     .option(
+      "--template <name>",
+      "Manager template set name from manager-templates/<name>",
+    )
+    .option(
       "--reasoning-level <level>",
       "Reasoning level (low, medium, high, xhigh, max; provider-dependent)",
     )
@@ -103,6 +108,7 @@ export function registerManagerCommands(
                 ...(opts.name ? { name: opts.name } : {}),
                 ...(opts.provider ? { providerId: opts.provider } : {}),
                 ...(opts.model ? { model: opts.model } : {}),
+                ...(opts.template ? { templateName: opts.template } : {}),
                 environment: { type: "host", hostId },
                 ...(reasoningLevel ? { reasoningLevel } : {}),
                 ...(permissionMode ? { permissionMode } : {}),

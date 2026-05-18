@@ -149,6 +149,7 @@ async function createProvisioningThread(
       environmentIntent: args.environmentIntent,
       execution,
       input: args.request.input,
+      managerTemplateName: args.request.managerTemplateName,
       titleProvided: Boolean(args.request.title),
     });
   } catch (error) {

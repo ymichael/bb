@@ -677,6 +677,8 @@ describe("CLI command output contracts", () => {
         "claude-code",
         "--model",
         "claude-opus-4-7",
+        "--template",
+        "minimal",
         "--reasoning-level",
         "high",
       ],
@@ -692,6 +694,7 @@ describe("CLI command output contracts", () => {
         name: "Manager",
         providerId: "claude-code",
         reasoningLevel: "high",
+        templateName: "minimal",
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain(
@@ -852,6 +855,7 @@ describe("CLI command output contracts", () => {
     );
 
     expect(helpOutput).toContain("--permission-mode <mode>");
+    expect(helpOutput).toContain("--template <name>");
     expect(helpOutput).toMatch(
       /Permission mode: full, workspace-write, or\s+readonly/,
     );

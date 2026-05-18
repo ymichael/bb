@@ -3,6 +3,8 @@ import {
   resumeHostMock,
 } from "./public-thread-test-harness.js";
 
+import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import path from "node:path";
 import {
   events,
   archiveThread,
@@ -38,6 +40,43 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
+
+interface HostDataDirArgs {
+  hostId: string;
+}
+
+interface WriteManagerTemplateSetArgs {
+  dataDir: string;
+  files: Record<string, string>;
+  name: string;
+}
+
+interface WriteActiveManagerTemplateArgs {
+  dataDir: string;
+  name: string;
+}
+
+function hostDataDir(args: HostDataDirArgs): string {
+  return `/tmp/bb-host-data/${args.hostId}`;
+}
+
+async function writeManagerTemplateSet(
+  args: WriteManagerTemplateSetArgs,
+): Promise<void> {
+  const templateDir = path.join(args.dataDir, "manager-templates", args.name);
+  await mkdir(templateDir, { recursive: true });
+  for (const [fileName, content] of Object.entries(args.files)) {
+    await writeFile(path.join(templateDir, fileName), content, "utf8");
+  }
+}
+
+async function writeActiveManagerTemplate(
+  args: WriteActiveManagerTemplateArgs,
+): Promise<void> {
+  const templateRoot = path.join(args.dataDir, "manager-templates");
+  await mkdir(templateRoot, { recursive: true });
+  await writeFile(path.join(templateRoot, "active"), `${args.name}\n`, "utf8");
+}
 
 describe("public thread manager and ownership routes", () => {
   beforeEach(() => {
@@ -345,6 +384,251 @@ describe("public thread manager and ownership routes", () => {
       );
     } finally {
       await harness.cleanup();
+    }
+  });
+
+  it("copies the default manager template set into new manager thread storage", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-template-default";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+      await writeManagerTemplateSet({
+        dataDir,
+        name: "default",
+        files: {
+          "PREFERENCES.md": "default prefs\n",
+          "STATUS.md": "default status\n",
+          "STATUS.html": "<p>default dashboard</p>\n",
+          "ASYNC.md": "default async\n",
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "cli",
+            providerId: "codex",
+            model: "gpt-5",
+            environment: {
+              type: "host",
+              hostId: host.id,
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      const storagePath = path.join(dataDir, "thread-storage", thread.id);
+      await expect(
+        readFile(path.join(storagePath, "PREFERENCES.md"), "utf8"),
+      ).resolves.toBe("default prefs\n");
+      await expect(
+        readFile(path.join(storagePath, "STATUS.md"), "utf8"),
+      ).resolves.toBe("default status\n");
+      await expect(
+        readFile(path.join(storagePath, "ASYNC.md"), "utf8"),
+      ).resolves.toBe("default async\n");
+      await expect(
+        readFile(path.join(storagePath, "STATUS.html"), "utf8"),
+      ).resolves.toBe("<p>default dashboard</p>\n");
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses the active manager template pointer instead of default", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-template-active";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+      await writeManagerTemplateSet({
+        dataDir,
+        name: "default",
+        files: { "PREFERENCES.md": "default prefs\n" },
+      });
+      await writeManagerTemplateSet({
+        dataDir,
+        name: "minimal",
+        files: { "PREFERENCES.md": "minimal prefs\n" },
+      });
+      await writeActiveManagerTemplate({ dataDir, name: "minimal" });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "cli",
+            providerId: "codex",
+            model: "gpt-5",
+            environment: {
+              type: "host",
+              hostId: host.id,
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      await expect(
+        readFile(
+          path.join(dataDir, "thread-storage", thread.id, "PREFERENCES.md"),
+          "utf8",
+        ),
+      ).resolves.toBe("minimal prefs\n");
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses an explicit manager template over the active pointer", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-template-explicit";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+      await writeManagerTemplateSet({
+        dataDir,
+        name: "default",
+        files: { "PREFERENCES.md": "default prefs\n" },
+      });
+      await writeManagerTemplateSet({
+        dataDir,
+        name: "minimal",
+        files: { "PREFERENCES.md": "minimal prefs\n" },
+      });
+      await writeActiveManagerTemplate({ dataDir, name: "minimal" });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "cli",
+            providerId: "codex",
+            model: "gpt-5",
+            templateName: "default",
+            environment: {
+              type: "host",
+              hostId: host.id,
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      await expect(
+        readFile(
+          path.join(dataDir, "thread-storage", thread.id, "PREFERENCES.md"),
+          "utf8",
+        ),
+      ).resolves.toBe("default prefs\n");
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
+    }
+  });
+
+  it("continues manager welcome flow when no manager template directory exists", async () => {
+    const harness = await createTestAppHarness();
+    const hostId = "host-manager-template-missing";
+    const dataDir = hostDataDir({ hostId });
+    await rm(dataDir, { recursive: true, force: true });
+    try {
+      const { host } = seedHostSession(harness.deps, { id: hostId });
+      const { project, source } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: source.path,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/managers`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            origin: "cli",
+            providerId: "codex",
+            model: "gpt-5",
+            environment: {
+              type: "host",
+              hostId: host.id,
+            },
+          }),
+        },
+      );
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+      await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" && command.threadId === thread.id,
+      );
+      await expect(
+        stat(path.join(dataDir, "thread-storage", thread.id, "PREFERENCES.md")),
+      ).rejects.toThrow();
+    } finally {
+      await harness.cleanup();
+      await rm(dataDir, { recursive: true, force: true });
     }
   });
 

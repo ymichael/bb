@@ -173,6 +173,7 @@ describe("automation sweep", () => {
           model: "gpt-5",
           type: "standard",
           input: [{ type: "text", text: "Reject after delete" }],
+          managerTemplateName: null,
           environment: {
             type: "reuse",
             environmentId: environment.id,
