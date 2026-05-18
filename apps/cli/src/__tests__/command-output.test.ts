@@ -42,6 +42,7 @@ vi.mock("../daemon.js", () => ({
 
 import { createClient, unwrap } from "../client.js";
 import { registerEnvironmentCommands } from "../commands/environment.js";
+import { registerGuideCommand } from "../commands/guide.js";
 import { registerHostCommands } from "../commands/host.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerProjectCommands } from "../commands/project.js";
@@ -389,6 +390,29 @@ describe("CLI command output contracts", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.unstubAllEnvs();
+  });
+
+  it("bb guide styling prints the styling chapter", async () => {
+    await runCommand(["guide", "styling"], registerGuideCommand);
+
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output.trim().length).toBeGreaterThan(0);
+    expect(output).toContain("STATUS.html styling");
+    expect(output).toContain("https://cdn.tailwindcss.com");
+    expect(output).toContain("--background: oklch(0.9551 0 0);");
+    expect(output).toContain("@media (prefers-color-scheme: dark)");
+  });
+
+  it("bb guide unknown chapter lists styling in available chapters", async () => {
+    await expect(
+      runCommand(["guide", "missing"], registerGuideCommand),
+    ).rejects.toThrow("process.exit:1");
+
+    const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
+    expect(errorOutput).toContain("Unknown guide chapter 'missing'");
+    expect(errorOutput).toContain(
+      "Available: threads, environments, managers, providers, projects, hosts, styling.",
+    );
   });
 
   it("bb project list --json prints raw projects", async () => {
