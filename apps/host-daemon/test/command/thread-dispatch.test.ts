@@ -1261,12 +1261,7 @@ describe("thread command dispatch", () => {
     const { runtime, state } = createFakeRuntime();
     const { workspace } = createFakeWorkspace("/tmp/env-exit");
     let onProcessExit:
-      | ((info: {
-          code: number | null;
-          providerId: string;
-          signal: string | null;
-          threadIds: string[];
-        }) => void)
+      | NonNullable<AgentRuntimeOptions["onProcessExit"]>
       | undefined;
     const manager = new RuntimeManager({
       provisionWorkspace: async () => workspace,
@@ -1285,7 +1280,9 @@ describe("thread command dispatch", () => {
       providerId: "fake",
       threadIds: ["thread-1"],
       code: 1,
+      expected: false,
       signal: null,
+      stderr: null,
     });
 
     const result = await dispatchCommand(

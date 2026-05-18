@@ -451,6 +451,124 @@ describe("internal event side effects", () => {
     }
   });
 
+  it("marks a thread errored when a provider process exit error is reported", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-provider-process-exit",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
+              event: {
+                type: "system/error",
+                threadId: thread.id,
+                scope: threadScope(),
+                code: "provider_process_exited",
+                message: 'Provider "codex" exited unexpectedly with code 1',
+                detail: "stderr:\nUsage limit reached. Please upgrade.",
+              },
+            }),
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.status).toBe("error");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("does not error a stop-requested thread from provider process exit failure events", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-provider-process-exit-stop-requested",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        status: "active",
+      });
+      markThreadStopRequested(harness.db, harness.hub, {
+        threadId: thread.id,
+        requestedAt: 123,
+      });
+      seedTurnStarted(harness.deps, {
+        threadId: thread.id,
+        environmentId: environment.id,
+        providerThreadId: "provider-process-exit-stop-requested",
+        turnId: "turn-provider-process-exit-stop-requested",
+      });
+
+      const response = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          events: [
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 1,
+              event: {
+                type: "turn/completed",
+                threadId: thread.id,
+                providerThreadId: "provider-process-exit-stop-requested",
+                scope: turnScope("turn-provider-process-exit-stop-requested"),
+                status: "failed",
+                error: {
+                  message: 'Provider "codex" exited unexpectedly with code 1',
+                },
+              },
+            }),
+            createTestDaemonEventEnvelope({
+              producerEventIdValue: 2,
+              event: {
+                type: "system/error",
+                threadId: thread.id,
+                scope: turnScope("turn-provider-process-exit-stop-requested"),
+                code: "provider_process_exited",
+                message: 'Provider "codex" exited unexpectedly with code 1',
+              },
+            }),
+          ],
+        }),
+      });
+
+      expect(response.status).toBe(200);
+      const latestThread = getThread(harness.db, thread.id);
+      expect(latestThread?.status).toBe("active");
+      expect(latestThread?.stopRequestedAt).toBe(123);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("continues child turn-completed side effects when manager notification queuing fails", async () => {
     const harness = await createTestAppHarness();
     try {

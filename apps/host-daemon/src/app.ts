@@ -575,6 +575,18 @@ export async function createHostDaemonApp(
       }
     },
     onProcessExit: (info) => {
+      if (!info.expected && info.stderr) {
+        options.logger.warn(
+          {
+            providerId: info.providerId,
+            threadIds: info.threadIds,
+            code: info.code,
+            signal: info.signal,
+            stderr: info.stderr,
+          },
+          "Unexpected provider process exited with stderr",
+        );
+      }
       if (info.threadIds.length === 0) {
         return;
       }

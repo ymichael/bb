@@ -23,7 +23,9 @@ export function applyTurnCompletedEvent(
 
   let nextStatus: ThreadStatus | null = null;
   if (payload.status === "failed") {
-    nextStatus = "error";
+    if (thread.stopRequestedAt === null) {
+      nextStatus = "error";
+    }
   } else if (payload.status === "interrupted") {
     nextStatus = "idle";
   } else if (

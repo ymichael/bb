@@ -21,7 +21,9 @@ export interface AgentRuntimeProcessExitInfo {
   providerId: string;
   threadIds: string[];
   code: number | null;
+  expected: boolean;
   signal: string | null;
+  stderr: string | null;
 }
 
 // ---------------------------------------------------------------------------

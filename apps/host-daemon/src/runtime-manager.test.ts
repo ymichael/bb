@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AgentRuntime, AgentRuntimeOptions } from "@bb/agent-runtime";
+import type { ThreadEvent } from "@bb/domain";
+import { threadScope, turnScope } from "@bb/domain";
 import type {
   HostWatcher,
   ThreadStorageWatchError,
@@ -1128,12 +1130,7 @@ describe("RuntimeManager", () => {
     });
     const runtime = createFakeRuntime();
     let onProcessExit:
-      | ((info: {
-          code: number | null;
-          providerId: string;
-          signal: string | null;
-          threadIds: string[];
-        }) => void)
+      | NonNullable<AgentRuntimeOptions["onProcessExit"]>
       | undefined;
     const manager = new RuntimeManager({
       hostWatcher,
@@ -1157,7 +1154,9 @@ describe("RuntimeManager", () => {
       providerId: "fake",
       threadIds: ["thread-1"],
       code: 1,
+      expected: false,
       signal: null,
+      stderr: null,
     });
 
     expect(manager.get("env-exit")).toBeUndefined();
@@ -1176,12 +1175,7 @@ describe("RuntimeManager", () => {
     let runningProviders = ["fake-alpha", "fake-beta"];
     runtime.listRunningProviders.mockImplementation(() => runningProviders);
     let onProcessExit:
-      | ((info: {
-          code: number | null;
-          providerId: string;
-          signal: string | null;
-          threadIds: string[];
-        }) => void)
+      | NonNullable<AgentRuntimeOptions["onProcessExit"]>
       | undefined;
     const manager = new RuntimeManager({
       hostWatcher,
@@ -1207,7 +1201,9 @@ describe("RuntimeManager", () => {
       providerId: "fake-alpha",
       threadIds: ["thread-a"],
       code: 1,
+      expected: false,
       signal: null,
+      stderr: null,
     });
 
     expect(manager.get("env-shared")).toBeDefined();
@@ -1215,6 +1211,234 @@ describe("RuntimeManager", () => {
     expect(manager.hasThread("env-shared", "thread-b")).toBe(true);
     expect(stopWatchingStatus).not.toHaveBeenCalled();
     expect(runtime.shutdown).not.toHaveBeenCalled();
+  });
+
+  it("emits failure events for active threads when a provider exits unexpectedly", async () => {
+    const emittedEvents: Array<{
+      environmentId: string;
+      event: ThreadEvent;
+    }> = [];
+    const runtime = createFakeRuntime();
+    const forwardedProcessExits: Parameters<
+      NonNullable<AgentRuntimeOptions["onProcessExit"]>
+    >[0][] = [];
+    let onRuntimeEvent: AgentRuntimeOptions["onEvent"] | undefined;
+    let onProcessExit:
+      | NonNullable<AgentRuntimeOptions["onProcessExit"]>
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock(
+        "/tmp/env-provider-exit",
+      ).mockResolvedValue(createFakeWorkspace("/tmp/env-provider-exit")),
+      createRuntime: vi.fn((options) => {
+        onRuntimeEvent = options.onEvent;
+        onProcessExit = options.onProcessExit;
+        return runtime;
+      }),
+      onEvent: (event) => {
+        emittedEvents.push(event);
+      },
+      onProcessExit: (info) => {
+        forwardedProcessExits.push(info);
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-provider-exit",
+      workspacePath: "/tmp/env-provider-exit",
+    });
+    if (!onRuntimeEvent || !onProcessExit) {
+      throw new Error("Expected runtime callbacks to be captured");
+    }
+    onRuntimeEvent({
+      type: "turn/started",
+      threadId: "thread-1",
+      providerThreadId: "provider-1",
+      scope: turnScope("turn-1"),
+    });
+
+    onProcessExit({
+      providerId: "codex",
+      threadIds: ["thread-1"],
+      code: 1,
+      expected: false,
+      signal: null,
+      stderr: "OPENAI_API_KEY=sk-test-secret\nUsage limit reached.",
+    });
+
+    expect(emittedEvents).toEqual([
+      {
+        environmentId: "env-provider-exit",
+        event: {
+          type: "turn/started",
+          threadId: "thread-1",
+          providerThreadId: "provider-1",
+          scope: turnScope("turn-1"),
+        },
+      },
+      {
+        environmentId: "env-provider-exit",
+        event: {
+          type: "turn/completed",
+          threadId: "thread-1",
+          providerThreadId: "provider-1",
+          scope: turnScope("turn-1"),
+          status: "failed",
+          error: {
+            message: 'Provider "codex" exited unexpectedly with code 1',
+          },
+        },
+      },
+      {
+        environmentId: "env-provider-exit",
+        event: {
+          type: "system/error",
+          threadId: "thread-1",
+          scope: turnScope("turn-1"),
+          code: "provider_process_exited",
+          message: 'Provider "codex" exited unexpectedly with code 1',
+          detail:
+            "stderr:\nOPENAI_API_KEY=sk-test-secret\nUsage limit reached.",
+        },
+      },
+    ]);
+    expect(forwardedProcessExits).toEqual([
+      expect.objectContaining({
+        stderr: "OPENAI_API_KEY=sk-test-secret\nUsage limit reached.",
+      }),
+    ]);
+  });
+
+  it("preserves the active turn when thread identity arrives after turn start", async () => {
+    const emittedEvents: Array<{
+      environmentId: string;
+      event: ThreadEvent;
+    }> = [];
+    const runtime = createFakeRuntime();
+    let onRuntimeEvent: AgentRuntimeOptions["onEvent"] | undefined;
+    let onProcessExit:
+      | NonNullable<AgentRuntimeOptions["onProcessExit"]>
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock(
+        "/tmp/env-identity-after-turn",
+      ).mockResolvedValue(createFakeWorkspace("/tmp/env-identity-after-turn")),
+      createRuntime: vi.fn((options) => {
+        onRuntimeEvent = options.onEvent;
+        onProcessExit = options.onProcessExit;
+        return runtime;
+      }),
+      onEvent: (event) => {
+        emittedEvents.push(event);
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-identity-after-turn",
+      workspacePath: "/tmp/env-identity-after-turn",
+    });
+    if (!onRuntimeEvent || !onProcessExit) {
+      throw new Error("Expected runtime callbacks to be captured");
+    }
+    onRuntimeEvent({
+      type: "turn/started",
+      threadId: "thread-1",
+      providerThreadId: "provider-before-identity",
+      scope: turnScope("turn-1"),
+    });
+    onRuntimeEvent({
+      type: "thread/identity",
+      threadId: "thread-1",
+      providerThreadId: "provider-after-identity",
+      scope: threadScope(),
+    });
+    emittedEvents.splice(0, emittedEvents.length);
+
+    onProcessExit({
+      providerId: "codex",
+      threadIds: ["thread-1"],
+      code: 1,
+      expected: false,
+      signal: null,
+      stderr: null,
+    });
+
+    expect(emittedEvents).toEqual([
+      {
+        environmentId: "env-identity-after-turn",
+        event: {
+          type: "turn/completed",
+          threadId: "thread-1",
+          providerThreadId: "provider-after-identity",
+          scope: turnScope("turn-1"),
+          status: "failed",
+          error: {
+            message: 'Provider "codex" exited unexpectedly with code 1',
+          },
+        },
+      },
+      {
+        environmentId: "env-identity-after-turn",
+        event: {
+          type: "system/error",
+          threadId: "thread-1",
+          scope: turnScope("turn-1"),
+          code: "provider_process_exited",
+          message: 'Provider "codex" exited unexpectedly with code 1',
+        },
+      },
+    ]);
+  });
+
+  it("does not emit failure events for expected provider exits", async () => {
+    const emittedEvents: Array<{
+      environmentId: string;
+      event: ThreadEvent;
+    }> = [];
+    const runtime = createFakeRuntime();
+    let onRuntimeEvent: AgentRuntimeOptions["onEvent"] | undefined;
+    let onProcessExit:
+      | NonNullable<AgentRuntimeOptions["onProcessExit"]>
+      | undefined;
+    const manager = new RuntimeManager({
+      provisionWorkspace: createProvisionWorkspaceMock(
+        "/tmp/env-expected-exit",
+      ).mockResolvedValue(createFakeWorkspace("/tmp/env-expected-exit")),
+      createRuntime: vi.fn((options) => {
+        onRuntimeEvent = options.onEvent;
+        onProcessExit = options.onProcessExit;
+        return runtime;
+      }),
+      onEvent: (event) => {
+        emittedEvents.push(event);
+      },
+    });
+
+    await manager.ensureEnvironment({
+      environmentId: "env-expected-exit",
+      workspacePath: "/tmp/env-expected-exit",
+    });
+    if (!onRuntimeEvent || !onProcessExit) {
+      throw new Error("Expected runtime callbacks to be captured");
+    }
+    onRuntimeEvent({
+      type: "turn/started",
+      threadId: "thread-1",
+      providerThreadId: "provider-1",
+      scope: turnScope("turn-1"),
+    });
+    emittedEvents.splice(0, emittedEvents.length);
+
+    onProcessExit({
+      providerId: "codex",
+      threadIds: ["thread-1"],
+      code: null,
+      expected: true,
+      signal: "SIGTERM",
+      stderr: null,
+    });
+
+    expect(emittedEvents).toEqual([]);
   });
 
   it("shuts down all tracked environments", async () => {

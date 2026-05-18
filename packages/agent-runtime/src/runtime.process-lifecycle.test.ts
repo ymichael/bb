@@ -5,12 +5,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
 import type { ProviderAdapter } from "./provider-adapter.js";
 import { createAgentRuntimeWithAdapters } from "./runtime.js";
+import { RuntimeProviderProcessManager } from "./runtime-provider-process.js";
+import { RuntimeThreadIdentityRegistry } from "./runtime-thread-identity.js";
 import { fakeProviderScriptPath } from "./test/index.js";
 import {
   createFakeAdapter,
   fullRuntimeOptions,
   waitForRuntimeState,
 } from "./test/runtime-test-harness.js";
+import type { AgentRuntimeOptions } from "./types.js";
+
+interface CreateProviderProcessManagerArgs {
+  onProcessExit: NonNullable<AgentRuntimeOptions["onProcessExit"]>;
+  scriptPath: string;
+  workspacePath: string;
+}
 
 describe("createAgentRuntime process lifecycle", () => {
   let tmpDir: string;
@@ -24,6 +33,44 @@ describe("createAgentRuntime process lifecycle", () => {
   afterEach(() => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  function createProviderProcessManager(
+    args: CreateProviderProcessManagerArgs,
+  ): RuntimeProviderProcessManager {
+    const identityRegistry = new RuntimeThreadIdentityRegistry();
+    let nextRequestId = 1;
+    return new RuntimeProviderProcessManager({
+      additionalWorkspaceWriteRoots: [],
+      adapterFactory: () => createNoopInitializeAdapter(args.scriptPath),
+      bridgeBundleDir: undefined,
+      createProviderIdentityState: (providerId) =>
+        identityRegistry.createProviderState({ providerId }),
+      emitCapture: () => undefined,
+      env: undefined,
+      getNextRequestId: () => nextRequestId++,
+      handleStdoutLine: () => undefined,
+      onProcessExit: args.onProcessExit,
+      onProviderIdentityWaitersInterrupted: (providerProcess) =>
+        identityRegistry.resolvePendingIdentityWaiters(providerProcess.identity),
+      onProviderThreadDetached: (threadId) =>
+        identityRegistry.clearThread(threadId),
+      onStderr: () => undefined,
+      workspacePath: args.workspacePath,
+    });
+  }
+
+  function createNoopInitializeAdapter(scriptPath: string): ProviderAdapter {
+    const adapter = createFakeAdapter(scriptPath);
+    return {
+      ...adapter,
+      buildCommandPlan(command) {
+        if (command.type === "initialize") {
+          return { kind: "noop", reason: "initialized by process spawn" };
+        }
+        return adapter.buildCommandPlan(command);
+      },
+    };
+  }
 
   it("handles JSON-RPC error responses from provider", async () => {
     const events: ThreadEvent[] = [];
@@ -151,6 +198,56 @@ describe("createAgentRuntime process lifecycle", () => {
     });
     await runtime.shutdown();
     // Should not hang
+  });
+
+  it("treats shutdown process errors as expected without carrying state to replacement processes", async () => {
+    const exitInfo = vi.fn<NonNullable<AgentRuntimeOptions["onProcessExit"]>>();
+    const manager = createProviderProcessManager({
+      onProcessExit: exitInfo,
+      scriptPath,
+      workspacePath: tmpDir,
+    });
+
+    await manager.ensureProvider({ providerId: "fake" });
+    const shuttingDownProcess = manager.requireProviderProcess("fake");
+    const shutdown = manager.shutdownProvider({
+      providerId: "fake",
+      timeoutMs: 50,
+    });
+    shuttingDownProcess.child.emit(
+      "error",
+      new Error("simulated shutdown process error"),
+    );
+
+    expect(exitInfo).toHaveBeenCalledTimes(1);
+    expect(exitInfo).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        code: null,
+        expected: true,
+        providerId: "fake",
+      }),
+    );
+    await shutdown;
+
+    await manager.ensureProvider({ providerId: "fake" });
+    const replacementProcess = manager.requireProviderProcess("fake");
+    replacementProcess.child.emit("exit", 64, null);
+
+    await waitForRuntimeState({
+      label: "unexpected replacement process exit",
+      predicate: () => exitInfo.mock.calls.length === 2,
+    });
+    expect(exitInfo).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        code: 64,
+        expected: false,
+        providerId: "fake",
+      }),
+    );
+    replacementProcess.child.kill("SIGTERM");
+    await manager.shutdown();
   });
 
   it("ignores provider stdout emitted after shutdown starts", async () => {

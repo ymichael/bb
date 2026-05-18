@@ -416,6 +416,18 @@ async function applyEventEffects(
         continue;
       }
 
+      if (
+        event.type === "system/error" &&
+        event.code === "provider_process_exited"
+      ) {
+        const thread = getThread(deps.db, entry.threadId);
+        if (!thread || thread.stopRequestedAt !== null) {
+          continue;
+        }
+        tryTransition(deps.db, deps.hub, entry.threadId, "error");
+        continue;
+      }
+
       if (event.type === "thread/name/updated") {
         updateThread(deps.db, deps.hub, entry.threadId, {
           title: event.threadName,

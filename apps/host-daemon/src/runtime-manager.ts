@@ -4,12 +4,18 @@ import {
   createAgentRuntime,
   type AgentRuntime,
   type AgentRuntimeOptions,
+  type AgentRuntimeProcessExitInfo,
 } from "@bb/agent-runtime";
 import type {
   PendingInteractionCreate,
   PendingInteractionResolution,
   ThreadEvent,
   WorkspaceProvisionType,
+} from "@bb/domain";
+import {
+  requireThreadEventScopeTurnId,
+  threadScope,
+  turnScope,
 } from "@bb/domain";
 import type {
   HostDaemonActiveThread,
@@ -30,10 +36,12 @@ import {
 
 const STOP_WATCHING = () => undefined;
 const PROVIDER_MAINTENANCE_WORKSPACE_DIR = "provider-maintenance-workspace";
+const PROVIDER_PROCESS_EXIT_DETAIL_MAX_LENGTH = 4000;
 const LOCAL_WORKSPACE_WATCH_CHANGE_KINDS: readonly WorkspaceStatusWatchChangeKind[] =
   ["workspace-content-changed", "workspace-git-changed"];
 
 interface RuntimeThreadState {
+  activeTurnId: string | null;
   providerThreadId: string;
   status: "active" | "idle";
 }
@@ -48,6 +56,12 @@ interface WorkspaceWatchState {
   lastSharedRefsFingerprint: string | null;
   pendingKinds: Set<WorkspaceStatusWatchChangeKind>;
   processing: Promise<void> | null;
+}
+
+interface BuildUnexpectedProviderExitEventsArgs {
+  environmentId: string;
+  info: AgentRuntimeProcessExitInfo;
+  threads: Map<string, RuntimeThreadState>;
 }
 
 function lazyProvisionOpts(
@@ -70,6 +84,33 @@ function toErrorMessage(error: unknown): string {
     return error.message;
   }
   return "Unknown workspace watch error";
+}
+
+function formatProviderProcessExitStatus(
+  info: AgentRuntimeProcessExitInfo,
+): string {
+  if (info.signal) {
+    return `signal ${info.signal}`;
+  }
+  if (info.code !== null) {
+    return `code ${info.code}`;
+  }
+  return "unknown status";
+}
+
+function buildProviderProcessExitMessage(
+  info: AgentRuntimeProcessExitInfo,
+): string {
+  return `Provider "${info.providerId}" exited unexpectedly with ${formatProviderProcessExitStatus(info)}`;
+}
+
+function buildProviderProcessExitDetail(
+  info: AgentRuntimeProcessExitInfo,
+): string | undefined {
+  if (!info.stderr) {
+    return undefined;
+  }
+  return `stderr:\n${info.stderr.slice(-PROVIDER_PROCESS_EXIT_DETAIL_MAX_LENGTH)}`;
 }
 
 function workspaceWatchKindsIncludeLocalState(
@@ -301,7 +342,9 @@ export class RuntimeManager {
       return;
     }
 
+    const current = entry.threads.get(threadId);
     entry.threads.set(threadId, {
+      activeTurnId: current?.activeTurnId ?? null,
       providerThreadId,
       status: "active",
     });
@@ -320,8 +363,31 @@ export class RuntimeManager {
 
     this.entries.get(environmentId)?.threads.set(threadId, {
       ...current,
+      activeTurnId: null,
       status: "idle",
     });
+  }
+
+  private markThreadTurnStarted(
+    environmentId: string,
+    threadId: string,
+    providerThreadId: string,
+    turnId: string,
+  ): void {
+    const entry = this.entries.get(environmentId);
+    if (!entry) {
+      return;
+    }
+    entry.threads.set(threadId, {
+      activeTurnId: turnId,
+      providerThreadId,
+      status: "active",
+    });
+    this.trackedThreadStorageTargets.set(threadId, {
+      environmentId,
+      threadId,
+    });
+    this.ensureThreadStorageWatcher();
   }
 
   markTerminalActive(environmentId: string, terminalId: string): void {
@@ -522,6 +588,46 @@ export class RuntimeManager {
     this.stopWatchingThreadStorageRoot = STOP_WATCHING;
   }
 
+  private buildUnexpectedProviderExitEvents(
+    args: BuildUnexpectedProviderExitEventsArgs,
+  ): ThreadEvent[] {
+    const message = buildProviderProcessExitMessage(args.info);
+    const detail = buildProviderProcessExitDetail(args.info);
+    const events: ThreadEvent[] = [];
+
+    for (const threadId of args.info.threadIds) {
+      const thread = args.threads.get(threadId);
+      if (!thread || thread.status !== "active") {
+        continue;
+      }
+
+      if (thread.activeTurnId !== null) {
+        events.push({
+          type: "turn/completed",
+          threadId,
+          providerThreadId: thread.providerThreadId,
+          scope: turnScope(thread.activeTurnId),
+          status: "failed",
+          error: { message },
+        });
+      }
+
+      events.push({
+        type: "system/error",
+        threadId,
+        scope:
+          thread.activeTurnId !== null
+            ? turnScope(thread.activeTurnId)
+            : threadScope(),
+        code: "provider_process_exited",
+        message,
+        ...(detail ? { detail } : {}),
+      });
+    }
+
+    return events;
+  }
+
   private async createProviderMaintenanceRuntime(args: {
     dataDir: string;
   }): Promise<AgentRuntime> {
@@ -626,6 +732,16 @@ export class RuntimeManager {
               event.threadId,
               event.providerThreadId,
             );
+          } else if (event.type === "turn/started") {
+            this.markThreadTurnStarted(
+              args.environmentId,
+              event.threadId,
+              event.providerThreadId,
+              requireThreadEventScopeTurnId({
+                type: event.type,
+                scope: event.scope,
+              }),
+            );
           } else if (event.type === "turn/completed") {
             this.markThreadInactive(args.environmentId, event.threadId);
           }
@@ -643,6 +759,18 @@ export class RuntimeManager {
         onInteractiveRequest: this.options.onInteractiveRequest,
         onStderr: this.options.onStderr,
         onProcessExit: (info) => {
+          if (!info.expected) {
+            for (const event of this.buildUnexpectedProviderExitEvents({
+              environmentId: args.environmentId,
+              info,
+              threads,
+            })) {
+              this.options.onEvent?.({
+                environmentId: args.environmentId,
+                event,
+              });
+            }
+          }
           for (const threadId of info.threadIds) {
             threads.delete(threadId);
           }

@@ -19,6 +19,7 @@ import type { AgentRuntimeOptions } from "./types.js";
 export interface RuntimeProviderProcess {
   adapter: ProviderAdapter;
   child: ChildProcess;
+  expectedShutdown: boolean;
   identity: RuntimeProviderIdentityState;
   interactiveRequestScope: string;
   pending: Map<string | number, PendingJsonRpcRequest>;
@@ -140,6 +141,7 @@ export class RuntimeProviderProcessManager {
       return;
     }
 
+    providerProcess.expectedShutdown = true;
     await new Promise<void>((resolve) => {
       const softTimer = setTimeout(() => {
         if (providerProcess.child.exitCode === null) {
@@ -226,6 +228,7 @@ export class RuntimeProviderProcessManager {
     const providerProcess: RuntimeProviderProcess = {
       child,
       adapter,
+      expectedShutdown: false,
       interactiveRequestScope: randomUUID(),
       identity: this.args.createProviderIdentityState(providerId),
       pending: new Map(),
@@ -280,6 +283,10 @@ export class RuntimeProviderProcessManager {
 
   private handleProviderProcessError(args: ProviderProcessErrorArgs): void {
     if (this.shuttingDown) return;
+    if (!this.isCurrentProviderProcess(args)) return;
+    const expected = consumeExpectedProviderProcessShutdown(
+      args.providerProcess,
+    );
     this.processes.delete(args.providerId);
     const message = args.err.message;
     for (const [, pending] of args.providerProcess.pending) {
@@ -301,19 +308,25 @@ export class RuntimeProviderProcessManager {
       providerId: args.providerId,
       threadIds: [...args.providerProcess.identity.threadIds],
       code: null,
+      expected,
       signal: null,
+      stderr: null,
     });
   }
 
   private handleProviderProcessExit(args: ProviderProcessExitArgs): void {
     if (this.shuttingDown) return;
+    if (!this.isCurrentProviderProcess(args)) return;
+    const expected = consumeExpectedProviderProcessShutdown(
+      args.providerProcess,
+    );
     this.processes.delete(args.providerId);
     const threadIds = [...args.providerProcess.identity.threadIds];
     for (const threadId of threadIds) {
       this.args.onProviderThreadDetached(threadId);
     }
     for (const [, pending] of args.providerProcess.pending) {
-      const stderr = args.providerProcess.stderrChunks.join("\n").slice(0, 500);
+      const stderr = formatProviderStderr(args.providerProcess.stderrChunks);
       pending.reject(
         new Error(
           `Provider "${args.providerId}" exited unexpectedly` +
@@ -338,9 +351,33 @@ export class RuntimeProviderProcessManager {
       providerId: args.providerId,
       threadIds,
       code: args.code,
+      expected,
       signal: args.signal,
+      stderr: formatProviderStderr(args.providerProcess.stderrChunks),
     });
   }
+
+  private isCurrentProviderProcess(
+    args: Pick<ProviderProcessExitArgs, "providerId" | "providerProcess">,
+  ): boolean {
+    return this.processes.get(args.providerId) === args.providerProcess;
+  }
+}
+
+function formatProviderStderr(stderrChunks: readonly string[]): string | null {
+  const stderr = stderrChunks.join("\n").trim();
+  if (stderr.length === 0) {
+    return null;
+  }
+  return stderr.slice(-4000);
+}
+
+function consumeExpectedProviderProcessShutdown(
+  providerProcess: RuntimeProviderProcess,
+): boolean {
+  const expected = providerProcess.expectedShutdown;
+  providerProcess.expectedShutdown = false;
+  return expected;
 }
 
 interface ProviderProcessErrorArgs {
