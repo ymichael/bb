@@ -27,6 +27,7 @@ Manager templates:
 - Put per-user manager templates in `<bb data dir>/manager-templates/`. In production this is usually `~/.bb/manager-templates/`; in development it is usually `~/.bb-dev/manager-templates/`.
 - Supported template files are `PREFERENCES_TEMPLATE.md`, `STATUS_TEMPLATE.md`, and `ASYNC_TEMPLATE.md`.
 - When a new manager thread starts, bb copies each present template once into that manager's thread storage as `PREFERENCES.md`, `STATUS.md`, or `ASYNC.md`. Missing templates leave the corresponding storage file absent, so the manager uses the normal welcome flow.
+- These storage files stay writable after seeding. Managers can update `PREFERENCES.md` to shape future manager instructions, `STATUS.md` to keep a current handoff summary, and `ASYNC.md` to control future scheduled nudges.
 
 Context variables set automatically inside a thread environment:
 
