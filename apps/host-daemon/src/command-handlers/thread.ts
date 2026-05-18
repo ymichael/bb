@@ -1,6 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
+import type {
+  HostDaemonCommandResult,
+  ThreadStorageSeedTemplate,
+} from "@bb/host-daemon-contract";
 import { resolveContainedPath } from "@bb/process-utils";
 import type { RuntimeEntry } from "../runtime-manager.js";
 import {
@@ -8,9 +11,15 @@ import {
   type CommandDispatchOptions,
   type CommandOf,
 } from "../command-dispatch-support.js";
+import { isFsErrorWithCode } from "../fs-errors.js";
 import { stagePromptAttachments } from "./prompt-attachments.js";
 
 type TurnSubmitCommand = CommandOf<"turn.submit">;
+
+interface SeedThreadStorageTemplatesArgs {
+  seedTemplates: readonly ThreadStorageSeedTemplate[];
+  threadStoragePath: string;
+}
 
 function requireConfinedPath(rootPath: string, candidatePath: string): string {
   const resolved = resolveContainedPath({
@@ -46,6 +55,40 @@ async function cleanupAfterPostStagingFailure(
   }
 }
 
+async function seedThreadStorageTemplates(
+  args: SeedThreadStorageTemplatesArgs,
+): Promise<void> {
+  for (const seedTemplate of args.seedTemplates) {
+    if (
+      !path.isAbsolute(seedTemplate.templateRootPath) ||
+      !path.isAbsolute(seedTemplate.templatePath)
+    ) {
+      throw new CommandDispatchError(
+        "invalid_path",
+        "Thread storage seed template paths must be absolute",
+      );
+    }
+    const sourcePath = requireConfinedPath(
+      seedTemplate.templateRootPath,
+      seedTemplate.templatePath,
+    );
+    const filePath = requireConfinedPath(
+      args.threadStoragePath,
+      path.join(args.threadStoragePath, seedTemplate.fileName),
+    );
+    try {
+      await fs.copyFile(sourcePath, filePath, fs.constants.COPYFILE_EXCL);
+    } catch (error) {
+      if (
+        !isFsErrorWithCode(error, "ENOENT") &&
+        !isFsErrorWithCode(error, "EEXIST")
+      ) {
+        throw error;
+      }
+    }
+  }
+}
+
 export async function startThread(
   command: CommandOf<"thread.start">,
   options: CommandDispatchOptions,
@@ -56,6 +99,12 @@ export async function startThread(
       command.threadStoragePath,
     );
     await fs.mkdir(confined, { recursive: true });
+    if (command.threadStorageSeedTemplates) {
+      await seedThreadStorageTemplates({
+        seedTemplates: command.threadStorageSeedTemplates,
+        threadStoragePath: confined,
+      });
+    }
   }
   const staged = await stagePromptAttachments({
     fetchProjectAttachment: options.fetchProjectAttachment,

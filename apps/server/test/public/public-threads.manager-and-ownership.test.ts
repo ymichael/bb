@@ -343,6 +343,23 @@ describe("public thread manager and ownership routes", () => {
       expect(managerStartCommand.command.instructions).toContain(
         `Thread storage: \`/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}\``,
       );
+      expect(managerStartCommand.command.threadStorageSeedTemplates).toEqual([
+        {
+          fileName: "PREFERENCES.md",
+          templatePath: `/tmp/bb-host-data/${host.id}/manager-templates/PREFERENCES_TEMPLATE.md`,
+          templateRootPath: `/tmp/bb-host-data/${host.id}/manager-templates`,
+        },
+        {
+          fileName: "STATUS.md",
+          templatePath: `/tmp/bb-host-data/${host.id}/manager-templates/STATUS_TEMPLATE.md`,
+          templateRootPath: `/tmp/bb-host-data/${host.id}/manager-templates`,
+        },
+        {
+          fileName: "ASYNC.md",
+          templatePath: `/tmp/bb-host-data/${host.id}/manager-templates/ASYNC_TEMPLATE.md`,
+          templateRootPath: `/tmp/bb-host-data/${host.id}/manager-templates`,
+        },
+      ]);
     } finally {
       await harness.cleanup();
     }

@@ -13,6 +13,7 @@ import {
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
   clientTurnRequestIdSchema,
+  managerStorageFileNameSchema,
 } from "@bb/domain";
 import {
   replayCaptureDaemonListResponseSchema,
@@ -21,7 +22,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 15 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 16 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -94,6 +95,17 @@ const hostDaemonThreadRuntimeContextSchema = z.object({
   instructionMode: instructionModeSchema,
 });
 
+export const threadStorageSeedTemplateSchema = z
+  .object({
+    fileName: managerStorageFileNameSchema,
+    templatePath: z.string().min(1),
+    templateRootPath: z.string().min(1),
+  })
+  .strict();
+export type ThreadStorageSeedTemplate = z.infer<
+  typeof threadStorageSeedTemplateSchema
+>;
+
 const hostDaemonExistingThreadRuntimeContextSchema =
   hostDaemonThreadRuntimeContextSchema.extend({
     providerThreadId: z.string().min(1),
@@ -125,8 +137,24 @@ export const threadStartCommandSchema = hostDaemonThreadTargetSchema
     requestId: clientTurnRequestIdSchema,
     input: z.array(promptInputSchema).min(1),
     threadStoragePath: z.string().min(1).optional(),
+    threadStorageSeedTemplates: z
+      .array(threadStorageSeedTemplateSchema)
+      .min(1)
+      .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((command, context) => {
+    if (
+      command.threadStorageSeedTemplates !== undefined &&
+      command.threadStoragePath === undefined
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["threadStoragePath"],
+        message: "threadStoragePath is required when seeding thread storage",
+      });
+    }
+  });
 
 export const turnSubmitTargetSchema = z.discriminatedUnion("mode", [
   z.object({

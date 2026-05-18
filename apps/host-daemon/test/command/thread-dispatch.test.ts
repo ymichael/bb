@@ -1635,6 +1635,156 @@ describe("thread command dispatch", () => {
     });
   });
 
+  it("seeds manager thread storage files before runtime start", async () => {
+    const threadStorageRootPath = await makeTempDir("bb-manager-storage-seed-");
+    const templateRootPath = await makeTempDir("bb-manager-storage-template-");
+    const threadStoragePath = path.join(threadStorageRootPath, "thread-seeded");
+    const harness = createHarness();
+    await fs.writeFile(
+      path.join(templateRootPath, "PREFERENCES_TEMPLATE.md"),
+      "# Preferences\n\n- terse updates\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(templateRootPath, "STATUS_TEMPLATE.md"),
+      "# Status\n\nReady to coordinate.\n",
+      "utf8",
+    );
+    await fs.writeFile(
+      path.join(templateRootPath, "ASYNC_TEMPLATE.md"),
+      "---\nschedules: []\n---\n",
+      "utf8",
+    );
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-seeded",
+        threadId: "thread-seeded",
+        workspaceContext: {
+          workspacePath: "/tmp/env-seeded",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "project-seeded",
+        providerId: "fake",
+        requestId: nextClientRequestId(),
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "test",
+        dynamicTools: [],
+        instructionMode: "append",
+        threadStoragePath,
+        threadStorageSeedTemplates: [
+          {
+            fileName: "PREFERENCES.md",
+            templatePath: path.join(
+              templateRootPath,
+              "PREFERENCES_TEMPLATE.md",
+            ),
+            templateRootPath,
+          },
+          {
+            fileName: "STATUS.md",
+            templatePath: path.join(templateRootPath, "STATUS_TEMPLATE.md"),
+            templateRootPath,
+          },
+          {
+            fileName: "ASYNC.md",
+            templatePath: path.join(templateRootPath, "ASYNC_TEMPLATE.md"),
+            templateRootPath,
+          },
+        ],
+      },
+      harness.dispatchOptions({ threadStorageRootPath }),
+    );
+
+    expect(harness.runtimeState.startedThreadId).toBe("thread-seeded");
+    await expect(
+      fs.readFile(path.join(threadStoragePath, "PREFERENCES.md"), "utf8"),
+    ).resolves.toBe("# Preferences\n\n- terse updates\n");
+    await expect(
+      fs.readFile(path.join(threadStoragePath, "STATUS.md"), "utf8"),
+    ).resolves.toBe("# Status\n\nReady to coordinate.\n");
+    await expect(
+      fs.readFile(path.join(threadStoragePath, "ASYNC.md"), "utf8"),
+    ).resolves.toBe("---\nschedules: []\n---\n");
+  });
+
+  it("leaves manager thread storage files absent when templates are missing", async () => {
+    const threadStorageRootPath = await makeTempDir(
+      "bb-manager-storage-no-seed-",
+    );
+    const templateRootPath = await makeTempDir(
+      "bb-manager-storage-missing-template-",
+    );
+    const threadStoragePath = path.join(threadStorageRootPath, "thread-empty");
+    const harness = createHarness();
+
+    await dispatchCommand(
+      {
+        type: "thread.start",
+        environmentId: "env-empty",
+        threadId: "thread-empty",
+        workspaceContext: {
+          workspacePath: "/tmp/env-empty",
+          workspaceProvisionType: "unmanaged",
+        },
+        projectId: "project-empty",
+        providerId: "fake",
+        requestId: nextClientRequestId(),
+        input: [{ type: "text", text: "hello" }],
+        options: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          permissionEscalation: null,
+        },
+        instructions: "test",
+        dynamicTools: [],
+        instructionMode: "append",
+        threadStoragePath,
+        threadStorageSeedTemplates: [
+          {
+            fileName: "PREFERENCES.md",
+            templatePath: path.join(
+              templateRootPath,
+              "PREFERENCES_TEMPLATE.md",
+            ),
+            templateRootPath,
+          },
+          {
+            fileName: "STATUS.md",
+            templatePath: path.join(templateRootPath, "STATUS_TEMPLATE.md"),
+            templateRootPath,
+          },
+          {
+            fileName: "ASYNC.md",
+            templatePath: path.join(templateRootPath, "ASYNC_TEMPLATE.md"),
+            templateRootPath,
+          },
+        ],
+      },
+      harness.dispatchOptions({ threadStorageRootPath }),
+    );
+
+    await expect(
+      fs.stat(path.join(threadStoragePath, "PREFERENCES.md")),
+    ).rejects.toThrow();
+    await expect(
+      fs.stat(path.join(threadStoragePath, "STATUS.md")),
+    ).rejects.toThrow();
+    await expect(
+      fs.stat(path.join(threadStoragePath, "ASYNC.md")),
+    ).rejects.toThrow();
+  });
+
   it("rejects thread.start when threadStoragePath escapes storage root", async () => {
     const tempDir = await makeTempDir("bb-thread-storage-start-traversal-");
     const harness = createHarness();

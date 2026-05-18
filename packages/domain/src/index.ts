@@ -326,6 +326,13 @@ export type {
 } from "./thread.js";
 
 export {
+  managerStorageFileNameSchema,
+  managerStorageFileNameValues,
+  managerTemplateFileNameByStorageFileName,
+} from "./manager-storage.js";
+export type { ManagerStorageFileName } from "./manager-storage.js";
+
+export {
   threadGitDiffResponseSchema,
   workspaceDiffTargetSchema,
 } from "./thread-git-diff.js";

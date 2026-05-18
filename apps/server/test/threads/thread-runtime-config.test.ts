@@ -45,48 +45,56 @@ describe("thread runtime config", () => {
       name: "falls back to full for managed child execution when the provider does not support workspace-write",
       requestedModel: "openai-codex/gpt-5.4",
     },
-  ])("$name", async ({ childProviderId, expectedPermissionMode, managerProviderId, requestedModel }) => {
-    const harness = await createTestAppHarness();
-    try {
-      const { host } = seedHostSession(harness.deps, {
-        id: `host-runtime-${childProviderId}-${managerProviderId ?? "root"}`,
-      });
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
-      const managerThread =
-        managerProviderId === null
-          ? null
-          : seedThread(harness.deps, {
-              projectId: project.id,
-              environmentId: environment.id,
-              type: "manager",
-              providerId: managerProviderId,
-            });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        parentThreadId: managerThread?.id ?? null,
-        providerId: childProviderId,
-      });
+  ])(
+    "$name",
+    async ({
+      childProviderId,
+      expectedPermissionMode,
+      managerProviderId,
+      requestedModel,
+    }) => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps, {
+          id: `host-runtime-${childProviderId}-${managerProviderId ?? "root"}`,
+        });
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const managerThread =
+          managerProviderId === null
+            ? null
+            : seedThread(harness.deps, {
+                projectId: project.id,
+                environmentId: environment.id,
+                type: "manager",
+                providerId: managerProviderId,
+              });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          parentThreadId: managerThread?.id ?? null,
+          providerId: childProviderId,
+        });
 
-      const execution = await resolveExecutionOptions(harness.deps, {
-        threadId: thread.id,
-        requestedExecution: {
-          model: requestedModel,
-          source: "client/turn/requested",
-        },
-      });
+        const execution = await resolveExecutionOptions(harness.deps, {
+          threadId: thread.id,
+          requestedExecution: {
+            model: requestedModel,
+            source: "client/turn/requested",
+          },
+        });
 
-      expect(execution.permissionMode).toBe(expectedPermissionMode);
-    } finally {
-      await harness.cleanup();
-    }
-  });
+        expect(execution.permissionMode).toBe(expectedPermissionMode);
+      } finally {
+        await harness.cleanup();
+      }
+    },
+  );
 
   it("ignores standard project permission defaults for managed child execution", async () => {
     const harness = await createTestAppHarness();
@@ -383,6 +391,23 @@ describe("thread runtime config", () => {
       expect(runtimeConfig.instructions).toContain(
         `Thread storage: \`/tmp/bb-host-data/${hostId}/thread-storage/${managerThread.id}\``,
       );
+      expect(runtimeConfig.threadStorageSeedTemplates).toEqual([
+        {
+          fileName: "PREFERENCES.md",
+          templatePath: `/tmp/bb-host-data/${hostId}/manager-templates/PREFERENCES_TEMPLATE.md`,
+          templateRootPath: `/tmp/bb-host-data/${hostId}/manager-templates`,
+        },
+        {
+          fileName: "STATUS.md",
+          templatePath: `/tmp/bb-host-data/${hostId}/manager-templates/STATUS_TEMPLATE.md`,
+          templateRootPath: `/tmp/bb-host-data/${hostId}/manager-templates`,
+        },
+        {
+          fileName: "ASYNC.md",
+          templatePath: `/tmp/bb-host-data/${hostId}/manager-templates/ASYNC_TEMPLATE.md`,
+          templateRootPath: `/tmp/bb-host-data/${hostId}/manager-templates`,
+        },
+      ]);
       expect(runtimeConfig.instructions).toContain(
         `Local timezone: \`${resolveLocalTimezone()}\``,
       );

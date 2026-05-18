@@ -299,6 +299,11 @@ export async function buildThreadStartCommand(
       : {}),
     instructionMode: runtimeContext.instructionMode,
     threadStoragePath: runtimeContext.threadStoragePath,
+    ...(runtimeContext.threadStorageSeedTemplates.length
+      ? {
+          threadStorageSeedTemplates: runtimeContext.threadStorageSeedTemplates,
+        }
+      : {}),
   };
 }
 

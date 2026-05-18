@@ -50,6 +50,8 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
     "host.read_file may omit rootPath only for explicit absolute disk reads; ref-based reads still require it.",
   "hostDaemonCommandSchema.threadStoragePath":
     "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
+  "hostDaemonCommandSchema.threadStorageSeedTemplates":
+    "thread.start may include manager seed templates only when threadStoragePath is present; omitting it preserves the normal no-template startup.",
   "hostDaemonCommandSchema.disallowedTools":
     "manager thread runtime context may omit provider-specific built-in tool removals for providers that do not need them.",
   "hostDaemonCommandSchema.resumeContext.disallowedTools":

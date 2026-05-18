@@ -22,6 +22,12 @@ Thread types:
 
 Threads can have a parent-child relationship. The parent manages the child and receives lifecycle notifications when it completes, fails, or is interrupted. Threads without a parent are managed by the user.
 
+Manager templates:
+
+- Put per-user manager templates in `<bb data dir>/manager-templates/`. In production this is usually `~/.bb/manager-templates/`; in development it is usually `~/.bb-dev/manager-templates/`.
+- Supported template files are `PREFERENCES_TEMPLATE.md`, `STATUS_TEMPLATE.md`, and `ASYNC_TEMPLATE.md`.
+- When a new manager thread starts, bb copies each present template once into that manager's thread storage as `PREFERENCES.md`, `STATUS.md`, or `ASYNC.md`. Missing templates leave the corresponding storage file absent, so the manager uses the normal welcome flow.
+
 Context variables set automatically inside a thread environment:
 
 - BB_PROJECT_ID — current project

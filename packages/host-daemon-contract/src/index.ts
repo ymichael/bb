@@ -78,6 +78,7 @@ export {
   replayCaptureListCommandSchema,
   replayRunCommandSchema,
   threadRenameCommandSchema,
+  threadStorageSeedTemplateSchema,
   threadStartCommandSchema,
   threadStopCommandSchema,
   turnSubmitCommandSchema,
@@ -98,6 +99,7 @@ export type {
   HostDaemonCommandResultReportWithoutSession,
   HostDaemonCommandType,
   HostDaemonExecutionOptions,
+  ThreadStorageSeedTemplate,
   TurnSubmitTarget,
   WorkspaceContext,
 } from "./commands.js";

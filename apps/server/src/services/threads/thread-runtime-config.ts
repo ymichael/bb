@@ -18,6 +18,7 @@ import type {
   ThreadTurnInitiator,
   WorkspaceProvisionType,
 } from "@bb/domain";
+import type { ThreadStorageSeedTemplate } from "@bb/host-daemon-contract";
 import { renderTemplate } from "@bb/templates";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
@@ -25,6 +26,7 @@ import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
+import { buildManagerStorageSeedTemplates } from "./manager-storage-seeds.js";
 import {
   DEFAULT_REASONING_LEVEL,
   DEFAULT_SERVICE_TIER,
@@ -97,9 +99,8 @@ export interface ResolveThreadRuntimeCommandConfigArgs {
   environment: ThreadRuntimeCommandEnvironment;
   thread: Thread;
   /**
-   * True during thread creation. Skips the daemon round-trip to read
-   * PREFERENCES.md because the manager has no preferences yet at
-   * creation time. Preferences are read on subsequent turns.
+   * True during thread creation. Includes user-authored manager seed template
+   * paths for the daemon to copy before the first provider turn starts.
    */
   isThreadCreation?: boolean;
 }
@@ -116,6 +117,7 @@ export interface ResolvedThreadRuntimeCommandConfig {
   instructions: string;
   projectId: string;
   providerId: string;
+  threadStorageSeedTemplates: ThreadStorageSeedTemplate[];
   /** Only set for manager threads. */
   threadStoragePath?: string;
   workspacePath: string;
@@ -297,6 +299,7 @@ export async function resolveThreadRuntimeCommandConfig(
       instructions: STANDARD_AGENT_INSTRUCTIONS,
       projectId: args.thread.projectId,
       providerId: args.thread.providerId,
+      threadStorageSeedTemplates: [],
       workspacePath,
       workspaceProvisionType,
     };
@@ -306,6 +309,11 @@ export async function resolveThreadRuntimeCommandConfig(
     threadId: args.thread.id,
   });
 
+  const threadStorageSeedTemplates = args.isThreadCreation
+    ? await buildManagerStorageSeedTemplates(deps, {
+        hostId: args.environment.hostId,
+      })
+    : [];
   const managerPreferencesContent = args.isThreadCreation
     ? NO_MANAGER_PREFERENCES
     : await readManagerPreferences(deps, {
@@ -329,6 +337,7 @@ export async function resolveThreadRuntimeCommandConfig(
     }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
+    threadStorageSeedTemplates,
     threadStoragePath,
     workspacePath,
     workspaceProvisionType,
