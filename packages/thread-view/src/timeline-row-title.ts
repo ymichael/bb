@@ -874,46 +874,41 @@ function firstQuestionPrompt(row: TimelineQuestionViewWorkRow): string | null {
 
 function mapQuestionTitle(row: TimelineQuestionViewWorkRow): TimelineTitle {
   const prompt = firstQuestionPrompt(row);
-  const reasonSegment = row.statusReason
-    ? segment(row.statusReason, { truncate: true })
+  const promptSegment = prompt
+    ? segment(prompt, { em: true, truncate: true })
     : null;
   switch (row.lifecycle) {
     case "pending":
       return makeTitle({
         segments: filterNull([
           segment("Waiting for answer", { shimmer: true }),
-          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+          promptSegment,
         ]),
       });
     case "resolving":
       return makeTitle({
         segments: filterNull([
           segment("Delivering answer", { shimmer: true }),
-          prompt ? segment(prompt, { em: true, truncate: true }) : null,
+          promptSegment,
         ]),
       });
     case "answered":
       return makeTitle({
-        segments: filterNull([
-          segment("Answered"),
-          prompt ? segment(prompt, { em: true, truncate: true }) : null,
-        ]),
+        segments: filterNull([segment("Answered"), promptSegment]),
       });
     case "interrupted":
+      // Mirror the command/tool/web-search interrupted pattern: a past-tense
+      // verb plus a status decoration. Keeps the title shape consistent with
+      // peer rows; the longer statusReason lives on the row itself if a
+      // reader wants the detail.
       return makeTitle({
-        segments: filterNull([
-          segment("Question interrupted"),
-          prompt ? segment(prompt, { em: true, truncate: true }) : null,
-          reasonSegment,
-        ]),
+        segments: filterNull([segment("Asked"), promptSegment]),
+        decorations: [statusDecoration("interrupted", null)],
       });
     case "expired":
       return makeTitle({
-        segments: filterNull([
-          segment("Question expired"),
-          prompt ? segment(prompt, { em: true, truncate: true }) : null,
-          reasonSegment,
-        ]),
+        segments: filterNull([segment("Asked"), promptSegment]),
+        decorations: [statusDecoration("expired", null)],
       });
     default:
       return assertNever(row.lifecycle);

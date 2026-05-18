@@ -14,7 +14,6 @@ import {
   conversationRow,
   delegationRow,
   fileChangeRow,
-  questionRow,
   systemRow,
   turnRow,
 } from "@/test/fixtures/thread-timeline-rows";
@@ -191,52 +190,6 @@ describe("ThreadTimelineRows", () => {
     );
 
     expect(view.container.textContent ?? "").toContain("rg timeline apps/app");
-  });
-
-  it("renders pending user questions as read-only status rows", () => {
-    const row = questionRow({
-      interactionId: "pi_question_1",
-      questions: [
-        {
-          id: "area",
-          prompt: "Which areas should I focus on?",
-          shortLabel: "Area",
-          multiSelect: true,
-          options: [
-            { value: "bug", label: "Bug fix" },
-            { value: "docs", label: "Docs" },
-          ],
-          allowFreeText: false,
-        },
-        {
-          id: "notes",
-          prompt: "Anything else I should know?",
-          shortLabel: "Notes",
-          multiSelect: false,
-          allowFreeText: true,
-        },
-      ],
-    });
-
-    renderTimelineRows({
-      timelineRows: [row],
-      overrides: {
-        initialExpanded: new Set([row.id]),
-      },
-    });
-
-    expect(screen.getAllByText("Waiting").length).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("Which areas should I focus on?").length,
-    ).toBeGreaterThan(0);
-    expect(
-      screen.getAllByText("Anything else I should know?").length,
-    ).toBeGreaterThan(0);
-    expect(screen.getByText("Bug fix")).not.toBeNull();
-    expect(screen.getByText("Docs")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Submit answer" })).toBeNull();
-    expect(screen.queryByLabelText("Bug fix")).toBeNull();
-    expect(screen.queryByLabelText("Notes answer")).toBeNull();
   });
 
   it("preserves completed activity summary identity when work appends", () => {

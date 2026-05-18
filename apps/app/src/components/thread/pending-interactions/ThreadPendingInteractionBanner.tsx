@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import {
   assertNever,
   buildPendingInteractionApprovalResolution,
@@ -9,8 +9,6 @@ import { extractShellCommandFromString } from "@bb/thread-view";
 import {
   isApprovalPendingInteractionPayload,
   isUserQuestionPendingInteractionPayload,
-} from "@bb/domain";
-import {
   type ApprovalPendingInteractionPayload,
   type PendingInteraction,
   type PendingInteractionApprovalDecision,
@@ -19,12 +17,9 @@ import {
 } from "@bb/domain";
 import { Button } from "@/components/ui/button.js";
 import { ExpandableLine } from "@/components/ui/expandable-line.js";
-import { Pill } from "@/components/ui/pill.js";
+import { Icon } from "@/components/ui/icon.js";
 import { getDetailScrollMaxHeightClass } from "@/components/ui/detail-scroll-size.js";
-import {
-  UserQuestionAnswerForm,
-  UserQuestionLifecycleNotice,
-} from "@/components/thread/user-questions/UserQuestionInteractionContent.js";
+import { UserQuestionAnswerForm } from "@/components/thread/user-questions/UserQuestionInteractionContent.js";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
@@ -32,18 +27,6 @@ import { cn } from "@/lib/utils";
 interface ThreadPendingInteractionBannerProps {
   interaction: PendingInteraction;
   threadId: string;
-}
-
-interface BannerOption {
-  label: string;
-  resolution: PendingInteractionResolution;
-}
-
-interface BannerModel {
-  title: string;
-  subject: ReactNode | null;
-  options: BannerOption[];
-  skip: BannerOption | null;
 }
 
 interface ApprovalPendingInteractionBannerProps {
@@ -58,7 +41,19 @@ interface UserQuestionPendingInteractionBannerProps {
   threadId: string;
 }
 
-interface BuildBannerModelInput {
+interface BannerShellProps {
+  title: string;
+  errorMessage?: string | null;
+  footer?: ReactNode;
+  children?: ReactNode;
+}
+
+interface ApprovalSubject {
+  title: string;
+  body: ReactNode;
+}
+
+interface BuildApprovalSubjectInput {
   interaction: PendingInteraction;
   payload: ApprovalPendingInteractionPayload;
 }
@@ -90,21 +85,44 @@ export function ThreadPendingInteractionBanner({
   );
 }
 
+function BannerShell({
+  title,
+  errorMessage,
+  footer,
+  children,
+}: BannerShellProps) {
+  return (
+    <div className="mb-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+      <h3 className="min-w-0 text-sm font-semibold text-foreground">
+        <ExpandableLine fullText={title} collapsedClassName="line-clamp-2">
+          {title}
+        </ExpandableLine>
+      </h3>
+      {children ? <div className="mt-3">{children}</div> : null}
+      {footer ? (
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          {footer}
+        </div>
+      ) : null}
+      {errorMessage ? (
+        <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/[0.06] px-2 py-1 text-xs text-destructive">
+          {errorMessage}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ApprovalPendingInteractionBanner({
   interaction,
   payload,
   threadId,
 }: ApprovalPendingInteractionBannerProps) {
   const resolvePendingInteraction = useResolveThreadPendingInteraction();
-  const [selectedIndex, setSelectedIndex] = useState(0);
   const isResolving = interaction.status === "resolving";
-
-  useEffect(() => {
-    setSelectedIndex(0);
-  }, [interaction.id]);
-
-  const model = useMemo(
-    () => buildBannerModel({ interaction, payload }),
+  const submittedDecision = approvalResolutionDecision(interaction.resolution);
+  const subject = useMemo(
+    () => buildApprovalSubject({ interaction, payload }),
     [interaction, payload],
   );
   const mutationErrorMessage = resolvePendingInteraction.error
@@ -113,15 +131,15 @@ function ApprovalPendingInteractionBanner({
         fallbackMessage: "Failed to resolve pending interaction.",
       })
     : null;
+  const submitDisabled = resolvePendingInteraction.isPending || isResolving;
 
-  const submitIndex = Math.min(selectedIndex, model.options.length - 1);
-  const submitOption = model.options[submitIndex] ?? null;
-  const skipOption = model.skip;
-  const showSubmit = !isResolving && submitOption !== null;
-  const showSkip = !isResolving && skipOption !== null;
-  const showFooter = showSubmit || showSkip;
-
-  const submitResolution = (resolution: PendingInteractionResolution) => {
+  const submitDecision = (
+    decision: PendingInteractionApprovalDecision,
+  ): void => {
+    const resolution = buildPendingInteractionApprovalResolution(
+      interaction,
+      decision,
+    );
     void resolvePendingInteraction
       .mutateAsync({
         threadId,
@@ -132,89 +150,21 @@ function ApprovalPendingInteractionBanner({
   };
 
   return (
-    <div className="mb-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-      <div className="flex min-w-0 items-center gap-2">
-        <h3 className="min-w-0 flex-1 text-sm font-semibold text-foreground">
-          <ExpandableLine
-            fullText={model.title}
-            collapsedClassName="line-clamp-2"
-          >
-            {model.title}
-          </ExpandableLine>
-        </h3>
-        {isResolving ? (
-          <Pill variant="secondary">Delivering</Pill>
-        ) : null}
-      </div>
-
-      {model.subject ? <div className="mt-3">{model.subject}</div> : null}
-
-      {isResolving ? (
-        <div className="mt-3 rounded-md border border-border/50 bg-background/60 px-3 py-2 text-xs text-muted-foreground">
-          Answer submitted. Delivering it to the provider.
-        </div>
-      ) : null}
-
-      {!isResolving && model.options.length > 0 ? (
-        <ol className="mt-3 flex flex-col">
-          {model.options.map((option, index) => {
-            const isSelected = index === submitIndex;
-            return (
-              <li key={option.label}>
-                <button
-                  type="button"
-                  onClick={() => setSelectedIndex(index)}
-                  disabled={resolvePendingInteraction.isPending}
-                  className={cn(
-                    "flex w-full items-center rounded-md px-3 py-2 text-left text-sm transition-colors",
-                    isSelected
-                      ? "bg-foreground/15 font-bold text-foreground"
-                      : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
-                    resolvePendingInteraction.isPending && "opacity-60",
-                  )}
-                  aria-pressed={isSelected}
-                >
-                  <span className="flex-1 truncate">{option.label}</span>
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-      ) : null}
-
-      {showFooter ? (
-        <div className="mt-3 flex items-center justify-end gap-2">
-          {showSkip && skipOption ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="link"
-              disabled={resolvePendingInteraction.isPending}
-              onClick={() => submitResolution(skipOption.resolution)}
-            >
-              {skipOption.label}
-            </Button>
-          ) : null}
-          {showSubmit && submitOption ? (
-            <Button
-              type="button"
-              size="sm"
-              variant="default"
-              disabled={resolvePendingInteraction.isPending}
-              onClick={() => submitResolution(submitOption.resolution)}
-            >
-              Submit
-            </Button>
-          ) : null}
-        </div>
-      ) : null}
-
-      {mutationErrorMessage ? (
-        <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/[0.06] px-2 py-1 text-xs text-destructive">
-          {mutationErrorMessage}
-        </div>
-      ) : null}
-    </div>
+    <BannerShell
+      title={subject.title}
+      errorMessage={mutationErrorMessage}
+      footer={payload.availableDecisions.map((decision) => (
+        <ApprovalDecisionButton
+          key={decision}
+          decision={decision}
+          disabled={submitDisabled}
+          isLoading={isResolving && submittedDecision === decision}
+          onClick={() => submitDecision(decision)}
+        />
+      ))}
+    >
+      {subject.body}
+    </BannerShell>
   );
 }
 
@@ -230,82 +180,113 @@ function ThreadUserQuestionPendingInteractionBanner({
   });
 
   return (
-    <div className="mb-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
-      <div className="flex min-w-0 items-center gap-2">
-        <h3 className="min-w-0 flex-1 text-sm font-semibold text-foreground">
-          <ExpandableLine fullText={title} collapsedClassName="line-clamp-2">
-            {title}
-          </ExpandableLine>
-        </h3>
-        {isResolving ? <Pill variant="secondary">Delivering</Pill> : null}
-      </div>
-
-      {isResolving ? (
-        <div className="mt-3">
-          <UserQuestionLifecycleNotice
-            message="Answer submitted. Delivering it to the provider."
-            statusReason={interaction.statusReason}
-            tone="default"
-          />
-        </div>
-      ) : (
-        <UserQuestionAnswerForm
-          className="mt-3"
-          interactionId={interaction.id}
-          questions={payload.questions}
-          threadId={threadId}
-        />
-      )}
-    </div>
+    <BannerShell title={title}>
+      <UserQuestionAnswerForm
+        interactionId={interaction.id}
+        isResolving={isResolving}
+        questions={payload.questions}
+        threadId={threadId}
+      />
+    </BannerShell>
   );
 }
 
-function buildBannerModel({
+interface ApprovalDecisionButtonProps {
+  decision: PendingInteractionApprovalDecision;
+  disabled: boolean;
+  isLoading: boolean;
+  onClick: () => void;
+}
+
+function ApprovalDecisionButton({
+  decision,
+  disabled,
+  isLoading,
+  onClick,
+}: ApprovalDecisionButtonProps) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant={approvalDecisionButtonVariant(decision)}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      {isLoading ? (
+        <Icon name="Spinner" className="size-3 animate-spin" />
+      ) : null}
+      {labelForApprovalDecision(decision)}
+    </Button>
+  );
+}
+
+function approvalDecisionButtonVariant(
+  decision: PendingInteractionApprovalDecision,
+): "default" | "outline" | "ghost" {
+  // Three-level hierarchy: filled primary for the safest yes, outline for the
+  // longer-lived yes, ghost for the dismissive no. Keeps Deny visible without
+  // letting it compete with the affirmative actions.
+  switch (decision) {
+    case "allow_once":
+      return "default";
+    case "allow_for_session":
+      return "outline";
+    case "deny":
+      return "ghost";
+  }
+}
+
+function approvalResolutionDecision(
+  resolution: PendingInteractionResolution | null,
+): PendingInteractionApprovalDecision | null {
+  if (!resolution || "kind" in resolution) {
+    return null;
+  }
+  return resolution.decision;
+}
+
+function buildApprovalSubject({
   interaction,
   payload,
-}: BuildBannerModelInput): BannerModel {
-  const options = payload.availableDecisions.map((decision) => ({
-    label: labelForApprovalDecision(decision),
-    resolution: buildPendingInteractionApprovalResolution(
-      interaction,
-      decision,
-    ),
-  }));
-
+}: BuildApprovalSubjectInput): ApprovalSubject {
   switch (payload.subject.kind) {
     case "command": {
       const rawCommand = payload.subject.command;
       const command = rawCommand
         ? (extractShellCommandFromString(rawCommand) ?? rawCommand)
         : null;
+      // The cwd value is a self-describing absolute path, so the "Cwd: "
+      // prefix from the shared formatter reads as redundant in the banner.
+      // Strip the label here; other prefixed lines (Action:, Session grant:)
+      // need their labels to be readable.
       const detailLines = formatPendingInteractionSubjectDetailLines(
         interaction,
-      ).filter((line) => !line.startsWith("Command: "));
-      const subject = command ? (
-        <div className="overflow-hidden rounded-lg border border-border bg-card">
-          <pre
-            className={cn(
-              getDetailScrollMaxHeightClass("base"),
-              "overflow-auto whitespace-pre px-4 py-3 font-mono text-sm leading-tight text-foreground",
-            )}
-          >
-            $ {command}
-          </pre>
-          {detailLines.length > 0 ? (
-            <ul className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
-              {detailLines.map((line) => (
-                <li key={line}>{line}</li>
-              ))}
-            </ul>
-          ) : null}
-        </div>
-      ) : null;
-
+      )
+        .filter((line) => !line.startsWith("Command: "))
+        .map((line) =>
+          line.startsWith("Cwd: ") ? line.slice("Cwd: ".length) : line,
+        );
       return {
         title: payload.reason ?? "Do you want to run this command?",
-        subject,
-        options,
-        skip: null,
+        body: command ? (
+          <div className="overflow-hidden rounded-lg border border-border bg-card">
+            <pre
+              className={cn(
+                getDetailScrollMaxHeightClass("base"),
+                "overflow-auto whitespace-pre px-4 py-3 font-mono text-sm leading-tight text-foreground",
+              )}
+            >
+              $ {command}
+            </pre>
+            {detailLines.length > 0 ? (
+              <ul className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
+                {detailLines.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        ) : null,
       };
     }
     case "file_change": {
@@ -313,7 +294,7 @@ function buildBannerModel({
         formatPendingInteractionSubjectDetailLines(interaction);
       return {
         title: payload.reason ?? "Do you want to make these changes?",
-        subject:
+        body:
           detailLines.length > 0 ? (
             <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
               {detailLines.map((line) => (
@@ -321,8 +302,6 @@ function buildBannerModel({
               ))}
             </ul>
           ) : null,
-        options,
-        skip: null,
       };
     }
     case "permission_grant": {
@@ -330,7 +309,7 @@ function buildBannerModel({
         formatPendingInteractionSubjectDetailLines(interaction);
       return {
         title: payload.reason ?? "Do you want to grant this permission?",
-        subject:
+        body:
           detailLines.length > 0 ? (
             <ul className="rounded-lg border border-border bg-card px-4 py-3 text-xs text-muted-foreground">
               {detailLines.map((line) => (
@@ -338,8 +317,6 @@ function buildBannerModel({
               ))}
             </ul>
           ) : null,
-        options,
-        skip: null,
       };
     }
     default:

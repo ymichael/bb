@@ -11,8 +11,8 @@ import type {
   PendingInteractionUserQuestionQuestion,
   UserQuestionPendingInteractionResolution,
 } from "@bb/domain";
-import { formatPendingInteractionUserQuestionOptionLabel } from "@bb/core-ui";
 import { Button } from "@/components/ui/button.js";
+import { Icon } from "@/components/ui/icon.js";
 import { useResolveThreadPendingInteraction } from "@/hooks/mutations/thread-interaction-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { cn } from "@/lib/utils";
@@ -20,23 +20,15 @@ import { cn } from "@/lib/utils";
 interface UserQuestionAnswerFormProps {
   className?: string;
   interactionId: string;
+  /**
+   * The interaction has reached `status: "resolving"` — the server is in the
+   * middle of delivering the answer to the provider. Keeps the form chrome on
+   * screen with everything disabled and a spinner in the submit button,
+   * instead of swapping the form out for a separate notice.
+   */
+  isResolving?: boolean;
   questions: readonly PendingInteractionUserQuestionQuestion[];
   threadId: string;
-}
-
-interface UserQuestionAnswerSummaryListProps {
-  answers: Record<string, PendingInteractionUserAnswer> | null;
-  questions: readonly PendingInteractionUserQuestionQuestion[];
-}
-
-interface UserQuestionPromptListProps {
-  questions: readonly PendingInteractionUserQuestionQuestion[];
-}
-
-interface UserQuestionLifecycleNoticeProps {
-  message: string;
-  statusReason: string | null;
-  tone: "default" | "danger";
 }
 
 interface QuestionPromptProps {
@@ -53,21 +45,12 @@ interface QuestionInputBlockProps {
   question: PendingInteractionUserQuestionQuestion;
 }
 
-interface QuestionAnswerSummaryProps {
-  answer: PendingInteractionUserAnswer | null;
-  question: PendingInteractionUserQuestionQuestion;
-}
-
 interface QuestionOptionInputProps {
   checked: boolean;
   disabled: boolean;
   inputName: string;
   onOptionToggle: (input: ToggleQuestionOptionInput) => void;
   option: PendingInteractionUserQuestionOption;
-  question: PendingInteractionUserQuestionQuestion;
-}
-
-interface QuestionPromptBlockProps {
   question: PendingInteractionUserQuestionQuestion;
 }
 
@@ -128,7 +111,6 @@ interface UseQuestionAnswerFormResult {
   formState: QuestionFormState;
   mutationErrorMessage: string | null;
   submitAnswer: () => void;
-  submitDisabled: boolean;
   updateFreeTextAnswer: (input: UpdateQuestionFreeTextInput) => void;
   updateSelectedAnswer: (input: ToggleQuestionOptionInput) => void;
 }
@@ -442,7 +424,6 @@ function useQuestionAnswerForm({
     formState,
     mutationErrorMessage,
     submitAnswer,
-    submitDisabled,
     updateFreeTextAnswer,
     updateSelectedAnswer,
   };
@@ -451,42 +432,89 @@ function useQuestionAnswerForm({
 export function UserQuestionAnswerForm({
   className,
   interactionId,
+  isResolving = false,
   questions,
   threadId,
 }: UserQuestionAnswerFormProps) {
   const {
-    disabled,
+    disabled: mutationDisabled,
     formState,
     mutationErrorMessage,
     submitAnswer,
-    submitDisabled,
     updateFreeTextAnswer,
     updateSelectedAnswer,
   } = useQuestionAnswerForm({ interactionId, questions, threadId });
+  const disabled = mutationDisabled || isResolving;
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    setCurrentIndex(0);
+  }, [interactionId]);
+
+  const totalQuestions = questions.length;
+  const currentQuestion = questions[currentIndex] ?? null;
+  const isLastQuestion = currentIndex === totalQuestions - 1;
+  const isCurrentAnswered = currentQuestion
+    ? isQuestionAnswered({ formState, question: currentQuestion })
+    : false;
+
+  const handleBack = (): void => {
+    setCurrentIndex((index) => Math.max(index - 1, 0));
+  };
+  const handleAdvance = (): void => {
+    if (isLastQuestion) {
+      submitAnswer();
+      return;
+    }
+    setCurrentIndex((index) => Math.min(index + 1, totalQuestions - 1));
+  };
   const handleSubmit = (event: QuestionAnswerFormSubmitEvent): void => {
     event.preventDefault();
-    submitAnswer();
+    handleAdvance();
   };
+
+  if (!currentQuestion) {
+    return null;
+  }
 
   return (
     <form className={cn("space-y-3", className)} onSubmit={handleSubmit}>
-      <div className="space-y-3">
-        {questions.map((question) => (
-          <QuestionInputBlock
-            key={question.id}
-            disabled={disabled}
-            formState={formState}
-            interactionId={interactionId}
-            onFreeTextChange={updateFreeTextAnswer}
-            onOptionToggle={updateSelectedAnswer}
-            onSubmit={submitAnswer}
-            question={question}
-          />
-        ))}
-      </div>
+      {totalQuestions > 1 ? (
+        <QuestionStepperIndicator
+          currentIndex={currentIndex}
+          totalQuestions={totalQuestions}
+        />
+      ) : null}
+      <QuestionInputBlock
+        disabled={disabled}
+        formState={formState}
+        interactionId={interactionId}
+        onFreeTextChange={updateFreeTextAnswer}
+        onOptionToggle={updateSelectedAnswer}
+        onSubmit={handleAdvance}
+        question={currentQuestion}
+      />
       <div className="flex items-center justify-end gap-2">
-        <Button type="submit" size="sm" disabled={submitDisabled}>
-          Submit answer
+        {currentIndex > 0 ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={disabled}
+            onClick={handleBack}
+          >
+            Back
+          </Button>
+        ) : null}
+        <Button
+          type="submit"
+          size="sm"
+          disabled={disabled || !isCurrentAnswered}
+        >
+          {isResolving ? (
+            <Icon name="Spinner" className="size-3 animate-spin" />
+          ) : null}
+          {isLastQuestion ? "Submit answer" : "Next"}
         </Button>
       </div>
       {mutationErrorMessage ? (
@@ -498,111 +526,35 @@ export function UserQuestionAnswerForm({
   );
 }
 
-function QuestionAnswerSummary({
-  answer,
-  question,
-}: QuestionAnswerSummaryProps) {
-  const selectedLabels =
-    answer?.selected.map((value) =>
-      formatPendingInteractionUserQuestionOptionLabel({ question, value }),
-    ) ?? [];
-  const freeText = answer?.freeText ?? null;
-  const hasAnswer = selectedLabels.length > 0 || freeText !== null;
-
-  return (
-    <div className="space-y-2 rounded-md border border-border bg-card px-4 py-3">
-      <QuestionPrompt question={question} />
-      {hasAnswer ? (
-        <div className="space-y-1 text-sm text-foreground">
-          {selectedLabels.length > 0 ? (
-            <div>{selectedLabels.join(", ")}</div>
-          ) : null}
-          {freeText ? (
-            <div className="whitespace-pre-wrap">{freeText}</div>
-          ) : null}
-        </div>
-      ) : (
-        <div className="text-sm text-muted-foreground">
-          No answer recorded.
-        </div>
-      )}
-    </div>
-  );
+interface QuestionStepperIndicatorProps {
+  currentIndex: number;
+  totalQuestions: number;
 }
 
-function QuestionPromptBlock({ question }: QuestionPromptBlockProps) {
-  const options = question.options ?? [];
+function QuestionStepperIndicator({
+  currentIndex,
+  totalQuestions,
+}: QuestionStepperIndicatorProps) {
   return (
-    <div className="space-y-2 rounded-md border border-border bg-card px-4 py-3">
-      <QuestionPrompt question={question} />
-      {options.length > 0 ? (
-        <ul className="grid gap-1.5 text-sm text-muted-foreground">
-          {options.map((option) => (
-            <li key={option.value}>
-              <span className="font-medium text-foreground">
-                {option.label}
-              </span>
-              {option.description ? (
-                <span className="text-muted-foreground">
-                  {" "}
-                  {option.description}
-                </span>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </div>
-  );
-}
-
-export function UserQuestionAnswerSummaryList({
-  answers,
-  questions,
-}: UserQuestionAnswerSummaryListProps) {
-  return (
-    <div className="space-y-3">
-      {questions.map((question) => (
-        <QuestionAnswerSummary
-          key={question.id}
-          question={question}
-          answer={answers?.[question.id] ?? null}
-        />
-      ))}
-    </div>
-  );
-}
-
-export function UserQuestionPromptList({
-  questions,
-}: UserQuestionPromptListProps) {
-  return (
-    <div className="space-y-3">
-      {questions.map((question) => (
-        <QuestionPromptBlock key={question.id} question={question} />
-      ))}
-    </div>
-  );
-}
-
-export function UserQuestionLifecycleNotice({
-  message,
-  statusReason,
-  tone,
-}: UserQuestionLifecycleNoticeProps) {
-  return (
-    <div
-      className={cn(
-        "rounded-md border px-3 py-2 text-sm",
-        tone === "danger"
-          ? "border-destructive/30 bg-destructive/[0.06] text-destructive"
-          : "border-border bg-card text-muted-foreground",
-      )}
-    >
-      <div>{message}</div>
-      {statusReason ? (
-        <div className="mt-1 text-xs">{statusReason}</div>
-      ) : null}
+    <div className="flex items-center justify-between text-xs text-muted-foreground">
+      <span>
+        Question {currentIndex + 1} of {totalQuestions}
+      </span>
+      <div className="flex items-center gap-1.5" aria-hidden>
+        {Array.from({ length: totalQuestions }).map((_, index) => (
+          <span
+            key={index}
+            className={cn(
+              "size-1.5 rounded-full transition-colors",
+              index === currentIndex
+                ? "bg-foreground"
+                : index < currentIndex
+                  ? "bg-foreground/60"
+                  : "bg-foreground/25",
+            )}
+          />
+        ))}
+      </div>
     </div>
   );
 }

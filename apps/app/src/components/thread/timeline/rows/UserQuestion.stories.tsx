@@ -96,6 +96,15 @@ const resolvingQuestion = questionRow({
   id: "thr_question_story:question:resolving",
   lifecycle: "resolving",
   status: "pending",
+  answers: {
+    scope: {
+      selected: ["app", "tests"],
+    },
+    notes: {
+      selected: [],
+      freeText: "Keep the banner as the actionable surface.",
+    },
+  },
 });
 
 const answeredQuestion = questionRow({

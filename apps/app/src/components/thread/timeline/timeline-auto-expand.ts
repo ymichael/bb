@@ -18,7 +18,10 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
     case "approval":
       return false;
     case "question":
-      return true;
+      // Resolving and answered rows both carry a recorded answer in their
+      // body. Pending/interrupted/expired stay title-only. Matches the
+      // body-collapse rule in QuestionWorkRowBody.
+      return row.lifecycle === "answered" || row.lifecycle === "resolving";
     case "command":
     case "tool":
       return !hasTimelineExplorationIntent(row);
