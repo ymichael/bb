@@ -7,25 +7,19 @@ on:
   pull_request:
   workflow_dispatch:
 
+env:
+  PRIMARY_NODE_VERSION: "22.x"
+  PNPM_VERSION: "9.15.0"
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   checks:
-    name: Checks (ubuntu-latest, Node ${{ matrix.node-version }})
+    name: Checks (ubuntu-latest, Node 22.x)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: ${{ matrix.node-version == '20.x' }}
-
-    strategy:
-      fail-fast: false
-      matrix:
-        node-version:
-          - 20.x
-          - 22.x
-          - 24.x
-          - 26.x
 
     steps:
       - name: Checkout repository
@@ -34,23 +28,23 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9.15.0
+          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ env.PRIMARY_NODE_VERSION }}
           cache: pnpm
 
       - name: Cache Turbo task outputs
         uses: actions/cache@v4
         with:
           path: .turbo/cache
-          key: ${{ runner.os }}-node-${{ matrix.node-version }}-checks-turbo-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          key: ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-checks-turbo-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-node-${{ matrix.node-version }}-checks-turbo-${{ hashFiles('pnpm-lock.yaml') }}-
-            ${{ runner.os }}-node-${{ matrix.node-version }}-checks-turbo-
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-checks-turbo-${{ hashFiles('pnpm-lock.yaml') }}-
+            ${{ runner.os }}-node-${{ env.PRIMARY_NODE_VERSION }}-checks-turbo-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
@@ -66,13 +60,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
-        node-version:
-          - 22.x
-          - 24.x
-          - 26.x
+        include:
+          - os: ubuntu-latest
+            node-version: "22.x"
+          - os: macos-latest
+            node-version: "22.x"
 
     steps:
       - name: Checkout repository
@@ -81,7 +73,7 @@ jobs:
       - name: Set up pnpm
         uses: pnpm/action-setup@v4
         with:
-          version: 9.15.0
+          version: ${{ env.PNPM_VERSION }}
           run_install: false
 
       - name: Set up Node.js
@@ -98,6 +90,59 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node-${{ matrix.node-version }}-package-smoke-turbo-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-node-${{ matrix.node-version }}-package-smoke-turbo-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Smoke bb-app tarball
+        run: pnpm exec turbo run smoke:tarball --filter=bb-app --cache-dir=.turbo/cache --output-logs=new-only
+
+  node-compat-smoke:
+    name: Node Compatibility Smoke (${{ matrix.os }}, Node ${{ matrix.node-version }})
+    if: ${{ github.event_name != 'pull_request' }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.node-version == '20.x' }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            node-version: "20.x"
+          - os: ubuntu-latest
+            node-version: "24.x"
+          - os: ubuntu-latest
+            node-version: "26.x"
+          - os: macos-latest
+            node-version: "24.x"
+          - os: macos-latest
+            node-version: "26.x"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: pnpm
+
+      - name: Cache Turbo task outputs
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: ${{ runner.os }}-node-${{ matrix.node-version }}-compat-smoke-turbo-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-node-${{ matrix.node-version }}-compat-smoke-turbo-${{ hashFiles('pnpm-lock.yaml') }}-
+            ${{ runner.os }}-node-${{ matrix.node-version }}-compat-smoke-turbo-
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile --prefer-offline
