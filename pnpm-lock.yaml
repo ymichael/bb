@@ -134,6 +134,9 @@ importers:
       jotai-family:
         specifier: ^1.0.1
         version: 1.0.1(jotai@2.19.0(@babel/core@7.29.0)(@babel/template@7.28.6)(@types/react@19.2.13)(react@19.2.4))
+      nanoid:
+        specifier: ^5.1.6
+        version: 5.1.6
       partysocket:
         specifier: ^1.1.16
         version: 1.1.16(react@19.2.4)
