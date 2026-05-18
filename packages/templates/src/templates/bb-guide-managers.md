@@ -15,7 +15,7 @@ Use bb thread commands for most manager interactions.
     --name <name>                         Manager name
     --provider <id>                       Provider override
     --model <model>                       Model override
-    --reasoning-level <level>             Reasoning level: low, medium, high, xhigh
+    --reasoning-level <level>             Reasoning level: low, medium, high, xhigh, max
     --permission-mode <mode>              Permission mode: full, workspace-write, or readonly
     --host <id>                           Target host (defaults to local host)
     --json                                Print machine-readable JSON output

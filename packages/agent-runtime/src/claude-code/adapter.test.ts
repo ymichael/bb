@@ -354,7 +354,7 @@ describe("claude-code provider adapter", () => {
     expect(fullCmd?.params).not.toHaveProperty("additionalWorkspaceWriteRoots");
   });
 
-  it("buildCommand thread/start passes through model, env vars, instructions, reasoning level, and dynamic tools", () => {
+  it("buildCommand thread/start passes through model, env vars, instructions, max reasoning level, and dynamic tools", () => {
     const adapter = createClaudeCodeProviderAdapter();
     const cmd = adapter.buildCommandPlan({
       type: "thread/start",
@@ -364,10 +364,10 @@ describe("claude-code provider adapter", () => {
       instructionMode: "append",
       options: {
         permissionEscalation: "ask",
-        model: "claude-sonnet-4-5",
+        model: "claude-opus-4-7",
         permissionMode: "workspace-write",
         instructions: "Focus on the failing tests first.",
-        reasoningLevel: "high",
+        reasoningLevel: "max",
         envVars: {
           "BAD.KEY": "ignored",
           TEST_VAR: "123",
@@ -393,8 +393,8 @@ describe("claude-code provider adapter", () => {
       method: "thread/start",
       params: {
         threadId: "bb-thread-1",
-        model: "claude-sonnet-4-5",
-        reasoningLevel: "high",
+        model: "claude-opus-4-7",
+        reasoningLevel: "max",
         permissionMode: "acceptEdits",
         permissionEscalation: "ask",
         baseInstructions: expect.stringContaining(

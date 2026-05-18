@@ -1,6 +1,12 @@
 import { z } from "zod";
 
-export const reasoningLevelValues = ["low", "medium", "high", "xhigh"] as const;
+export const reasoningLevelValues = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+] as const;
 export const reasoningLevelSchema = z.enum(reasoningLevelValues);
 export type ReasoningLevel = z.infer<typeof reasoningLevelSchema>;
 

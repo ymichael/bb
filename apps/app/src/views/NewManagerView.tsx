@@ -42,6 +42,7 @@ const REASONING_LABELS: Record<ReasoningLevel, string> = {
   medium: "Medium",
   high: "High",
   xhigh: "Extra High",
+  max: "Max",
 };
 const EMPTY_PROVIDERS: ProviderInfo[] = [];
 const EMPTY_MODELS: AvailableModel[] = [];
