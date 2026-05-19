@@ -711,6 +711,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "host.list_branches": null,
   "host.list_files": null,
   "host.read_file": null,
+  "host.write_file": null,
   "interactive.resolve": defineCommandResultOwner({
     applySideEffects: handleInteractiveResolveResult,
   }),

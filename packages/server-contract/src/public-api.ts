@@ -42,6 +42,7 @@ import type {
   EnvironmentStatusQuery,
   EnvironmentStatusResponse,
   ThreadStorageContentQuery,
+  ThreadStorageContentWriteResponse,
   ThreadHostFileContentQuery,
   ThreadStorageFilesQuery,
   ProjectAttachmentContentQuery,
@@ -514,6 +515,17 @@ export type PublicApiSchema = {
       Uint8Array,
       200,
       "binary"
+    >;
+    /**
+     * Overwrite a thread storage file with the request body. The route accepts
+     * `application/json` or `text/plain` and stores the bytes verbatim. The
+     * `path` query parameter must be a bare filename — no directory traversal,
+     * no leading dot, no slashes. Body byte length is capped at
+     * `THREAD_STORAGE_CONTENT_MAX_BYTES`. Proxies to `host.write_file`.
+     */
+    $put: Endpoint<
+      PathId & { query: ThreadStorageContentQuery; json: unknown },
+      ThreadStorageContentWriteResponse
     >;
   };
   "/threads/:id/host-files/content": {

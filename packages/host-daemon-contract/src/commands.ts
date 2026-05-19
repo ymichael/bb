@@ -21,7 +21,14 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 15 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 16 as const;
+
+/**
+ * Maximum byte length for a single `host.write_file` payload. Mirrors the
+ * server-side cap on `PUT /threads/:id/thread-storage/content` so the daemon
+ * rejects anything that would otherwise slip past a stale server.
+ */
+export const HOST_WRITE_FILE_MAX_BYTES = 1024 * 1024;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -38,6 +45,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "host.list_files",
   "host.list_branches",
   "host.read_file",
+  "host.write_file",
   "provider.list",
   "provider.list_models",
   "environment.provision",
@@ -256,6 +264,23 @@ export const hostListFilesCommandSchema = z.object({
 });
 
 /**
+ * Write a file under a declared absolute host root. The daemon enforces that
+ * `rootPath` exists, is a directory, and is a prefix of `path` (after
+ * normalization), then writes `content` atomically (write tmp + rename).
+ *
+ * `content` is the raw UTF-8 body when `contentEncoding === "utf8"` and a
+ * base64-encoded byte string when `contentEncoding === "base64"`. The
+ * resolved byte length must not exceed `HOST_WRITE_FILE_MAX_BYTES`.
+ */
+export const hostWriteFileCommandSchema = z.object({
+  type: z.literal("host.write_file"),
+  path: z.string().min(1),
+  rootPath: z.string().min(1),
+  content: z.string(),
+  contentEncoding: z.enum(["utf8", "base64"]),
+});
+
+/**
  * List git branches at an absolute host path. Path-only sibling of
  * `host.list_files`. Does not require an environment row, does not
  * provision anything, and does not create daemon-side workspace state.
@@ -406,6 +431,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostListFilesCommandSchema,
   hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
+  hostWriteFileCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
   environmentDestroyCommandSchema,
@@ -435,6 +461,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "host.list_branches":
     case "host.list_files":
     case "host.read_file":
+    case "host.write_file":
     case "provider.list":
     case "provider.list_models":
     case "replay.capture_delete":
@@ -492,6 +519,10 @@ export const hostDaemonCommandResultSchemaByType = {
     defaultBranch: z.string().nullable(),
   }),
   "host.read_file": fileReadResultSchema,
+  "host.write_file": z.object({
+    path: z.string(),
+    sizeBytes: z.number().int().nonnegative(),
+  }),
   "provider.list": z.object({
     providers: z.array(providerInfoSchema),
   }),

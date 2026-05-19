@@ -9,7 +9,7 @@ import {
   type CommandOf,
   isExpectedCommandDispatchError,
 } from "../command-dispatch-support.js";
-import { readHostFile } from "./host-files.js";
+import { readHostFile, writeHostFile } from "./host-files.js";
 
 const execFileAsync = promisify(execFile);
 const tempDirs: string[] = [];
@@ -288,5 +288,105 @@ describe("readHostFile (with ref — git history read)", () => {
     });
 
     expect(result.content).toBe("first\n");
+  });
+});
+
+describe("writeHostFile", () => {
+  it("writes utf8 content under rootPath atomically", async () => {
+    const rootPath = await makeTempDir("bb-host-write-");
+    const filePath = path.join(rootPath, "STATUS_DATA.json");
+    const payload = JSON.stringify({ todos: ["a"] });
+
+    const result = await writeHostFile({
+      type: "host.write_file",
+      path: filePath,
+      rootPath,
+      content: payload,
+      contentEncoding: "utf8",
+    });
+
+    expect(result).toEqual({
+      path: filePath,
+      sizeBytes: Buffer.byteLength(payload, "utf8"),
+    });
+    await expect(fs.readFile(filePath, "utf8")).resolves.toBe(payload);
+  });
+
+  it("overwrites existing files", async () => {
+    const rootPath = await makeTempDir("bb-host-write-");
+    const filePath = path.join(rootPath, "STATUS_DATA.json");
+    await fs.writeFile(filePath, "original");
+
+    await writeHostFile({
+      type: "host.write_file",
+      path: filePath,
+      rootPath,
+      content: "replacement",
+      contentEncoding: "utf8",
+    });
+
+    await expect(fs.readFile(filePath, "utf8")).resolves.toBe("replacement");
+  });
+
+  it("rejects paths outside rootPath", async () => {
+    const rootPath = await makeTempDir("bb-host-write-");
+    const sibling = await makeTempDir("bb-host-write-sibling-");
+
+    await expect(
+      writeHostFile({
+        type: "host.write_file",
+        path: path.join(sibling, "escape.json"),
+        rootPath,
+        content: "x",
+        contentEncoding: "utf8",
+      }),
+    ).rejects.toMatchObject({ code: "invalid_path" });
+  });
+
+  it("rejects payloads larger than HOST_WRITE_FILE_MAX_BYTES", async () => {
+    const rootPath = await makeTempDir("bb-host-write-");
+    const filePath = path.join(rootPath, "big.bin");
+    const payload = "a".repeat(1024 * 1024 + 1);
+
+    await expect(
+      writeHostFile({
+        type: "host.write_file",
+        path: filePath,
+        rootPath,
+        content: payload,
+        contentEncoding: "utf8",
+      }),
+    ).rejects.toMatchObject({ code: "file_too_large" });
+  });
+
+  it("decodes base64 content before measuring against the size cap", async () => {
+    const rootPath = await makeTempDir("bb-host-write-");
+    const filePath = path.join(rootPath, "image.bin");
+    const bytes = Buffer.from([0x00, 0xff, 0x42, 0x10]);
+
+    await writeHostFile({
+      type: "host.write_file",
+      path: filePath,
+      rootPath,
+      content: bytes.toString("base64"),
+      contentEncoding: "base64",
+    });
+
+    await expect(fs.readFile(filePath)).resolves.toEqual(bytes);
+  });
+
+  it("rejects missing rootPath with ENOENT", async () => {
+    const parent = await makeTempDir("bb-host-write-missing-");
+    const missingRoot = path.join(parent, "not-here");
+
+    await expect(
+      writeHostFile({
+        type: "host.write_file",
+        path: path.join(missingRoot, "STATUS_DATA.json"),
+        rootPath: missingRoot,
+        content: "x",
+        contentEncoding: "utf8",
+      }),
+    ).rejects.toMatchObject({ code: "ENOENT" });
   });
 });

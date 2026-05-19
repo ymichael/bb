@@ -1,7 +1,7 @@
 import path from "node:path";
 import { listQueuedThreadMessages } from "@bb/db";
 import { FILE_LIST_LIMIT_MAX } from "@bb/host-daemon-contract";
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { PROMPT_HISTORY_ENTRY_LIMIT, threadEventTypeSchema } from "@bb/domain";
 import {
   promptHistoryQuerySchema,
@@ -13,8 +13,10 @@ import {
   threadTimelineQuerySchema,
   timelineTurnSummaryDetailsQuerySchema,
   typedRoutes,
+  THREAD_STORAGE_CONTENT_MAX_BYTES,
   type PublicApiSchema,
   type ThreadComposerBootstrapResponse,
+  type ThreadStorageContentWriteResponse,
   type ThreadTimelineQuery,
 } from "@bb/server-contract";
 import type { AppDeps, WorkSessionDeps } from "../../types.js";
@@ -109,6 +111,29 @@ function validateFilePath(filePath: string): void {
     filePath.startsWith("/") ||
     filePath.split("/").includes("..") ||
     filePath.split("\\").includes("..")
+  ) {
+    throw new ApiError(400, "invalid_request", "Invalid file path");
+  }
+}
+
+/**
+ * PUT `/threads/:id/thread-storage/content` allows only a bare filename in
+ * `path`. No directory traversal, no slashes (forward or backward), no
+ * leading dot (so dotfiles like `.bb-write-*.tmp` cannot be clobbered), no
+ * NUL byte, and reasonable length. Tighter than {@link validateFilePath}
+ * because writes mutate state and we do not want callers planting files
+ * outside the storage root or alongside daemon tmp files.
+ */
+function validateBareStorageFileName(filePath: string): void {
+  if (
+    filePath.length === 0 ||
+    filePath.length > 255 ||
+    filePath.includes("/") ||
+    filePath.includes("\\") ||
+    filePath.includes("\0") ||
+    filePath.startsWith(".") ||
+    filePath === ".." ||
+    filePath === "."
   ) {
     throw new ApiError(400, "invalid_request", "Invalid file path");
   }
@@ -214,6 +239,109 @@ async function requireThreadStorageTarget(
       threadId: thread.id,
     }),
   };
+}
+
+interface ParsedThreadStorageWriteBody {
+  content: string;
+  contentEncoding: "utf8";
+}
+
+function parseThreadStoragePathQuery(context: Context): string {
+  const raw = context.req.query("path");
+  if (raw === undefined) {
+    throw new ApiError(400, "invalid_request", "path is required");
+  }
+  return raw;
+}
+
+async function parseThreadStorageWriteBody(
+  context: Context,
+): Promise<ParsedThreadStorageWriteBody> {
+  const declaredContentType = (
+    context.req.header("content-type") ?? ""
+  ).toLowerCase();
+  const acceptsJson = declaredContentType.includes("application/json");
+  const acceptsText =
+    declaredContentType.includes("text/plain") || declaredContentType === "";
+
+  if (!acceptsJson && !acceptsText) {
+    throw new ApiError(
+      415,
+      "invalid_request",
+      "Unsupported Content-Type — use application/json or text/plain",
+    );
+  }
+
+  const contentLengthHeader = context.req.header("content-length");
+  if (contentLengthHeader !== undefined) {
+    const contentLength = Number.parseInt(contentLengthHeader, 10);
+    if (
+      Number.isFinite(contentLength) &&
+      contentLength > THREAD_STORAGE_CONTENT_MAX_BYTES
+    ) {
+      throw new ApiError(
+        413,
+        "payload_too_large",
+        "Request body exceeds limit",
+      );
+    }
+  }
+
+  let rawText: string;
+  try {
+    rawText = await context.req.text();
+  } catch {
+    throw new ApiError(400, "invalid_request", "Could not read request body");
+  }
+
+  const byteLength = Buffer.byteLength(rawText, "utf8");
+  if (byteLength > THREAD_STORAGE_CONTENT_MAX_BYTES) {
+    throw new ApiError(413, "payload_too_large", "Request body exceeds limit");
+  }
+
+  if (acceptsJson) {
+    try {
+      JSON.parse(rawText);
+    } catch {
+      throw new ApiError(400, "invalid_request", "Body is not valid JSON");
+    }
+  }
+
+  return { content: rawText, contentEncoding: "utf8" };
+}
+
+async function handleThreadStorageContentWrite(
+  context: Context,
+  deps: AppDeps,
+): Promise<Response> {
+  const filePath = parseThreadStoragePathQuery(context);
+  validateBareStorageFileName(filePath);
+  const body = await parseThreadStorageWriteBody(context);
+  const target = await requireThreadStorageTarget(deps, {
+    threadId: context.req.param("id"),
+  });
+
+  try {
+    const result = await queueCommandAndWait(deps, {
+      hostId: target.hostId,
+      timeoutMs: COMMAND_TIMEOUT_MS,
+      command: {
+        type: "host.write_file",
+        path: path.join(target.storagePath, filePath),
+        rootPath: target.storagePath,
+        content: body.content,
+        contentEncoding: body.contentEncoding,
+      },
+    });
+    const responseBody: ThreadStorageContentWriteResponse = {
+      ok: true,
+      path: filePath,
+      sizeBytes: result.sizeBytes,
+    };
+    return context.json(responseBody);
+  } catch (error) {
+    return remapDaemonFileRouteError(error);
+  }
 }
 
 export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
@@ -428,6 +556,10 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         return remapDaemonFileRouteError(error);
       }
     },
+  );
+
+  app.put("/threads/:id/thread-storage/content", async (context) =>
+    handleThreadStorageContentWrite(context, deps),
   );
 
   get(

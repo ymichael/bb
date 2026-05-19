@@ -866,6 +866,23 @@ export type ThreadStorageContentQuery = z.infer<
   typeof threadStorageContentQuerySchema
 >;
 
+/**
+ * Maximum size in bytes of a single PUT
+ * `/threads/:id/thread-storage/content` payload.
+ *
+ * Threads use storage for small status documents (STATUS_DATA.json, todo
+ * lists, similar). 1 MiB is plenty for that workload and matches the daemon
+ * `host.write_file` cap so a stale server cannot ship a larger payload than
+ * the daemon will accept.
+ */
+export const THREAD_STORAGE_CONTENT_MAX_BYTES = 1024 * 1024;
+
+export interface ThreadStorageContentWriteResponse {
+  ok: true;
+  path: string;
+  sizeBytes: number;
+}
+
 export const threadHostFileContentQuerySchema = z.object({
   path: z.string().min(1),
 });

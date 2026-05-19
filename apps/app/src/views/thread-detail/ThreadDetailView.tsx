@@ -951,6 +951,7 @@ export function ThreadDetailView() {
       isLoading={isThreadStorageFilePreviewLoading}
       onOpenInEditor={handleOpenStorageFileInEditor}
       pinnedPath={pinnedStorageFilePath}
+      threadId={threadId ?? ""}
     />
   ) : undefined;
 

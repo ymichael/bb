@@ -766,9 +766,53 @@ describe("host-daemon command schemas", () => {
       contentEncoding: "utf8",
     });
 
+    expect(
+      hostDaemonCommandResultSchemaByType["host.write_file"].parse({
+        path: "/tmp/bb-data/thread-storage/thread-123/STATUS_DATA.json",
+        sizeBytes: 42,
+      }),
+    ).toEqual({
+      path: "/tmp/bb-data/thread-storage/thread-123/STATUS_DATA.json",
+      sizeBytes: 42,
+    });
+
     expect(() =>
       hostDaemonCommandResultSchemaByType["workspace.commit"].parse({
         commitSha: "",
+      }),
+    ).toThrow();
+  });
+
+  it("parses host.write_file commands", () => {
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.write_file",
+        path: "/tmp/bb-data/thread-storage/thread-123/STATUS_DATA.json",
+        rootPath: "/tmp/bb-data/thread-storage/thread-123",
+        content: "{}",
+        contentEncoding: "utf8",
+      }),
+    ).toMatchObject({
+      type: "host.write_file",
+      contentEncoding: "utf8",
+    });
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.write_file",
+        path: "/tmp/bb-data/thread-storage/thread-123/STATUS_DATA.json",
+        rootPath: "/tmp/bb-data/thread-storage/thread-123",
+        content: "{}",
+        contentEncoding: "ascii",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.write_file",
+        path: "/tmp/bb-data/thread-storage/thread-123/STATUS_DATA.json",
+        content: "{}",
+        contentEncoding: "utf8",
       }),
     ).toThrow();
   });

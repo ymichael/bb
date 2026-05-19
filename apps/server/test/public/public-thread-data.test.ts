@@ -2280,4 +2280,223 @@ describe("public thread data routes", () => {
       await harness.cleanup();
     }
   });
+
+  describe("PUT /threads/:id/thread-storage/content", () => {
+    it("writes a json payload through host.write_file and returns the saved size", async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          type: "manager",
+        });
+        const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+        const body = JSON.stringify({ todos: [{ id: "a", text: "ship" }] });
+
+        const writePromise = harness.app.request(
+          `/api/v1/threads/${thread.id}/thread-storage/content?path=STATUS_DATA.json`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body,
+          },
+        );
+        const writeCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) => command.type === "host.write_file",
+        );
+        expect(writeCommand.command).toMatchObject({
+          type: "host.write_file",
+          path: `${threadStorageRoot}/STATUS_DATA.json`,
+          rootPath: threadStorageRoot,
+          content: body,
+          contentEncoding: "utf8",
+        });
+        await reportQueuedCommandSuccess(harness, writeCommand, {
+          path: `${threadStorageRoot}/STATUS_DATA.json`,
+          sizeBytes: body.length,
+        });
+
+        const response = await writePromise;
+        expect(response.status).toBe(200);
+        await expect(readJson(response)).resolves.toEqual({
+          ok: true,
+          path: "STATUS_DATA.json",
+          sizeBytes: body.length,
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    });
+
+    it("rejects paths that are not a bare filename", async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          type: "manager",
+        });
+
+        for (const badPath of [
+          "../escape.json",
+          "nested/file.json",
+          ".hidden.json",
+          "",
+          "back\\slash.json",
+        ]) {
+          const response = await harness.app.request(
+            `/api/v1/threads/${thread.id}/thread-storage/content?path=${encodeURIComponent(badPath)}`,
+            {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body: "{}",
+            },
+          );
+          expect(response.status).toBe(400);
+          await expect(readJson(response)).resolves.toMatchObject({
+            code: "invalid_request",
+          });
+        }
+      } finally {
+        await harness.cleanup();
+      }
+    });
+
+    it("rejects payloads larger than the limit with 413", async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          type: "manager",
+        });
+
+        const oversizedBody = `"${"a".repeat(1024 * 1024 + 10)}"`;
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}/thread-storage/content?path=STATUS_DATA.json`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: oversizedBody,
+          },
+        );
+        expect(response.status).toBe(413);
+        await expect(readJson(response)).resolves.toMatchObject({
+          code: "payload_too_large",
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    });
+
+    it("rejects invalid JSON bodies under application/json", async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          type: "manager",
+        });
+
+        const response = await harness.app.request(
+          `/api/v1/threads/${thread.id}/thread-storage/content?path=STATUS_DATA.json`,
+          {
+            method: "PUT",
+            headers: { "content-type": "application/json" },
+            body: "{not-valid",
+          },
+        );
+        expect(response.status).toBe(400);
+        await expect(readJson(response)).resolves.toMatchObject({
+          code: "invalid_request",
+          message: "Body is not valid JSON",
+        });
+      } finally {
+        await harness.cleanup();
+      }
+    });
+
+    it("accepts text/plain payloads and stores them verbatim", async () => {
+      const harness = await createTestAppHarness();
+      try {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
+        const thread = seedThread(harness.deps, {
+          projectId: project.id,
+          environmentId: environment.id,
+          type: "manager",
+        });
+        const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+        const body = "hello, status";
+
+        const writePromise = harness.app.request(
+          `/api/v1/threads/${thread.id}/thread-storage/content?path=STATUS_NOTES.txt`,
+          {
+            method: "PUT",
+            headers: { "content-type": "text/plain" },
+            body,
+          },
+        );
+        const writeCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) => command.type === "host.write_file",
+        );
+        expect(writeCommand.command).toMatchObject({
+          type: "host.write_file",
+          path: `${threadStorageRoot}/STATUS_NOTES.txt`,
+          rootPath: threadStorageRoot,
+          content: body,
+          contentEncoding: "utf8",
+        });
+        await reportQueuedCommandSuccess(harness, writeCommand, {
+          path: `${threadStorageRoot}/STATUS_NOTES.txt`,
+          sizeBytes: body.length,
+        });
+
+        const response = await writePromise;
+        expect(response.status).toBe(200);
+      } finally {
+        await harness.cleanup();
+      }
+    });
+  });
 });

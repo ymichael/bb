@@ -5,6 +5,7 @@ import type { CommandOf } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
 import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
 import { readFileForTransport, readFileFromGitRef } from "./file-read.js";
+import { writeFileUnderRoot } from "./file-write.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
 
 /**
@@ -85,5 +86,17 @@ export async function readHostFile(
     resolvedPath: command.path,
     resultPath: command.path,
     ...(rootPath !== undefined ? { rootPath } : {}),
+  });
+}
+
+export async function writeHostFile(
+  command: CommandOf<"host.write_file">,
+): Promise<HostDaemonCommandResult<"host.write_file">> {
+  return writeFileUnderRoot({
+    rootPath: command.rootPath,
+    resolvedPath: command.path,
+    resultPath: command.path,
+    content: command.content,
+    contentEncoding: command.contentEncoding,
   });
 }

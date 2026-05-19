@@ -11,6 +11,15 @@ interface FilePreviewBaseProps {
   copyPath?: string | null;
   error?: Error | null;
   filePreview: FilePreview | undefined;
+  /**
+   * Thread id used by the iframe ↔ parent storage bridge when this preview
+   * surface renders the manager STATUS.html. The parent component listens for
+   * `postMessage` requests from the iframe and proxies them to
+   * `/threads/<id>/thread-storage/content`. Pass the manager thread id so the
+   * iframe's `window.bbStatus.read/write` calls resolve to that thread's
+   * storage directory.
+   */
+  iframeStatusBridgeThreadId?: string;
   isLoading: boolean;
   lineNumber?: number | null;
   onOpenInEditor?: (path: string) => void;
@@ -18,6 +27,7 @@ interface FilePreviewBaseProps {
 
 interface ThreadStorageFilePreviewProps extends FilePreviewBaseProps {
   pinnedPath: string;
+  threadId: string;
 }
 
 interface SecondaryPanelFilePreviewProps extends FilePreviewBaseProps {
@@ -30,6 +40,7 @@ export function SecondaryPanelFilePreview({
   copyPath = null,
   error,
   filePreview,
+  iframeStatusBridgeThreadId,
   isLoading,
   lineNumber = null,
   onOpenInEditor,
@@ -82,6 +93,7 @@ export function SecondaryPanelFilePreview({
         copyPath={copyPath}
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
+        iframeStatusBridgeThreadId={iframeStatusBridgeThreadId}
         state={{
           kind: "html",
           file: {
@@ -158,6 +170,7 @@ export function ThreadStorageFilePreview({
   lineNumber,
   onOpenInEditor,
   pinnedPath,
+  threadId,
 }: ThreadStorageFilePreviewProps) {
   return (
     <SecondaryPanelFilePreview
@@ -165,6 +178,7 @@ export function ThreadStorageFilePreview({
       copyPath={copyPath}
       error={error}
       filePreview={filePreview}
+      iframeStatusBridgeThreadId={threadId}
       isLoading={isLoading}
       lineNumber={lineNumber}
       onOpenInEditor={onOpenInEditor}

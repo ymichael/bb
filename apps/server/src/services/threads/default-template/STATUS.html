@@ -375,6 +375,76 @@
           </div>
         </div>
       </section>
+
+      =====================================================================
+      STATUS_DATA.json read/write — example usage
+      =====================================================================
+      `window.bbStatus` is provided by the bb app shell when STATUS.html
+      renders in the secondary panel. It postMessages to the bb parent
+      window, which proxies to the server's
+      `PUT/GET /api/v1/threads/:id/thread-storage/content?path=...` routes.
+      The default file is `STATUS_DATA.json`; pass a different bare
+      filename to read/write a sibling. The server caps payloads at 1 MiB
+      and rejects anything that is not a bare filename.
+
+      Both calls return Promises. `read()` resolves to `null` when the file
+      does not exist yet so the page can render an empty initial state
+      without a try/catch. Whole-file overwrite — no merging, no locking.
+      Callers do read-modify-write themselves.
+
+        async function loadTodos() {
+          const data = (await window.bbStatus.read()) ?? { todos: [] };
+          renderTodos(data.todos);
+        }
+
+        async function addTodo(text) {
+          const data = (await window.bbStatus.read()) ?? { todos: [] };
+          data.todos.push({ id: crypto.randomUUID(), text, done: false });
+          await window.bbStatus.write(data);
+        }
+
+        async function toggleTodo(id) {
+          const data = (await window.bbStatus.read()) ?? { todos: [] };
+          const t = data.todos.find((todo) => todo.id === id);
+          if (t) t.done = !t.done;
+          await window.bbStatus.write(data);
+        }
     -->
+    <script>
+      // window.bbStatus — minimal client for STATUS_DATA.json via postMessage
+      // to the bb parent window. The parent calls the server PUT/GET routes.
+      // Default file: `STATUS_DATA.json`; pass a different bare filename to
+      // read/write a sibling. Whole-file overwrite; no merging or locking.
+      window.bbStatus = (() => {
+        let nextId = 1;
+        const pending = new Map();
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent) return;
+          const data = event.data;
+          if (!data || data.type !== "bb-status:result") return;
+          const handler = pending.get(data.id);
+          if (!handler) return;
+          pending.delete(data.id);
+          if (data.ok) {
+            handler.resolve(data.data);
+          } else {
+            handler.reject(new Error(data.error || "bb-status failed"));
+          }
+        });
+        function call(type, payload) {
+          const id = nextId++;
+          return new Promise((resolve, reject) => {
+            pending.set(id, { resolve, reject });
+            window.parent.postMessage({ id, type, ...payload }, "*");
+          });
+        }
+        return {
+          read: (path = "STATUS_DATA.json") =>
+            call("bb-status:read", { path }),
+          write: (data, path = "STATUS_DATA.json") =>
+            call("bb-status:write", { path, data }),
+        };
+      })();
+    </script>
   </body>
 </html>

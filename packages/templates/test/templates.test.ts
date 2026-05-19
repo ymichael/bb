@@ -132,6 +132,26 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("--text-base: 0.9375rem;");
   });
 
+  it("renders bbGuideStatus and lists it in the overview", () => {
+    const templates = listTemplates();
+    expect(templates.some((template) => template.id === "bbGuideStatus")).toBe(
+      true,
+    );
+
+    const rendered = renderTemplate("bbGuideStatus", {});
+    expect(rendered).toContain("STATUS_DATA.json");
+    expect(rendered).toContain("window.bbStatus");
+    expect(rendered).toContain("`STATUS_DATA.json`");
+    expect(rendered).toContain("1 MiB");
+    expect(rendered).toContain(
+      "PUT  /api/v1/threads/:threadId/thread-storage/content?path=STATUS_DATA.json",
+    );
+
+    const overview = renderTemplate("bbGuideOverview", {});
+    expect(overview).toContain("status");
+    expect(overview).toContain("STATUS_DATA.json");
+  });
+
   it("renders standardAgentInstructions without user-question guidance", () => {
     const rendered = renderTemplate("standardAgentInstructions", {});
 

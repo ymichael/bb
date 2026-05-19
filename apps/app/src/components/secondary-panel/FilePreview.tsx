@@ -15,6 +15,10 @@ import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
+import {
+  handleIframeStatusRequest,
+  parseIframeStatusBridgeRequest,
+} from "@/lib/iframe-status-bridge";
 
 export interface FilePreviewFile {
   name: string;
@@ -38,12 +42,21 @@ export interface FilePreviewProps {
   copyPath?: string | null;
   onOpenInEditor?: (path: string) => void;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
+  /**
+   * Thread id used by the iframe ↔ parent storage bridge when rendering an
+   * HTML preview (`state.kind === "html"`). Pass the manager thread id so
+   * that `window.bbStatus.read/write` calls inside the iframe can resolve to
+   * the correct `~/.bb/thread-storage/<id>/` directory. Optional because
+   * non-HTML previews never need it.
+   */
+  iframeStatusBridgeThreadId?: string;
 }
 
 interface FilePreviewBodyProps {
   state: FilePreviewState;
   path: string;
   markdownMode: MarkdownViewMode;
+  iframeStatusBridgeThreadId: string | null;
 }
 
 interface FilePreviewHeaderProps {
@@ -57,6 +70,7 @@ interface FilePreviewHeaderProps {
 
 interface HtmlFilePreviewProps {
   file: FilePreviewFile;
+  iframeStatusBridgeThreadId: string | null;
 }
 
 type MarkdownViewMode = "preview" | "source";
@@ -101,6 +115,7 @@ export function FilePreview({
   copyPath = null,
   onOpenInEditor,
   statusLabel = null,
+  iframeStatusBridgeThreadId,
 }: FilePreviewProps) {
   const isReadyMarkdown =
     state.kind === "ready" && isMarkdownFile(state.file.name);
@@ -134,12 +149,18 @@ export function FilePreview({
         state={state}
         path={path}
         markdownMode={isReadyMarkdown ? markdownMode : "preview"}
+        iframeStatusBridgeThreadId={iframeStatusBridgeThreadId ?? null}
       />
     </div>
   );
 }
 
-function FilePreviewBody({ state, path, markdownMode }: FilePreviewBodyProps) {
+function FilePreviewBody({
+  state,
+  path,
+  markdownMode,
+  iframeStatusBridgeThreadId,
+}: FilePreviewBodyProps) {
   if (state.kind === "loading") {
     return <FilePreviewLoading />;
   }
@@ -166,7 +187,12 @@ function FilePreviewBody({ state, path, markdownMode }: FilePreviewBodyProps) {
     return <FilePreviewImage url={state.url} alt={path} />;
   }
   if (state.kind === "html") {
-    return <HtmlFilePreview file={state.file} />;
+    return (
+      <HtmlFilePreview
+        file={state.file}
+        iframeStatusBridgeThreadId={iframeStatusBridgeThreadId}
+      />
+    );
   }
   if (isMarkdownFile(state.file.name) && markdownMode === "preview") {
     return <MarkdownFilePreview file={state.file} />;
@@ -281,10 +307,43 @@ function FilePreviewImage({ url, alt }: { url: string; alt: string }) {
   );
 }
 
-function HtmlFilePreview({ file }: HtmlFilePreviewProps) {
+function HtmlFilePreview({
+  file,
+  iframeStatusBridgeThreadId,
+}: HtmlFilePreviewProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    const threadId = iframeStatusBridgeThreadId;
+    if (threadId === null) return;
+
+    const handleMessage = (event: MessageEvent): void => {
+      const iframe = iframeRef.current;
+      // The iframe runs from `srcdoc`, so its origin is null/opaque; we cannot
+      // trust `event.origin`. Validate that the post came from this iframe's
+      // own window — that is the only signal we have.
+      if (!iframe || event.source !== iframe.contentWindow) return;
+      const request = parseIframeStatusBridgeRequest(event.data);
+      if (request === null) return;
+      void handleIframeStatusRequest({
+        fetchImpl: window.fetch.bind(window),
+        request,
+        threadId,
+      }).then((result) => {
+        iframe.contentWindow?.postMessage(result, "*");
+      });
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => {
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [iframeStatusBridgeThreadId]);
+
   return (
     <div className="min-h-0 flex-1">
       <iframe
+        ref={iframeRef}
         title={file.name}
         srcDoc={file.contents}
         style={HTML_FILE_PREVIEW_IFRAME_STYLE}

@@ -101,6 +101,7 @@ export type {
 export {
   AUTOMATION_NAME_MAX_LENGTH,
   FILE_LIST_QUERY_MAX_LENGTH,
+  THREAD_STORAGE_CONTENT_MAX_BYTES,
   automationActionSchema,
   automationNameSchema,
   automationScheduleTriggerSchema,
@@ -252,6 +253,7 @@ export type {
   EnvironmentStatusResponse,
   ThreadHostFileContentQuery,
   ThreadStorageContentQuery,
+  ThreadStorageContentWriteResponse,
   ThreadStorageFileListResponse,
   ThreadStorageFilesQuery,
   ProjectAttachmentContentQuery,

@@ -33,9 +33,19 @@ describe("manager storage templates", () => {
         "## Open questions to resolve when natural",
       );
       expect(preferencesContent).toContain("Landing changes");
-      await expect(
-        readFile(path.join(templateRootPath, "default", "STATUS.html"), "utf8"),
-      ).resolves.toContain('<div class="sect-title">Open PRs · 0</div>');
+      const statusHtmlContent = await readFile(
+        path.join(templateRootPath, "default", "STATUS.html"),
+        "utf8",
+      );
+      expect(statusHtmlContent).toContain(
+        '<div class="sect-title">Open PRs · 0</div>',
+      );
+      expect(statusHtmlContent).toContain("window.bbStatus");
+      expect(statusHtmlContent).toContain("bb-status:read");
+      expect(statusHtmlContent).toContain("bb-status:write");
+      expect(statusHtmlContent).toContain(
+        "STATUS_DATA.json read/write — example usage",
+      );
       await expect(
         readFile(path.join(templateRootPath, "default", "ASYNC.md"), "utf8"),
       ).rejects.toThrow();
