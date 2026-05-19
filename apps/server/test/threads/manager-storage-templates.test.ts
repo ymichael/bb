@@ -33,6 +33,9 @@ describe("manager storage templates", () => {
         "## Open questions to resolve when natural",
       );
       expect(preferencesContent).toContain("Landing changes");
+      expect(preferencesContent).toContain("## Communication");
+      expect(preferencesContent).toContain("Update cadence");
+      expect(preferencesContent).toContain("Worker report format");
       await expect(
         readFile(path.join(templateRootPath, "default", "STATUS.html"), "utf8"),
       ).resolves.toContain('<div class="sect-title">Open PRs · 0</div>');

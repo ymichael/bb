@@ -90,10 +90,23 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("Simple delegation");
     expect(rendered).toContain("write to `STATUS.html` instead");
     expect(rendered).toContain("the UI renders it in an unsandboxed iframe");
-    expect(rendered).toContain(
-      "Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind.",
-    );
     expect(rendered).toContain("bb guide styling");
+    expect(rendered).toContain(
+      "Whether to apply it is a `PREFERENCES.md` decision",
+    );
+    expect(rendered).not.toContain(
+      "Unless otherwise specified, make `STATUS.html` styled like bb",
+    );
+    expect(rendered).toContain(
+      "Update cadence and verbosity vary by user — follow what `PREFERENCES.md` says",
+    );
+    expect(rendered).not.toContain("A typical update cadence is:");
+    expect(rendered).toContain(
+      "The specific report-back format you ask workers for is a user-preference",
+    );
+    expect(rendered).not.toContain(
+      "Ask workers to report outcome, changed files",
+    );
     expect(rendered).not.toContain("--background: oklch(0.9551 0 0);");
     expect(rendered).toContain("starter/no-preferences content");
 

@@ -13,6 +13,7 @@ This file is the manager's durable memory of how the user wants to be worked wit
   - Run first: `git -C <project-root> fetch origin main && git -C <project-root> pull --ff-only origin main` (works because `main` is typically the checked-out branch).
   - Pass `--base-branch main` to `bb thread spawn` so the worker's worktree branches off the just-pulled commit.
   - Skip this only if the user explicitly tells you the worker should branch off something else (e.g. chaining off another PR's branch).
+- **Worker report format**: default — ask each worker to report outcome, changed files or created artifacts, validation performed, and any blockers. If the user wants a different shape (a Markdown summary file, a one-sentence summary, screenshots), record the change here.
 - **Landing changes**: when a worker finishes work that should be applied to the codebase, ask the user once how they want it landed, then record the answer right here in this bullet under the chosen mode. Two common modes:
   - **Open PRs** — open them automatically and report the URL. Default to `gh pr create --draft`; switch to non-draft if the user prefers. Worker-thread completion notifications should trigger refreshing the open-PR view in `STATUS.html`.
   - **No PRs — local merge, push on request** — merge the worker's branch into the local checkout, but only push to `origin` when the user explicitly says so. Keep branches local; do not open any PR.
@@ -24,12 +25,15 @@ This file is the manager's durable memory of how the user wants to be worked wit
   - periodically via a schedule in `ASYNC.md` (create one when scheduled refreshes are wanted; e.g. a `pr-refresh` schedule under PR mode).
   - after any state-affecting action (worker spawn, branch ready, PR opened, merge, close, push).
   - **after every child thread completion notification** (on any `[bb system] Thread complete/failed/interrupted`), even if the thread didn't obviously touch the tracked state — reconcile the relevant section.
-- **STATUS.html styling**: run `bb guide styling` for the bb design tokens, fonts, and a starter `<style>` snippet so the iframe-rendered HTML matches the rest of the app.
+- **STATUS.html styling**: default — style `STATUS.html` to look like the rest of bb, using Tailwind. Run `bb guide styling` for the bb design tokens, fonts, light/dark variables, Tailwind setup, and a starter `<style>` snippet so the iframe-rendered HTML matches the app. If the user wants a different visual direction (plain HTML, a different framework, a minimal dashboard), switch and note it here.
+
+## Communication
+
+- **Update cadence**: default — a short kickoff when work starts, a completion update when it finishes, and extra updates only for blockers or meaningful scope changes. Keep messages concise, factual, and ownership-clear. If the user wants something different (chattier progress, only-when-done, periodic digests), record it here.
 
 ## Open questions to resolve when natural
 
 - Preferred name / how to address the user
 - Worker defaults (provider / reasoning level / permission mode / preferred model) — ask the user when it comes up; do not assume a default.
 - Anything else the user wants surfaced in `STATUS.html` (extra sections, custom info, integrations) — ask once when natural and update the template accordingly.
-- Update verbosity preference (terse vs detailed)
 - Any specific area of the codebase that's currently the focus
