@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Manager Status</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* bb design tokens, mirrored from apps/app/src/components/ui/theme.css.
+         See also: `bb guide styling`. */
+      :root {
+        color-scheme: light;
+        --background: oklch(0.9551 0 0);
+        --foreground: oklch(0.3211 0 0);
+        --card: oklch(0.9702 0 0);
+        --muted-foreground: oklch(0.5103 0 0);
+        --secondary: oklch(0.9067 0 0);
+        --border: oklch(0.8576 0 0);
+        --success: oklch(0.7 0.15 155);
+        --attention: oklch(0.74 0.15 80);
+        --destructive: oklch(0.5594 0.19 25.8625);
+        --primary: oklch(0.4891 0 0);
+        --font-sans: "Inter", -apple-system, BlinkMacSystemFont, sans-serif;
+        --font-mono: "Fira Code", ui-monospace, Menlo, monospace;
+        --radius: 0.35rem;
+        --radius-sm: calc(var(--radius) - 4px);
+        --shadow-sm:
+          0px 2px 0px 0px hsl(0 0% 20% / 0.12),
+          0px 1px 2px -1px hsl(0 0% 20% / 0.12);
+        --text-xs: 0.75rem;
+        --text-sm: 0.8125rem;
+        --text-base: 0.9375rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          color-scheme: dark;
+          --background: oklch(0.195 0 0);
+          --foreground: oklch(0.8853 0 0);
+          --card: oklch(0.2435 0 0);
+          --muted-foreground: oklch(0.66 0 0);
+          --secondary: oklch(0.3092 0 0);
+          --border: oklch(0.329 0 0);
+          --success: oklch(0.74 0.15 155);
+          --attention: oklch(0.8 0.15 80);
+          --destructive: oklch(0.56 0.19 22.1703);
+          --primary: oklch(0.7058 0 0);
+        }
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html {
+        height: 100%;
+        overflow-y: auto;
+        overflow-x: hidden;
+        scrollbar-width: thin;
+        scrollbar-color: var(--border) transparent;
+      }
+      html::-webkit-scrollbar {
+        width: 10px;
+      }
+      html::-webkit-scrollbar-thumb {
+        background: var(--border);
+        border-radius: 999px;
+        border: 2px solid var(--background);
+      }
+      html::-webkit-scrollbar-thumb:hover {
+        background: var(--muted-foreground);
+      }
+
+      body {
+        margin: 0;
+        padding: 16px 16px 20px;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: var(--font-sans);
+        font-size: var(--text-base);
+        line-height: 1.45;
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+        text-decoration-thickness: 1px;
+        text-underline-offset: 2px;
+      }
+
+      code,
+      .mono {
+        font-family: var(--font-mono);
+        font-size: var(--text-xs);
+        color: var(--muted-foreground);
+      }
+
+      /* header */
+      .header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid var(--border);
+      }
+      .brand {
+        width: 20px;
+        height: 20px;
+        border: 1px solid var(--border);
+        background: var(--card);
+        border-radius: var(--radius-sm);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-family: var(--font-mono);
+        font-weight: 500;
+        font-size: 10px;
+      }
+      .title {
+        font-size: var(--text-sm);
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        flex: 1;
+        min-width: 0;
+      }
+      .ts {
+        font-family: var(--font-mono);
+        font-size: 10px;
+        color: var(--muted-foreground);
+      }
+
+      /* sections */
+      section {
+        margin-top: 16px;
+      }
+      .sect-title {
+        font-size: 10.5px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-foreground);
+        margin-bottom: 8px;
+      }
+
+      /* row */
+      .row {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+        padding: 10px 12px;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+      }
+      .row + .row {
+        margin-top: 6px;
+      }
+      .row .main {
+        min-width: 0;
+        flex: 1;
+      }
+      .row .label {
+        font-family: var(--font-mono);
+        font-size: 10.5px;
+        color: var(--muted-foreground);
+        margin-bottom: 3px;
+      }
+      .row .name {
+        font-size: var(--text-sm);
+        font-weight: 500;
+        line-height: 1.35;
+        color: var(--foreground);
+        word-break: break-word;
+      }
+
+      /* pill */
+      .pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        font-family: var(--font-mono);
+        font-size: 9.5px;
+        font-weight: 500;
+        line-height: 1;
+        padding: 3px 7px;
+        border-radius: 999px;
+        border: 1px solid var(--border);
+        background: var(--secondary);
+        color: var(--muted-foreground);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        white-space: nowrap;
+        flex-shrink: 0;
+      }
+      .pill .dot {
+        width: 5px;
+        height: 5px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+      .pill.open {
+        color: var(--success);
+        background: color-mix(in srgb, var(--success) 12%, var(--background));
+        border-color: color-mix(in srgb, var(--success) 32%, var(--border));
+      }
+      .pill.running {
+        color: var(--attention);
+        background: color-mix(in srgb, var(--attention) 14%, var(--background));
+        border-color: color-mix(in srgb, var(--attention) 32%, var(--border));
+      }
+      .pill.failed {
+        color: var(--destructive);
+        background: color-mix(in srgb, var(--destructive) 12%, var(--background));
+        border-color: color-mix(in srgb, var(--destructive) 32%, var(--border));
+      }
+
+      .empty {
+        padding: 10px 12px;
+        font-size: var(--text-sm);
+        color: var(--muted-foreground);
+        font-style: italic;
+        border: 1px dashed var(--border);
+        border-radius: var(--radius);
+      }
+    </style>
+  </head>
+  <body>
+    <header class="header">
+      <span class="brand">bb</span>
+      <span class="title">Manager status</span>
+      <span class="ts">—</span>
+    </header>
+
+    <section>
+      <div class="sect-title">Open PRs · 0</div>
+      <div class="empty">No open PRs.</div>
+    </section>
+
+    <section>
+      <div class="sect-title">Active workers · 0</div>
+      <div class="empty">No active workers.</div>
+    </section>
+
+    <!--
+      =====================================================================
+      SNIPPET LIBRARY — copy/paste from these patterns when populating
+      STATUS.html. Keep them in sync if you change the styles above. For the
+      design tokens themselves, run `bb guide styling`.
+      =====================================================================
+
+      ---- Refresh timestamp (header right) ----
+      Update <span class="ts"> on every refresh:
+        <span class="ts">YYYY-MM-DD · HH:MM TZ</span>
+
+      ---- Section: open PRs (with count) ----
+      <section>
+        <div class="sect-title">Open PRs · 2</div>
+        <div class="row"> ...PR row... </div>
+        <div class="row"> ...PR row... </div>
+      </section>
+
+      ---- PR row ----
+      <div class="row">
+        <div class="main">
+          <div class="label">#42</div>
+          <div class="name">
+            <a href="https://github.com/OWNER/REPO/pull/42" target="_blank" rel="noopener">PR title goes here</a>
+          </div>
+        </div>
+        <span class="pill open"><span class="dot"></span>Open</span>
+      </div>
+
+      ---- Active worker row ----
+      <div class="row">
+        <div class="main">
+          <div class="label">thr_xxxxxxxxxx</div>
+          <div class="name">One-line description of what the worker is doing</div>
+        </div>
+        <span class="pill running"><span class="dot"></span>Running</span>
+      </div>
+
+      ---- Empty state ----
+      <div class="empty">No open PRs.</div>
+      <div class="empty">No active workers.</div>
+
+      ---- Pill variants ----
+      <span class="pill open"><span class="dot"></span>Open</span>            (success / green)
+      <span class="pill running"><span class="dot"></span>Running</span>      (attention / amber)
+      <span class="pill failed"><span class="dot"></span>Failed</span>        (destructive / red)
+      <span class="pill"><span class="dot"></span>Neutral</span>              (muted)
+
+      ---- Inline status annotation on a name (e.g. "Superseded by #99") ----
+      <span class="pill" style="margin-left:6px; color:var(--destructive); border-color:color-mix(in srgb,var(--destructive) 32%,var(--border)); background:color-mix(in srgb,var(--destructive) 12%,var(--background))">Superseded by #99</span>
+
+      =====================================================================
+      No-PR landing mode — use these two sections in place of "Open PRs"
+      when the user has opted out of PRs. "In progress" tracks worker
+      branches in flight; "Ready for review" tracks validated branches
+      waiting for the user to push or merge.
+      =====================================================================
+
+      ---- Section: in-progress work (no-PR mode) ----
+      <section>
+        <div class="sect-title">In progress · N</div>
+        <div class="row">
+          <div class="main">
+            <div class="label">branch-name</div>
+            <div class="name">One-line description of the work in flight</div>
+          </div>
+          <span class="pill running"><span class="dot"></span>WIP</span>
+        </div>
+      </section>
+
+      ---- Section: ready for review (no-PR mode) ----
+      <section>
+        <div class="sect-title">Ready for review · N</div>
+        <div class="row">
+          <div class="main">
+            <div class="label">branch-name</div>
+            <div class="name">One-line description · validated and waiting for user OK</div>
+          </div>
+          <span class="pill open"><span class="dot"></span>Ready</span>
+        </div>
+      </section>
+
+      ---- Optional sections you may want later ----
+
+      Active workers entry with provider/base meta (use a card-style row with extra meta block):
+      <article class="row" style="flex-direction:column; align-items:stretch; gap:6px">
+        <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start">
+          <span class="label">thr_xxxxxxxxxx</span>
+          <span class="pill running"><span class="dot"></span>Running</span>
+        </div>
+        <div class="name">Description</div>
+        <div style="display:flex; flex-direction:column; gap:3px; font-family:var(--font-mono); font-size:10.5px; color:var(--muted-foreground)">
+          <span>provider · codex · xhigh · full perms</span>
+          <span>base · origin/main</span>
+        </div>
+      </article>
+
+      Dev-instance callout:
+      <section>
+        <div class="sect-title">Dev instance</div>
+        <div class="row">
+          <div class="main">
+            <div class="label">~/.bb-dev/</div>
+            <div class="name">Running PR #NN worktree.</div>
+          </div>
+          <span class="pill running"><span class="dot"></span>Up</span>
+        </div>
+      </section>
+
+      Recently completed feed (compact list — keep short, e.g. last 3):
+      <section>
+        <div class="sect-title">Recently completed · 2</div>
+        <div class="row">
+          <div class="main">
+            <div class="label">thr_xxxxxxxxxx</div>
+            <div class="name">
+              One-line outcome — <a href="https://github.com/OWNER/REPO/pull/41" target="_blank" rel="noopener">PR #41</a>
+              <span class="pill" style="margin-left:6px">Merged</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    -->
+  </body>
+</html>

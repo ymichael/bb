@@ -1,4 +1,4 @@
-import { constants as fsConstants } from "node:fs";
+import { constants as fsConstants, readFileSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import {
   copyFile,
@@ -9,6 +9,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   managerTemplateNameSchema,
   type ManagerTemplateName,
@@ -20,25 +21,12 @@ export const MANAGER_TEMPLATE_DIR_NAME = "manager-templates";
 export const ACTIVE_MANAGER_TEMPLATE_FILE_NAME = "active";
 export const DEFAULT_MANAGER_TEMPLATE_NAME: ManagerTemplateName = "default";
 
-const DEFAULT_PREFERENCES_CONTENT = `# Preferences
+const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+const defaultTemplateAssetDir = path.join(moduleDir, "default-template");
 
-No user-specific preferences have been recorded yet. On first welcome, ask what the user prefers to be called and how they like updates, then replace this starter note with durable preferences.
-`;
-
-const DEFAULT_STATUS_CONTENT = `# Status
-
-No active work yet.
-`;
-
-const DEFAULT_ASYNC_CONTENT = `---
-timezone: UTC
-schedules: []
----
-
-# Scheduled nudges
-
-No scheduled nudges yet.
-`;
+function loadDefaultTemplateAsset(fileName: string): string {
+  return readFileSync(path.join(defaultTemplateAssetDir, fileName), "utf8");
+}
 
 type ManagerTemplateLogger = Pick<ServerLogger, "debug" | "warn">;
 
@@ -106,15 +94,11 @@ const BUILT_IN_MANAGER_TEMPLATE_SETS: readonly BuiltInManagerTemplateSet[] = [
     files: [
       {
         fileName: "PREFERENCES.md",
-        content: DEFAULT_PREFERENCES_CONTENT,
+        content: loadDefaultTemplateAsset("PREFERENCES.md"),
       },
       {
-        fileName: "STATUS.md",
-        content: DEFAULT_STATUS_CONTENT,
-      },
-      {
-        fileName: "ASYNC.md",
-        content: DEFAULT_ASYNC_CONTENT,
+        fileName: "STATUS.html",
+        content: loadDefaultTemplateAsset("STATUS.html"),
       },
     ],
   },

@@ -25,18 +25,23 @@ describe("manager storage templates", () => {
       await expect(
         readFile(path.join(templateRootPath, "active"), "utf8"),
       ).resolves.toBe("default\n");
+      const preferencesContent = await readFile(
+        path.join(templateRootPath, "default", "PREFERENCES.md"),
+        "utf8",
+      );
+      expect(preferencesContent).toContain(
+        "## Open questions to resolve when natural",
+      );
+      expect(preferencesContent).toContain("Landing changes");
       await expect(
-        readFile(
-          path.join(templateRootPath, "default", "PREFERENCES.md"),
-          "utf8",
-        ),
-      ).resolves.toContain("No user-specific preferences");
-      await expect(
-        readFile(path.join(templateRootPath, "default", "STATUS.md"), "utf8"),
-      ).resolves.toContain("No active work yet");
+        readFile(path.join(templateRootPath, "default", "STATUS.html"), "utf8"),
+      ).resolves.toContain('<div class="sect-title">Open PRs · 0</div>');
       await expect(
         readFile(path.join(templateRootPath, "default", "ASYNC.md"), "utf8"),
-      ).resolves.toContain("schedules: []");
+      ).rejects.toThrow();
+      await expect(
+        readFile(path.join(templateRootPath, "default", "STATUS.md"), "utf8"),
+      ).rejects.toThrow();
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
@@ -63,7 +68,7 @@ describe("manager storage templates", () => {
         readFile(path.join(defaultTemplatePath, "PREFERENCES.md"), "utf8"),
       ).resolves.toBe("custom prefs\n");
       await expect(
-        readFile(path.join(defaultTemplatePath, "STATUS.md"), "utf8"),
+        readFile(path.join(defaultTemplatePath, "STATUS.html"), "utf8"),
       ).rejects.toThrow();
     } finally {
       await rm(dataDir, { recursive: true, force: true });
