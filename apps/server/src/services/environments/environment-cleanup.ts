@@ -2,7 +2,10 @@ import type {
   EnvironmentOperationKind,
   WorkspaceProvisionType,
 } from "@bb/domain";
-import { isActiveLifecycleOperationState } from "@bb/domain";
+import {
+  isActiveLifecycleOperationState,
+  resolveEnvironmentMergeBaseBranch,
+} from "@bb/domain";
 import {
   cancelCommand,
   countLiveThreadsInEnvironment,
@@ -133,8 +136,7 @@ async function workspaceCanBeSafelyCleaned(
     return false;
   }
 
-  const mergeBaseBranch =
-    environment.mergeBaseBranch ?? environment.defaultBranch;
+  const mergeBaseBranch = resolveEnvironmentMergeBaseBranch(environment);
   if (environment.isGitRepo && !mergeBaseBranch) {
     return false;
   }

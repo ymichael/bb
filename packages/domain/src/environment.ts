@@ -94,3 +94,19 @@ export const environmentSchema = z.object({
   updatedAt: z.number(),
 });
 export type Environment = z.infer<typeof environmentSchema>;
+
+export type EnvironmentMergeBaseBranchSource = Pick<
+  Environment,
+  "baseBranch" | "defaultBranch" | "mergeBaseBranch"
+>;
+
+export function resolveEnvironmentMergeBaseBranch(
+  environment: EnvironmentMergeBaseBranchSource | null | undefined,
+): string | undefined {
+  return (
+    environment?.mergeBaseBranch ??
+    environment?.baseBranch ??
+    environment?.defaultBranch ??
+    undefined
+  );
+}

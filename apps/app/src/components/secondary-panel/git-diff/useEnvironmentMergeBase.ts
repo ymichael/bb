@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import type { Environment, Thread, WorkspaceStatus } from "@bb/domain";
+import {
+  resolveEnvironmentMergeBaseBranch,
+  type Environment,
+  type Thread,
+  type WorkspaceStatus,
+} from "@bb/domain";
 import { toast } from "sonner";
 import { getMergeBaseBranchCandidates } from "@/components/pickers/BranchPicker";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
@@ -23,6 +28,22 @@ interface ShouldSyncSelectedMergeBaseBranchParams {
   persistedMergeBaseBranch?: string | null;
   selectedMergeBaseBranch?: string;
   updatePending: boolean;
+}
+
+interface ResolveEffectiveMergeBaseBranchParams {
+  environment?: Environment;
+  selectedMergeBaseBranch?: string;
+  workspaceStatus?: WorkspaceStatus;
+}
+
+interface ResolveImplicitMergeBaseBranchParams {
+  environment?: Environment;
+  workspaceStatus?: WorkspaceStatus;
+}
+
+interface ResolvePersistedMergeBaseBranchParams
+  extends ResolveImplicitMergeBaseBranchParams {
+  branch: string;
 }
 
 function normalizeSelectedMergeBaseBranch(
@@ -50,6 +71,49 @@ export function shouldSyncSelectedMergeBaseBranch({
     selectedMergeBaseBranch !==
     normalizeSelectedMergeBaseBranch(persistedMergeBaseBranch)
   );
+}
+
+export function resolveImplicitMergeBaseBranch({
+  environment,
+  workspaceStatus,
+}: ResolveImplicitMergeBaseBranchParams): string | undefined {
+  return (
+    environment?.baseBranch ??
+    workspaceStatus?.branch.defaultBranch ??
+    environment?.defaultBranch ??
+    undefined
+  );
+}
+
+export function resolveEffectiveMergeBaseBranch({
+  environment,
+  selectedMergeBaseBranch,
+  workspaceStatus,
+}: ResolveEffectiveMergeBaseBranchParams): string | undefined {
+  return (
+    selectedMergeBaseBranch ??
+    environment?.mergeBaseBranch ??
+    environment?.baseBranch ??
+    workspaceStatus?.mergeBase?.mergeBaseBranch ??
+    workspaceStatus?.branch.defaultBranch ??
+    resolveEnvironmentMergeBaseBranch(environment)
+  );
+}
+
+export function resolvePersistedMergeBaseBranch({
+  branch,
+  environment,
+  workspaceStatus,
+}: ResolvePersistedMergeBaseBranchParams): string | null {
+  const normalizedBranch = branch.trim();
+  if (normalizedBranch.length === 0) {
+    return null;
+  }
+
+  return normalizedBranch ===
+    resolveImplicitMergeBaseBranch({ environment, workspaceStatus })
+    ? null
+    : normalizedBranch;
 }
 
 export function useEnvironmentMergeBase({
@@ -92,10 +156,11 @@ export function useEnvironmentMergeBase({
     setSelectedMergeBaseBranch,
   ]);
 
-  const effectiveMergeBaseBranch =
-    selectedMergeBaseBranch ??
-    workspaceStatus?.mergeBase?.mergeBaseBranch ??
-    workspaceStatus?.branch.defaultBranch;
+  const effectiveMergeBaseBranch = resolveEffectiveMergeBaseBranch({
+    environment,
+    selectedMergeBaseBranch,
+    workspaceStatus,
+  });
   const showBranchComparisonUi = Boolean(
     effectiveMergeBaseBranch || workspaceStatus?.branch.defaultBranch,
   );
@@ -125,11 +190,11 @@ export function useEnvironmentMergeBase({
       }
 
       const normalizedBranch = branch.trim();
-      const defaultBranch = workspaceStatus?.branch.defaultBranch.trim();
-      const nextPersistedMergeBaseBranch =
-        normalizedBranch.length > 0 && normalizedBranch !== defaultBranch
-          ? normalizedBranch
-          : null;
+      const nextPersistedMergeBaseBranch = resolvePersistedMergeBaseBranch({
+        branch: normalizedBranch,
+        environment,
+        workspaceStatus,
+      });
       const currentPersistedMergeBaseBranch = environment.mergeBaseBranch;
 
       setSelectedMergeBaseBranch(normalizedBranch);
@@ -162,7 +227,7 @@ export function useEnvironmentMergeBase({
       setSelectedMergeBaseBranch,
       thread?.environmentId,
       updateEnvironment,
-      workspaceStatus?.branch.defaultBranch,
+      workspaceStatus,
     ],
   );
 

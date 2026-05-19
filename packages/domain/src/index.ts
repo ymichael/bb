@@ -165,6 +165,7 @@ export {
   environmentStatusValues,
   environmentWorkspaceDisplayKindSchema,
   environmentWorkspaceDisplayKindValues,
+  resolveEnvironmentMergeBaseBranch,
   resolveEnvironmentWorkspaceDisplayKind,
   workspaceProvisionTypeSchema,
 } from "./environment.js";
@@ -172,6 +173,7 @@ export type {
   DiscoveredWorkspaceProperties,
   Environment,
   EnvironmentCleanupMode,
+  EnvironmentMergeBaseBranchSource,
   EnvironmentStatus,
   EnvironmentWorkspaceDisplayKind,
   ResolveEnvironmentWorkspaceDisplayKindArgs,

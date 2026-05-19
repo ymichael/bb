@@ -12,6 +12,7 @@ import {
   environmentSchema,
   hostSchema,
   pendingInteractionSchema,
+  resolveEnvironmentMergeBaseBranch,
   threadEventRowSchema,
   threadGitDiffResponseSchema,
   threadSchema,
@@ -137,17 +138,22 @@ function toWorkspaceArgs(
   return { ...workspace, baseBranch: { kind: "default" } };
 }
 
+export function requireEnvironmentMergeBaseBranch(
+  environment: Environment,
+): string {
+  const mergeBaseBranch = resolveEnvironmentMergeBaseBranch(environment);
+  if (!mergeBaseBranch) {
+    throw new Error(`Environment ${environment.id} has no merge base branch`);
+  }
+  return mergeBaseBranch;
+}
+
 async function requireMergeBaseBranch(
   api: PublicApiClient,
   environmentId: string,
 ): Promise<string> {
   const environment = await getEnvironment(api, environmentId);
-  const mergeBaseBranch =
-    environment.mergeBaseBranch ?? environment.defaultBranch;
-  if (!mergeBaseBranch) {
-    throw new Error(`Environment ${environmentId} has no default branch`);
-  }
-  return mergeBaseBranch;
+  return requireEnvironmentMergeBaseBranch(environment);
 }
 
 export async function archiveThread(

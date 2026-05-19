@@ -5,7 +5,11 @@ import type {
   ThreadTimelineLocalFileLink,
   TimelineTitleActionResolver,
 } from "@/components/thread/timeline";
-import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import {
+  resolveEnvironmentMergeBaseBranch,
+  type ThreadListEntry,
+  type ThreadWithRuntime,
+} from "@bb/domain";
 import { toast } from "sonner";
 import type { ThreadSecondaryPanel as ThreadSecondaryPanelTab } from "@/lib/thread-secondary-panel";
 import {
@@ -421,7 +425,7 @@ export function ThreadDetailView() {
     environmentId: thread?.environmentId ?? "",
   });
   const environmentMergeBaseBranch =
-    environment?.mergeBaseBranch ?? environment?.defaultBranch ?? undefined;
+    resolveEnvironmentMergeBaseBranch(environment);
   const {
     closeThreadSecondaryPanel,
     defaultMergeBaseBranch: resolvedDefaultMergeBaseBranch,

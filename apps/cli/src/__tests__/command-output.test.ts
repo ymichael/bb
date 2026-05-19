@@ -7,6 +7,7 @@ import {
   type PendingInteraction,
   type PendingInteractionApprovalDecision,
   type Thread,
+  type ThreadGitDiffResponse,
 } from "@bb/domain";
 import type {
   ThreadTimelineResponse,
@@ -2345,6 +2346,73 @@ describe("CLI command output contracts", () => {
       "Error: Cannot combine a thread ID argument with --self.",
     );
     expect(createClientMock).not.toHaveBeenCalled();
+  });
+
+  it("bb thread show --git-diff uses the environment base branch before the repository default", async () => {
+    const thread: Thread = makeThread({
+      id: "thread-show-diff-base",
+      projectId: "proj-1",
+      providerId: "codex",
+      environmentId: "env-diff-base",
+      type: "standard",
+      status: "idle",
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const environment = makeEnvironment({
+      id: "env-diff-base",
+      projectId: "proj-1",
+      hostId: "host-1",
+      baseBranch: "release",
+      defaultBranch: "main",
+      mergeBaseBranch: null,
+      createdAt: 1,
+      updatedAt: 2,
+    });
+    const gitDiff: ThreadGitDiffResponse = {
+      diff: "",
+      files: "M\tsrc/file.ts\n",
+      mergeBaseRef: "abc1234",
+      shortstat: " 1 file changed, 1 insertion(+)",
+      truncated: false,
+    };
+    const get = vi.fn(async () => thread);
+    const environmentGet = vi.fn(async () => environment);
+    const diffGet = vi.fn(async () => gitDiff);
+    const timelineGet = makeEmptyTimelineGetMock();
+    createClientMock.mockReturnValue(
+      asServerClient({
+        api: {
+          v1: {
+            environments: {
+              ":id": {
+                $get: environmentGet,
+                diff: { $get: diffGet },
+              },
+            },
+            threads: {
+              ":id": {
+                $get: get,
+                timeline: { $get: timelineGet },
+              },
+            },
+          },
+        },
+      }),
+    );
+
+    await runCommand(
+      ["thread", "show", "thread-show-diff-base", "--git-diff"],
+      (program) => registerThreadCommands(program, () => "http://server"),
+    );
+
+    expect(diffGet).toHaveBeenCalledWith({
+      param: { id: "env-diff-base" },
+      query: {
+        mergeBaseBranch: "release",
+        target: "all",
+      },
+    });
   });
 });
 

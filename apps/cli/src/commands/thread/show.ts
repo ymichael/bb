@@ -4,6 +4,7 @@ import {
   type ThreadTimelineTextFormat,
 } from "@bb/thread-view";
 import {
+  resolveEnvironmentMergeBaseBranch,
   type Environment,
   type Thread,
   type ThreadEventRow,
@@ -143,10 +144,7 @@ export function registerShowCommand(
         const requireMergeBaseBranch = async (override?: string) => {
           const environment = await getEnvironment();
           const mergeBaseBranch =
-            override ??
-            environment?.mergeBaseBranch ??
-            environment?.defaultBranch ??
-            undefined;
+            override ?? resolveEnvironmentMergeBaseBranch(environment);
           if (!mergeBaseBranch) {
             throw new Error(
               "Thread environment does not have a merge base branch",
