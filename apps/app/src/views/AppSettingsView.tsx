@@ -245,7 +245,6 @@ export function AppSettingsView() {
 
         <SettingsSection
           title="Hosts"
-          description="Persistent hosts"
           action={
             <Button
               type="button"
