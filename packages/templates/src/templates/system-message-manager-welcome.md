@@ -66,3 +66,5 @@ name, vibe, or other identity details for yourself, record those too.
 
 `STATUS.md`, `STATUS.html`, and `ASYNC.md` may also already exist from user
 templates. Preserve any seeded structure and keep the files current as you work.
+
+Depending on user preferences you might want to update the STATUS.html file to match their landing mode.
