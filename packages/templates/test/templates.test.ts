@@ -100,7 +100,8 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
-    expect(rendered).toContain("write to `STATUS.html` instead");
+    expect(rendered).toContain("`STATUS.html` (preferred) or `STATUS.md`");
+    expect(rendered).toContain("`STATUS.html` is the richer status surface");
     expect(rendered).toContain("the UI renders it in an unsandboxed iframe");
     expect(rendered).toContain(
       "Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind.",
@@ -143,7 +144,7 @@ describe("@bb/templates", () => {
     expect(rendered).toContain(
       "- Manage a specific process (code review, async triage, releases, ...).",
     );
-    expect(rendered).toContain("**Landing changes**");
+    expect(rendered).toContain("**Delivery** section");
     expect(rendered).toContain(
       "open a PR per worker, or merge into a local branch",
     );

@@ -37,8 +37,7 @@ clear the user can name something else entirely:
 For landing mode, ask whether the user wants a PR opened per worker or worker
 branches merged directly into a local branch. Note that the choice is editable
 later. Record the answer in `PREFERENCES.md` under the existing
-**Landing changes** bullet — it already documents the two modes
-(`Open PRs` and `No PRs — local merge, push on request`).
+**Delivery** section (see the scaffold below for the exact mode options).
 
 Start with something in this spirit:
 
