@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import type { ThreadType } from "@bb/domain";
 import {
   useFixedPanelTabsState,
@@ -316,18 +316,27 @@ export function useThreadFileTabs({
     });
   }, [isManagerThread, isThreadResolved, updateFixedPanelTabsState]);
 
+  const lastAppliedPinnedStorageFilePath = useRef<string | null>(null);
   useEffect(() => {
-    if (!isManagerThread) return;
+    if (!isManagerThread) {
+      lastAppliedPinnedStorageFilePath.current = null;
+      return;
+    }
+    const pinnedPathChanged =
+      lastAppliedPinnedStorageFilePath.current !== pinnedStorageFilePath;
+    lastAppliedPinnedStorageFilePath.current = pinnedStorageFilePath;
     updateFixedPanelTabsState((state) => {
       const pinnedTab = createStorageTab(
         pinnedStorageFilePath,
         pinnedStorageFilePath,
       );
-      const tabsWithoutStaleManagerStatus = removeMismatchedManagerStatusTabs(
-        state.secondary.tabs,
-        pinnedStorageFilePath,
-      );
-      const tabs = upsertSecondaryTab(tabsWithoutStaleManagerStatus, pinnedTab);
+      const baseTabs = pinnedPathChanged
+        ? removeMismatchedManagerStatusTabs(
+            state.secondary.tabs,
+            pinnedStorageFilePath,
+          )
+        : state.secondary.tabs;
+      const tabs = upsertSecondaryTab(baseTabs, pinnedTab);
       const activeTabId = isActiveTabStillOpen(
         tabs,
         state.secondary.activeTabId,
