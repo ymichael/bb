@@ -213,12 +213,21 @@ function ManagedEnvironmentThreadSubGroup({
   selectedThreadId,
   onProjectSelect,
 }: ManagedEnvironmentThreadSubGroupProps) {
-  const { threads } = environmentThreadGroup;
+  const { environmentId, threads } = environmentThreadGroup;
+  const createThreadInWorktree = useCreateThreadInWorktree({
+    projectId,
+    environmentId,
+  });
+  const handleCreateNewThread = useCallback(() => {
+    onProjectSelect?.();
+    createThreadInWorktree();
+  }, [createThreadInWorktree, onProjectSelect]);
   return (
     <div className="space-y-0.5">
       <EnvironmentThreadGroupHeader
         representativeThread={threads[0]}
         paddingClass={SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS}
+        onCreateNewThread={handleCreateNewThread}
       />
       <div
         className={cn("relative space-y-px", SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS)}
