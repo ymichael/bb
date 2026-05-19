@@ -51,6 +51,7 @@ describe("project execution defaults persistence", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
         type: "standard",
+        managerTemplateName: null,
         input: [{ type: "text", text: "Reuse one-off" }],
         environment: { type: "reuse", environmentId: environment.id },
       });
@@ -102,6 +103,7 @@ describe("project execution defaults persistence", () => {
         permissionMode: "workspace-write",
         serviceTier: "fast",
         type: "standard",
+        managerTemplateName: null,
         input: [{ type: "text", text: "Set new defaults" }],
         environment: {
           type: "host",
