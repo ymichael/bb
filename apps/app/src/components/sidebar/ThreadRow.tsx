@@ -1,7 +1,6 @@
 import { memo, useState } from "react";
 import type { ThreadListEntry } from "@bb/domain";
 import { Icon, type IconName } from "@/components/ui/icon.js";
-import { OverflowFade } from "@/components/ui/overflow-fade.js";
 import { SidebarStickyTier } from "@/components/ui/sidebar.js";
 import { NavLink } from "react-router-dom";
 import {
@@ -391,7 +390,6 @@ function ThreadRowComponent({
   const row = isManager ? (
     <SidebarStickyTier tier="manager" className={rowClassName}>
       {rowContent}
-      <OverflowFade placement="below" tone="sidebar" size="sm" />
     </SidebarStickyTier>
   ) : (
     <div className={rowClassName}>{rowContent}</div>

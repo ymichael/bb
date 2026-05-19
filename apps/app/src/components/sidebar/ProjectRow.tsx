@@ -3,9 +3,9 @@ import type { ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink } from "react-router-dom";
 import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
+import { Button } from "@/components/ui/button.js";
 import { EmptyState } from "@/components/ui/empty-state.js";
 import { Icon } from "@/components/ui/icon.js";
-import { OverflowFade } from "@/components/ui/overflow-fade.js";
 import { SidebarStickyTier } from "@/components/ui/sidebar.js";
 import {
   ProjectActionsContextMenu,
@@ -131,18 +131,20 @@ function EnvironmentThreadGroupHeader({
         ) : null}
       </span>
       {onCreateNewThread ? (
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon"
           aria-label="Create new thread in this worktree"
           title="New thread in this worktree"
           onClick={onCreateNewThread}
           className={cn(
-            "relative z-10 inline-flex shrink-0 items-center justify-center rounded-md text-sidebar-foreground/60 outline-none ring-sidebar-ring transition-colors hover:bg-sidebar-accent hover:text-sidebar-foreground focus-visible:ring-2",
+            "relative z-10 rounded-md p-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
             COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
           )}
         >
           <Icon name="MessageSquarePlus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
-        </button>
+        </Button>
       ) : (
         <span
           className={cn("shrink-0", COARSE_POINTER_ROW_ACTION_SIZE_CLASS)}
@@ -434,7 +436,6 @@ function ProjectRowComponent({
                 : "opacity-0 group-hover/project-row:opacity-100 group-focus-within/project-row:opacity-100",
             )}
           />
-          <OverflowFade placement="below" tone="sidebar" size="sm" />
         </SidebarStickyTier>
       </ProjectActionsContextMenu>
 

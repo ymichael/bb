@@ -188,9 +188,10 @@
     --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-manager-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
     --bb-sidebar-sticky-tier-z-index: 40;
-    --bb-sidebar-sticky-tier-shield-bottom-height: var(
-      --bb-sidebar-sticky-row-gap
-    );
+    /* Manager is the deepest sticky tier; its first child is non-sticky with a
+       2px (space-y-0.5) gap, so the shield only needs to fill that gap. The
+       4px sticky-row-gap would overshoot and clip the next row's top. */
+    --bb-sidebar-sticky-tier-shield-bottom-height: 0.125rem;
   }
 
   [data-sidebar-sticky-stack]
