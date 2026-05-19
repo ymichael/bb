@@ -1,485 +1,418 @@
 # Background Command Support Plan
 
+Last refreshed: 2026-05-19
+
 ## Goal
 
 Add first-class support for provider-native background commands so BB can:
 
-- keep them inline in the normal thread timeline/grouping model,
-- surface active background commands above the follow-up composer,
-- lazily fetch output only when the user expands the timeline row or banner,
-- let users stop them from the app and CLI.
+- keep background commands inline in the normal thread timeline and turn grouping model
+- surface currently active background commands above the follow-up composer
+- fetch command output lazily only when the user expands the timeline row or composer banner entry
+- let users stop background commands from the app and CLI
 
 ## Scope
 
 - v1 providers: Codex and Claude Code
-- no background-command inference from shell `&`, `nohup`, long runtimes, or idle heuristics
-- no separate output-inspection surface in v1
-- Pi is out of scope
+- Pi remains out of scope
+- no inference from shell syntax such as `&`, `nohup`, long runtimes, idle time, or missing exit codes
+- no separate output-inspection product surface in v1
+- background output persists through the normal thread event stream
 
-## Provider Facts
+## Current State
 
-### Codex
+This feature is still not implemented end to end.
 
-- Native agent-started background commands arrive as long-lived, thread-owned `commandExecution` items with a non-null `processId`.
-- Output continues after the starting turn via `item/commandExecution/outputDelta`.
-- The only confirmed native stop surface is `thread/backgroundTerminals/clean`.
-- That stop is thread-wide, not per-command.
-- If the Codex provider connection dies, the background command dies with it.
-
-### Claude Code
-
-- Native background commands come from `Bash` with `run_in_background: true`.
-- The SDK emits explicit task lifecycle signals including `task_started`, `TaskOutput(task_id)`, `TaskStop(task_id)`, and `task_notification`.
-- `TaskOutput(task_id)` returns accumulated snapshots, so BB must diff snapshots into appended deltas.
-- A Claude task may survive session loss, but BB product policy should still assume it is gone once the provider connection closes.
-
-## Existing Patterns To Follow
-
-### 1. Keep the semantic turn timeline
-
-The current timeline on `main` is already the right shape:
-
-- top-level rows are `turn` rows
-- command executions render as nested `work` rows with `workKind: "command"`
-- timeline responses are paginated
-
-Relevant code:
-
-- `packages/server-contract/src/api-types.ts`
-- `packages/server-contract/src/thread-timeline.ts`
-- `packages/thread-view/src/build-thread-timeline.ts`
-- `packages/thread-view/src/timeline-row-title.ts`
-- `packages/thread-view/src/timeline-view.ts`
-- `apps/server/src/services/threads/timeline.ts`
-
-Implication:
-
-- background commands should stay on the existing nested command row
-- do not add a new top-level background-command row kind
-
-### 2. Reuse turn-summary lazy row loading
-
-Nested rows already lazy-load through `/threads/:id/timeline/turn-summary-details`.
-
-Relevant code:
-
-- `packages/server-contract/src/api-types.ts`
-- `packages/server-contract/src/public-api.ts`
-- `apps/server/src/routes/threads/data.ts`
-- `apps/server/src/services/threads/timeline.ts`
-- `apps/app/src/hooks/queries/thread-queries.ts`
-- `apps/app/src/views/useTurnSummaryRowLoader.ts`
-
-Implication:
-
-- expanding a turn should keep using the current turn-summary-details flow
-- the background command still shows up as a normal nested command row inside that turn
-
-### 3. Follow the existing React Query + realtime invalidation pattern
-
-The app already has the right invalidation seam for live updates.
-
-Relevant code:
-
-- query keys: `apps/app/src/hooks/queries/query-keys.ts`
-- timeline query hooks: `apps/app/src/hooks/queries/thread-queries.ts`
-- realtime invalidation: `apps/app/src/hooks/realtime-cache-effects.ts`
-
-Implication:
-
-- any lazy background-command output query should be a normal cached query
-- `events-appended` should invalidate that query from `realtime-cache-effects.ts`
-- the main timeline query can keep using the existing thread/timeline invalidation behavior
-
-### 4. Reuse the current timeline renderers
-
-Expanded command output already has a canonical renderer path in the app.
-
-Relevant code:
-
-- `apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx`
-- `apps/app/src/components/thread-timeline/TimelineRowDetails.tsx`
-- `apps/app/src/components/thread-timeline/TerminalOutputBlock.tsx`
-- `apps/app/src/views/ThreadTimelinePane.tsx`
-
-Implication:
-
-- background command rows should reuse the current command row render path
-- the main renderer change is to let background command bodies read from a lazy output query instead of assuming `row.output` is already populated
-
-### 5. Reuse the existing banner/composer slot
-
-The composer area already has the right insertion point.
-
-Relevant code:
-
-- `apps/app/src/views/ThreadDetailPromptArea.tsx`
-- `apps/app/src/views/ThreadFollowUpComposer.tsx`
-
-### 6. Reuse the thread event stream and `itemId` indexing
-
-The `events` table already stores `itemId` and already has the right index for per-command event replay.
-
-Relevant code:
-
-- `packages/db/src/schema.ts`
-- `packages/db/src/data/events.ts`
-
-Implication:
-
-- background command output can live in the normal thread event stream
-- lazy output reads should key off `threadId + itemId`
-- we do not need a second public identifier for v1
-
-### 7. Reuse existing CLI timeline formatting
-
-CLI timeline rendering already flows through `@bb/thread-view`.
-
-Relevant code:
-
-- `apps/cli/src/commands/thread/show.ts`
-- `packages/thread-view/src/format-timeline-text.ts`
-
-Implication:
-
-- `bb thread show` should reuse the existing formatting path and add active background-command summaries there
-- dedicated CLI actions should stay narrow: list, stop, stop-all
+- `ThreadTimelineResponse` currently contains `rows`, `activeThinking`, `pendingTodos`, optional `contextWindowUsage`, and `timelinePage`. It does not expose active background commands.
+- Timeline pagination is segment-based through `segmentLimit`, `beforeAnchorSeq`, and `beforeAnchorId`. The old plan's top-level limit terminology is stale.
+- `summaryOnly=true` now exists for tail-only CLI/status consumers. Any active background-command metadata added to the timeline response needs an explicit decision about whether it is populated in summary-only responses.
+- Nested turn rows lazy-load through `/threads/:id/timeline/turn-summary-details`, but there is no lazy output route.
+- Command rows render through the current canonical path: `apps/app/src/components/thread/timeline/ThreadTimelineRows.tsx`, `TimelineRowDetails.tsx`, and `TerminalOutputBlock.tsx`.
+- The prompt-area extension point is now `ThreadPromptContextBanner` inside `apps/app/src/views/thread-detail/ThreadDetailPromptArea.tsx`.
+- Realtime invalidation is registry-driven in `apps/app/src/hooks/realtime-cache-registry.ts`, not handwritten directly in `realtime-cache-effects.ts`.
+- The normalized domain `commandExecution` item does not retain Codex `processId` and has no background marker or provider handle.
+- The Codex generated app-server schema includes `ThreadItem.processId` and `thread/backgroundTerminals/clean`, but the adapter currently drops `processId` and maps `thread/stop` only to active-turn interruption.
+- Claude Code `task_started`, `task_progress`, `task_updated`, and `task_notification` are currently classified as visibility noise. The adapter does not parse `run_in_background`, does not associate `task_id` with a Bash item, and the bridge has no `TaskOutput` or `TaskStop` request path.
+- The `events` table has `item_id` and an index on `(thread_id, turn_id, type, item_id, sequence)`. It does not have a direct `(thread_id, item_id, sequence)` index, so the old plan's `threadId + itemId` replay assumption is incomplete.
+- Event pruning can remove redundant `item/commandExecution/outputDelta` rows after an `item/completed` command with `aggregatedOutput`. Lazy reconstruction must account for both remaining deltas and completed aggregate output.
 
 ## Decisions
 
-### 1. Use explicit background-command lifecycle state, but keep row identity on the existing command item
+### Keep Timeline Identity On The Command Row
 
-We should add a first-class provider-agnostic background-command lifecycle in the shared model and `@bb/agent-runtime`, but keep the visible timeline identity on the existing `commandExecution` item.
+Background commands remain normal nested command work rows inside their original turn. Do not add a new top-level row kind.
 
-Concretely:
+The background lifecycle is separate metadata keyed by the existing command `itemId`.
 
-- lifecycle state is first-class
-- the canonical public background-command id is the existing `itemId`
-- the inline history row remains the normal nested command `work` row
+### Add An Explicit Background Lifecycle
 
-This keeps the current semantic timeline model intact and avoids parallel row concepts.
+Add a provider-agnostic background-command lifecycle to `@bb/domain`, `@bb/agent-runtime`, server contracts, and the daemon contract.
 
-### 2. Use explicit provider handle unions, not optional provider fields
+The lifecycle must model intent and progress explicitly. Do not overload thread `status` or command row `status` into a queue-state ladder.
 
-Avoid optional provider-specific fields in shared contracts.
+Required lifecycle states for v1:
 
-Use an explicit discriminated handle shape for active background commands, for example:
+- `running`
+- `stop_requested`
+- `stopped`
+- `completed`
+- `lost`
 
-- Codex: `{ provider: "codex", processId: string }`
-- Claude Code: `{ provider: "claude-code", taskId: string }`
+Only `running` and `stop_requested` should appear in `activeBackgroundCommands`.
 
-This applies to:
+`stop_requested` means BB accepted a user stop request but has not observed provider termination. `stopped` means provider stop completed or a terminal stopped lifecycle event was observed. `lost` means BB no longer has a live provider connection/handle and cannot prove the command stopped cleanly.
 
-- active background-command metadata on timeline responses
-- stop command payloads/results
-- daemon/server lifecycle state
+### Use These Event Shapes As The Starting Point
 
-### 3. Normalize all background output through `item/commandExecution/outputDelta`
+Phase 1 should land the event shape instead of deferring it to runtime/server work:
 
-Do not add a second output event type for v1.
+- Provider-originated turn-scoped lifecycle event: `item/commandExecution/backgroundLifecycle`
+- Server-originated lifecycle intent/reconciliation event: `system/backgroundCommand/lifecycle`
 
-Instead:
+Both events should carry `threadId`, `itemId`, lifecycle `status`, and a provider handle when one is known. Provider events also carry `providerThreadId`; server events do not. Server stop actions should first append `stop_requested`, then append `stopped` or `lost` only after command result/reconciliation evidence.
 
-- Codex keeps its native `item/commandExecution/outputDelta`
-- Claude polls `TaskOutput(task_id)`, diffs the latest snapshot, and emits only the appended suffix as `item/commandExecution/outputDelta`
+### Use Explicit Provider Handles
 
-That lets existing command output replay and projection code keep working.
+Use a discriminated handle union, not optional provider fields:
 
-### 4. Store full output in the event stream, but do not preload it into normal timeline reads
+- Codex: `{ provider: "codex"; processId: string }`
+- Claude Code: `{ provider: "claude-code"; taskId: string }`
 
-For v1:
+Provider-thread identity stays in runtime/server internals. The public background-command identity is the existing command `itemId`.
 
-- keep all normalized background-command output in the thread event stream
-- do not cap stored output
-- do not eagerly load full background output in the default timeline response
-- do not eagerly load full background output in `turn-summary-details`
+### Normalize Output Through Existing Command Output Events
 
-This matches the product requirement that output only gets fetched when the user expands:
+Keep output bytes on `item/commandExecution/outputDelta`.
 
-- the nested background command row, or
-- the active-command banner entry
+- Codex output deltas stay as normalized command output deltas.
+- Claude `TaskOutput(task_id)` snapshots must be diffed into appended command output deltas before persistence.
+- If a completed command event has `aggregatedOutput`, lazy output reconstruction may use it as the authoritative final body.
 
-### 5. Add thread-scoped active background commands to `ThreadTimelineResponse`
+### Add Thread-Scoped Active Metadata To Timeline Responses
 
-The current thread detail flow already fetches the timeline, so that response is the right place to surface the active background-command list.
+Add `activeBackgroundCommands` to `ThreadTimelineResponse`.
 
-Add an `activeBackgroundCommands` collection to `ThreadTimelineResponse`.
-
-Recommended fields:
+Recommended public fields:
 
 - `itemId`
 - `threadId`
 - `turnId`
-- `callId`
 - `command`
+- `cwd`
+- `source`
 - `status`
-- `sourceSeqStart`
-- `sourceSeqEnd`
-- `handle` as a discriminated provider union
+- `startedAt`
+- `lastUpdatedAt`
+- `handle`
+- `availableActions`
 
-Important:
+Do not include `sourceSeqStart` or `sourceSeqEnd` on `ActiveBackgroundCommand` in v1. Timeline rows already carry source sequence bounds, and the lazy output route can return `lastSequence` for streaming/invalidation checks.
 
-- this list should be thread-scoped metadata
-- it should not depend on which timeline page is currently loaded
+Recommended `availableActions` values:
 
-### 6. Add a dedicated lazy output route keyed by `threadId + itemId`
+- `stop`
+- `stop_all`
+
+The server is authoritative for this field. The app and CLI should render only the actions returned by the server and should not reimplement provider-specific safety checks.
+
+This list is thread-scoped metadata. It must not depend on which timeline page is loaded. Populate it on latest-page and summary-only timeline reads unless profiling shows a real cost.
+
+Timeline command rows should not gain a background-only row field in v1. The app can cross-reference `activeBackgroundCommands` by `TimelineCommandWorkRow.callId`, which is the command item id. This keeps historical command rows compatible and limits timeline contract churn.
+
+### Add A Dedicated Lazy Output Route
 
 Do not overload `turn-summary-details` for live background output bodies.
 
-Instead, add a dedicated output read that follows the existing server/query pattern:
+Add a dedicated public read route, for example:
 
-- schema in `packages/server-contract`
-- route in `apps/server/src/routes/threads/data.ts`
-- service in `apps/server/src/services/threads/timeline.ts`
-- query key + hook in `apps/app/src/hooks/queries`
+- `GET /api/v1/threads/:id/background-commands/:itemId/output`
 
-Recommended request identity:
+Recommended response fields:
 
+- `itemId`
 - `threadId`
-- `itemId`
-
-Recommended response shape:
-
-- `itemId`
+- `turnId`
 - `command`
+- `cwd`
 - `source`
 - `output`
 - `status`
 - `exitCode`
 - `completedAt`
+- `lastSequence`
 
-This route should rebuild the current background-command body by replaying thread events for that `itemId` using the existing `(thread_id, item_id, sequence)` index.
+Use the public identity directly: add a DB helper and migration for an explicit `(thread_id, item_id, sequence)` index. Do not require `turnId` in the public route.
 
-### 7. The timeline row and the banner should share the same lazy output query
+Historical non-background `commandExecution` items should continue to work with this route if the UI later chooses to lazy-load all command output. They are never active, so they have no handle and no stop actions, but output reconstruction follows the same event replay path.
 
-There should be one output-fetch path for both app surfaces:
+### Stop API Is Logical Per-Command, Physical Provider-Specific
 
-- expanding the nested background command row in the timeline
-- expanding the active background-command banner entry
-
-The app should invalidate that cached query when realtime thread changes report `events-appended`.
-
-The normal timeline query should keep using the existing invalidation behavior it already has.
-
-### 8. Keep collapsed-turn hints inside `@bb/thread-view`
-
-If collapsed turns need to hint that a background command is still active, extend the existing summary/title builders in `@bb/thread-view`.
-
-Do not add a separate summary row.
-
-Relevant code:
-
-- `packages/thread-view/src/timeline-row-title.ts`
-- `packages/thread-view/src/timeline-view.ts`
-
-### 9. Stop API is per-command logically, provider-specific physically
-
-The product surface should still be “stop this background command,” but the provider implementations differ:
-
-- Claude Code: true per-command stop via `TaskStop(task_id)`
-- Codex:
-  - if exactly one active Codex background command exists in the thread, allow a normal stop action and implement it with `thread/backgroundTerminals/clean`
-  - if multiple active Codex background commands exist in the thread, do not show per-command stop buttons; show a Codex-specific `Stop all background commands` action instead
-
-This means the server/daemon API needs both:
+Expose both:
 
 - stop one background command
 - stop all background commands in a thread
 
-The CLI should mirror that shape.
+Recommended public actions:
 
-### 10. Reconnect policy stays simple
+- `POST /api/v1/threads/:id/background-commands/:itemId/stop`
+- `POST /api/v1/threads/:id/background-commands/stop-all`
+
+Stop-one is valid only when that active command's `availableActions` includes `stop`. Stop-all is valid when at least one active command exposes `stop_all`.
+
+Provider behavior:
+
+- Claude Code supports true per-command stop through `TaskStop(task_id)`.
+- Codex v1 should use `thread/backgroundTerminals/clean` for stop-all.
+- Codex per-command stop is available only when exactly one active Codex background command exists in the thread. In that case the server may map "stop this command" to Codex stop-all.
+- If multiple active Codex background commands exist, hide per-command stop and expose only `Stop all background commands`.
+- Revalidate the active set immediately before queueing a Codex stop command. If a single-command stop request races with another active Codex command, return a conflict instead of invoking thread-wide cleanup.
+- Treat `thread/backgroundTerminals/clean` as a confirmed-but-still-suspicious API until integration tests prove it terminates native agent-started background commands and produces expected terminal lifecycle/output behavior.
+
+### Disconnect Policy Stays Simple
 
 User-visible policy:
 
-- if the provider connection closes, assume the background commands are gone
+- if the provider connection closes, active background commands are treated as lost
 
-Implementation nuance:
+Implementation detail:
 
-- Codex commands really are gone
-- Claude tasks may survive, but BB should still transition the lifecycle as gone and only do best-effort cleanup later if a handle remains usable after resume
+- Codex commands are expected to die with the provider connection.
+- Claude tasks may survive outside BB, but BB should mark them `lost` and only attempt best-effort cleanup if the provider handle is still usable.
 
 ## Implementation Plan
 
-### Phase 1: Contracts and shared model
+### Phase 1: Shared Contracts And Event Model
 
-1. Add explicit background-command lifecycle events/state to the shared event model and `@bb/agent-runtime`.
-2. Use `itemId` as the public background-command id for v1.
-3. Add a discriminated provider-handle union type for active background commands.
-4. Add `activeBackgroundCommands` to `ThreadTimelineResponse`.
-5. Add request/response schemas for lazy background-command output reads.
-6. Add request/response schemas for background-command stop and stop-all actions.
+1. Add background-command lifecycle types and schemas in `packages/domain/src/provider-event.ts`.
+2. Add scope policy entries in `packages/domain/src/thread-event-scope.ts`.
+3. Land the provider-originated and server-originated lifecycle event shapes sketched above.
+4. Add `BackgroundCommandHandle`, `ActiveBackgroundCommand`, lazy output response, stop request, and stop response schemas in `packages/server-contract`.
+5. Add `activeBackgroundCommands` to `threadTimelineResponseSchema`.
+6. Add public API entries for lazy output, stop one, and stop all.
+7. Add daemon command contract entries for background stop and stop-all, then bump `HOST_DAEMON_PROTOCOL_VERSION`.
 
 Relevant code:
 
 - `packages/domain/src/provider-event.ts`
-- `packages/server-contract/src/thread-timeline.ts`
+- `packages/domain/src/thread-event-scope.ts`
 - `packages/server-contract/src/api-types.ts`
 - `packages/server-contract/src/public-api.ts`
-- `packages/host-daemon-contract/src/*`
+- `packages/server-contract/src/thread-timeline.ts`
+- `packages/host-daemon-contract/src/commands.ts`
 
-### Phase 2: Provider translation in `@bb/agent-runtime`
+### Phase 2: Runtime And Provider Translation
 
-1. Codex:
-   - detect native background `commandExecution` items
-   - preserve `processId`
-   - keep output flowing through `item/commandExecution/outputDelta`
-   - translate stop-all to `thread/backgroundTerminals/clean`
-2. Claude Code:
-   - translate `run_in_background` plus `task_started` into background lifecycle start
-   - map `task_id` back to the originating `itemId`
-   - poll `TaskOutput(task_id)` on a bounded cadence while active
+1. Extend `AgentRuntime` with explicit background-command stop methods.
+2. Extend `AdapterCommand` with background stop and stop-all commands.
+3. Codex:
+   - parse and retain `processId` from command execution items when present
+   - detect provider-native background command start
+   - emit background lifecycle start with `{ provider: "codex"; processId }`
+   - preserve output as `item/commandExecution/outputDelta`
+   - implement stop-all through `thread/backgroundTerminals/clean`
+   - verify `thread/backgroundTerminals/clean` against real native background commands before exposing Codex stop actions
+   - do not assume `command/exec/terminate` applies to native agent-started background terminals until an integration test proves it
+4. Claude Code:
+   - parse `Bash` input with `run_in_background: true`
+   - associate `task_started.task_id` with the originating Bash `itemId`
+   - add bridge request support for task output snapshots and task stop
+   - poll `TaskOutput(task_id)` every 1s while active as the v1 placeholder cadence, with room to back off later if provider/API cost requires it
    - diff snapshots into appended `item/commandExecution/outputDelta`
-   - translate `TaskStop(task_id)` and terminal notifications into terminal lifecycle state
-3. Keep `task_updated` adapter-internal unless implementation proves it is necessary for correctness.
-4. Prevent active background commands from being auto-finalized as interrupted when the thread itself goes idle.
+   - map task stop/completion/loss into lifecycle events
+5. Prevent background commands from being finalized as interrupted just because the foreground turn goes idle or completes.
 
 Relevant code:
 
-- `packages/agent-runtime/src/codex/*`
-- `packages/agent-runtime/src/claude-code/*`
+- `packages/agent-runtime/src/types.ts`
+- `packages/agent-runtime/src/provider-adapter.ts`
+- `packages/agent-runtime/src/runtime.ts`
+- `packages/agent-runtime/src/codex/schemas.ts`
+- `packages/agent-runtime/src/codex/event-translation.ts`
+- `packages/agent-runtime/src/codex/adapter.ts`
+- `packages/agent-runtime/src/claude-code/schemas.ts`
+- `packages/agent-runtime/src/claude-code/adapter.ts`
+- `packages/agent-runtime/src/claude-code/bridge/commands.ts`
+- `packages/agent-runtime/src/claude-code/bridge/bridge.ts`
 - `packages/thread-view/src/exec-lifecycle.ts`
 
-### Phase 3: Server lifecycle and read model
+### Phase 3: Daemon Dispatch
 
-1. Add a dedicated server-owned background-command lifecycle module.
-2. Do not use `thread_operations` for this lifecycle.
-3. Derive active background commands alongside the normal timeline projection.
-4. Keep top-level rows as `turn` rows and nested command rows as normal `workKind: "command"` rows.
-5. Add the lazy background-command output read by replaying events for `threadId + itemId`.
-6. Keep timeline and turn-summary reads lightweight by omitting full background output bodies there.
-7. Add stop-one and stop-all server actions, with provider-specific validation.
-8. Persist lifecycle and output through the normal thread event ingestion path.
-9. Reconcile disconnect cleanup according to the agreed product policy.
+1. Add daemon handlers for the new background stop commands.
+2. Route stop-one and stop-all to the runtime entry for the thread's environment.
+3. Flush buffered provider events before reporting stop success, like `thread.stop`.
+4. Preserve existing thread runtime state after background stop unless the provider requires restart.
+5. On provider process exit, emit or allow server reconciliation to mark active background commands as lost.
 
 Relevant code:
 
-- `apps/server/src/routes/threads/data.ts`
+- `apps/host-daemon/src/command-dispatch.ts`
+- `apps/host-daemon/src/command-handlers/thread.ts`
+- `apps/host-daemon/src/runtime-manager.ts`
+- `apps/host-daemon/src/event-buffer.ts`
+
+### Phase 4: Server Lifecycle And Read Model
+
+1. Add a server-owned background-command lifecycle module. Do not use `thread_operations`.
+2. Build active background command state by replaying thread events and server lifecycle intent events.
+3. Add DB helpers for:
+   - active background command event/state replay
+   - per-item command output reconstruction
+4. Add the chosen `(thread_id, item_id, sequence)` index for efficient public `threadId + itemId` replay.
+5. Keep normal timeline and turn-summary reads lightweight. Do not eagerly return full background output bodies there.
+6. Ensure timeline window selection still includes enough events to render the command row shell even when output is omitted from default responses.
+7. Implement stop-one and stop-all public actions with provider-specific validation.
+8. Reconcile active background commands as `lost` on daemon/provider disconnect according to policy.
+9. Ensure event pruning does not break lazy output reconstruction. Reconstruction must consider `item/started`, remaining output deltas, and `item/completed.aggregatedOutput`.
+
+Relevant code:
+
 - `apps/server/src/services/threads/timeline.ts`
+- `apps/server/src/routes/threads/data.ts`
+- `apps/server/src/routes/threads/actions.ts`
+- `apps/server/src/services/threads/thread-events.ts`
+- `apps/server/src/internal/events.ts`
+- `apps/server/src/internal/reconciliation.ts`
 - `packages/db/src/data/events.ts`
 - `packages/db/src/schema.ts`
+- `packages/db/drizzle/*`
 
-### Phase 4: App queries and realtime
+### Phase 5: App Queries And Realtime
 
-1. Add query keys and hooks for lazy background-command output reads.
-2. Reuse the current timeline query for `activeBackgroundCommands`.
-3. Invalidate the lazy output query from `realtime-cache-effects.ts` on `events-appended`.
-4. Keep using `turn-summary-details` and `useTurnSummaryRowLoader()` for nested-row structure only.
+1. Add query keys for background command output.
+2. Add a query hook for lazy output reads.
+3. Add mutations for stop-one and stop-all.
+4. Invalidate background output queries on `events-appended` in `REALTIME_THREAD_CHANGE_REGISTRY`.
+5. Keep existing timeline invalidation for `activeBackgroundCommands`.
+6. Share one output query path between timeline-row expansion and composer-banner expansion.
 
 Relevant code:
 
+- `apps/app/src/lib/api.ts`
 - `apps/app/src/hooks/queries/query-keys.ts`
 - `apps/app/src/hooks/queries/thread-queries.ts`
+- `apps/app/src/hooks/mutations/thread-runtime-mutations.ts`
+- `apps/app/src/hooks/realtime-cache-registry.ts`
 - `apps/app/src/hooks/realtime-cache-effects.ts`
-- `apps/app/src/views/useTurnSummaryRowLoader.ts`
 
-### Phase 5: App UI
+### Phase 6: App UI
 
 1. Timeline:
-   - keep the existing top-level `turn` rows
-   - keep background commands on the normal nested command row
-   - when an expanded background command row body is opened, fetch its output lazily through the dedicated output query
-   - reuse `WorkRowBody` and `TerminalOutputBlock`
-2. Banner:
-   - render active background commands above the composer through the existing banner slot
-   - expand lazily using the same output query
+   - keep top-level `turn` rows
+   - keep background commands as normal nested `workKind: "command"` rows
+   - mark active background command rows by cross-referencing `activeBackgroundCommands` against `TimelineCommandWorkRow.callId`
+   - fetch output lazily when the row expands
+   - reuse `TerminalOutputBlock`
+2. Composer banner:
+   - extend `ThreadPromptContextBanner` with a background-command section
+   - render active background commands above the composer
+   - expand each entry lazily through the shared output query
    - expose stop or stop-all actions according to provider rules
 3. Collapsed turns:
-   - if necessary, add active-background hints through existing thread-view summary/title builders rather than a new row kind
+   - if active-background hints are needed, add them through `@bb/thread-view` title/summary helpers
+   - do not add a separate summary row kind
 
 Relevant code:
 
-- `apps/app/src/views/ThreadDetailPromptArea.tsx`
-- `apps/app/src/views/ThreadFollowUpComposer.tsx`
-- `apps/app/src/views/ThreadDetailView.tsx`
-- `apps/app/src/views/ThreadTimelinePane.tsx`
-- `apps/app/src/components/thread-timeline/ThreadTimelineRows.tsx`
-- `apps/app/src/components/thread-timeline/TimelineRowDetails.tsx`
-- `apps/app/src/components/thread-timeline/TerminalOutputBlock.tsx`
+- `apps/app/src/views/thread-detail/ThreadDetailView.tsx`
+- `apps/app/src/views/thread-detail/ThreadDetailPromptArea.tsx`
+- `apps/app/src/views/thread-detail/ThreadTimelinePane.tsx`
+- `apps/app/src/views/thread-detail/turn-summary/useThreadDetailTurnSummaryRows.ts`
+- `apps/app/src/views/thread-detail/turn-summary/useTurnSummaryRowLoader.ts`
+- `apps/app/src/components/promptbox/banner/ThreadPromptContextBanner.tsx`
+- `apps/app/src/components/thread/timeline/ThreadTimelineRows.tsx`
+- `apps/app/src/components/thread/timeline/TimelineRowDetails.tsx`
+- `apps/app/src/components/thread/timeline/TerminalOutputBlock.tsx`
+- `packages/thread-view/src/timeline-row-title.ts`
+- `packages/thread-view/src/timeline-view.ts`
 
-### Phase 6: CLI
+### Phase 7: CLI
 
 1. Add `bb thread background list <thread-id>`.
 2. Add `bb thread background stop <thread-id> <item-id>`.
 3. Add `bb thread background stop-all <thread-id>`.
-4. Update `bb thread show` to surface active background commands clearly through the existing timeline/status formatting path.
+4. Update `bb thread show` to surface active background commands through the existing timeline/status formatting path.
+5. Ensure `bb status` can read active background metadata cheaply if product wants it there; use `summaryOnly=true` if available.
 
 Relevant code:
 
 - `apps/cli/src/commands/thread/index.ts`
 - `apps/cli/src/commands/thread/show.ts`
+- `apps/cli/src/commands/status.ts`
 - `packages/thread-view/src/format-timeline-text.ts`
 
 ## Exit Criteria
 
 - provider-native background commands normalize into an explicit BB background-command lifecycle
-- the public background-command identity is the existing `itemId`
-- inline timeline history remains the existing nested command row inside the current `turn` grouping model
-- `ThreadTimelineResponse` exposes thread-scoped `activeBackgroundCommands`
-- background-command output is stored via normalized `item/commandExecution/outputDelta`
-- Claude snapshots are diffed into appended command deltas before persistence
-- default timeline reads do not eagerly fetch full background output
-- expanding a background-command timeline row fetches output lazily
-- expanding a background-command banner entry fetches the same output lazily
-- lazy output queries live-refresh through realtime invalidation on `events-appended`
-- the composer shows active background commands above the follow-up area
-- Codex supports stop when exactly one active background command exists
-- Codex supports stop-all when multiple active background commands exist
-- Claude supports per-command stop
+- public background-command identity is the existing command `itemId`
+- inline history remains the existing nested command row inside the current turn grouping model
+- `ThreadTimelineResponse.activeBackgroundCommands` is thread-scoped and independent of the loaded timeline page
+- default timeline and turn-summary reads do not eagerly return full active background output
+- lazy output reads reconstruct the correct command body for `threadId + itemId`
+- lazy output queries live-refresh on `events-appended`
+- composer banner shows active background commands above the prompt
+- timeline row and banner expansion share the same output query
+- Codex stop-one is available only when it safely maps to stop-all for a single active Codex command
+- Codex stop-all works through `thread/backgroundTerminals/clean`
+- Claude Code supports true per-command stop
+- disconnect behavior marks active background commands as lost
 - CLI supports list, stop, and stop-all
-- v1 scope is Codex + Claude only
-- disconnect behavior follows the agreed product policy
+- v1 remains limited to Codex and Claude Code
 
 ## Validation
 
 ### Typecheck
 
-`pnpm exec turbo run typecheck --filter=@bb/domain --filter=@bb/db --filter=@bb/agent-runtime --filter=@bb/thread-view --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/app --filter=@bb/cli`
+Run through Turbo:
+
+```sh
+pnpm exec turbo run typecheck --filter=@bb/domain --filter=@bb/db --filter=@bb/agent-runtime --filter=@bb/thread-view --filter=@bb/server-contract --filter=@bb/host-daemon-contract --filter=@bb/server --filter=@bb/host-daemon --filter=@bb/app --filter=@bb/cli
+```
 
 ### Unit Tests
 
-- runtime tests for:
-  - Codex background `commandExecution` normalization
-  - Claude `task_started` / `TaskOutput` / `TaskStop` normalization
-  - Claude snapshot-to-delta diffing
-  - no false interrupt when the thread goes idle
-- thread-view tests for:
-  - background commands remaining inline in the current `turn` grouping
-  - collapsed turn hints if new active-background summaries are added
-- server tests for:
-  - `ThreadTimelineResponse.activeBackgroundCommands`
-  - lazy background output reconstruction by `threadId + itemId`
-  - repeated stop requests
-  - Codex stop-one validation vs stop-all availability
-  - disconnect reconciliation
-- app tests for:
-  - background output query invalidation from `realtime-cache-effects`
-  - lazy row expansion fetching the dedicated output query
-  - composer banner rendering and stop states
-- CLI tests for:
-  - list / stop / stop-all command behavior
+Add focused tests for:
+
+- domain schema validation for lifecycle events and provider handles
+- Codex background command start normalization with `processId`
+- Codex stop-all command planning
+- Claude `run_in_background`, `task_started`, `TaskOutput`, and `TaskStop` normalization
+- Claude snapshot-to-delta diffing
+- foreground turn completion not interrupting active background command lifecycle
+- server active-background projection
+- lazy output reconstruction from started/delta/completed events
+- Codex stop-one validation vs stop-all availability
+- disconnect reconciliation to `lost`
+- app query invalidation for background output on `events-appended`
+- timeline row lazy output expansion
+- composer banner rendering, expansion, and stop states
+- CLI list, stop, and stop-all behavior
 
 ### Integration Tests
 
-Extend `packages/agent-runtime/src/test/runtime-integration-harness.ts` coverage:
+Extend runtime integration coverage in `packages/agent-runtime/src/test/runtime-integration-harness.ts`.
 
-- Codex:
-  - start a native background command
-  - observe long-lived `commandExecution` with `processId`
-  - observe `item/commandExecution/outputDelta` after turn completion
-  - stop via `thread/backgroundTerminals/clean`
-  - assert the original item completes terminally
-- Claude:
-  - start a native background Bash task
-  - observe `task_started`
-  - poll output via `TaskOutput`
-  - verify normalization into appended command deltas
-  - stop via `TaskStop`
-  - assert terminal notification/state
+Use real provider runtimes where available. Keep fake/unit harnesses for edge cases, races, and failure injection that are impractical to force through the provider.
 
-### Public Route / Timeline Tests
+Codex:
 
-Add or extend coverage in:
+- start a provider-native background command
+- observe a command item with a retained `processId`
+- observe command output after the starting turn completes
+- stop via `thread/backgroundTerminals/clean`
+- assert lifecycle reaches a terminal state
+
+Claude Code:
+
+- start a background Bash task
+- observe `task_started`
+- poll output via `TaskOutput`
+- verify snapshots normalize into appended command deltas
+- stop via `TaskStop`
+- assert lifecycle reaches a terminal state
+
+### Server / Public Route Tests
+
+Add or extend:
 
 - `apps/server/test/public/public-thread-data.test.ts`
 - `apps/server/test/threads/timeline-service.test.ts`
@@ -488,21 +421,24 @@ Add or extend coverage in:
 Focus on:
 
 - paginated timeline responses still returning normal turn rows
-- active background commands appearing as thread-scoped response metadata
+- `activeBackgroundCommands` appearing as thread-scoped response metadata
+- summary-only timeline responses returning the chosen active-background metadata
 - turn-summary detail loading still returning nested command rows correctly
-- lazy output reads reconstructing the expected command body for `itemId`
+- lazy output reads reconstructing expected output for `itemId`
+- output reconstruction still working after event pruning
 
 ### Manual QA
 
-- start a dev server in Codex
-- verify:
-  - the thread timeline still uses normal top-level `turn` rows
-  - expanding the relevant turn reveals the background command as a normal nested command row
-  - expanding the background command row fetches output lazily
-  - the active background-command banner appears above the composer
-  - expanding the banner fetches the same output lazily
-  - expanded output updates as new thread events append
-  - stop button works when there is exactly one active Codex background command
-  - multi-command Codex thread shows `Stop all background commands`
-- repeat in Claude Code
-- verify disconnect behavior matches the agreed policy
+Run the dev app and test both providers:
+
+- start a dev server or long-running watcher from the agent
+- verify the timeline still uses normal top-level turn rows
+- expand the original turn and confirm the background command appears as a normal nested command row
+- expand the command row and confirm output is fetched lazily
+- confirm the active background-command banner appears above the composer
+- expand the banner entry and confirm it uses the same output
+- verify output updates as new events append
+- verify Codex single-command stop and multi-command stop-all behavior
+- verify Claude per-command stop behavior
+- kill/restart the provider connection and confirm active commands become lost
+- navigate away and back after disconnect/lost reconciliation and confirm the banner/timeline do not resurrect stale active commands
