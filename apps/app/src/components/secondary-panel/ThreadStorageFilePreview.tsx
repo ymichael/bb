@@ -17,10 +17,12 @@ interface FilePreviewBaseProps {
 }
 
 interface ThreadStorageFilePreviewProps extends FilePreviewBaseProps {
+  managerThreadId?: string;
   pinnedPath: string;
 }
 
 interface SecondaryPanelFilePreviewProps extends FilePreviewBaseProps {
+  managerThreadId?: string;
   pendingNotFoundPath?: string;
   statusLabel?: WorkspaceFilePreviewStatusLabel | null;
 }
@@ -32,6 +34,7 @@ export function SecondaryPanelFilePreview({
   filePreview,
   isLoading,
   lineNumber = null,
+  managerThreadId,
   onOpenInEditor,
   pendingNotFoundPath,
   statusLabel = null,
@@ -88,6 +91,7 @@ export function SecondaryPanelFilePreview({
             name: filePreview.name ?? activePath,
             contents: filePreview.content,
           },
+          managerThreadId,
         }}
       />
     );
@@ -156,6 +160,7 @@ export function ThreadStorageFilePreview({
   filePreview,
   isLoading,
   lineNumber,
+  managerThreadId,
   onOpenInEditor,
   pinnedPath,
 }: ThreadStorageFilePreviewProps) {
@@ -167,6 +172,7 @@ export function ThreadStorageFilePreview({
       filePreview={filePreview}
       isLoading={isLoading}
       lineNumber={lineNumber}
+      managerThreadId={managerThreadId}
       onOpenInEditor={onOpenInEditor}
       pendingNotFoundPath={pinnedPath}
     />

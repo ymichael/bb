@@ -41,3 +41,4 @@ Run `bb guide <chapter>` for command details:
   projects       Project CRUD and sources
   hosts          Listing and understanding hosts
   styling        How to style STATUS.html to match the bb UI
+  status         Authoring STATUS.html and calling back to the manager

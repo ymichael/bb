@@ -9,6 +9,19 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FilePreview } from "./FilePreview";
+import { BB_STATUS_TELL_MESSAGE_TYPE } from "@/lib/iframe-status-bridge";
+
+const { sendThreadMessageMock } = vi.hoisted(() => ({
+  sendThreadMessageMock: vi.fn(async (..._args: unknown[]) => {}),
+}));
+
+vi.mock("@/lib/api", async (importActual) => {
+  const actual = (await importActual()) as Record<string, unknown>;
+  return {
+    ...actual,
+    sendThreadMessage: sendThreadMessageMock,
+  };
+});
 
 type ClipboardWriteText = (text: string) => Promise<void>;
 
@@ -53,6 +66,108 @@ describe("FilePreview", () => {
       expect(writeText).toHaveBeenCalledWith("/Users/me/project/src/App.tsx");
     });
   });
+
+  it(
+    "forwards bb-status:tell messages from the STATUS.html iframe to the manager thread and acks the iframe",
+    async () => {
+      const { container, unmount } = render(
+        <FilePreview
+          path="STATUS.html"
+          state={{
+            kind: "html",
+            file: { name: "STATUS.html", contents: "<p>status</p>" },
+            managerThreadId: "thr_manager_42",
+          }}
+        />,
+      );
+      const iframe = container.querySelector("iframe");
+      expect(iframe).not.toBeNull();
+      const iframeWindow = iframe?.contentWindow ?? null;
+      expect(iframeWindow).not.toBeNull();
+      if (iframeWindow === null) throw new Error("iframe contentWindow null");
+
+      const replies: unknown[] = [];
+      iframeWindow.postMessage = ((payload: unknown) => {
+        replies.push(payload);
+      }) as Window["postMessage"];
+
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            id: 1,
+            type: BB_STATUS_TELL_MESSAGE_TYPE,
+            text: "Mark todo #3 as done",
+          },
+          source: iframeWindow,
+        }),
+      );
+
+      await waitFor(() => {
+        expect(sendThreadMessageMock).toHaveBeenCalledWith("thr_manager_42", {
+          input: [{ type: "text", text: "Mark todo #3 as done" }],
+          mode: "auto",
+        });
+      });
+      await waitFor(() => {
+        expect(replies).toEqual([
+          {
+            type: "bb-status:tell-result",
+            id: 1,
+            ok: true,
+          },
+        ]);
+      });
+
+      unmount();
+      sendThreadMessageMock.mockClear();
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            id: 2,
+            type: BB_STATUS_TELL_MESSAGE_TYPE,
+            text: "ignored after unmount",
+          },
+          source: iframeWindow,
+        }),
+      );
+      // brief microtask flush; nothing should hit the sender or the iframe
+      await Promise.resolve();
+      expect(sendThreadMessageMock).not.toHaveBeenCalled();
+      expect(replies).toHaveLength(1);
+    },
+  );
+
+  it(
+    "ignores postMessage events whose source isn't the iframe's own contentWindow",
+    async () => {
+      const { container } = render(
+        <FilePreview
+          path="STATUS.html"
+          state={{
+            kind: "html",
+            file: { name: "STATUS.html", contents: "<p>status</p>" },
+            managerThreadId: "thr_manager_42",
+          }}
+        />,
+      );
+      const iframe = container.querySelector("iframe");
+      expect(iframe).not.toBeNull();
+
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: {
+            id: 1,
+            type: BB_STATUS_TELL_MESSAGE_TYPE,
+            text: "spoofed",
+          },
+          source: window,
+        }),
+      );
+
+      await Promise.resolve();
+      expect(sendThreadMessageMock).not.toHaveBeenCalled();
+    },
+  );
 
   it("renders sanitized HTML in markdown file previews", () => {
     const { container } = render(

@@ -14,7 +14,13 @@ import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
 import { Skeleton } from "@/components/ui/skeleton.js";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
+import { sendThreadMessage } from "@/lib/api";
 import type { WorkspaceFilePreviewStatusLabel } from "@/lib/file-preview";
+import {
+  handleBbStatusMessage,
+  isBbStatusTellEnvelope,
+  type BbStatusTellSender,
+} from "@/lib/iframe-status-bridge";
 
 export interface FilePreviewFile {
   name: string;
@@ -29,7 +35,7 @@ export type FilePreviewState =
   | { kind: "manager-status-pending" }
   | { kind: "error"; message?: string }
   | { kind: "image"; url: string }
-  | { kind: "html"; file: FilePreviewFile }
+  | { kind: "html"; file: FilePreviewFile; managerThreadId?: string }
   | { kind: "ready"; file: FilePreviewFile; lineNumber: number | null };
 
 export interface FilePreviewProps {
@@ -57,7 +63,16 @@ interface FilePreviewHeaderProps {
 
 interface HtmlFilePreviewProps {
   file: FilePreviewFile;
+  managerThreadId?: string;
+  sender?: BbStatusTellSender;
 }
+
+const defaultBbStatusSender: BbStatusTellSender = async ({ threadId, text }) => {
+  await sendThreadMessage(threadId, {
+    input: [{ type: "text", text }],
+    mode: "auto",
+  });
+};
 
 type MarkdownViewMode = "preview" | "source";
 
@@ -166,7 +181,12 @@ function FilePreviewBody({ state, path, markdownMode }: FilePreviewBodyProps) {
     return <FilePreviewImage url={state.url} alt={path} />;
   }
   if (state.kind === "html") {
-    return <HtmlFilePreview file={state.file} />;
+    return (
+      <HtmlFilePreview
+        file={state.file}
+        managerThreadId={state.managerThreadId}
+      />
+    );
   }
   if (isMarkdownFile(state.file.name) && markdownMode === "preview") {
     return <MarkdownFilePreview file={state.file} />;
@@ -281,10 +301,39 @@ function FilePreviewImage({ url, alt }: { url: string; alt: string }) {
   );
 }
 
-function HtmlFilePreview({ file }: HtmlFilePreviewProps) {
+function HtmlFilePreview({
+  file,
+  managerThreadId,
+  sender = defaultBbStatusSender,
+}: HtmlFilePreviewProps) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+
+  useEffect(() => {
+    function onMessage(event: MessageEvent) {
+      if (!isBbStatusTellEnvelope(event.data)) return;
+      const iframeWindow = iframeRef.current?.contentWindow ?? null;
+      if (iframeWindow === null) return;
+      // event.source is the iframe's contentWindow. Comparing identities scopes
+      // the bridge to the exact iframe we rendered — replies and dispatch never
+      // leak to other windows that happen to share this listener.
+      if (event.source !== iframeWindow) return;
+      void handleBbStatusMessage({
+        data: event.data,
+        replyTo: iframeWindow,
+        threadId: managerThreadId ?? null,
+        send: sender,
+      });
+    }
+    window.addEventListener("message", onMessage);
+    return () => {
+      window.removeEventListener("message", onMessage);
+    };
+  }, [managerThreadId, sender]);
+
   return (
     <div className="min-h-0 flex-1">
       <iframe
+        ref={iframeRef}
         title={file.name}
         srcDoc={file.contents}
         style={HTML_FILE_PREVIEW_IFRAME_STYLE}

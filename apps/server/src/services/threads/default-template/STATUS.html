@@ -304,6 +304,21 @@
       ---- Inline status annotation on a name (e.g. "Superseded by #99") ----
       <span class="pill" style="margin-left:6px; color:var(--destructive); border-color:color-mix(in srgb,var(--destructive) 32%,var(--border)); background:color-mix(in srgb,var(--destructive) 12%,var(--background))">Superseded by #99</span>
 
+      ---- Send a message to the manager ----
+      The bb app exposes `window.bbStatus.tell(text)` inside this iframe. The
+      text becomes a new user turn in the manager thread that owns STATUS.html.
+      Use it from any interactive element — button, checkbox, form — to ask
+      the manager to react (update STATUS.html, append a todo, spawn a worker,
+      etc.). 4 KiB cap per message; full reference: `bb guide status`.
+
+        <button id="done-3" type="button">Mark #3 done</button>
+        <script>
+          document.getElementById('done-3').addEventListener('click', async () => {
+            // user clicked a button — let the manager know
+            await window.bbStatus.tell('Mark todo #3 as done');
+          });
+        </script>
+
       =====================================================================
       No-PR landing mode — use these two sections in place of "Open PRs"
       when the user has opted out of PRs. "In progress" tracks worker
@@ -376,5 +391,42 @@
         </div>
       </section>
     -->
+
+    <script>
+      // window.bbStatus.tell(text) posts a new user turn to the manager thread
+      // that owns this STATUS.html. The bb app validates the message, forwards
+      // it as a user turn, and posts back an ack. The manager decides what to
+      // do (edit STATUS.html, append a todo, spawn a worker, etc.). 4 KiB cap
+      // per call. See `bb guide status` for usage patterns.
+      window.bbStatus = (() => {
+        let nextId = 1;
+        const pending = new Map();
+        window.addEventListener("message", (event) => {
+          if (event.source !== window.parent) return;
+          if (!event.data || event.data.type !== "bb-status:tell-result") return;
+          const { id, ok, error } = event.data;
+          const handler = pending.get(id);
+          if (!handler) return;
+          pending.delete(id);
+          if (ok) {
+            handler.resolve();
+          } else {
+            handler.reject(new Error(error || "bb-status:tell failed"));
+          }
+        });
+        return {
+          tell(text) {
+            const id = nextId++;
+            return new Promise((resolve, reject) => {
+              pending.set(id, { resolve, reject });
+              window.parent.postMessage(
+                { id, type: "bb-status:tell", text },
+                "*",
+              );
+            });
+          },
+        };
+      })();
+    </script>
   </body>
 </html>

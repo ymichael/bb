@@ -106,6 +106,29 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("No preferences yet.");
   });
 
+  it("renders bbGuideStatus", () => {
+    const templates = listTemplates();
+    expect(templates.some((template) => template.id === "bbGuideStatus")).toBe(
+      true,
+    );
+
+    const rendered = renderTemplate("bbGuideStatus", {});
+
+    expect(rendered).toContain("window.bbStatus.tell");
+    expect(rendered).toContain("4 KiB");
+    expect(rendered).toContain("bb-status:tell");
+    expect(rendered).toContain("bb-status:tell-result");
+    // The text becomes a user turn in the manager thread.
+    expect(rendered).toContain("user turn");
+  });
+
+  it("lists bbGuideStatus in the overview chapter index", () => {
+    const overview = renderTemplate("bbGuideOverview", {});
+    expect(overview).toContain(
+      "status         Authoring STATUS.html and calling back to the manager",
+    );
+  });
+
   it("renders bbGuideStyling", () => {
     const templates = listTemplates();
     expect(templates.some((template) => template.id === "bbGuideStyling")).toBe(

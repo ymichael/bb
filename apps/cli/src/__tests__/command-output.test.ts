@@ -403,7 +403,17 @@ describe("CLI command output contracts", () => {
     expect(output).toContain("@media (prefers-color-scheme: dark)");
   });
 
-  it("bb guide unknown chapter lists styling in available chapters", async () => {
+  it("bb guide status prints the status authoring chapter", async () => {
+    await runCommand(["guide", "status"], registerGuideCommand);
+
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output.trim().length).toBeGreaterThan(0);
+    expect(output).toContain("window.bbStatus.tell");
+    expect(output).toContain("bb-status:tell");
+    expect(output).toContain("4 KiB");
+  });
+
+  it("bb guide unknown chapter lists status and styling in available chapters", async () => {
     await expect(
       runCommand(["guide", "missing"], registerGuideCommand),
     ).rejects.toThrow("process.exit:1");
@@ -411,7 +421,7 @@ describe("CLI command output contracts", () => {
     const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
     expect(errorOutput).toContain("Unknown guide chapter 'missing'");
     expect(errorOutput).toContain(
-      "Available: threads, environments, managers, providers, projects, hosts, styling.",
+      "Available: threads, environments, managers, providers, projects, hosts, styling, status.",
     );
   });
 

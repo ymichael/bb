@@ -949,6 +949,7 @@ export function ThreadDetailView() {
       error={threadStorageFilePreviewError}
       filePreview={threadStorageFilePreview}
       isLoading={isThreadStorageFilePreviewLoading}
+      managerThreadId={threadId}
       onOpenInEditor={handleOpenStorageFileInEditor}
       pinnedPath={pinnedStorageFilePath}
     />
