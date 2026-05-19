@@ -78,7 +78,6 @@ import {
   ThreadStorageFilePreviewTabContent,
   WorkspaceFilePreviewTabContent,
 } from "@/components/secondary-panel/ThreadSecondaryPanelTabContent";
-import { MANAGER_STATUS_MARKDOWN_FILE_PATH } from "@/components/secondary-panel/managerStorage";
 import { useManagerStorageBrowser } from "@/components/secondary-panel/useManagerStorageBrowser";
 import { useThreadFileTabs } from "@/components/secondary-panel/useThreadFileTabs";
 import type { SecondaryPanelFileTab } from "@/components/secondary-panel/ThreadSecondaryPanel";
@@ -100,14 +99,7 @@ import {
   useFixedPanelTabsState,
   useFixedPanelTabsStorageMaintenance,
   useTouchFixedPanelTabsState,
-  useUpdateFixedPanelTabsState,
 } from "@/lib/fixed-panel-tabs";
-import { createFixedPanelTabsStateFromLegacyPanels } from "@/lib/fixed-panel-tabs-state";
-import {
-  EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE,
-  readLegacyThreadSecondaryPanelState,
-  removeLegacyThreadSecondaryPanelState,
-} from "@/lib/thread-secondary-panel-legacy-state";
 import {
   buildManagerSelectorOptions,
   isUnassignedStandardThread,
@@ -157,7 +149,6 @@ export function ThreadDetailView() {
   useFixedPanelTabsStorageMaintenance(threadId);
   useThreadTerminalPanelStorageMaintenance(threadId);
   const fixedPanelTabsState = useFixedPanelTabsState(threadId);
-  const updateFixedPanelTabsState = useUpdateFixedPanelTabsState(threadId);
   const terminalPanelState = useThreadTerminalPanelState(threadId);
   const activeFixedSecondaryTab = getActiveFixedSecondaryTab({
     fixedPanelTabsState,
@@ -231,49 +222,6 @@ export function ThreadDetailView() {
     getLatestPendingInteraction(pendingInteractions) !== null;
   const isManagerThread = thread?.type === "manager";
   const canUseGitUi = thread?.type === "standard";
-  useEffect(() => {
-    if (!threadId || thread?.type === undefined) {
-      return;
-    }
-    const now = Date.now();
-    const legacySecondaryPanelState = readLegacyThreadSecondaryPanelState({
-      now,
-      threadId,
-    });
-    updateFixedPanelTabsState((current) => {
-      if (
-        current.lastUsedAt !== 0 ||
-        current.secondary.tabs.length > 0 ||
-        current.bottom.tabs.length > 0
-      ) {
-        return current;
-      }
-      if (
-        legacySecondaryPanelState === null &&
-        terminalPanelState.activeTerminalId === null
-      ) {
-        return current;
-      }
-      return createFixedPanelTabsStateFromLegacyPanels({
-        isManagerThread,
-        now,
-        pinnedStorageFilePath: MANAGER_STATUS_MARKDOWN_FILE_PATH,
-        secondaryPanelState:
-          legacySecondaryPanelState ??
-          EMPTY_LEGACY_THREAD_SECONDARY_PANEL_STATE,
-        terminalPanelState,
-      });
-    });
-    if (legacySecondaryPanelState !== null) {
-      removeLegacyThreadSecondaryPanelState({ threadId });
-    }
-  }, [
-    isManagerThread,
-    terminalPanelState,
-    threadId,
-    thread?.type,
-    updateFixedPanelTabsState,
-  ]);
   const [
     storedUseStandardManagerTimeline,
     setStoredUseStandardManagerTimeline,

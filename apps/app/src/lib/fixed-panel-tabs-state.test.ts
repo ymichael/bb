@@ -5,7 +5,6 @@ import {
   EMPTY_FIXED_PANEL_TABS_STATE,
   FIXED_PANEL_TABS_IDLE_EXPIRY_MS,
   createEmptyFixedPanelTabsState,
-  createFixedPanelTabsStateFromLegacyPanels,
   getFixedPanelTabsStateStorageKey,
   normalizeFixedPanelTabsState,
   parseFixedPanelTabsState,
@@ -13,19 +12,8 @@ import {
   serializeFixedPanelTabsState,
   type FixedPanelTabsState,
 } from "./fixed-panel-tabs-state";
-import {
-  createEmptyLegacyThreadSecondaryPanelState,
-  getLegacyThreadSecondaryPanelStateStorageKey,
-  readLegacyThreadSecondaryPanelState,
-  type LegacyThreadSecondaryPanelState,
-} from "./thread-secondary-panel-legacy-state";
-import {
-  createEmptyThreadTerminalPanelState,
-  type ThreadTerminalPanelState,
-} from "./thread-terminal-panel-state";
 
 const NOW = 1_700_000_000_000;
-const PINNED_STORAGE_FILE_PATH = "STATUS.md";
 
 afterEach(() => {
   window.localStorage.clear();
@@ -33,14 +21,6 @@ afterEach(() => {
 
 function workspaceFileTabId(path: string): string {
   return `workspace-file-preview:${encodeURIComponent(path)}`;
-}
-
-function hostFileTabId(path: string): string {
-  return `host-file-preview:${encodeURIComponent(path)}`;
-}
-
-function storageFileTabId(path: string): string {
-  return `thread-storage-file-preview:${encodeURIComponent(path)}`;
 }
 
 function terminalTabId(terminalId: string): string {
@@ -83,40 +63,6 @@ function makeFixedPanelTabsState(
   });
 }
 
-function makeSecondaryPanelState(
-  overrides: Partial<LegacyThreadSecondaryPanelState> = {},
-): LegacyThreadSecondaryPanelState {
-  return createEmptyLegacyThreadSecondaryPanelState({
-    activePanel: "thread-info",
-    environmentId: "env-current",
-    fileTabs: {
-      workspace: [
-        {
-          lineNumber: 12,
-          path: "src/app.ts",
-          source: { kind: "working-tree" },
-          statusLabel: null,
-        },
-      ],
-      storage: ["notes.md"],
-      hostFiles: [{ lineNumber: 9, path: "/Users/me/notes.md" }],
-      active: { type: "workspace", path: "src/app.ts" },
-    },
-    lastUsedAt: NOW - 10,
-    ...overrides,
-  });
-}
-
-function makeTerminalPanelState(
-  overrides: Partial<ThreadTerminalPanelState> = {},
-): ThreadTerminalPanelState {
-  return createEmptyThreadTerminalPanelState({
-    activeTerminalId: "term_1",
-    isOpen: true,
-    lastUsedAt: NOW - 5,
-    ...overrides,
-  });
-}
 
 describe("fixed panel tabs state storage", () => {
   it("round-trips valid state", () => {
@@ -308,181 +254,5 @@ describe("fixed panel tabs normalization", () => {
       },
     ]);
     expect(normalized.bottom.activeTabId).toBe(terminalTabId("term_1"));
-  });
-});
-
-describe("fixed panel tabs legacy migration", () => {
-  it("migrates v1 secondary panel storage without host files through the read path", () => {
-    const threadId = "thr-legacy-v1";
-    window.localStorage.setItem(
-      getLegacyThreadSecondaryPanelStateStorageKey({ threadId }),
-      JSON.stringify({
-        version: 1,
-        activePanel: "thread-info",
-        environmentId: "env-current",
-        fileTabs: {
-          workspace: [
-            {
-              lineNumber: 12,
-              path: "src/app.ts",
-              source: { kind: "working-tree" },
-              statusLabel: null,
-            },
-          ],
-          storage: ["notes.md"],
-          active: { type: "workspace", path: "src/app.ts" },
-        },
-        lastUsedAt: NOW - 10,
-      }),
-    );
-
-    const secondaryPanelState = readLegacyThreadSecondaryPanelState({
-      now: NOW,
-      threadId,
-    });
-    if (secondaryPanelState === null) {
-      throw new Error("Expected legacy secondary panel state to parse");
-    }
-
-    expect(secondaryPanelState.fileTabs.hostFiles).toEqual([]);
-
-    const migrated = createFixedPanelTabsStateFromLegacyPanels({
-      isManagerThread: false,
-      now: NOW,
-      pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
-      secondaryPanelState,
-      terminalPanelState: makeTerminalPanelState({
-        activeTerminalId: null,
-        isOpen: false,
-      }),
-    });
-
-    expect(migrated.secondary.tabs).toEqual([
-      { id: "thread-info", kind: "thread-info" },
-      { id: "git-diff", kind: "git-diff" },
-      {
-        environmentId: "env-current",
-        id: workspaceFileTabId("src/app.ts"),
-        kind: "workspace-file-preview",
-        lineNumber: 12,
-        path: "src/app.ts",
-        source: { kind: "working-tree" },
-        statusLabel: null,
-      },
-    ]);
-    expect(migrated.secondary.activeTabId).toBe(
-      workspaceFileTabId("src/app.ts"),
-    );
-    expect(migrated.secondary.isOpen).toBe(true);
-  });
-
-  it("migrates current secondary file tabs and bottom active terminal", () => {
-    const migrated = createFixedPanelTabsStateFromLegacyPanels({
-      isManagerThread: false,
-      now: NOW,
-      pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
-      secondaryPanelState: makeSecondaryPanelState(),
-      terminalPanelState: makeTerminalPanelState(),
-    });
-
-    expect(migrated.secondary.tabs).toEqual([
-      { id: "thread-info", kind: "thread-info" },
-      { id: "git-diff", kind: "git-diff" },
-      {
-        environmentId: "env-current",
-        id: workspaceFileTabId("src/app.ts"),
-        kind: "workspace-file-preview",
-        lineNumber: 12,
-        path: "src/app.ts",
-        source: { kind: "working-tree" },
-        statusLabel: null,
-      },
-      {
-        id: hostFileTabId("/Users/me/notes.md"),
-        kind: "host-file-preview",
-        lineNumber: 9,
-        path: "/Users/me/notes.md",
-      },
-    ]);
-    expect(migrated.secondary.activeTabId).toBe(
-      workspaceFileTabId("src/app.ts"),
-    );
-    expect(migrated.secondary.isOpen).toBe(true);
-    expect(migrated.bottom.tabs).toEqual([
-      {
-        id: terminalTabId("term_1"),
-        kind: "terminal",
-        terminalId: "term_1",
-      },
-    ]);
-    expect(migrated.bottom.activeTabId).toBe(terminalTabId("term_1"));
-    expect(migrated.lastUsedAt).toBe(NOW);
-  });
-
-  it("keeps migrated secondary active tab while clearing closed bottom active id", () => {
-    const migrated = createFixedPanelTabsStateFromLegacyPanels({
-      isManagerThread: false,
-      now: NOW,
-      pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
-      secondaryPanelState: makeSecondaryPanelState({ activePanel: null }),
-      terminalPanelState: makeTerminalPanelState({ isOpen: false }),
-    });
-
-    expect(
-      migrated.secondary.tabs.some((tab) => tab.kind === "thread-info"),
-    ).toBe(true);
-    expect(migrated.secondary.activeTabId).toBe(
-      workspaceFileTabId("src/app.ts"),
-    );
-    expect(migrated.secondary.isOpen).toBe(true);
-    expect(migrated.bottom.tabs).toEqual([
-      {
-        id: terminalTabId("term_1"),
-        kind: "terminal",
-        terminalId: "term_1",
-      },
-    ]);
-    expect(migrated.bottom.activeTabId).toBeNull();
-  });
-
-  it("pins and activates manager storage status when no file tab is active", () => {
-    const migrated = createFixedPanelTabsStateFromLegacyPanels({
-      isManagerThread: true,
-      now: NOW,
-      pinnedStorageFilePath: PINNED_STORAGE_FILE_PATH,
-      secondaryPanelState: makeSecondaryPanelState({
-        fileTabs: {
-          workspace: [],
-          storage: ["notes.md", PINNED_STORAGE_FILE_PATH],
-          hostFiles: [],
-          active: null,
-        },
-      }),
-      terminalPanelState: makeTerminalPanelState({
-        activeTerminalId: null,
-        isOpen: false,
-      }),
-    });
-
-    expect(migrated.secondary.tabs).toEqual([
-      { id: "thread-info", kind: "thread-info" },
-      { id: "git-diff", kind: "git-diff" },
-      {
-        id: storageFileTabId(PINNED_STORAGE_FILE_PATH),
-        isPinned: true,
-        kind: "thread-storage-file-preview",
-        path: PINNED_STORAGE_FILE_PATH,
-      },
-      {
-        id: storageFileTabId("notes.md"),
-        isPinned: false,
-        kind: "thread-storage-file-preview",
-        path: "notes.md",
-      },
-    ]);
-    expect(migrated.secondary.activeTabId).toBe(
-      storageFileTabId(PINNED_STORAGE_FILE_PATH),
-    );
-    expect(migrated.secondary.isOpen).toBe(true);
   });
 });

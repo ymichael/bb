@@ -6,12 +6,6 @@ import {
   type WorkspaceFilePreviewStatusLabel,
   type WorkspaceFileTabState,
 } from "./file-preview";
-import {
-  normalizeLegacyThreadSecondaryPanelState,
-  type LegacyThreadSecondaryPanelFileTabRef,
-  type LegacyThreadSecondaryPanelState,
-} from "./thread-secondary-panel-legacy-state";
-import type { ThreadTerminalPanelState } from "./thread-terminal-panel-state";
 
 export const FIXED_PANEL_TABS_STATE_STORAGE_PREFIX =
   "bb.thread.fixedPanelTabsState";
@@ -238,14 +232,6 @@ interface PruneFixedPanelTabsStorageArgs {
   now: number;
 }
 
-interface CreateFixedPanelTabsStateFromLegacyPanelsArgs {
-  isManagerThread: boolean;
-  now: number;
-  pinnedStorageFilePath: string;
-  secondaryPanelState: LegacyThreadSecondaryPanelState;
-  terminalPanelState: ThreadTerminalPanelState;
-}
-
 interface NormalizeFixedPanelTabsStateArgs {
   state: FixedPanelTabsState;
 }
@@ -267,17 +253,6 @@ interface CreateWorkspaceFilePreviewFixedPanelTabArgs {
 
 interface CreateTerminalFixedPanelTabArgs {
   terminalId: string;
-}
-
-interface GetActiveLegacyFileTabIdArgs {
-  active: LegacyThreadSecondaryPanelFileTabRef | null;
-  tabs: readonly FixedPanelTab[];
-}
-
-interface BuildLegacySecondaryTabGroupArgs {
-  isManagerThread: boolean;
-  pinnedStorageFilePath: string;
-  secondaryPanelState: LegacyThreadSecondaryPanelState;
 }
 
 function getLocalStorage(): Storage | null {
@@ -572,120 +547,6 @@ export function pruneFixedPanelTabsStorage({
       localStorage.removeItem(key);
     }
   }
-}
-
-function getActiveLegacyFileTabId({
-  active,
-  tabs,
-}: GetActiveLegacyFileTabIdArgs): string | null {
-  if (active === null) {
-    return null;
-  }
-
-  const activeTab = tabs.find((tab) => {
-    if (active.type === "workspace") {
-      return tab.kind === "workspace-file-preview" && tab.path === active.path;
-    }
-    if (active.type === "host-file") {
-      return tab.kind === "host-file-preview" && tab.path === active.path;
-    }
-    return (
-      tab.kind === "thread-storage-file-preview" && tab.path === active.path
-    );
-  });
-
-  return activeTab?.id ?? null;
-}
-
-function buildLegacySecondaryTabGroup({
-  isManagerThread,
-  pinnedStorageFilePath,
-  secondaryPanelState,
-}: BuildLegacySecondaryTabGroupArgs): FixedSecondaryPanelTabGroupState {
-  const normalizedState = normalizeLegacyThreadSecondaryPanelState({
-    isManagerThread,
-    state: secondaryPanelState,
-  });
-  const storagePaths = isManagerThread
-    ? [
-        pinnedStorageFilePath,
-        ...normalizedState.fileTabs.storage.filter(
-          (path) => path !== pinnedStorageFilePath,
-        ),
-      ]
-    : [];
-  const tabs: FixedPanelTab[] = [
-    createThreadInfoFixedPanelTab(),
-    createGitDiffFixedPanelTab(),
-    ...normalizedState.fileTabs.workspace.map((tab) =>
-      createWorkspaceFilePreviewFixedPanelTab({
-        environmentId: normalizedState.environmentId,
-        tab,
-      }),
-    ),
-    ...normalizedState.fileTabs.hostFiles.map(
-      createHostFilePreviewFixedPanelTab,
-    ),
-    ...storagePaths.map((path) =>
-      createThreadStorageFilePreviewFixedPanelTab({
-        isPinned: path === pinnedStorageFilePath,
-        path,
-      }),
-    ),
-  ];
-  const activeFileTabId = getActiveLegacyFileTabId({
-    active:
-      normalizedState.fileTabs.active ??
-      (isManagerThread
-        ? {
-            type: "storage",
-            path: pinnedStorageFilePath,
-          }
-        : null),
-    tabs,
-  });
-  const activeTabId = activeFileTabId ?? normalizedState.activePanel;
-
-  return normalizeFixedSecondaryPanelTabGroupState({
-    tabs,
-    activeTabId,
-    isOpen: activeTabId !== null,
-  });
-}
-
-export function createFixedPanelTabsStateFromLegacyPanels({
-  isManagerThread,
-  now,
-  pinnedStorageFilePath,
-  secondaryPanelState,
-  terminalPanelState,
-}: CreateFixedPanelTabsStateFromLegacyPanelsArgs): FixedPanelTabsState {
-  const terminalTab =
-    terminalPanelState.activeTerminalId === null
-      ? null
-      : createTerminalFixedPanelTab({
-          terminalId: terminalPanelState.activeTerminalId,
-        });
-  const bottomTabs = terminalTab === null ? [] : [terminalTab];
-  return createEmptyFixedPanelTabsState({
-    secondary: buildLegacySecondaryTabGroup({
-      isManagerThread,
-      pinnedStorageFilePath,
-      secondaryPanelState,
-    }),
-    bottom: {
-      tabs: bottomTabs,
-      activeTabId:
-        terminalPanelState.isOpen && terminalTab !== null
-          ? terminalTab.id
-          : null,
-    },
-    lastUsedAt: Math.max(
-      secondaryPanelState.lastUsedAt,
-      terminalPanelState.lastUsedAt,
-      now,
-    ),
-  });
 }
 
 export function areFixedPanelTabsEquivalent(

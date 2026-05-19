@@ -23,7 +23,6 @@ import {
   withThreadSecondaryPanel,
   type ThreadSecondaryPanel,
 } from "./thread-secondary-panel";
-import { pruneLegacyThreadSecondaryPanelStorage } from "./thread-secondary-panel-legacy-state";
 
 const FIXED_PANEL_TABS_TOUCH_THROTTLE_MS = 60 * 1000;
 
@@ -203,7 +202,6 @@ export function useFixedPanelTabsStorageMaintenance(
   useEffect(() => {
     const now = Date.now();
     pruneFixedPanelTabsStorage({ now });
-    pruneLegacyThreadSecondaryPanelStorage({ now });
   }, [threadId]);
 }
 
