@@ -24,6 +24,7 @@ import type {
   RuntimeThreadExecutionOptions,
   Thread,
   ClientTurnRequestId,
+  ManagerTemplateName,
   WorkspaceProvisionType,
 } from "@bb/domain";
 import type { CreateThreadRequest } from "@bb/server-contract";
@@ -36,6 +37,7 @@ import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { getLastProviderThreadId } from "./thread-events.js";
+import { seedManagerThreadStorage } from "./manager-storage-templates.js";
 import {
   resolveExecutionOptions,
   resolveThreadRuntimeCommandConfig,
@@ -82,6 +84,7 @@ export interface QueueThreadStartCommandArgs {
   execution: ResolvedThreadExecutionOptions;
   permissionEscalation: PermissionEscalation;
   input: PromptInput[];
+  managerTemplateName: ManagerTemplateName | null;
   projectId: string;
   providerId: string;
   requestId: ClientTurnRequestId;
@@ -279,6 +282,14 @@ export async function buildThreadStartCommand(
     environment: args.environment,
     isThreadCreation: true,
   });
+  if (args.thread.type === "manager" && runtimeContext.threadStoragePath) {
+    await seedManagerThreadStorage(deps, {
+      explicitTemplateName: args.managerTemplateName,
+      hostId: args.environment.hostId,
+      threadId: args.thread.id,
+      threadStoragePath: runtimeContext.threadStoragePath,
+    });
+  }
   return {
     type: "thread.start",
     environmentId: args.environment.id,

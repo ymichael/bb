@@ -7,6 +7,7 @@ import {
 } from "@bb/db";
 import { markThreadOperationRecordFailed } from "@bb/db/internal-lifecycle";
 import {
+  type ManagerTemplateName,
   type Environment,
   type PromptInput,
   type ProvisioningTranscriptEntry,
@@ -46,6 +47,7 @@ export interface RequestThreadProvisionArgs {
   environmentIntent: ThreadProvisionEnvironmentIntent;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
+  managerTemplateName: ManagerTemplateName | null;
   thread: Thread;
   titleProvided: boolean;
 }
@@ -146,6 +148,7 @@ async function startThreadIfEnvironmentReady(
     }),
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,
+    managerTemplateName: args.context.request.managerTemplateName,
   });
 }
 
@@ -186,6 +189,8 @@ export function requestThreadProvision(
   const context = createMetadataPendingContext({
     ...args,
     clientRequestId: request.requestId,
+    managerTemplateName:
+      args.thread.type === "manager" ? args.managerTemplateName : null,
   });
   upsertThreadProvisionOperation(deps.db, {
     threadId: args.thread.id,

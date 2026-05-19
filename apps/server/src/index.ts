@@ -14,6 +14,7 @@ import { createBbAppManagedConfigReloader } from "./services/system/bb-app-manag
 import { startEventLoopStallMonitor } from "./services/system/event-loop-stall-monitor.js";
 import { runPeriodicSweeps } from "./services/system/periodic-sweeps.js";
 import { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
+import { ensureBuiltInManagerTemplatesInstalled } from "./services/threads/manager-storage-templates.js";
 import { createLifecycleDedupers } from "./lifecycle-dedupers.js";
 import type { ServerRuntimeConfig } from "./types.js";
 import { NotificationHub } from "./ws/hub.js";
@@ -55,6 +56,10 @@ async function main(): Promise<void> {
   if (appUrl !== undefined) {
     runtimeConfig.appUrl = appUrl;
   }
+  await ensureBuiltInManagerTemplatesInstalled({
+    dataDir: commonConfig.BB_DATA_DIR,
+    logger,
+  });
   const bbAppManagedConfig = await createBbAppManagedConfigReloader({
     config: runtimeConfig,
     hub,

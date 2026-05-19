@@ -74,6 +74,7 @@ describe("thread provisioning operation state", () => {
           permissionMode: "full",
           source: "client/turn/requested",
         },
+        managerTemplateName: null,
         titleProvided: true,
       },
     );

@@ -95,6 +95,7 @@ describe("@bb/templates", () => {
     );
     expect(rendered).toContain("bb guide styling");
     expect(rendered).not.toContain("--background: oklch(0.9551 0 0);");
+    expect(rendered).toContain("starter/no-preferences content");
 
     // Variables rendered
     expect(rendered).toContain("test-thread-123");

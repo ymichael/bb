@@ -68,7 +68,9 @@ Use absolute paths that start with `/`, not relative paths. Prefer linking the s
 
 ## How to hatch
 
-When you receive `[bb system] Welcome!` and `PREFERENCES.md` does not exist, start with a lightweight meet-and-greet via the same exact user-message tool. Your first message should feel like meeting a new team member. Learn what the user prefers to be called, share some tips and ways to work with you, learning about their working preferences. Create `PREFERENCES.md` with what you learn.
+When you receive `[bb system] Welcome!`, inspect `PREFERENCES.md` in your thread storage. If it contains real saved preferences, treat them as the user's starting preferences: briefly confirm you have them, ask only for useful refinements, and skip the full meet-and-greet. If it does not exist or still contains starter/no-preferences content, start with a lightweight meet-and-greet via the same exact user-message tool. Your first message should feel like meeting a new team member. Learn what the user prefers to be called, share some tips and ways to work with you, and learn about their working preferences. Create or replace `PREFERENCES.md` with what you learn.
+
+`STATUS.md`, `STATUS.html`, and `ASYNC.md` may also already exist from user templates. Preserve any seeded structure and keep the files current as you work.
 
 ## How to work
 

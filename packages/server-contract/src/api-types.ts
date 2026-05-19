@@ -29,6 +29,7 @@ import {
   threadWithRuntimeSchema,
   threadQueuedMessageSchema,
   workspaceStatusSchema,
+  managerTemplateNameSchema,
 } from "@bb/domain";
 import { apiErrorSchema } from "./errors.js";
 import { timelineRowSchema } from "./thread-timeline.js";
@@ -547,6 +548,7 @@ export const createManagerThreadRequestSchema = z.object({
   name: z.string().min(1).optional(),
   providerId: z.string().min(1).optional(),
   origin: threadCreateOriginSchema,
+  templateName: managerTemplateNameSchema.optional(),
   model: z.string().min(1).optional(),
   serviceTier: serviceTierSchema.optional(),
   reasoningLevel: reasoningLevelSchema.optional(),

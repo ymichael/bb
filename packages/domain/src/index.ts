@@ -34,6 +34,9 @@ export type {
 export { defaultFeatureFlags, featureFlagsSchema } from "./feature-flags.js";
 export type { FeatureFlags } from "./feature-flags.js";
 
+export { managerTemplateNameSchema } from "./manager-templates.js";
+export type { ManagerTemplateName } from "./manager-templates.js";
+
 export {
   TERMINAL_COLS_MAX,
   TERMINAL_DATA_MAX_BASE64_LENGTH,
