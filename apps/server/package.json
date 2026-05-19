@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "build": "node ../../scripts/build-node-entry.mjs src/index.ts dist/index.js --clean-dist --templates --copy-dir ../../packages/db/drizzle dist/drizzle",
+    "build": "node ../../scripts/build-node-entry.mjs src/index.ts dist/index.js --clean-dist --templates --copy-dir ../../packages/db/drizzle dist/drizzle --copy-dir src/services/threads/default-template dist/default-template",
     "bench": "vitest bench --config vitest.config.ts",
     "start": "node dist/index.js",
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
