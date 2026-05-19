@@ -44,11 +44,14 @@ const makeProject = (overrides: Partial<ProjectResponse> = {}) =>
 const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
   makeThreadListEntry({ id: "thr_default", ...overrides });
 
+type ToggleStoryCollapsedId = (id: string) => void;
+
 interface InteractiveProjectRowArgs {
   project?: ProjectResponse;
   threadListState: ProjectThreadListState;
   initialCollapsed?: boolean;
   initialCollapsedManagerIds?: ReadonlySet<string>;
+  initialCollapsedEnvironmentIds?: ReadonlySet<string>;
   isActive?: boolean;
   isLocalPathInvalid?: boolean;
 }
@@ -61,6 +64,7 @@ function InteractiveProjectRow({
   threadListState,
   initialCollapsed = false,
   initialCollapsedManagerIds,
+  initialCollapsedEnvironmentIds,
   isActive = false,
   isLocalPathInvalid = false,
 }: InteractiveProjectRowArgs) {
@@ -68,20 +72,40 @@ function InteractiveProjectRow({
   const [collapsedManagerIds, setCollapsedManagerIds] = useState<Set<string>>(
     () => new Set(initialCollapsedManagerIds ?? []),
   );
+  const [collapsedEnvironmentIds, setCollapsedEnvironmentIds] = useState<
+    Set<string>
+  >(() => new Set(initialCollapsedEnvironmentIds ?? []));
   const onToggleProjectCollapsed = useCallback(() => {
     setIsCollapsed((current) => !current);
   }, []);
-  const onToggleManagerCollapsed = useCallback((threadId: string) => {
-    setCollapsedManagerIds((current) => {
-      const next = new Set(current);
-      if (next.has(threadId)) {
-        next.delete(threadId);
-      } else {
-        next.add(threadId);
-      }
-      return next;
-    });
-  }, []);
+  const onToggleManagerCollapsed = useCallback<ToggleStoryCollapsedId>(
+    (threadId) => {
+      setCollapsedManagerIds((current) => {
+        const next = new Set(current);
+        if (next.has(threadId)) {
+          next.delete(threadId);
+        } else {
+          next.add(threadId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
+  const onToggleEnvironmentCollapsed = useCallback<ToggleStoryCollapsedId>(
+    (environmentId) => {
+      setCollapsedEnvironmentIds((current) => {
+        const next = new Set(current);
+        if (next.has(environmentId)) {
+          next.delete(environmentId);
+        } else {
+          next.add(environmentId);
+        }
+        return next;
+      });
+    },
+    [],
+  );
   return (
     <ProjectRow
       project={project}
@@ -89,9 +113,11 @@ function InteractiveProjectRow({
       isActive={isActive}
       isCollapsed={isCollapsed}
       collapsedManagerIds={collapsedManagerIds}
+      collapsedEnvironmentIds={collapsedEnvironmentIds}
       isLocalPathInvalid={isLocalPathInvalid}
       onToggleProjectCollapsed={onToggleProjectCollapsed}
       onToggleManagerCollapsed={onToggleManagerCollapsed}
+      onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
     />
   );
 }
@@ -313,6 +339,18 @@ export function Overview() {
         hint="two unmanaged standard threads sharing one worktree environment — grouped under a worktree header that surfaces the branch"
       >
         {singleProject({
+          threadListState: {
+            status: "ready",
+            threads: [sharedWorktreeThreadA, sharedWorktreeThreadB],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
+        label="environment starts collapsed"
+        hint="worktree header remains visible while child threads are hidden"
+      >
+        {singleProject({
+          initialCollapsedEnvironmentIds: new Set(["env_shared_worktree"]),
           threadListState: {
             status: "ready",
             threads: [sharedWorktreeThreadA, sharedWorktreeThreadB],

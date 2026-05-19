@@ -121,6 +121,7 @@
     --bb-sidebar-sticky-label-gap: 0.25rem;
     --bb-sidebar-sticky-row-height: var(--bb-sidebar-row-height);
     --bb-sidebar-sticky-row-gap: 0.25rem;
+    --bb-sidebar-sticky-child-row-gap: 0.125rem;
     --bb-sidebar-sticky-label-top: var(--bb-sidebar-sticky-stack-padding-top);
     --bb-sidebar-sticky-project-top: calc(
       var(--bb-sidebar-sticky-label-top) +
@@ -130,6 +131,11 @@
     --bb-sidebar-sticky-manager-top: calc(
       var(--bb-sidebar-sticky-project-top) +
         var(--bb-sidebar-sticky-row-height) + var(--bb-sidebar-sticky-row-gap)
+    );
+    --bb-sidebar-sticky-environment-top: calc(
+      var(--bb-sidebar-sticky-manager-top) +
+        var(--bb-sidebar-sticky-row-height) +
+        var(--bb-sidebar-sticky-child-row-gap)
     );
 
     padding: var(--bb-sidebar-sticky-stack-padding-top)
@@ -198,10 +204,20 @@
     --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-manager-top);
     --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
     --bb-sidebar-sticky-tier-z-index: 40;
-    /* Manager is the deepest sticky tier; its first child is non-sticky with a
-       2px (space-y-0.5) gap, so the shield only needs to fill that gap. The
-       4px sticky-row-gap would overshoot and clip the next row's top. */
-    --bb-sidebar-sticky-tier-shield-bottom-height: 0.125rem;
+    /* Manager rows and top-level env rows have a compact child gap. The 4px
+       project row gap would overshoot and clip the next row's top. */
+    --bb-sidebar-sticky-tier-shield-bottom-height: var(
+      --bb-sidebar-sticky-child-row-gap
+    );
+  }
+
+  [data-sidebar-sticky-stack] [data-sidebar-sticky-tier="environment"] {
+    --bb-sidebar-sticky-tier-top: var(--bb-sidebar-sticky-environment-top);
+    --bb-sidebar-sticky-tier-height: var(--bb-sidebar-sticky-row-height);
+    --bb-sidebar-sticky-tier-z-index: 35;
+    --bb-sidebar-sticky-tier-shield-bottom-height: var(
+      --bb-sidebar-sticky-child-row-gap
+    );
   }
 
   [data-sidebar-sticky-stack]

@@ -30,9 +30,9 @@ export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
 /**
  * Hairline that runs through a manager's managed-child list, sitting under
  * the center of the manager's user icon. Z-index sits below both the
- * manager (z-40) and project (z-50) sticky tiers so a stuck manager or
- * project row covers the line, while ordinary thread rows still let it
- * show through their hover/active backgrounds.
+ * manager (z-40), env (z-35), and project (z-50) sticky tiers so a stuck
+ * parent row covers the line, while ordinary thread rows still let it show
+ * through their hover/active backgrounds.
  */
 export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
   "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
@@ -40,7 +40,14 @@ export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
 /**
  * Hairline that runs through an env sub-group nested inside a manager.
  * Sits under the center of the sub-group header's worktree glyph at the
- * managed-child indent (pl-14), so the line lands at left-16.
+ * managed-child indent (pl-14), so the line lands at left-16. It stays below
+ * the env sticky tier (z-35).
  */
 export const SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS =
   "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
+
+export const SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS =
+  "pointer-events-none absolute bottom-0 left-10 top-0 z-[1] w-px bg-border-hairline";
+
+export const SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS =
+  "pointer-events-none absolute -bottom-0.5 -right-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold leading-none text-primary-foreground transition-opacity duration-150";

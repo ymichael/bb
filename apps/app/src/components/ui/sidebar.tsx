@@ -464,7 +464,11 @@ const SidebarGroupLabel = React.forwardRef<
 });
 SidebarGroupLabel.displayName = "SidebarGroupLabel";
 
-export type SidebarStickyTierKind = "label" | "project" | "manager";
+export type SidebarStickyTierKind =
+  | "label"
+  | "project"
+  | "manager"
+  | "environment";
 
 type SidebarStickyStackProps = React.ComponentProps<"div">;
 

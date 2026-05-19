@@ -3,6 +3,7 @@ import { createJsonLocalStorage } from "@/lib/browser-storage";
 
 const COLLAPSED_PROJECTS_STORAGE_KEY = "bb.sidebar.collapsedProjects";
 const COLLAPSED_MANAGERS_STORAGE_KEY = "bb.sidebar.collapsedManagers";
+const COLLAPSED_ENVIRONMENTS_STORAGE_KEY = "bb.sidebar.collapsedEnvironments";
 
 export const collapsedProjectIdsAtom = atomWithStorage<string[]>(
   COLLAPSED_PROJECTS_STORAGE_KEY,
@@ -13,6 +14,13 @@ export const collapsedProjectIdsAtom = atomWithStorage<string[]>(
 
 export const collapsedManagerIdsAtom = atomWithStorage<string[]>(
   COLLAPSED_MANAGERS_STORAGE_KEY,
+  [],
+  createJsonLocalStorage<string[]>(),
+  { getOnInit: true },
+);
+
+export const collapsedEnvironmentIdsAtom = atomWithStorage<string[]>(
+  COLLAPSED_ENVIRONMENTS_STORAGE_KEY,
   [],
   createJsonLocalStorage<string[]>(),
   { getOnInit: true },

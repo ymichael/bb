@@ -4,6 +4,7 @@ import { Suspense, type ReactNode } from "react";
 import {
   act,
   cleanup,
+  fireEvent,
   render,
   screen,
   waitFor,
@@ -48,6 +49,7 @@ interface ProjectListRenderResult {
 }
 
 type ProjectThreadListEntry = ProjectWithThreadsResponse["threads"][number];
+type ProjectThreadListEntryOverrides = Partial<ProjectThreadListEntry>;
 
 function makeProjectResponse(
   overrides: Partial<ProjectResponse> = {},
@@ -65,6 +67,7 @@ function makeProjectResponse(
 function makeThreadListEntry(
   projectId: string,
   index: number,
+  overrides: ProjectThreadListEntryOverrides = {},
 ): ProjectThreadListEntry {
   return {
     archivedAt: null,
@@ -92,6 +95,7 @@ function makeThreadListEntry(
     titleFallback: `Thread ${index}`,
     type: "standard",
     updatedAt: index,
+    ...overrides,
   };
 }
 
@@ -167,6 +171,7 @@ afterEach(() => {
   wsManager.disconnect();
   cleanup();
   resetFakeReconnectingWebSockets();
+  window.localStorage.clear();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -239,6 +244,228 @@ describe("ProjectList", () => {
     expect(includeProjectRequestCount).toBe(1);
     expect(leanProjectRequestCount).toBe(0);
     expect(threadRequestCount).toBe(0);
+  });
+
+  it("collapses project-level worktree environment groups", async () => {
+    const project = makeProjectResponse();
+    const branchName = "feat/sidebar-collapse";
+    const threads = [
+      makeThreadListEntry(project.id, 1, {
+        environmentBranchName: branchName,
+        environmentHostId: "host-local",
+        environmentId: "env-shared",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        id: "thread-a",
+        title: "Thread A",
+        titleFallback: "Thread A",
+      }),
+      makeThreadListEntry(project.id, 2, {
+        environmentBranchName: branchName,
+        environmentHostId: "host-local",
+        environmentId: "env-shared",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        id: "thread-b",
+        title: "Thread B",
+        titleFallback: "Thread B",
+      }),
+    ];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: buildProjectListHandler({
+          projects: [project],
+          threadsByProjectId: new Map([[project.id, threads]]),
+        }),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList({ selectedProjectId: project.id });
+
+    expect(await screen.findByText("Thread A")).toBeTruthy();
+    expect(screen.getByText("Thread B")).toBeTruthy();
+    const collapseButton = screen.getByRole("button", {
+      name: `Collapse Worktree: ${branchName} threads`,
+    });
+    expect(
+      collapseButton
+        .closest("[data-sidebar-sticky-tier]")
+        ?.getAttribute("data-sidebar-sticky-tier"),
+    ).toBe("manager");
+    fireEvent.click(collapseButton);
+
+    expect(
+      screen
+        .getByRole("button", {
+          name: `Expand Worktree: ${branchName} threads`,
+        })
+        .closest("[data-sidebar-sticky-tier]")
+        ?.textContent,
+    ).toContain("2");
+    expect(screen.queryByText("Thread A")).toBeNull();
+    expect(screen.queryByText("Thread B")).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: `Expand Worktree: ${branchName} threads`,
+      }),
+    );
+
+    expect(screen.getByText("Thread A")).toBeTruthy();
+    expect(screen.getByText("Thread B")).toBeTruthy();
+  });
+
+  it("badges collapsed manager rows with their child count", async () => {
+    const project = makeProjectResponse();
+    const manager = makeThreadListEntry(project.id, 1, {
+      id: "manager-thread",
+      title: "Frontend Manager",
+      titleFallback: "Frontend Manager",
+      type: "manager",
+    });
+    const threads = [
+      manager,
+      makeThreadListEntry(project.id, 2, {
+        id: "managed-thread-a",
+        parentThreadId: manager.id,
+        title: "Managed Thread A",
+        titleFallback: "Managed Thread A",
+      }),
+      makeThreadListEntry(project.id, 3, {
+        id: "managed-thread-b",
+        parentThreadId: manager.id,
+        title: "Managed Thread B",
+        titleFallback: "Managed Thread B",
+      }),
+    ];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: buildProjectListHandler({
+          projects: [project],
+          threadsByProjectId: new Map([[project.id, threads]]),
+        }),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList({ selectedProjectId: project.id });
+
+    expect(await screen.findByText("Managed Thread A")).toBeTruthy();
+    const collapseButton = screen.getByRole("button", {
+      name: "Collapse Frontend Manager threads",
+    });
+    fireEvent.click(collapseButton);
+
+    expect(
+      screen.getByRole("button", {
+        name: "Expand Frontend Manager threads",
+      }).textContent,
+    ).toContain("2");
+    expect(screen.queryByText("Managed Thread A")).toBeNull();
+    expect(screen.queryByText("Managed Thread B")).toBeNull();
+  });
+
+  it("collapses managed worktree environment groups under managers", async () => {
+    const project = makeProjectResponse();
+    const branchName = "feat/manager-env";
+    const manager = makeThreadListEntry(project.id, 1, {
+      id: "manager-thread",
+      title: "Frontend Manager",
+      titleFallback: "Frontend Manager",
+      type: "manager",
+    });
+    const threads = [
+      manager,
+      makeThreadListEntry(project.id, 2, {
+        environmentBranchName: branchName,
+        environmentHostId: "host-local",
+        environmentId: "env-managed",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        id: "managed-thread-a",
+        parentThreadId: manager.id,
+        title: "Managed Thread A",
+        titleFallback: "Managed Thread A",
+      }),
+      makeThreadListEntry(project.id, 3, {
+        environmentBranchName: branchName,
+        environmentHostId: "host-local",
+        environmentId: "env-managed",
+        environmentWorkspaceDisplayKind: "managed-worktree",
+        id: "managed-thread-b",
+        parentThreadId: manager.id,
+        title: "Managed Thread B",
+        titleFallback: "Managed Thread B",
+      }),
+    ];
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: buildProjectListHandler({
+          projects: [project],
+          threadsByProjectId: new Map([[project.id, threads]]),
+        }),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    await renderProjectList({ selectedProjectId: project.id });
+
+    expect(await screen.findByText("Managed Thread A")).toBeTruthy();
+    expect(screen.getByText("Managed Thread B")).toBeTruthy();
+    const collapseButton = screen.getByRole("button", {
+      name: `Collapse Worktree: ${branchName} threads`,
+    });
+    expect(
+      collapseButton
+        .closest("[data-sidebar-sticky-tier]")
+        ?.getAttribute("data-sidebar-sticky-tier"),
+    ).toBe("environment");
+    fireEvent.click(collapseButton);
+
+    expect(
+      screen
+        .getByRole("button", {
+          name: `Expand Worktree: ${branchName} threads`,
+        })
+        .closest("[data-sidebar-sticky-tier]")
+        ?.textContent,
+    ).toContain("2");
+    expect(screen.getByText("Frontend Manager")).toBeTruthy();
+    expect(screen.queryByText("Managed Thread A")).toBeNull();
+    expect(screen.queryByText("Managed Thread B")).toBeNull();
   });
 
   it("does not show project error or empty states before the websocket connects", async () => {

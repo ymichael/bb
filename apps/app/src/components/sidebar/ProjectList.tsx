@@ -47,6 +47,7 @@ import { COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS, COARSE_POINTER_ICON_SIZE_
 import { ProjectRow } from "./ProjectRow";
 import type { ProjectThreadListState } from "./ProjectRow";
 import {
+  collapsedEnvironmentIdsAtom,
   collapsedManagerIdsAtom,
   collapsedProjectIdsAtom,
 } from "./sidebarCollapsedAtoms";
@@ -132,6 +133,13 @@ interface ProjectThreadListStateArgs {
   threads: ThreadListEntry[] | undefined;
 }
 
+interface ToggleCollapsedIdListArgs {
+  current: string[];
+  id: string;
+}
+
+type ToggleCollapsedId = (id: string) => void;
+
 function buildProjectThreadQueryAggregation({
   projectIds,
   queryResults,
@@ -188,6 +196,20 @@ function getProjectThreadListState({
     case undefined:
       return EMPTY_PROJECT_THREAD_LIST_STATE;
   }
+}
+
+function toggleCollapsedIdList({
+  current,
+  id,
+}: ToggleCollapsedIdListArgs): string[] {
+  const next = new Set(current);
+  if (next.has(id)) {
+    next.delete(id);
+  } else {
+    next.add(id);
+  }
+
+  return Array.from(next);
 }
 
 function ProjectListSectionOptions({
@@ -418,6 +440,9 @@ function ProjectListComponent({
   const [collapsedManagerIdList, setCollapsedManagerIdList] = useAtom(
     collapsedManagerIdsAtom,
   );
+  const [collapsedEnvironmentIdList, setCollapsedEnvironmentIdList] = useAtom(
+    collapsedEnvironmentIdsAtom,
+  );
   const collapsedProjectIds = useMemo(
     () => new Set(collapsedProjectIdList),
     [collapsedProjectIdList],
@@ -425,6 +450,10 @@ function ProjectListComponent({
   const collapsedManagerIds = useMemo(
     () => new Set(collapsedManagerIdList),
     [collapsedManagerIdList],
+  );
+  const collapsedEnvironmentIds = useMemo(
+    () => new Set(collapsedEnvironmentIdList),
+    [collapsedEnvironmentIdList],
   );
   const threadsByProject = useMemo(() => {
     const grouped = new Map<string, ThreadListEntry[]>();
@@ -456,36 +485,31 @@ function ProjectListComponent({
     return map;
   }, [projects, threadStatesByProjectId, threadsByProject]);
 
-  const toggleProjectCollapsed = useCallback(
-    (projectId: string) => {
+  const toggleProjectCollapsed = useCallback<ToggleCollapsedId>(
+    (projectId) => {
       setCollapsedProjectIdList((current) => {
-        const next = new Set(current);
-        if (next.has(projectId)) {
-          next.delete(projectId);
-        } else {
-          next.add(projectId);
-        }
-
-        return Array.from(next);
+        return toggleCollapsedIdList({ current, id: projectId });
       });
     },
     [setCollapsedProjectIdList],
   );
 
-  const toggleManagerCollapsed = useCallback(
-    (threadId: string) => {
+  const toggleManagerCollapsed = useCallback<ToggleCollapsedId>(
+    (threadId) => {
       setCollapsedManagerIdList((current) => {
-        const next = new Set(current);
-        if (next.has(threadId)) {
-          next.delete(threadId);
-        } else {
-          next.add(threadId);
-        }
-
-        return Array.from(next);
+        return toggleCollapsedIdList({ current, id: threadId });
       });
     },
     [setCollapsedManagerIdList],
+  );
+
+  const toggleEnvironmentCollapsed = useCallback<ToggleCollapsedId>(
+    (environmentId) => {
+      setCollapsedEnvironmentIdList((current) => {
+        return toggleCollapsedIdList({ current, id: environmentId });
+      });
+    },
+    [setCollapsedEnvironmentIdList],
   );
 
   return (
@@ -517,10 +541,12 @@ function ProjectListComponent({
               isActive={selectedProjectId === project.id && isProjectMainView}
               isCollapsed={collapsedProjectIds.has(project.id)}
               collapsedManagerIds={collapsedManagerIds}
+              collapsedEnvironmentIds={collapsedEnvironmentIds}
               isLocalPathInvalid={isLocalPathInvalid}
               onProjectSelect={onProjectSelect}
               onToggleProjectCollapsed={toggleProjectCollapsed}
               onToggleManagerCollapsed={toggleManagerCollapsed}
+              onToggleEnvironmentCollapsed={toggleEnvironmentCollapsed}
             />
           );
         })

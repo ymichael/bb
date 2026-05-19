@@ -26,6 +26,7 @@ import {
   SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ROW_PADDING_CLASS,
+  SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS,
   SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
@@ -60,6 +61,7 @@ interface ThreadRowProps {
 }
 
 interface ManagerChevronProps {
+  childCount: number;
   isCollapsed: boolean;
   onToggle: () => void;
   threadTitle: string;
@@ -69,6 +71,7 @@ const ROW_GLYPH_SLOT_CLASS =
   "inline-flex shrink-0 items-center justify-center text-subtle-foreground";
 
 function ManagerChevron({
+  childCount,
   isCollapsed,
   onToggle,
   threadTitle,
@@ -131,6 +134,12 @@ function ManagerChevron({
             aria-hidden="true"
           />
         </span>
+        {isCollapsed ? (
+          <CollapsedChildCountBadge
+            count={childCount}
+            className="group-hover/thread-row:opacity-0 group-has-[:focus-visible]/thread-row:opacity-0"
+          />
+        ) : null}
       </span>
     </button>
   );
@@ -200,6 +209,29 @@ function ThreadStatusGlyph({
   }
 
   return null;
+}
+
+interface CollapsedChildCountBadgeProps {
+  className?: string;
+  count: number;
+}
+
+export function formatCollapsedChildCount(count: number): string {
+  return count > 9 ? "9+" : String(count);
+}
+
+export function CollapsedChildCountBadge({
+  className,
+  count,
+}: CollapsedChildCountBadgeProps) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS, className)}
+    >
+      {formatCollapsedChildCount(count)}
+    </span>
+  );
 }
 
 interface ThreadTrailingIndicatorProps extends ThreadStatusGlyphProps {
@@ -327,6 +359,7 @@ function ThreadRowComponent({
       />
       {managerOptions && hasManagedChildren ? (
         <ManagerChevron
+          childCount={managedChildCount}
           isCollapsed={isManagerCollapsed}
           onToggle={() => {
             managerOptions.onToggleCollapsed(thread.id);
