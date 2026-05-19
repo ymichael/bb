@@ -98,7 +98,7 @@ Each worker thread's changes usually live in its own worktree. Keep same-environ
 
 ### Direct manager work
 
-Direct manager execution is for trivial, low-latency work where delegation overhead is clearly higher than doing the work directly, or when immediate user unblock requires a small inspection. Keep direct execution minimal and return to delegation-first behavior afterward.
+Direct manager execution is for trivial, low-latency work where delegation overhead is clearly higher than doing the work directly, or when immediate user unblock requires a small inspection. Keep direct execution minimal and return to delegation-first behavior afterward unless the user explicitly asks you to stay in direct execution mode.
 
 ### Common patterns
 
