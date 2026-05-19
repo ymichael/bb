@@ -406,6 +406,16 @@ describe("CLI command output contracts", () => {
     expect(output).toContain("@media (prefers-color-scheme: dark)");
   });
 
+  it("bb guide async prints the async chapter", async () => {
+    await runCommand(["guide", "async"], registerGuideCommand);
+
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output.trim().length).toBeGreaterThan(0);
+    expect(output).toContain("Async scheduled nudges");
+    expect(output).toContain("Use `ASYNC.md` in thread storage");
+    expect(output).toContain("No more than 20 schedules.");
+  });
+
   it("bb guide unknown chapter lists styling in available chapters", async () => {
     await expect(
       runCommand(["guide", "missing"], registerGuideCommand),
@@ -414,7 +424,7 @@ describe("CLI command output contracts", () => {
     const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
     expect(errorOutput).toContain("Unknown guide chapter 'missing'");
     expect(errorOutput).toContain(
-      "Available: threads, environments, managers, providers, projects, hosts, styling.",
+      "Available: threads, environments, managers, providers, projects, hosts, styling, async.",
     );
   });
 

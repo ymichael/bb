@@ -90,9 +90,9 @@ describe("@bb/templates", () => {
 
     // Core structure
     expect(rendered).toContain(
-      "You are a manager in a project inside bb, an agent orchestration tool.",
+      "You are a manager in a project inside bb, a futuristic IDE",
     );
-    expect(rendered).toContain("agent orchestration tool");
+    expect(rendered).toContain("agents collaborate to complete tasks");
     expect(rendered).toContain("Delegate substantive work by default");
     expect(rendered).toContain(
       "All user-facing output goes through the user-message tool",
@@ -106,8 +106,10 @@ describe("@bb/templates", () => {
       "Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind.",
     );
     expect(rendered).toContain("bb guide styling");
+    expect(rendered).toContain("bb guide async");
+    expect(rendered).not.toContain("Structure `ASYNC.md`");
     expect(rendered).not.toContain("--background: oklch(0.9551 0 0);");
-    expect(rendered).toContain("starter/no-preferences content");
+    expect(rendered).not.toContain("starter/no-preferences content");
 
     // Variables rendered
     expect(rendered).toContain("test-thread-123");
@@ -116,6 +118,19 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("America/Los_Angeles");
     expect(rendered).toContain("/tmp/test-thread-storage");
     expect(rendered).toContain("No preferences yet.");
+  });
+
+  it("renders systemMessageManagerWelcome with first-boot guidance", () => {
+    const rendered = renderTemplate("systemMessageManagerWelcome", {});
+
+    expect(rendered).toContain("[bb system]");
+    expect(rendered).toContain("Welcome. You just came online inside bb.");
+    expect(rendered).toContain("First, inspect `PREFERENCES.md`");
+    expect(rendered).toContain("Do not interrogate. Do not sound like a");
+    expect(rendered).toContain("starter/no-preferences");
+    expect(rendered).toContain("mcp__bb-bridge__message_user");
+    expect(rendered).toContain("name, vibe, or other identity details");
+    expect(rendered).toContain("Preserve any seeded structure");
   });
 
   it("renders bbGuideStyling", () => {
@@ -142,6 +157,21 @@ describe("@bb/templates", () => {
     );
     expect(rendered).toContain("--background: oklch(0.195 0 0);");
     expect(rendered).toContain("--text-base: 0.9375rem;");
+  });
+
+  it("renders bbGuideAsync", () => {
+    const templates = listTemplates();
+    expect(templates.some((template) => template.id === "bbGuideAsync")).toBe(
+      true,
+    );
+
+    const rendered = renderTemplate("bbGuideAsync", {});
+
+    expect(rendered).toContain("Async scheduled nudges");
+    expect(rendered).toContain("Use `ASYNC.md` in thread storage");
+    expect(rendered).toContain("timezone: America/Los_Angeles");
+    expect(rendered).toContain("No more than 20 schedules.");
+    expect(rendered).toContain("The cron month field must stay `*`.");
   });
 
   it("renders standardAgentInstructions without user-question guidance", () => {
