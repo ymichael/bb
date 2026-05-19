@@ -32,6 +32,14 @@ export interface BottomAnchorContextValue {
   isAtBottom: boolean;
   scrollToBottom: () => void;
   scrollElementIntoView: (args: ScrollElementIntoViewArgs) => void;
+  /**
+   * Scroll only far enough to reveal the element, clamped to the scroll area's
+   * max offset. If the resulting position is near max, stick-to-bottom is
+   * re-enabled so near-bottom reveals keep following later timeline growth.
+   */
+  scrollElementIntoViewClampedToMaxScroll: (
+    args: ScrollElementIntoViewClampedToMaxScrollArgs,
+  ) => void;
   // Snapshot the scroll area so the next height growth (e.g. prepending older
   // messages) keeps the visible row at the same Y position instead of jumping.
   captureScrollAnchor: () => void;
@@ -48,6 +56,10 @@ export interface BottomAnchoredScrollBodyProps {
 export interface ScrollElementIntoViewArgs {
   element: HTMLElement;
   options?: ScrollIntoViewOptions;
+}
+
+export interface ScrollElementIntoViewClampedToMaxScrollArgs {
+  element: HTMLElement;
 }
 
 interface ElementVisibilityArgs {
@@ -102,6 +114,25 @@ function isElementFullyVisibleInScrollArea({
   return (
     elementRect.top >= scrollAreaRect.top &&
     elementRect.bottom <= scrollAreaRect.bottom
+  );
+}
+
+function getScrollOffsetToRevealElement({
+  element,
+  scrollArea,
+}: ElementVisibilityArgs) {
+  const elementRect = element.getBoundingClientRect();
+  const scrollAreaRect = scrollArea.getBoundingClientRect();
+  return Math.max(
+    0,
+    elementRect.top - scrollAreaRect.top + scrollArea.scrollTop,
+  );
+}
+
+function getRevealScrollOffsetClampedToMax(args: ElementVisibilityArgs) {
+  return Math.min(
+    getMaxScrollOffset(args.scrollArea),
+    getScrollOffsetToRevealElement(args),
   );
 }
 
@@ -221,6 +252,33 @@ export function BottomAnchoredScrollBody({
     [cancelQueuedRestore],
   );
 
+  const scrollElementIntoViewClampedToMaxScroll = useCallback(
+    ({ element }: ScrollElementIntoViewClampedToMaxScrollArgs) => {
+      const scrollArea = scrollAreaRef.current;
+      if (!scrollArea) {
+        element.scrollIntoView({ block: "start", inline: "nearest" });
+        return;
+      }
+
+      scrollArea.scrollTop = getRevealScrollOffsetClampedToMax({
+        element,
+        scrollArea,
+      });
+
+      const targetIsAtBottom = isScrolledNearBottom(scrollArea);
+      shouldStickToBottomRef.current = targetIsAtBottom;
+      setIsAtBottom(targetIsAtBottom);
+
+      if (targetIsAtBottom) {
+        queueBottomRestore();
+        return;
+      }
+
+      cancelQueuedRestore();
+    },
+    [cancelQueuedRestore, queueBottomRestore],
+  );
+
   const captureScrollAnchor = useCallback(() => {
     const scrollArea = scrollAreaRef.current;
     if (!scrollArea) return;
@@ -292,9 +350,16 @@ export function BottomAnchoredScrollBody({
       isAtBottom,
       scrollToBottom,
       scrollElementIntoView,
+      scrollElementIntoViewClampedToMaxScroll,
       captureScrollAnchor,
     }),
-    [isAtBottom, scrollToBottom, scrollElementIntoView, captureScrollAnchor],
+    [
+      isAtBottom,
+      scrollToBottom,
+      scrollElementIntoView,
+      scrollElementIntoViewClampedToMaxScroll,
+      captureScrollAnchor,
+    ],
   );
 
   useEffect(() => {

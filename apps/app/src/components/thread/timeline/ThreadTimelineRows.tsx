@@ -554,12 +554,8 @@ function TimelineUnreadDivider() {
       }
 
       hasScrolledRef.current = true;
-      bottomAnchor.scrollElementIntoView({
+      bottomAnchor.scrollElementIntoViewClampedToMaxScroll({
         element: divider,
-        options: {
-          block: "center",
-          inline: "nearest",
-        },
       });
     }, 0);
 

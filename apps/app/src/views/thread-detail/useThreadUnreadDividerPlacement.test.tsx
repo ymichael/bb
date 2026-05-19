@@ -21,6 +21,12 @@ interface ThreadUnreadTimelineHarnessProps {
   useStandardManagerTimeline?: boolean;
 }
 
+interface ScrollMetrics {
+  scrollHeight: number;
+  clientHeight: number;
+  scrollTop: number;
+}
+
 interface TestRect {
   bottom: number;
   height: number;
@@ -39,6 +45,18 @@ function expectElementBefore(firstElement: Element, secondElement: Element) {
 
 function buildDomRect(rect: TestRect): DOMRect {
   return new DOMRect(rect.left, rect.top, rect.width, rect.height);
+}
+
+function setScrollMetrics(element: HTMLElement, metrics: ScrollMetrics) {
+  Object.defineProperty(element, "scrollHeight", {
+    configurable: true,
+    value: metrics.scrollHeight,
+  });
+  Object.defineProperty(element, "clientHeight", {
+    configurable: true,
+    value: metrics.clientHeight,
+  });
+  element.scrollTop = metrics.scrollTop;
 }
 
 function requireHTMLElement(element: Element | null): HTMLElement {
@@ -165,10 +183,81 @@ describe("useThreadUnreadDividerPlacement", () => {
     );
   });
 
+  it("scrolls to the timeline bottom when the unread divider stays visible there", async () => {
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn(() => 1),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    vi.useFakeTimers();
+
+    try {
+      const unreadThread: UnreadDividerThreadState = {
+        id: "thread-1",
+        lastReadAt: 1_000,
+        latestAttentionAt: 2_000,
+        type: "standard",
+      };
+      const timelineRows = [
+        conversationRow({
+          id: "already-read-row",
+          sourceSeqStart: 1_000,
+          text: "Already-read thread context",
+        }),
+        conversationRow({
+          id: "first-new-row",
+          sourceSeqStart: 2_000,
+          text: "First update requiring attention",
+        }),
+      ];
+
+      const view = render(
+        <ThreadUnreadScrollTimelineHarness
+          thread={unreadThread}
+          timelineRows={timelineRows}
+        />,
+      );
+      const scrollArea = requireHTMLElement(
+        view.container.querySelector(".scroll-area"),
+      );
+      const divider = screen.getByRole("separator", {
+        name: "New messages",
+      });
+      setScrollMetrics(scrollArea, {
+        clientHeight: 100,
+        scrollHeight: 1_000,
+        scrollTop: 400,
+      });
+      vi.spyOn(scrollArea, "getBoundingClientRect").mockReturnValue(
+        buildDomRect({
+          bottom: 100,
+          height: 100,
+          left: 0,
+          right: 100,
+          top: 0,
+          width: 100,
+        }),
+      );
+      vi.spyOn(divider, "getBoundingClientRect").mockReturnValue(
+        buildDomRect({
+          bottom: 540,
+          height: 20,
+          left: 0,
+          right: 100,
+          top: 520,
+          width: 100,
+        }),
+      );
+
+      await vi.runOnlyPendingTimersAsync();
+
+      expect(scrollArea.scrollTop).toBe(900);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("does not remount or rescroll an existing divider during a sequential attention bump", async () => {
-    const scrollIntoView = vi.fn();
-    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    HTMLElement.prototype.scrollIntoView = scrollIntoView;
     vi.stubGlobal(
       "requestAnimationFrame",
       vi.fn(() => 1),
@@ -217,6 +306,11 @@ describe("useThreadUnreadDividerPlacement", () => {
       const divider = screen.getByRole("separator", {
         name: "New messages",
       });
+      setScrollMetrics(scrollArea, {
+        clientHeight: 100,
+        scrollHeight: 1_000,
+        scrollTop: 0,
+      });
       vi.spyOn(scrollArea, "getBoundingClientRect").mockReturnValue(
         buildDomRect({
           bottom: 100,
@@ -239,7 +333,7 @@ describe("useThreadUnreadDividerPlacement", () => {
       );
 
       await vi.runOnlyPendingTimersAsync();
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollArea.scrollTop).toBe(300);
 
       view.rerender(
         <ThreadUnreadScrollTimelineHarness
@@ -253,14 +347,9 @@ describe("useThreadUnreadDividerPlacement", () => {
       );
 
       await vi.runOnlyPendingTimersAsync();
-      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollArea.scrollTop).toBe(300);
     } finally {
       vi.useRealTimers();
-      if (originalScrollIntoView) {
-        HTMLElement.prototype.scrollIntoView = originalScrollIntoView;
-      } else {
-        Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
-      }
     }
   });
 
