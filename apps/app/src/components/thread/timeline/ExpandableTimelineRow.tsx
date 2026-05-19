@@ -35,7 +35,7 @@ function headerToneClass(title: TimelineTitle, isExpanded: boolean): string {
     return "text-destructive";
   }
   if (title.tone === "summary") {
-    return "text-muted-foreground/60 transition-colors hover:text-muted-foreground/80 focus-visible:text-muted-foreground/80";
+    return "text-subtle-foreground transition-colors hover:text-muted-foreground focus-visible:text-muted-foreground";
   }
   return getCollapsibleHeaderToneClass(isExpanded);
 }

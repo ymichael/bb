@@ -151,7 +151,7 @@ export function ImageLightbox({
         <img
           src={imageSrc}
           alt={imageAlt}
-          className="max-h-[82vh] max-w-[90vw] rounded bg-background/95 object-contain"
+          className="max-h-[82vh] max-w-[90vw] rounded bg-background object-contain"
         />
 
         {hasNavigation ? (

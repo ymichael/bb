@@ -36,7 +36,7 @@ export function TabPill({
         "inline-flex h-7 shrink-0 items-center rounded-md text-xs transition-colors",
         isActive
           ? "bg-muted text-foreground"
-          : "text-muted-foreground hover:bg-muted/60",
+          : "text-muted-foreground hover:bg-state-hover",
       )}
     >
       <button
@@ -51,7 +51,7 @@ export function TabPill({
       >
         <span className={cn("truncate", labelMaxWidthClass)}>{label}</span>
         {secondaryLabel ? (
-          <span className="ml-1 shrink-0 text-muted-foreground/80">
+          <span className="ml-1 shrink-0 text-muted-foreground">
             {secondaryLabel}
           </span>
         ) : null}

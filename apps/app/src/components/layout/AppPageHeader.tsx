@@ -30,8 +30,8 @@ export function AppPageHeader({
   return (
     <header
       className={cn(
-        "relative h-12 shrink-0 bg-background/95 px-4 backdrop-blur-sm",
-        bordered && "border-b border-border/80",
+        "relative h-12 shrink-0 bg-surface-scrim px-4 backdrop-blur-sm",
+        bordered && "border-b border-border",
         className,
       )}
     >

@@ -23,7 +23,7 @@ const noop = () => {};
 
 export function PanelStage({ children }: { children: ReactNode }) {
   return (
-    <div className="w-full max-w-[480px] min-w-0 rounded-md border border-border/70 bg-background px-4 py-3">
+    <div className="w-full max-w-[480px] min-w-0 rounded-md border border-border bg-background px-4 py-3">
       {children}
     </div>
   );

@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 export type BadgeVariant = "primary" | "muted";
 
 const BADGE_VARIANT_CLASS: Record<BadgeVariant, string> = {
-  primary: "bg-primary/10 text-primary",
+  primary: "bg-surface-selected text-primary",
   muted: "bg-muted text-muted-foreground",
 };
 

@@ -90,7 +90,7 @@ export function ThreadGitActionDialog({
 
   return (
     <Dialog open={target !== null} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border/80 bg-background p-0 shadow-xl">
+      <DialogContent className="max-w-[34rem] gap-0 overflow-hidden border-border bg-background p-0 shadow-xl">
         {target && dialogCopy ? (
           <ThreadGitActionDialogContent
             key={target.kind}
@@ -203,7 +203,7 @@ export function ThreadGitActionDialogContent({
         gitStatusDisplay ||
         canShowMergeBase ||
         shouldShowChangedFilesRow ? (
-          <DetailCard className="border-border/70 bg-muted/20">
+          <DetailCard className="border-border bg-surface-recessed">
             {branchName ? (
               <DetailRow label="Branch" valueClassName="min-w-0 truncate">
                 <span className="block truncate" title={branchName}>

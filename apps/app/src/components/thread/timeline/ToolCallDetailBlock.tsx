@@ -121,7 +121,7 @@ export function ToolCallDetailBlock({
       >
         <CollapsibleHeader toolName={toolName} argEntries={argEntries} />
         {hasOutput ? (
-          <div className="mt-2 whitespace-pre border-t border-border/60 pt-2">
+          <div className="mt-2 whitespace-pre border-t border-border pt-2">
             {output}
           </div>
         ) : null}

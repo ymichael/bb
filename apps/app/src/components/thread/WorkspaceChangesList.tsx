@@ -32,7 +32,7 @@ export function WorkspaceChangesList({
           key={`${file.status}:${file.path}`}
           className="grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-3"
         >
-          <span className="text-xs leading-5 text-muted-foreground/80">
+          <span className="text-xs leading-5 text-muted-foreground">
             {formatWorkspaceFileStatus(file.status)}
           </span>
           <FilePathLink

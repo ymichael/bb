@@ -171,7 +171,7 @@ function AppHeader({
                 {index > 0 ? (
                   <Icon
                     name="ChevronRight"
-                    className="size-3.5 shrink-0 text-muted-foreground/70"
+                    className="size-3.5 shrink-0 text-subtle-foreground"
                   />
                 ) : null}
                 {!isLast && segment.to ? (

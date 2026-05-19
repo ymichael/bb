@@ -443,7 +443,7 @@ export function NewManagerForm({
         )}
       </div>
 
-      <div className="relative w-full rounded-lg border border-input bg-background pb-2">
+      <div className="relative w-full rounded-lg border border-border bg-background pb-2">
         <div className="space-y-3 px-4 pt-3">
           <div className="space-y-1">
             <div className="flex items-center gap-2 text-sm">
@@ -476,7 +476,7 @@ export function NewManagerForm({
             placeholder="Give them a name (optional)"
             disabled={isPending}
             aria-label="Manager name"
-            className="h-10 border-muted-foreground/30 text-sm"
+            className="h-10 border-input text-sm"
             onChange={(event) => {
               setManagerName(event.target.value);
               setError(null);

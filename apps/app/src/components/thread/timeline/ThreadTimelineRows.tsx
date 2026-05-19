@@ -238,7 +238,7 @@ interface TurnRowBodyProps {
 }
 
 const NESTED_ROWS_GROUP_LINE_CLASS =
-  "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-foreground/15 before:content-['']";
+  "relative my-1 pl-3 pr-2 before:pointer-events-none before:absolute before:bottom-1 before:left-1.5 before:top-0 before:w-px before:bg-border-hairline before:content-['']";
 
 const TimelineRendererStaticContext =
   createContext<TimelineRendererStaticContextValue | null>(null);
@@ -596,13 +596,13 @@ function TimelineSystemDetailBlock({
       contentKey={detail}
       className={cn(
         "overflow-hidden rounded-lg border bg-card",
-        tone === "danger" ? "border-destructive/30" : "border-border",
+        tone === "danger" ? "border-destructive" : "border-border",
       )}
     >
       <pre
         className={cn(
           "whitespace-pre px-4 py-3 font-mono text-xs leading-tight",
-          tone === "danger" ? "text-destructive/90" : "text-foreground",
+          tone === "danger" ? "text-destructive" : "text-foreground",
         )}
       >
         {detail}
@@ -783,7 +783,7 @@ function TurnRowBody({ compactActivityIntents, row }: TurnRowBodyProps) {
           variant="outline"
           size="sm"
           onClick={handleRetry}
-          className="h-7 border-destructive/30 px-2 text-destructive hover:text-destructive"
+          className="h-7 border-destructive px-2 text-destructive hover:text-destructive"
         >
           <Icon name="RotateCcw" />
           Retry

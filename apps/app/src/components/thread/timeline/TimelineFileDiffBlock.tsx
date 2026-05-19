@@ -290,7 +290,7 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
 
   if (renderablePatch === null && renderedChange.plainDiff === null) {
     return (
-      <div className="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-xs text-muted-foreground">
+      <div className="rounded-md border border-border bg-surface-raised px-2 py-1.5 text-xs text-muted-foreground">
         No diff available.
       </div>
     );
@@ -321,7 +321,7 @@ export const TimelineFileDiffBlock = memo(function TimelineFileDiffBlock({
     <TimelineDetailScroll
       size="base"
       contentKey={diffContentKey}
-      className="mt-1 rounded-md border border-border/60 bg-background/40"
+      className="mt-1 rounded-md border border-border bg-surface-raised"
     >
       <div className="min-w-fit">
         <EventCodeBlock className="rounded-none border-0 bg-transparent">

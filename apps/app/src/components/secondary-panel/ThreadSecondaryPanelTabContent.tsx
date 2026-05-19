@@ -106,9 +106,9 @@ function ThreadDiffSkeleton({
       {Array.from({ length: count }).map((_, index) => (
         <div
           key={`git-diff-skeleton-${index}`}
-          className="rounded-lg border border-border/70 bg-background/70"
+          className="rounded-lg border border-border bg-surface-raised"
         >
-          <div className="border-b border-border/70 bg-card/70 px-3 py-1.5">
+          <div className="border-b border-border bg-surface-recessed px-3 py-1.5">
             <div className="flex items-center justify-between gap-2">
               <div className="flex min-w-0 flex-1 items-center gap-1.5">
                 <Skeleton className="size-4 shrink-0 rounded-sm" />
@@ -193,7 +193,7 @@ export function GitDiffTabContent({
       {isPreparingGitDiff ? (
         <ThreadDiffSkeleton />
       ) : gitDiffError ? (
-        <p className="rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+        <p className="rounded-lg border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-xs text-destructive">
           {gitDiffError.message}
         </p>
       ) : threadGitDiff && hasCurrentGitDiff ? (
@@ -225,7 +225,7 @@ export function GitDiffTabContent({
                 );
               })}
               {isParsingGitDiffFiles ? (
-                <div className="rounded-lg border border-border/70 bg-background/70 px-3 py-3">
+                <div className="rounded-lg border border-border bg-surface-raised px-3 py-3">
                   <div className="space-y-1.5">
                     <Skeleton className="h-3 w-52 max-w-full rounded-sm" />
                     <Skeleton className="h-3 w-5/6 rounded-sm" />
@@ -234,7 +234,7 @@ export function GitDiffTabContent({
               ) : null}
             </div>
           ) : (
-            <pre className="overflow-auto whitespace-pre rounded-lg border border-border/70 bg-background/70 p-3 font-mono text-xs text-foreground">
+            <pre className="overflow-auto whitespace-pre rounded-lg border border-border bg-surface-raised p-3 font-mono text-xs text-foreground">
               {threadGitDiff.diff}
             </pre>
           )}
@@ -245,7 +245,7 @@ export function GitDiffTabContent({
           ) : null}
         </>
       ) : (
-        <p className="rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+        <p className="rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
           No diff to display.
         </p>
       )}

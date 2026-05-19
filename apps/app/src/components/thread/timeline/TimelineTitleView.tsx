@@ -44,11 +44,11 @@ export interface TimelineTitleViewProps {
 function emToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
-      return "font-semibold text-foreground/85";
+      return "font-semibold text-foreground";
     case "destructive":
       return "text-destructive";
     case "summary":
-      return "text-muted-foreground/60";
+      return "text-subtle-foreground";
     default:
       return assertNever(tone);
   }
@@ -57,11 +57,11 @@ function emToneClass(tone: TimelineTitleTone): string {
 function plainToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
-      return "text-muted-foreground/90";
+      return "text-muted-foreground";
     case "destructive":
       return "text-destructive";
     case "summary":
-      return "text-muted-foreground/60";
+      return "text-subtle-foreground";
     default:
       return assertNever(tone);
   }
@@ -70,11 +70,11 @@ function plainToneClass(tone: TimelineTitleTone): string {
 function decorationToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
-      return "text-muted-foreground/75";
+      return "text-muted-foreground";
     case "destructive":
-      return "text-destructive/80";
+      return "text-destructive";
     case "summary":
-      return "text-muted-foreground/60";
+      return "text-subtle-foreground";
     default:
       return assertNever(tone);
   }

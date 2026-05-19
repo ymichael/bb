@@ -250,7 +250,7 @@ export function ThreadSecondaryPanel({
         {hasActiveFileTab ? (
           <div className={cn(PANEL_SCROLL_SLOT_CLASS, "pb-3")}>
             {fileTabContent ?? (
-              <p className="mx-4 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground">
+              <p className="mx-4 rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground">
                 No file preview content provided.
               </p>
             )}
@@ -369,7 +369,7 @@ function SecondaryPanelResizeHandle({
     >
       <span
         className={cn(
-          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/70 transition-colors",
+          "pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-colors",
           isResizing
             ? "bg-accent-foreground/50"
             : "group-hover:bg-accent-foreground/35",

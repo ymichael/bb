@@ -92,7 +92,7 @@ function BannerShell({
   children,
 }: BannerShellProps) {
   return (
-    <div className="mb-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3 text-xs text-muted-foreground">
+    <div className="mb-2 rounded-lg border border-border bg-surface-recessed px-4 py-3 text-xs text-muted-foreground">
       <h3 className="min-w-0 text-sm font-semibold text-foreground">
         <ExpandableLine fullText={title} collapsedClassName="line-clamp-2">
           {title}
@@ -105,7 +105,7 @@ function BannerShell({
         </div>
       ) : null}
       {errorMessage ? (
-        <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/[0.06] px-2 py-1 text-xs text-destructive">
+        <div className="mt-2 rounded-md border border-surface-destructive-border bg-surface-destructive px-2 py-1 text-xs text-destructive">
           {errorMessage}
         </div>
       ) : null}
@@ -279,7 +279,7 @@ function buildApprovalSubject({
               $ {command}
             </pre>
             {detailLines.length > 0 ? (
-              <ul className="border-t border-border/60 px-4 py-3 text-xs text-muted-foreground">
+              <ul className="border-t border-border px-4 py-3 text-xs text-muted-foreground">
                 {detailLines.map((line) => (
                   <li key={line}>{line}</li>
                 ))}

@@ -12,7 +12,7 @@ export const SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS = "pl-14";
 export const SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS = "pl-20";
 
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
-  "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
+  "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
 
 /**
  * Hairline that runs through an expanded project's thread list, sitting
@@ -25,7 +25,7 @@ export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
  * it cleanly.
  */
 export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-[45] before:w-px before:bg-sidebar-foreground/15 before:content-[''] max-md:pointer-coarse:before:left-5";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-4 before:top-0 before:z-[45] before:w-px before:bg-border-hairline before:content-[''] max-md:pointer-coarse:before:left-5";
 
 /**
  * Hairline that runs through a manager's managed-child list, sitting under
@@ -35,7 +35,7 @@ export const SIDEBAR_PROJECT_GROUP_LINE_CLASS =
  * show through their hover/active backgrounds.
  */
 export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-30 before:w-px before:bg-sidebar-foreground/15 before:content-['']";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-10 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
 
 /**
  * Hairline that runs through an env sub-group nested inside a manager.
@@ -43,4 +43,4 @@ export const SIDEBAR_MANAGER_GROUP_LINE_CLASS =
  * managed-child indent (pl-14), so the line lands at left-16.
  */
 export const SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-sidebar-foreground/15 before:content-['']";
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";

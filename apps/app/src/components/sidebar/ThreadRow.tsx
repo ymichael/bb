@@ -66,7 +66,7 @@ interface ManagerChevronProps {
 }
 
 const ROW_GLYPH_SLOT_CLASS =
-  "inline-flex shrink-0 items-center justify-center text-sidebar-foreground/60";
+  "inline-flex shrink-0 items-center justify-center text-subtle-foreground";
 
 function ManagerChevron({
   isCollapsed,
@@ -181,7 +181,7 @@ function ThreadStatusGlyph({
       <Icon
         name="CircleDashed"
         className={cn(
-          "animate-spin text-sidebar-foreground/70",
+          "animate-spin text-muted-foreground",
           COARSE_POINTER_ICON_SIZE_CLASS,
         )}
         aria-label="Thread working"
@@ -246,7 +246,7 @@ function ThreadTrailingIcon({
     <Icon
       name={environmentIcon}
       className={cn(
-        "text-sidebar-foreground/70",
+        "text-muted-foreground",
         COARSE_POINTER_ICON_SIZE_CLASS,
       )}
       aria-label={environmentIconLabel ?? undefined}
@@ -376,7 +376,7 @@ function ThreadRowComponent({
             <ThreadActionsMenu
               thread={thread}
               triggerClassName={cn(
-                "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+                "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
               onOpenChange={setIsDropdownActionsOpen}

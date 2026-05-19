@@ -83,7 +83,7 @@ export function InternalReplayListView() {
   return (
     <PageShell contentClassName="pt-4 md:pt-5">
       <div className="mx-auto w-full max-w-3xl space-y-4">
-        <div className="flex items-start gap-2 rounded-md border border-border/70 bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+        <div className="flex items-start gap-2 rounded-md border border-border bg-surface-recessed px-3 py-2 text-sm text-muted-foreground">
           <Icon name="Info" className="mt-0.5 size-4 shrink-0" />
           <p className="m-0">
             Replay previously captured conversations in a fresh thread. To

@@ -162,7 +162,7 @@ export function ProviderModelPicker({
           <span className={OPTION_CONTENT_CLASS_NAME}>
             {TriggerIcon ? <TriggerIcon className="size-3.5 shrink-0" /> : null}
             {fastModeEnabled ? (
-              <Icon name="Zap" className="size-3.5 shrink-0 fill-current text-muted-foreground/75" />
+              <Icon name="Zap" className="size-3.5 shrink-0 fill-current text-subtle-foreground" />
             ) : null}
             <span className="truncate">{selectedModelLabel}</span>
           </span>
@@ -178,7 +178,7 @@ export function ProviderModelPicker({
           <div
             className={cn(
               "flex items-center gap-0.5 border-b border-border px-2.5 pt-1",
-              isCompactViewport ? "sticky top-0 z-10 bg-background" : "bg-muted/40",
+              isCompactViewport ? "sticky top-0 z-10 bg-background" : "bg-surface-recessed",
             )}
           >
             {providerOptions.map((provider) => {

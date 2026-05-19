@@ -83,7 +83,7 @@ export function HostJoinDialogContent({
       </DialogHeader>
 
       <div className="min-w-0 space-y-3">
-        <div className="relative min-w-0 rounded-md border border-border bg-muted/40">
+        <div className="relative min-w-0 rounded-md border border-border bg-surface-recessed">
           <pre className="max-h-56 min-w-0 overflow-y-auto whitespace-pre-wrap break-all px-3 py-2.5 pr-10 text-xs leading-5">
             <code>{target.joinCommand}</code>
           </pre>

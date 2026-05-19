@@ -106,15 +106,15 @@ function EnvironmentThreadGroupHeader({
         paddingClass,
         COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
         // Match the resting text color of manager/thread rows
-        // (SIDEBAR_ROW_INTERACTIVE_STATE_CLASS uses /80) so the env header
+        // (SIDEBAR_ROW_INTERACTIVE_STATE_CLASS) so the env header
         // doesn't read as a different visual tier than its siblings.
-        "text-sidebar-foreground/80",
+        "text-muted-foreground",
       )}
       title={headerTitle}
     >
       <span
         className={cn(
-          "inline-flex shrink-0 items-center justify-center text-sidebar-foreground/60",
+          "inline-flex shrink-0 items-center justify-center text-subtle-foreground",
           COARSE_POINTER_GLYPH_BOX_CLASS,
         )}
         aria-label={iconLabel ?? undefined}
@@ -126,7 +126,7 @@ function EnvironmentThreadGroupHeader({
         {branchName ? (
           <>
             <span>:</span>{" "}
-            <span className="text-sidebar-foreground/55">{branchName}</span>
+            <span className="text-muted-foreground">{branchName}</span>
           </>
         ) : null}
       </span>
@@ -139,7 +139,7 @@ function EnvironmentThreadGroupHeader({
           title="New thread in this worktree"
           onClick={onCreateNewThread}
           className={cn(
-            "relative z-10 rounded-md p-0 text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-foreground",
+            "relative z-10 rounded-md p-0 text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground",
             COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
           )}
         >
@@ -345,7 +345,7 @@ function ProjectRowComponent({
             "group/project-row flex w-full items-center rounded-md text-sm transition-colors",
             isActive
               ? "bg-sidebar-border text-sidebar-foreground"
-              : "text-sidebar-foreground/80 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
           )}
           title={project.name}
         >
@@ -371,7 +371,7 @@ function ProjectRowComponent({
               onToggleProjectCollapsed(project.id);
             }}
             className={cn(
-              "relative z-10 flex shrink-0 items-center justify-center rounded-md text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
+              "relative z-10 flex shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2",
               COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
             )}
           >
@@ -429,7 +429,7 @@ function ProjectRowComponent({
             project={project}
             onOpenChange={setIsDropdownActionsOpen}
             triggerClassName={cn(
-              "relative z-10 text-sidebar-foreground/70 transition-opacity hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
+              "relative z-10 text-muted-foreground transition-opacity hover:bg-sidebar-accent hover:text-sidebar-foreground data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
               COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               isActionsOpen
                 ? "opacity-100"
@@ -493,7 +493,7 @@ function ProjectRowComponent({
                 : "No threads"
             }
             className="py-0.5 pl-8 pr-2 group-data-[collapsible=icon]:hidden"
-            messageClassName="text-xs leading-4 text-sidebar-foreground/60"
+            messageClassName="text-xs leading-4 text-muted-foreground"
           />
         )
       ) : null}

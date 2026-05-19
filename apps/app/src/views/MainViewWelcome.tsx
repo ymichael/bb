@@ -23,7 +23,7 @@ export function MainViewWelcome({
           <p className="text-base text-foreground">
             bb is a workspace for coding agents.
           </p>
-          <ul className="list-inside list-disc space-y-1.5 text-left text-sm text-muted-foreground marker:text-muted-foreground/50">
+          <ul className="list-inside list-disc space-y-1.5 text-left text-sm text-muted-foreground marker:text-subtle-foreground">
             <li>Your agents can use bb too.</li>
             <li>
               Teach a manager how you work — then delegate the repetitive

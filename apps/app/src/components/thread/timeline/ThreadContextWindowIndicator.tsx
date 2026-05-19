@@ -29,10 +29,10 @@ export function ThreadContextWindowIndicator({
 
   const toneClass =
     usedPercent >= 90
-      ? "text-destructive/75"
+      ? "text-destructive"
       : usedPercent >= 75
-        ? "text-warning/75"
-        : "text-muted-foreground/60";
+        ? "text-warning-text"
+        : "text-muted-foreground";
 
   const usedTokensLabel = formatCompactTokenCount(usage.usedTokens);
   const windowTokensLabel = formatCompactTokenCount(usage.modelContextWindow);
@@ -64,7 +64,7 @@ export function ThreadContextWindowIndicator({
               r={radius}
               fill="none"
               strokeWidth="3"
-              className="stroke-border/40"
+              className="stroke-border-hairline"
             />
             <circle
               cx="8"
@@ -86,7 +86,7 @@ export function ThreadContextWindowIndicator({
         align="end"
         sideOffset={8}
         {...contentHoverProps}
-        className="w-auto max-w-[240px] border-border/80 bg-popover/95 px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
+        className="w-auto max-w-[240px] border-border bg-surface-scrim px-3 py-2 text-sm shadow-lg backdrop-blur-sm"
       >
         <div className="space-y-1.5">
           <p className="text-muted-foreground">

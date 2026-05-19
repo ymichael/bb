@@ -230,7 +230,7 @@ function SectionToggleButton({
         // icon — the icons' own internal padding provides enough separation,
         // and a gap here makes the pair look untethered.
         label !== null && label !== undefined ? "gap-1.5" : "gap-0",
-        isExpanded ? "text-foreground/90" : "text-muted-foreground",
+        isExpanded ? "text-foreground" : "text-muted-foreground",
       )}
     >
       {icon}
@@ -240,7 +240,7 @@ function SectionToggleButton({
       <Icon
         name="ChevronDown"
         className={cn(
-          "size-3.5 shrink-0 text-muted-foreground/70 transition-transform duration-200",
+          "size-3.5 shrink-0 text-subtle-foreground transition-transform duration-200",
           isExpanded && "rotate-180",
         )}
         aria-hidden="true"
@@ -302,10 +302,10 @@ function TodoBody({
           <span
             className={cn(
               "min-w-0 flex-1 truncate",
-              item.status === "in_progress" && "font-medium text-foreground/90",
-              item.status === "pending" && "text-foreground/85",
+              item.status === "in_progress" && "font-medium text-foreground",
+              item.status === "pending" && "text-muted-foreground",
               item.status === "completed" &&
-                "text-muted-foreground/70 line-through decoration-muted-foreground/40",
+                "text-subtle-foreground line-through decoration-subtle-foreground",
             )}
             title={item.text}
           >
@@ -352,7 +352,7 @@ function ManagerChildrenBody({
             title={item.title}
             className="flex min-w-0 items-center gap-2 py-0.5 text-foreground/90 underline-offset-2 hover:underline"
           >
-            <ManagedChildIcon className="text-muted-foreground/60 no-underline" />
+            <ManagedChildIcon className="text-subtle-foreground no-underline" />
             <span className="min-w-0 flex-1 truncate">{item.title}</span>
           </NavLink>
         </li>
@@ -381,7 +381,7 @@ function AnimatedBody({
       className={cn(
         "grid overflow-hidden transition-[grid-template-rows,opacity,border-color] duration-200 ease-out",
         isExpanded
-          ? "grid-rows-[1fr] border-t border-border/40 opacity-100"
+          ? "grid-rows-[1fr] border-t border-border opacity-100"
           : "pointer-events-none grid-rows-[0fr] border-t border-transparent opacity-0",
       )}
     >
@@ -595,7 +595,7 @@ export function ThreadPromptContextBanner({
           />
         ) : null}
         {showGit && gitSection.mergeBase ? (
-          <div className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground/90">
+          <div className="ml-auto flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground">
             <span className="shrink-0">Merge base:</span>
             <BranchPicker
               value={gitSection.mergeBase.branch}

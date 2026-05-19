@@ -21,7 +21,7 @@ function MainViewStage({
 }) {
   return (
     <div
-      className={`flex ${height} w-full min-w-0 flex-col rounded-md border border-border/70 bg-background p-4 md:p-5`}
+      className={`flex ${height} w-full min-w-0 flex-col rounded-md border border-border bg-background p-4 md:p-5`}
     >
       {children}
     </div>

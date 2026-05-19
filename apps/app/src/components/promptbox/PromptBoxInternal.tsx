@@ -866,7 +866,7 @@ export function PromptBoxInternal({
         emitAttachmentFiles(Array.from(event.dataTransfer.files));
       }}
       className={cn(
-        "relative w-full rounded-lg border border-input bg-background pb-2",
+        "relative w-full rounded-lg border border-border bg-background pb-2",
         isZenMode && "flex flex-col pb-3",
         isZenMode && ZEN_MODE_HEIGHT_CLASS[zenModeLayout],
         className,
@@ -906,7 +906,7 @@ export function PromptBoxInternal({
           title={isZenMode ? "Exit zen mode" : "Enter zen mode"}
           aria-label={isZenMode ? "Exit zen mode" : "Enter zen mode"}
           aria-pressed={isZenMode}
-          className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-muted-foreground/40 hover:text-muted-foreground"
+          className="absolute right-2 top-2 z-20 size-auto h-6 px-1.5 text-subtle-foreground hover:text-muted-foreground"
         >
           {isZenMode ? (
             <Icon name="Minimize2" className="size-3" />
@@ -963,7 +963,7 @@ export function PromptBoxInternal({
         aria-keyshortcuts={onModifierSubmit ? "Meta+Enter" : undefined}
         enterKeyHint="send"
         className={cn(
-          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-muted-foreground/60",
+          "w-full resize-none overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 leading-relaxed outline-none placeholder:select-none placeholder:text-subtle-foreground",
           COARSE_POINTER_TEXT_BASE_CLASS,
           isZenMode && "min-h-0 flex-1 px-6 pb-3 pt-8",
           // When a header sits above the textarea, its own padding already
@@ -1022,7 +1022,7 @@ export function PromptBoxInternal({
       ) : null}
 
       {voiceErrorMessage ? (
-        <div className="mx-3 mb-1 mt-1 rounded-md border border-destructive/30 bg-destructive/[0.06] px-2 py-1 text-xs text-destructive">
+        <div className="mx-3 mb-1 mt-1 rounded-md border border-surface-destructive-border bg-surface-destructive px-2 py-1 text-xs text-destructive">
           <span className="block truncate" title={voiceErrorMessage}>
             {voiceErrorMessage}
           </span>

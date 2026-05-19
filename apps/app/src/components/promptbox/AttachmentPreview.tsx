@@ -59,7 +59,7 @@ export function AttachmentPreview({
               <div key={`${attachment.path}-${index}`} className="relative">
                 <button
                   type="button"
-                  className="cursor-zoom-in overflow-hidden rounded-md border border-border/70 bg-muted/20"
+                  className="cursor-zoom-in overflow-hidden rounded-md border border-border bg-surface-recessed"
                   onClick={() => onExpandedImageIndexChange(index)}
                   title={attachment.name}
                 >
@@ -94,14 +94,14 @@ export function AttachmentPreview({
             {nonImageAttachments.map((attachment) => (
               <span
                 key={attachment.path}
-                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground"
+                className="inline-flex max-w-full items-center gap-1 rounded-full border border-border bg-surface-recessed px-2 py-0.5 text-xs text-muted-foreground"
               >
                 <span className="truncate">{attachment.name}</span>
                 {onRemoveAttachment ? (
                   <button
                     type="button"
                     onClick={() => onRemoveAttachment(attachment.path)}
-                    className="rounded p-0.5 hover:bg-background/70"
+                    className="rounded p-0.5 hover:bg-state-hover"
                     title={`Remove ${attachment.name}`}
                   >
                     <Icon name="X" className="size-3" />

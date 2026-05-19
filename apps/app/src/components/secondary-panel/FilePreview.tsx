@@ -190,7 +190,7 @@ function FilePreviewHeader({
   // out of flow so the body's `pt-4` controls the initial gap, not this strip.
   return (
     <div className="sticky top-0 z-10">
-      <div className="flex h-9 items-center gap-2 border-b border-border/70 bg-background px-4">
+      <div className="flex h-9 items-center gap-2 border-b border-border bg-background px-4">
         <div className="flex min-w-0 items-center gap-1">
           <TruncateStart
             className="min-w-0 font-mono text-xs font-medium leading-5 text-foreground"
@@ -224,7 +224,7 @@ function FilePreviewHeader({
         </div>
         {markdownMode !== null ? (
           <div
-            className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border/70 p-0.5"
+            className="ml-auto inline-flex shrink-0 items-center gap-0.5 rounded-md border border-border p-0.5"
             role="tablist"
             aria-label="Markdown view mode"
           >
@@ -344,7 +344,7 @@ function FilePreviewMessage({
   return (
     <p
       role={role}
-      className="mx-4 mt-4 rounded-lg border border-dashed border-border/70 bg-background/45 px-3 py-6 text-center text-sm text-muted-foreground"
+      className="mx-4 mt-4 rounded-lg border border-dashed border-border bg-surface-raised px-3 py-6 text-center text-sm text-muted-foreground"
     >
       {message}
     </p>

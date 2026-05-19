@@ -19,9 +19,9 @@ interface ChevronProps {
 }
 
 export const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
-  "text-muted-foreground/90 transition-colors hover:text-foreground/90 focus-visible:text-foreground/90";
-export const COLLAPSIBLE_HEADER_EXPANDED_TONE_CLASS = "text-foreground/90";
-export const COLLAPSIBLE_HEADER_STATIC_TONE_CLASS = "text-muted-foreground/90";
+  "text-muted-foreground transition-colors hover:text-foreground focus-visible:text-foreground";
+export const COLLAPSIBLE_HEADER_EXPANDED_TONE_CLASS = "text-foreground";
+export const COLLAPSIBLE_HEADER_STATIC_TONE_CLASS = "text-muted-foreground";
 export const COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS =
   "inline-flex max-w-full items-center gap-1 overflow-hidden py-0.5 text-left text-sm";
 export const COLLAPSIBLE_HEADER_TEXT_CLASS = "min-w-0 truncate";

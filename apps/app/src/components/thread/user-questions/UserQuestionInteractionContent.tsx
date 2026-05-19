@@ -266,8 +266,8 @@ function QuestionOptionInput({
       className={cn(
         "flex min-w-0 cursor-pointer items-start gap-2 rounded-md border px-3 py-2 transition-colors",
         checked
-          ? "border-primary/40 bg-primary/10 text-foreground"
-          : "border-border bg-background/70 text-muted-foreground hover:bg-state-hover hover:text-foreground",
+          ? "border-surface-selected-border bg-surface-selected text-foreground"
+          : "border-border bg-surface-raised text-muted-foreground hover:bg-state-hover hover:text-foreground",
         disabled && "cursor-not-allowed opacity-60",
       )}
     >
@@ -518,7 +518,7 @@ export function UserQuestionAnswerForm({
         </Button>
       </div>
       {mutationErrorMessage ? (
-        <div className="rounded-md border border-destructive/30 bg-destructive/[0.06] px-3 py-2 text-xs text-destructive">
+        <div className="rounded-md border border-surface-destructive-border bg-surface-destructive px-3 py-2 text-xs text-destructive">
           {mutationErrorMessage}
         </div>
       ) : null}

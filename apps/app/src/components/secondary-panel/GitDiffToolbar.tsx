@@ -51,7 +51,7 @@ function GitDiffSelector({
           size="sm"
           disabled={disabled}
           className={cn(
-            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border border-border/70 bg-transparent px-2.5 text-xs font-normal",
+            "h-8 w-full min-w-0 justify-between gap-2 rounded-lg border border-border bg-transparent px-2.5 text-xs font-normal",
             disabled && "opacity-60",
           )}
         >
@@ -196,7 +196,7 @@ export function GitDiffToolbar({
             )}
           </Button>
           <div
-            className="inline-flex items-center gap-1 rounded-lg border border-border/70 p-0.5"
+            className="inline-flex items-center gap-1 rounded-lg border border-border p-0.5"
             role="tablist"
             aria-label="Diff view mode"
           >

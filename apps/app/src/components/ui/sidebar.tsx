@@ -23,7 +23,7 @@ const SIDEBAR_WIDTH_MOBILE = "min(90vw, 320px)";
 const SIDEBAR_WIDTH_ICON = "3rem";
 const SIDEBAR_KEYBOARD_SHORTCUT = "b";
 const SIDEBAR_GROUP_LABEL_BASE_CLASS =
-  "duration-200 flex shrink-0 items-center rounded-md px-2 text-xs font-medium text-sidebar-foreground/70 outline-none ring-sidebar-ring transition-[margin,opa] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0";
+  "duration-200 flex shrink-0 items-center rounded-md px-2 text-xs font-medium text-muted-foreground outline-none ring-sidebar-ring transition-[margin,opa] ease-linear focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0";
 const SIDEBAR_GROUP_LABEL_COLLAPSED_CLASS =
   "group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0";
 const SIDEBAR_GROUP_LABEL_HEIGHT_CLASS = "h-8";

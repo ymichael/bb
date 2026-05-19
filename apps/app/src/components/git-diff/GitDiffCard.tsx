@@ -344,7 +344,7 @@ export const GitDiffCard = memo(function GitDiffCard({
   return (
     <div
       ref={cardRef}
-      className="rounded-lg border border-border/70 bg-background"
+      className="rounded-lg border border-border bg-background"
     >
       {stickyHeader ? <div ref={stickySentinelRef} className="h-0" /> : null}
       <div
@@ -361,7 +361,7 @@ export const GitDiffCard = memo(function GitDiffCard({
           // When stuck, the card's own rounded top border scrolls out of view;
           // add a matching top border on the sticky so it still reads as the
           // top edge of the card instead of a flat-cut slab.
-          isHeaderStuck && "rounded-t-none border-t border-border/70",
+          isHeaderStuck && "rounded-t-none border-t border-border",
         )}
       >
         <div className="flex w-full min-w-0 items-center justify-between gap-2">
@@ -408,7 +408,7 @@ export const GitDiffCard = memo(function GitDiffCard({
             >
               {renameInfo ? (
                 <TruncateStart
-                  className="min-w-0 font-mono text-xs leading-5 text-muted-foreground/80"
+                  className="min-w-0 font-mono text-xs leading-5 text-muted-foreground"
                   title={renameInfo.from}
                 >
                   {renameInfo.from}
@@ -418,7 +418,7 @@ export const GitDiffCard = memo(function GitDiffCard({
                 <Icon
                   name="ArrowRight"
                   aria-hidden="true"
-                  className="size-3 shrink-0 text-muted-foreground/60"
+                  className="size-3 shrink-0 text-subtle-foreground"
                 />
               ) : null}
               <FilePathLink
@@ -444,7 +444,7 @@ export const GitDiffCard = memo(function GitDiffCard({
                   onClick={() => onOpenFileInEditor(openablePath)}
                   aria-label={`Open ${fileDiffLabel} in editor`}
                   title="Open in editor"
-                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground/80 hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  className="inline-flex size-5 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-state-hover hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                 >
                   <Icon name="ExternalLink" aria-hidden className="size-3" />
                 </button>

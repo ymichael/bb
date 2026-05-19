@@ -210,8 +210,8 @@ function ConversationAttachments({
               className={cn(
                 "cursor-zoom-in overflow-hidden rounded-md border",
                 align === "end"
-                  ? "border-primary/30 bg-background/70"
-                  : "border-border/70 bg-muted/20",
+                  ? "border-surface-selected-border bg-surface-raised"
+                  : "border-border bg-surface-recessed",
               )}
               onClick={() => setExpandedImageIndex(index)}
               title={imageItem.alt}
@@ -235,8 +235,8 @@ function ConversationAttachments({
             const className = cn(
               "inline-flex max-w-full items-center rounded-full border px-2 py-0.5 text-xs text-muted-foreground",
               align === "end"
-                ? "border-primary/30 bg-background/70"
-                : "border-border/70 bg-muted/40",
+                ? "border-surface-selected-border bg-surface-raised"
+                : "border-border bg-surface-recessed",
             );
             const label = (
               <span className="truncate">{fileNameFromPath(path)}</span>
@@ -400,7 +400,7 @@ function CollapsibleMessageText({
     <>
       {prefixText !== null ? (
         <span
-          className="line-clamp-1 text-muted-foreground/70"
+          className="line-clamp-1 text-muted-foreground"
           title={prefixText.trimEnd()}
         >
           {prefixText}
@@ -455,7 +455,7 @@ function UserConversationMessage({
   return (
     <div className="w-full">
       <div className="ml-auto w-fit max-w-[80%]">
-        <div className="rounded-md bg-primary/10 p-2 text-sm leading-relaxed text-foreground">
+        <div className="rounded-md bg-surface-selected p-2 text-sm leading-relaxed text-foreground">
           {messageText ? (
             <CollapsibleMessageText
               text={text}
@@ -477,7 +477,7 @@ function UserConversationMessage({
             {requestLabel ? (
               <span
                 className={cn(
-                  "shrink-0 whitespace-nowrap text-xs leading-none text-muted-foreground/80",
+                  "shrink-0 whitespace-nowrap text-xs leading-none text-muted-foreground",
                   isPendingSteer && "animate-shine",
                 )}
               >

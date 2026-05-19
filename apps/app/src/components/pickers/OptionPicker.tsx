@@ -12,11 +12,11 @@ export const OPTION_INTERACTIVE_CLASS_NAME =
 export const OPTION_CONTENT_CLASS_NAME =
   "flex min-w-0 items-center gap-1.5";
 export const OPTION_MUTED_CLASS_NAME =
-  "text-muted-foreground/75 hover:text-foreground";
-const OPTION_WARNING_TEXT_CLASS_NAME = "text-warning";
+  "text-muted-foreground hover:text-foreground";
+const OPTION_WARNING_TEXT_CLASS_NAME = "text-warning-text";
 const OPTION_WARNING_INTERACTIVE_CLASS_NAME =
-  "hover:text-warning/80 data-[state=open]:text-warning";
-const OPTION_WARNING_ICON_CLASS_NAME = "text-warning/90";
+  "hover:text-warning-text data-[state=open]:text-warning-text";
+const OPTION_WARNING_ICON_CLASS_NAME = "text-warning-text";
 
 export interface PickerOption<T extends string> {
   value: T;
@@ -160,7 +160,7 @@ export function OptionPicker<T extends string>({
               <span
                 className={cn(
                   "flex min-w-0 items-start gap-2",
-                  option.tone === "warning" && "text-warning",
+                  option.tone === "warning" && "text-warning-text",
                 )}
               >
                 {OptionIcon ? (

@@ -13,7 +13,7 @@ export default {
 // isolation reads the same way as it does inside the full info-tab panel.
 function PanelStage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-[360px] w-full max-w-[460px] min-w-0 flex-col overflow-hidden rounded-md border border-border/70 bg-background px-4 py-3">
+    <div className="flex h-[360px] w-full max-w-[460px] min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background px-4 py-3">
       <DetailCard
         className="h-full min-h-0 flex-1 rounded-none border-0 bg-transparent px-0 py-0"
       >

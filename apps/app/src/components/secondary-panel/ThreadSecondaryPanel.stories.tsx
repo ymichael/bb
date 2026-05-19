@@ -22,7 +22,7 @@ const noop = () => {};
 // scroll regions get something to fill.
 function PanelStage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex h-[160px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-md border border-border/70 bg-background">
+    <div className="flex h-[160px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background">
       {children}
     </div>
   );

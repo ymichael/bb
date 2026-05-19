@@ -69,7 +69,7 @@ export function ProjectArchivedThreadsView() {
         <div className="sticky top-0 z-10 -mx-4 bg-background px-4 pt-4 md:-mx-5 md:px-5 md:pt-5">
           <OverflowFade placement="below" tone="background" />
           <div
-            className="inline-flex items-center gap-1 rounded-lg border border-border/70 p-0.5"
+            className="inline-flex items-center gap-1 rounded-lg border border-border p-0.5"
             role="tablist"
             aria-label="Filter archived threads"
           >

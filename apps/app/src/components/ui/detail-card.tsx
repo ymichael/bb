@@ -35,7 +35,7 @@ export function DetailCard({
   return (
     <dl
       className={cn(
-        "flex flex-col gap-1 rounded-md border border-border/80 bg-background/40 px-2 py-1",
+        "flex flex-col gap-1 rounded-md border border-border bg-surface-raised px-2 py-1",
         className,
       )}
       style={labelWidthStyle(labelWidth)}

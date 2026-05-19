@@ -42,7 +42,7 @@ export function FilePathLink({
     >
       <TruncateStart>{text}</TruncateStart>
       {variant === "external" ? (
-        <Icon name="ExternalLink" className="size-3 shrink-0 text-muted-foreground/80" />
+        <Icon name="ExternalLink" className="size-3 shrink-0 text-subtle-foreground" />
       ) : null}
     </button>
   );

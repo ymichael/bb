@@ -177,7 +177,7 @@ export function EnvironmentPickerUI({
             <span className="truncate">
               {selected.modeLabel}
               {selected.hostLabel ? (
-                <span className="text-muted-foreground/60">
+                <span className="text-muted-foreground">
                   {" "}
                   · {selected.hostLabel}
                 </span>

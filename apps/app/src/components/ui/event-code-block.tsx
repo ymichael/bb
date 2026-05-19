@@ -24,8 +24,8 @@ export function EventCodeBlock({
       className={cn(
         "whitespace-pre-wrap break-words rounded-md px-2 py-1.5 font-mono text-xs leading-tight",
         tone === "danger"
-          ? "text-destructive/90"
-          : "border border-border/70 bg-background/70 text-muted-foreground",
+          ? "text-destructive"
+          : "border border-border bg-surface-raised text-muted-foreground",
         className,
       )}
     >

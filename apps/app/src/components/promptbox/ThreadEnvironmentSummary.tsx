@@ -53,7 +53,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
             <span className="flex items-center gap-1.5">
               <span>{environmentLabel}</span>
               {environmentHostLabel ? (
-                <span className="hidden text-muted-foreground/60 lg:inline">
+                <span className="hidden text-muted-foreground lg:inline">
                   · {environmentHostLabel}
                 </span>
               ) : null}
@@ -79,7 +79,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
       {environmentBranchName ? (
         <button
           type="button"
-          className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground/75 transition-colors hover:bg-state-hover hover:text-foreground md:flex"
+          className="hidden min-w-0 items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground md:flex"
           title={`Copy branch name: ${environmentBranchName}`}
           onClick={() => {
             void copyToClipboardWithToast(environmentBranchName, {
@@ -98,7 +98,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
           aria-label="Create new thread in this worktree"
           title="New thread in this worktree"
           onClick={onCreateNewThreadInWorktree}
-          className="-ml-1 inline-flex shrink-0 items-center justify-center rounded-md px-1 py-0.5 text-muted-foreground/75 transition-colors hover:bg-state-hover hover:text-foreground"
+          className="-ml-1 inline-flex shrink-0 items-center justify-center rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
         >
           <Icon name="MessageSquarePlus" className="size-4" />
         </button>

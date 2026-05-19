@@ -26,7 +26,7 @@ export default {
 // cards in a scrolling region underneath. Keeps the visual context honest.
 function PanelStage({ children }: { children: ReactNode }) {
   return (
-    <div className="flex w-full max-w-[760px] min-w-0 flex-col overflow-hidden rounded-md border border-border/70 bg-background pt-3">
+    <div className="flex w-full max-w-[760px] min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background pt-3">
       {children}
     </div>
   );

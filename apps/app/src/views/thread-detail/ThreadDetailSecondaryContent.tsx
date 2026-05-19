@@ -231,7 +231,7 @@ function TerminalPanelResizeHandle({ isOpen }: { isOpen: boolean }) {
       )}
       aria-label="Resize thread and terminal panels"
     >
-      <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border/70 transition-colors group-hover:bg-accent-foreground/35" />
+      <span className="pointer-events-none absolute inset-x-0 top-1/2 h-px -translate-y-1/2 bg-border transition-colors group-hover:bg-accent-foreground/35" />
     </PanelResizeHandle>
   );
 }

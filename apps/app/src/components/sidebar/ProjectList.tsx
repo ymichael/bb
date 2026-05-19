@@ -202,7 +202,7 @@ function ProjectListSectionOptions({
           title="Project options"
           aria-label="Project options"
           className={cn(
-            "inline-flex items-center justify-center rounded text-sidebar-foreground/50 transition-colors hover:text-sidebar-foreground disabled:opacity-50",
+            "inline-flex items-center justify-center rounded text-muted-foreground transition-colors hover:text-sidebar-foreground disabled:opacity-50",
             COARSE_POINTER_ADD_PROJECT_BUTTON_SIZE_CLASS,
           )}
         >

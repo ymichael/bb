@@ -11,7 +11,7 @@ export type PillVariant =
 const PILL_VARIANT_CLASS: Record<PillVariant, string> = {
   default: "border-transparent bg-primary text-primary-foreground",
   secondary: "border-transparent bg-secondary text-secondary-foreground",
-  destructive: "border-transparent bg-destructive text-white",
+  destructive: "border-transparent bg-destructive text-destructive-foreground",
   outline: "border-border bg-background text-foreground",
   emphasis: "border-transparent bg-foreground text-background",
 };

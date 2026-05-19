@@ -148,7 +148,7 @@ function MarkdownAnchor({
         <Icon
           name="ExternalLink"
           aria-hidden
-          className="size-3 shrink-0 self-center text-muted-foreground/80"
+          className="size-3 shrink-0 self-center text-subtle-foreground"
         />
       ) : null}
     </a>
@@ -166,9 +166,9 @@ function MarkdownCode({
   const isBlock = language !== undefined || codeText.includes("\n");
   if (isBlock) {
     return (
-      <div className="my-2 overflow-hidden rounded-md border border-border/70 bg-muted/35">
+      <div className="my-2 overflow-hidden rounded-md border border-border bg-surface-recessed">
         <div className="flex items-center justify-between pl-3 pr-1.5 pt-1.5">
-          <span className="font-mono text-xs uppercase text-muted-foreground/60">
+          <span className="font-mono text-xs uppercase text-muted-foreground">
             {language ?? ""}
           </span>
           <CopyButton text={codeText} label="Copy code" />
@@ -305,26 +305,26 @@ function MarkdownTable({ children }: MarkdownTableProps) {
           minWidth: `min(var(${MARKDOWN_CONTENT_WIDTH_VARIABLE}), 100%)`,
         }}
       >
-        <table className="border border-border/80">{children}</table>
+        <table className="border border-border">{children}</table>
       </div>
     </div>
   );
 }
 
 function MarkdownTableHead({ children }: MarkdownTableHeadProps) {
-  return <thead className="bg-muted/40">{children}</thead>;
+  return <thead className="bg-surface-recessed">{children}</thead>;
 }
 
 function MarkdownTableHeader({ children }: MarkdownTableHeaderProps) {
   return (
-    <th className="border border-border/80 px-2 py-1 text-left font-medium">
+    <th className="border border-border px-2 py-1 text-left font-medium">
       {children}
     </th>
   );
 }
 
 function MarkdownTableCell({ children }: MarkdownTableCellProps) {
-  return <td className="border border-border/80 px-2 py-1">{children}</td>;
+  return <td className="border border-border px-2 py-1">{children}</td>;
 }
 
 function renderMarkdownImage({
@@ -348,7 +348,7 @@ function renderMarkdownImage({
 }
 
 function MarkdownHr(_props: MarkdownHrProps) {
-  return <hr className="my-4 border-t border-border/70" />;
+  return <hr className="my-4 border-t border-border" />;
 }
 
 function parseMarkdownSourceColorScheme(media: string): Theme | null {

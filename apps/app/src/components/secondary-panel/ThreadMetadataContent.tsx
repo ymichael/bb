@@ -249,7 +249,7 @@ export function EnvironmentRow({
             aria-label="Create new thread in this worktree"
             title="New thread in this worktree"
             onClick={createThreadInWorktree}
-            className="inline-flex shrink-0 items-center justify-center rounded-md p-0.5 text-muted-foreground/75 transition-colors hover:bg-state-hover hover:text-foreground"
+            className="inline-flex shrink-0 items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
           >
             <Icon name="MessageSquarePlus" className="size-4" />
           </button>

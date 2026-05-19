@@ -79,7 +79,7 @@ export function MentionMenu({
   );
 
   return (
-    <div className="overflow-hidden rounded-md border border-border/70 bg-popover text-popover-foreground">
+    <div className="overflow-hidden rounded-md border border-border bg-popover text-popover-foreground">
       <div className="max-h-48 overflow-y-auto pb-1">
         {state.kind === "hint" ? (
           <div className="px-3 py-2 text-xs text-muted-foreground">
@@ -97,7 +97,7 @@ export function MentionMenu({
         ) : sections.length > 0 ? (
           sections.map((section) => (
             <div key={section.kind}>
-              <div className="sticky top-0 z-10 bg-popover px-3 pb-1 pt-1.5 text-xs text-muted-foreground/60">
+              <div className="sticky top-0 z-10 bg-popover px-3 pb-1 pt-1.5 text-xs text-muted-foreground">
                 {section.label}
               </div>
               <div className="flex flex-col gap-px px-1">

@@ -169,7 +169,7 @@ function WorktreeMenuItem({
             </span>
           ))}
           {additionalCount > 0 ? (
-            <span className="text-muted-foreground/70">
+            <span className="text-muted-foreground">
               +{additionalCount} more
             </span>
           ) : null}

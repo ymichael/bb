@@ -17,7 +17,7 @@ export default {
 function PreviewStage({ children }: { children: ReactNode }) {
   return (
     <div
-      className="@container/page mx-auto w-full max-w-[1280px] overflow-hidden rounded-md border border-border/70 bg-background p-4"
+      className="@container/page mx-auto w-full max-w-[1280px] overflow-hidden rounded-md border border-border bg-background p-4"
       style={STAGE_VARS}
     >
       <div className="mx-auto max-w-[680px]">{children}</div>

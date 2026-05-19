@@ -152,7 +152,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="bordered">
         <DetailCard
-          className="w-full max-w-xl border-border/70 bg-muted/20"
+          className="w-full max-w-xl border-border bg-surface-recessed"
           labelWidth="60px"
         >
           <DetailRow label="Name" valueClassName="min-w-0">

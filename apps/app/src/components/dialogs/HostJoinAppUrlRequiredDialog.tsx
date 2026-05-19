@@ -37,7 +37,7 @@ export function HostJoinAppUrlRequiredDialogContent() {
 
       <div className="min-w-0 space-y-2 text-sm text-foreground">
         <p>Run this on the server machine, then restart bb:</p>
-        <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-muted/40 px-3 py-2 font-mono text-xs leading-5">
+        <pre className="min-w-0 overflow-x-auto rounded-md border border-border bg-surface-recessed px-3 py-2 font-mono text-xs leading-5">
           <code>
             {
               "npx bb-app config BB_APP_URL http://<your-machine>.<tailnet>.ts.net:38886"

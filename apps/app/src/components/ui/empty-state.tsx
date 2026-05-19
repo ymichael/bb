@@ -23,7 +23,7 @@ export function EmptyState({
           name={icon}
           aria-hidden="true"
           className={cn(
-            "size-4 shrink-0 text-muted-foreground/70",
+            "size-4 shrink-0 text-subtle-foreground",
             iconClassName,
           )}
         />

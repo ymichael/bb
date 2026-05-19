@@ -160,7 +160,7 @@ export function BranchPicker({
           }
           className={cn(
             variant === "default" &&
-              "h-8 w-full min-w-0 justify-between rounded-md border-border/60 bg-background px-2.5 text-sm font-normal shadow-none hover:bg-state-hover",
+              "h-8 w-full min-w-0 justify-between rounded-md border-border bg-background px-2.5 text-sm font-normal shadow-none hover:bg-state-hover",
             variant === "minimal" &&
               "h-5 w-auto min-w-0 justify-between gap-1 rounded-sm px-0 text-xs font-normal shadow-none hover:bg-transparent data-[state=open]:bg-transparent data-[state=open]:hover:bg-transparent",
             variant === "minimal" &&
@@ -224,7 +224,7 @@ export function BranchPicker({
         mobileTitle="Branch"
         className="flex flex-col overflow-hidden p-0 md:max-h-[calc(100vh-6rem)] md:w-[18rem] md:min-w-[min(var(--radix-popover-trigger-width),calc(100vw-2rem))] md:max-w-[calc(100vw-2rem)]"
       >
-        <div className="shrink-0 border-b border-border/70 p-1.5">
+        <div className="shrink-0 border-b border-border p-1.5">
           <div className="relative">
             <Icon
               name="Search"
