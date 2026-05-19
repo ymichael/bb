@@ -24,6 +24,7 @@ export const secondaryPanelWidthPercentAtom = atomWithStorage<number>(
   "bb.thread.secondaryPanel.widthPercent",
   DEFAULT_SECONDARY_PANEL_WIDTH_PERCENT,
   secondaryPanelWidthStorage,
+  { getOnInit: true },
 );
 
 /** Collapsed file keys in the diff panel. Set by useGitDiffFileRenderQueue, read by ThreadSecondaryPanel. */
