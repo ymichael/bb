@@ -131,6 +131,22 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("name, vibe, or other identity details");
     expect(rendered).toContain("Preserve any seeded structure");
+
+    // Anchors the two opening asks: scope + landing mode.
+    expect(rendered).toContain(
+      "Your first user-facing message must anchor two things up front",
+    );
+    expect(rendered).toContain("- Manage an individual feature or workstream.");
+    expect(rendered).toContain(
+      "- Manage all coding agents across this repo.",
+    );
+    expect(rendered).toContain(
+      "- Manage a specific process (code review, async triage, releases, ...).",
+    );
+    expect(rendered).toContain("**Landing changes**");
+    expect(rendered).toContain(
+      "open a PR per worker, or merge into a local branch",
+    );
   });
 
   it("renders bbGuideStyling", () => {

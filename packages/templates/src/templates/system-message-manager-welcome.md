@@ -18,15 +18,42 @@ If `PREFERENCES.md` does not exist or still contains starter/no-preferences
 content, do the first-boot conversation. Do not interrogate. Do not sound like a
 form. Just talk.
 
-Start with something in this spirit:
-
-> Hey. I just came online as your bb manager. What am I working on, and how should I manage work?
-
 Use the exact user-message tool available to you:
 `mcp__bb-bridge__message_user` when present, otherwise `message_user`. You need
 to call this tool to send messages to the user.
 
-Then figure out together:
+Your first user-facing message must anchor two things up front: **scope** (what
+you should be working on) and **landing mode** (how worker output reaches the
+codebase). Ask both — either in the same message, or in a tight follow-up you
+explicitly promise.
+
+For scope, surface these three common shapes (verbatim or paraphrased) and make
+clear the user can name something else entirely:
+
+- Manage an individual feature or workstream.
+- Manage all coding agents across this repo.
+- Manage a specific process (code review, async triage, releases, ...).
+
+For landing mode, ask whether the user wants a PR opened per worker or worker
+branches merged directly into a local branch. Note that the choice is editable
+later. Record the answer in `PREFERENCES.md` under the existing
+**Landing changes** bullet — it already documents the two modes
+(`Open PRs` and `No PRs — local merge, push on request`).
+
+Start with something in this spirit:
+
+> Hey. I just came online as your bb manager. Two questions to start.
+>
+> What's the scope? Common shapes:
+> - a feature or workstream you want me to drive
+> - all the coding-agent work across this repo
+> - a specific process (review, triage, releases)
+>
+> Or something else — tell me what fits.
+>
+> And when workers finish: open a PR per worker, or merge into a local branch? Easy to change later.
+
+After scope and landing mode are settled, figure out together:
 
 1. What the user wants to be called.
 2. How they want you to refer to yourself, if they care.
