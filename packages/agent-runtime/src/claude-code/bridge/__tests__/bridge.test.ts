@@ -7,7 +7,7 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
-import type { PermissionEscalation } from "@bb/domain";
+import type { JsonValue, PermissionEscalation } from "@bb/domain";
 
 const { queryMock } = vi.hoisted(() => ({
   queryMock: vi.fn(),
@@ -2085,5 +2085,185 @@ describe("bridge", () => {
     } finally {
       bridge.restore();
     }
+  });
+
+  describe("prompt attachment text markers", () => {
+    async function sendTurnAndReadPrompt(
+      bridge: BridgeJsonRpcTestHarness,
+      queries: ControlledClaudeQuery[],
+      threadId: string,
+      input: JsonValue[],
+    ): Promise<string> {
+      await startBridgeThread({ bridge, threadId });
+      bridge.sendRequest(2, "turn/start", {
+        input,
+        providerThreadId: null,
+        threadId,
+      });
+      await bridge.waitForResponse(2);
+      const text = await readNextPromptText(getLatestQueryCall());
+      await stopBridgeThread({ bridge, queries, threadId });
+      return text;
+    }
+
+    function withBridgeHarness(): {
+      bridge: BridgeJsonRpcTestHarness;
+      queries: ControlledClaudeQuery[];
+    } {
+      const bridge = createBridgeJsonRpcTestHarness(handleLine);
+      const queries: ControlledClaudeQuery[] = [];
+      queryMock.mockImplementation(() => {
+        const query = createControlledClaudeQuery();
+        queries.push(query);
+        return query;
+      });
+      return { bridge, queries };
+    }
+
+    it("forwards a text-only prompt unchanged", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-text",
+          [{ type: "text", text: "Hello there" }],
+        );
+        expect(text).toBe("Hello there");
+      } finally {
+        bridge.restore();
+      }
+    });
+
+    it("joins multiple text fragments with newlines", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-text-multi",
+          [
+            { type: "text", text: "Line one" },
+            { type: "text", text: "Line two" },
+          ],
+        );
+        expect(text).toBe("Line one\nLine two");
+      } finally {
+        bridge.restore();
+      }
+    });
+
+    it("emits a path-bearing marker for a localImage attachment", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-local-image",
+          [
+            { type: "text", text: "Describe this" },
+            {
+              type: "localImage",
+              path: "/staged/runtime-attachments/req-1/000-screenshot.png",
+            },
+          ],
+        );
+        expect(text).toBe(
+          "Describe this\n[Attached image. It is on disk at /staged/runtime-attachments/req-1/000-screenshot.png — use the Read tool to view it.]",
+        );
+      } finally {
+        bridge.restore();
+      }
+    });
+
+    it("emits a name+mime+size marker for a localFile with full metadata", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-local-file-full",
+          [
+            { type: "text", text: "Summarize this" },
+            {
+              type: "localFile",
+              path: "/staged/runtime-attachments/req-2/000-report.pdf",
+              name: "report.pdf",
+              mimeType: "application/pdf",
+              sizeBytes: 12345,
+            },
+          ],
+        );
+        expect(text).toBe(
+          'Summarize this\n[Attached file "report.pdf" (application/pdf, 12345 bytes). It is on disk at /staged/runtime-attachments/req-2/000-report.pdf — use the Read tool to view it.]',
+        );
+      } finally {
+        bridge.restore();
+      }
+    });
+
+    it("omits missing fields from the localFile marker", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-local-file-minimal",
+          [
+            {
+              type: "localFile",
+              path: "/staged/runtime-attachments/req-3/000-data.csv",
+            },
+          ],
+        );
+        expect(text).toBe(
+          "[Attached file. It is on disk at /staged/runtime-attachments/req-3/000-data.csv — use the Read tool to view it.]",
+        );
+      } finally {
+        bridge.restore();
+      }
+    });
+
+    it("emits a URL marker for a remote image attachment", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-image-url",
+          [
+            { type: "text", text: "Compare to:" },
+            { type: "image", url: "https://example.com/cat.png" },
+          ],
+        );
+        expect(text).toBe(
+          "Compare to:\n[Attached image: https://example.com/cat.png]",
+        );
+      } finally {
+        bridge.restore();
+      }
+    });
+
+    it("accepts an attachment-only turn (no text fragments)", async () => {
+      const { bridge, queries } = withBridgeHarness();
+      try {
+        const text = await sendTurnAndReadPrompt(
+          bridge,
+          queries,
+          "thread-marker-attachment-only",
+          [
+            {
+              type: "localImage",
+              path: "/staged/runtime-attachments/req-4/000-only.png",
+            },
+          ],
+        );
+        expect(text).toBe(
+          "[Attached image. It is on disk at /staged/runtime-attachments/req-4/000-only.png — use the Read tool to view it.]",
+        );
+      } finally {
+        bridge.restore();
+      }
+    });
   });
 });
