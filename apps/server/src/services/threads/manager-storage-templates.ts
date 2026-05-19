@@ -93,10 +93,6 @@ const BUILT_IN_MANAGER_TEMPLATE_SETS: readonly BuiltInManagerTemplateSet[] = [
     name: DEFAULT_MANAGER_TEMPLATE_NAME,
     files: [
       {
-        fileName: "PREFERENCES.md",
-        content: loadDefaultTemplateAsset("PREFERENCES.md"),
-      },
-      {
         fileName: "STATUS.html",
         content: loadDefaultTemplateAsset("STATUS.html"),
       },

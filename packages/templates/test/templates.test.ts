@@ -125,9 +125,11 @@ describe("@bb/templates", () => {
 
     expect(rendered).toContain("[bb system]");
     expect(rendered).toContain("Welcome. You just came online inside bb.");
-    expect(rendered).toContain("First, inspect `PREFERENCES.md`");
+    expect(rendered).toContain("Then check whether `PREFERENCES.md` exists");
     expect(rendered).toContain("Do not interrogate. Do not sound like a");
-    expect(rendered).toContain("starter/no-preferences");
+    expect(rendered).toContain("work with the user to fill out the template");
+    expect(rendered).toContain("**Delegator workflow**");
+    expect(rendered).toContain("**Landing changes**");
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("name, vibe, or other identity details");
     expect(rendered).toContain("Preserve any seeded structure");
@@ -143,7 +145,6 @@ describe("@bb/templates", () => {
     expect(rendered).toContain(
       "- Manage a specific process (code review, async triage, releases, ...).",
     );
-    expect(rendered).toContain("**Landing changes**");
     expect(rendered).toContain(
       "open a PR per worker, or merge into a local branch",
     );

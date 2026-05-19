@@ -387,12 +387,19 @@ describe("public thread manager and ownership routes", () => {
     }
   });
 
-  it("copies the default manager template set into new manager thread storage", async () => {
+  it("copies user-authored default preferences alongside bundled status into new manager thread storage", async () => {
     const harness = await createTestAppHarness();
     const hostId = "host-manager-template-default";
     const dataDir = hostDataDir({ hostId });
     await rm(dataDir, { recursive: true, force: true });
     try {
+      const bundledStatusContent = await readFile(
+        new URL(
+          "../../src/services/threads/default-template/STATUS.html",
+          import.meta.url,
+        ),
+        "utf8",
+      );
       const { host } = seedHostSession(harness.deps, { id: hostId });
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -407,9 +414,7 @@ describe("public thread manager and ownership routes", () => {
         name: "default",
         files: {
           "PREFERENCES.md": "default prefs\n",
-          "STATUS.md": "default status\n",
-          "STATUS.html": "<p>default dashboard</p>\n",
-          "ASYNC.md": "default async\n",
+          "STATUS.html": bundledStatusContent,
         },
       });
 
@@ -442,14 +447,8 @@ describe("public thread manager and ownership routes", () => {
         readFile(path.join(storagePath, "PREFERENCES.md"), "utf8"),
       ).resolves.toBe("default prefs\n");
       await expect(
-        readFile(path.join(storagePath, "STATUS.md"), "utf8"),
-      ).resolves.toBe("default status\n");
-      await expect(
-        readFile(path.join(storagePath, "ASYNC.md"), "utf8"),
-      ).resolves.toBe("default async\n");
-      await expect(
         readFile(path.join(storagePath, "STATUS.html"), "utf8"),
-      ).resolves.toBe("<p>default dashboard</p>\n");
+      ).resolves.toBe(bundledStatusContent);
     } finally {
       await harness.cleanup();
       await rm(dataDir, { recursive: true, force: true });

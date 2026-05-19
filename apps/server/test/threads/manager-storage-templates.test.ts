@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readdir,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -25,17 +32,18 @@ describe("manager storage templates", () => {
       await expect(
         readFile(path.join(templateRootPath, "active"), "utf8"),
       ).resolves.toBe("default\n");
-      const preferencesContent = await readFile(
-        path.join(templateRootPath, "default", "PREFERENCES.md"),
-        "utf8",
-      );
-      expect(preferencesContent).toContain(
-        "## Open questions to resolve when natural",
-      );
-      expect(preferencesContent).toContain("Landing changes");
+      await expect(
+        readdir(path.join(templateRootPath, "default")),
+      ).resolves.toEqual(["STATUS.html"]);
       await expect(
         readFile(path.join(templateRootPath, "default", "STATUS.html"), "utf8"),
       ).resolves.toContain('<div class="sect-title">Open PRs · 0</div>');
+      await expect(
+        readFile(
+          path.join(templateRootPath, "default", "PREFERENCES.md"),
+          "utf8",
+        ),
+      ).rejects.toThrow();
       await expect(
         readFile(path.join(templateRootPath, "default", "ASYNC.md"), "utf8"),
       ).rejects.toThrow();
@@ -58,6 +66,11 @@ describe("manager storage templates", () => {
         "custom prefs\n",
         "utf8",
       );
+      await writeFile(
+        path.join(defaultTemplatePath, "STATUS.html"),
+        "custom status\n",
+        "utf8",
+      );
 
       await ensureBuiltInManagerTemplatesInstalled({
         dataDir,
@@ -69,7 +82,7 @@ describe("manager storage templates", () => {
       ).resolves.toBe("custom prefs\n");
       await expect(
         readFile(path.join(defaultTemplatePath, "STATUS.html"), "utf8"),
-      ).rejects.toThrow();
+      ).resolves.toBe("custom status\n");
     } finally {
       await rm(dataDir, { recursive: true, force: true });
     }
