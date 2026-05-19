@@ -1,18 +1,49 @@
 import { useState } from "react";
 import type { AvailableModel, Host, ProjectSource } from "@bb/domain";
 import type { ProjectResponse, SystemProviderInfo } from "@bb/server-contract";
-import { NewManagerForm } from "./NewManagerView";
+import {
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
+import { NewManagerForm } from "./NewManagerDialog";
 import {
   HOST_IDS,
   HOST_NAMES,
   PROJECT_IDS,
   makeProject,
-} from "../../.ladle/story-fixtures";
-import { StoryCard, StoryRow } from "../../.ladle/story-card";
+} from "../../../.ladle/story-fixtures";
+import { StoryCard, StoryRow } from "../../../.ladle/story-card";
+import { DialogStage } from "../../../.ladle/story-dialog-stage";
 
 export default {
-  title: "views/New Manager",
+  title: "dialogs/New Manager",
 };
+
+// Matches the real NewManagerDialog's DialogContent className so stories
+// reproduce its width and child spacing.
+const stageClassName = "gap-3 md:max-w-md";
+
+function NewManagerDialogStage(props: {
+  providers: SystemProviderInfo[];
+  providersAreLoaded: boolean;
+  models: readonly AvailableModel[];
+  hosts: Host[];
+  projectSources: readonly ProjectSource[];
+}) {
+  return (
+    <DialogStage className={stageClassName}>
+      <DialogHeader>
+        <DialogTitle>New Manager</DialogTitle>
+        <DialogDescription>
+          A manager is a teammate that coordinates work for you and delegates
+          to worker threads.
+        </DialogDescription>
+      </DialogHeader>
+      <ControlledNewManagerForm {...props} />
+    </DialogStage>
+  );
+}
 
 const noop = () => {};
 const asyncNoop = async () => {};
@@ -152,87 +183,39 @@ export function Overview() {
     <StoryCard>
       <StoryRow
         label="default"
-        hint="Codex provider preselected, models + reasoning available, local host pre-eligible"
+        hint="Codex preselected from multiple providers, models + reasoning available, local host pre-eligible"
       >
-        <div className="max-w-2xl">
-          <ControlledNewManagerForm
-            providers={[codexProvider]}
-            providersAreLoaded
-            models={codexModels}
-            hosts={[localHost]}
-            projectSources={projectSources}
-          />
-        </div>
+        <NewManagerDialogStage
+          providers={[codexProvider, claudeProvider]}
+          providersAreLoaded
+          models={codexModels}
+          hosts={[localHost, remoteHost]}
+          projectSources={projectSources}
+        />
       </StoryRow>
       <StoryRow
-        label="multiple providers"
-        hint="Provider picker has a chooser; Codex selected by default"
+        label="loading"
+        hint='provider selected but no models yet — slot shows "Loading…"'
       >
-        <div className="max-w-2xl">
-          <ControlledNewManagerForm
-            providers={[codexProvider, claudeProvider]}
-            providersAreLoaded
-            models={codexModels}
-            hosts={[localHost, remoteHost]}
-            projectSources={projectSources}
-          />
-        </div>
-      </StoryRow>
-      <StoryRow
-        label="providers loading"
-        hint='providersAreLoaded=false — model slot shows "Loading providers…"'
-      >
-        <div className="max-w-2xl">
-          <ControlledNewManagerForm
-            providers={[]}
-            providersAreLoaded={false}
-            models={[]}
-            hosts={[localHost]}
-            projectSources={projectSources}
-          />
-        </div>
-      </StoryRow>
-      <StoryRow
-        label="no providers"
-        hint='providers resolved empty — model slot shows "No providers available"'
-      >
-        <div className="max-w-2xl">
-          <ControlledNewManagerForm
-            providers={[]}
-            providersAreLoaded
-            models={[]}
-            hosts={[localHost]}
-            projectSources={projectSources}
-          />
-        </div>
-      </StoryRow>
-      <StoryRow
-        label="models loading"
-        hint='provider selected but no models yet — slot shows "Loading models…"'
-      >
-        <div className="max-w-2xl">
-          <ControlledNewManagerForm
-            providers={[codexProvider]}
-            providersAreLoaded
-            models={[]}
-            hosts={[localHost]}
-            projectSources={projectSources}
-          />
-        </div>
+        <NewManagerDialogStage
+          providers={[codexProvider]}
+          providersAreLoaded
+          models={[]}
+          hosts={[localHost]}
+          projectSources={projectSources}
+        />
       </StoryRow>
       <StoryRow
         label="no eligible host"
         hint="project has no local_path source for any connected host — host picker shows empty state"
       >
-        <div className="max-w-2xl">
-          <ControlledNewManagerForm
-            providers={[codexProvider]}
-            providersAreLoaded
-            models={codexModels}
-            hosts={[localHost]}
-            projectSources={[]}
-          />
-        </div>
+        <NewManagerDialogStage
+          providers={[codexProvider]}
+          providersAreLoaded
+          models={codexModels}
+          hosts={[localHost]}
+          projectSources={[]}
+        />
       </StoryRow>
     </StoryCard>
   );

@@ -27,11 +27,13 @@ import { useActiveProjectId } from "@/hooks/useActiveProjectId";
 import { useAppRoute } from "@/hooks/useAppRoute";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
+import { NewManagerDialog } from "@/components/dialogs/NewManagerDialog";
 import { ProjectPathDialog } from "@/components/dialogs/ProjectPathDialog";
 import { ProjectActionsMenu } from "@/components/project/ProjectActionsMenu";
 import { ProjectActionsProvider } from "@/components/project/ProjectActionsProvider";
 import { ThreadActionsProvider } from "@/components/thread/ThreadActionsProvider";
 import { createLocalStorageSyncStorage } from "@/lib/browser-storage";
+import { useNewManagerDialog } from "@/hooks/useNewManagerDialog";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 
 const SIDEBAR_WIDTH_KEY = "bb.sidebar.width";
@@ -126,9 +128,9 @@ const routeTitles: Record<string, { title: string; subtitle?: string }> = {
 
 interface AppHeaderProps {
   /**
-   * True for any project-scoped route (main, new-manager, archived, settings).
-   * Drives the unbordered chrome and the project action icons on the right;
-   * also suppresses meta.title in the center (project name is conveyed by the
+   * True for any project-scoped route (main, archived, settings). Drives the
+   * unbordered chrome and the project action icons on the right; also
+   * suppresses meta.title in the center (project name is conveyed by the
    * page-level project picker, not the chrome).
    */
   usesProjectChromeStyle: boolean;
@@ -136,6 +138,7 @@ interface AppHeaderProps {
   isSettingsView: boolean;
   projectId?: string;
   project?: ProjectResponse;
+  onHireManager?: (projectId: string) => void;
   meta: {
     title: string;
     subtitle?: string;
@@ -149,6 +152,7 @@ function AppHeader({
   isSettingsView,
   projectId,
   project,
+  onHireManager,
   meta,
 }: AppHeaderProps) {
   const headerBreadcrumbs = meta.breadcrumbs;
@@ -211,6 +215,22 @@ function AppHeader({
   const actions =
     usesProjectChromeStyle && projectId ? (
       <>
+        {onHireManager ? (
+          <button
+            type="button"
+            className={cn(
+              HEADER_ICON_BUTTON_CLASS,
+              "inline-flex items-center justify-center text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground",
+            )}
+            aria-label="Hire manager"
+            title="Hire manager"
+            onClick={() => {
+              onHireManager(projectId);
+            }}
+          >
+            <Icon name="UserRoundPlus" />
+          </button>
+        ) : null}
         <Link
           to={`/projects/${projectId}/settings`}
           className={cn(
@@ -265,6 +285,7 @@ interface AppLayoutProps {
 
 export function AppLayout({ children }: AppLayoutProps) {
   const quickCreateProject = useQuickCreateProjectController();
+  const newManagerDialog = useNewManagerDialog();
   const location = useLocation();
   const {
     projectId,
@@ -272,7 +293,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     isProjectMainView,
     isThreadView,
     isArchivedView,
-    isNewManagerView,
     isSettingsView,
     isRootView,
   } = useAppRoute();
@@ -366,9 +386,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     }
     if (isArchivedView && projectId) {
       return `${projectLabel ?? projectId} · Archived`;
-    }
-    if (isNewManagerView && projectId) {
-      return `${projectLabel ?? projectId} · New Manager`;
     }
     if (isSettingsView && projectId) {
       return `${projectLabel ?? projectId} · Settings`;
@@ -477,15 +494,13 @@ export function AppLayout({ children }: AppLayoutProps) {
               {showHeader ? (
                 <AppHeader
                   usesProjectChromeStyle={
-                    isProjectMainView ||
-                    isNewManagerView ||
-                    isArchivedView ||
-                    isSettingsView
+                    isProjectMainView || isArchivedView || isSettingsView
                   }
                   isArchivedView={isArchivedView}
                   isSettingsView={isSettingsView}
                   projectId={projectId}
                   project={project}
+                  onHireManager={newManagerDialog.open}
                   meta={meta}
                 />
               ) : null}
@@ -502,6 +517,7 @@ export function AppLayout({ children }: AppLayoutProps) {
           onOpenChange={quickCreateProject.projectPathDialog.onOpenChange}
           onSubmit={quickCreateProject.submitProjectPath}
         />
+        <NewManagerDialog />
       </ThreadActionsProvider>
     </ProjectActionsProvider>
   );

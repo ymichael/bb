@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Suspense, type JSX, type ReactNode } from "react";
+import { Suspense, useEffect, type JSX, type ReactNode } from "react";
 import {
   act,
   cleanup,
@@ -21,6 +21,10 @@ import {
   systemExecutionOptionsQueryKey,
   threadQueryKey,
 } from "@/hooks/queries/query-keys";
+import {
+  NewManagerDialogProvider,
+  useNewManagerDialog,
+} from "@/hooks/useNewManagerDialog";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { resetFakeReconnectingWebSockets } from "@/test/fake-reconnecting-websocket";
 import {
@@ -29,7 +33,7 @@ import {
   type FetchRoute,
 } from "@/test/http-test-utils";
 import { createTestSystemProvider } from "@/test/system-provider-test-utils";
-import { NewManagerView } from "./NewManagerView";
+import { NewManagerDialog } from "./NewManagerDialog";
 
 vi.mock("partysocket/ws", async () => {
   const { FakeReconnectingWebSocket } =
@@ -339,8 +343,8 @@ function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   };
 }
 
-interface RenderNewManagerRouteArgs {
-  initialEntry?: string;
+interface RenderNewManagerDialogArgs {
+  initialProjectId?: string;
   wrapper: ({ children }: { children: ReactNode }) => JSX.Element;
 }
 
@@ -349,22 +353,31 @@ function ThreadRouteProbe() {
   return <p>Thread route: {location.pathname}</p>;
 }
 
-async function renderNewManagerRoute(args: RenderNewManagerRouteArgs) {
+function NewManagerDialogProbe({ projectId }: { projectId: string }) {
+  const { open } = useNewManagerDialog();
+  useEffect(() => {
+    open(projectId);
+  }, [open, projectId]);
+  return <NewManagerDialog />;
+}
+
+async function renderNewManagerDialog(args: RenderNewManagerDialogArgs) {
+  const projectId = args.initialProjectId ?? "proj-1";
   await act(async () => {
     render(
-      <MemoryRouter
-        initialEntries={[args.initialEntry ?? "/projects/proj-1/managers/new"]}
-      >
-        <Routes>
-          <Route
-            path="/projects/:projectId/managers/new"
-            element={<NewManagerView />}
-          />
-          <Route
-            path="/projects/:projectId/threads/:threadId"
-            element={<ThreadRouteProbe />}
-          />
-        </Routes>
+      <MemoryRouter initialEntries={[`/projects/${projectId}`]}>
+        <NewManagerDialogProvider>
+          <Routes>
+            <Route
+              path="/projects/:projectId"
+              element={<NewManagerDialogProbe projectId={projectId} />}
+            />
+            <Route
+              path="/projects/:projectId/threads/:threadId"
+              element={<ThreadRouteProbe />}
+            />
+          </Routes>
+        </NewManagerDialogProvider>
       </MemoryRouter>,
       { wrapper: args.wrapper },
     );
@@ -382,7 +395,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("NewManagerView", () => {
+describe("NewManagerDialog", () => {
   it("submits the default manager hire through the route and caches the created thread", async () => {
     const piModels = [
       makeModel("anthropic/claude-opus-4-7", {
@@ -402,18 +415,13 @@ describe("NewManagerView", () => {
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderNewManagerRoute({ wrapper });
+    await renderNewManagerDialog({ wrapper });
 
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Host" }).title).toContain(
-        "Local Host",
-      );
-    });
     await waitFor(() => {
       expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
       expect(managerRequestProjectIds).toEqual(["proj-1"]);
@@ -456,7 +464,7 @@ describe("NewManagerView", () => {
       });
     const { wrapper } = createSuspenseWrapper();
 
-    await renderNewManagerRoute({ wrapper });
+    await renderNewManagerDialog({ wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Project" }).title).toContain(
@@ -479,15 +487,10 @@ describe("NewManagerView", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Host" }).title).toContain(
-        "Local Host",
-      );
-    });
-    await waitFor(() => {
       expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
       expect(managerRequestProjectIds).toEqual(["proj-2"]);
@@ -531,7 +534,7 @@ describe("NewManagerView", () => {
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderNewManagerRoute({ wrapper });
+    await renderNewManagerDialog({ wrapper });
 
     await waitFor(() => {
       expectProviderModelTitle(["Pi"]);
@@ -603,13 +606,7 @@ describe("NewManagerView", () => {
       });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderNewManagerRoute({ wrapper });
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Host" }).title).toContain(
-        "Local Host",
-      );
-    });
+    await renderNewManagerDialog({ wrapper });
 
     await selectProviderModel({
       provider: "Codex",
@@ -625,7 +622,7 @@ describe("NewManagerView", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Hire Manager" }));
+    fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
     await waitFor(() => {
       expect(managerRequests).toEqual([
@@ -678,13 +675,7 @@ describe("NewManagerView", () => {
     });
     const { queryClient, wrapper } = createSuspenseWrapper();
 
-    await renderNewManagerRoute({ wrapper });
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Host" }).title).toContain(
-        "Local Host",
-      );
-    });
+    await renderNewManagerDialog({ wrapper });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(

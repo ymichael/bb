@@ -6,7 +6,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import type {
   AvailableModel,
   Host,
@@ -17,12 +17,20 @@ import type { ProjectResponse } from "@bb/server-contract";
 import { findLocalPathProjectSourceForHost } from "@bb/domain";
 import type { HireProjectManagerRequest } from "@/hooks/mutations/project-mutations";
 import { Button } from "@/components/ui/button.js";
+import { DetailCard, DetailRow } from "@/components/ui/detail-card.js";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog.js";
 import { FormError } from "@/components/ui/form-error.js";
 import { Icon } from "@/components/ui/icon.js";
 import { Input } from "@/components/ui/input.js";
-import { PageShell } from "@/components/ui/page-shell.js";
-import { COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { useHireProjectManager } from "@/hooks/mutations/project-mutations";
+import { useNewManagerDialog } from "@/hooks/useNewManagerDialog";
 import { useSystemExecutionOptions } from "@/hooks/queries/system-queries";
 import { useEffectiveHosts } from "@/hooks/queries/effective-hosts";
 import { useProjects } from "@/hooks/queries/project-queries";
@@ -52,13 +60,43 @@ type ReasoningSelectionSource = "default" | "user";
 
 type IsLocalHostFn = (id: string | null | undefined) => boolean;
 
-function newManagerRoutePath(projectId: string) {
-  return `/projects/${projectId}/managers/new`;
+export function NewManagerDialog() {
+  const { state, setOpen } = useNewManagerDialog();
+  return (
+    <Dialog open={state.isOpen} onOpenChange={setOpen}>
+      <DialogContent className="gap-3 md:max-w-md">
+        <DialogHeader>
+          <DialogTitle>New Manager</DialogTitle>
+          <DialogDescription>
+            A manager is a teammate that coordinates work for you and delegates
+            to worker threads.
+          </DialogDescription>
+        </DialogHeader>
+        {state.isOpen && state.initialProjectId ? (
+          <NewManagerDialogBody
+            key={state.initialProjectId}
+            initialProjectId={state.initialProjectId}
+            onClose={() => {
+              setOpen(false);
+            }}
+          />
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  );
 }
 
-export function NewManagerView() {
-  const { projectId } = useParams<"projectId">();
+interface NewManagerDialogBodyProps {
+  initialProjectId: string;
+  onClose: () => void;
+}
+
+function NewManagerDialogBody({
+  initialProjectId,
+  onClose,
+}: NewManagerDialogBodyProps) {
   const navigate = useNavigate();
+  const [selectedProjectId, setSelectedProjectId] = useState(initialProjectId);
   const [selectedProviderId, setSelectedProviderId] = useState("");
 
   const projectsQuery = useProjects();
@@ -78,53 +116,28 @@ export function NewManagerView() {
   const handleHire = useCallback(
     async (params: HireProjectManagerRequest) => {
       const thread = await hireManager.mutateAsync(params);
+      onClose();
       navigate(`/projects/${thread.projectId}/threads/${thread.id}`);
     },
-    [hireManager, navigate],
+    [hireManager, navigate, onClose],
   );
-  const handleProjectChange = useCallback(
-    (nextProjectId: string) => {
-      if (nextProjectId === projectId) return;
-      navigate(newManagerRoutePath(nextProjectId));
-    },
-    [navigate, projectId],
-  );
-
-  if (!projectId) {
-    return (
-      <PageShell contentClassName="min-h-full items-center justify-center">
-        <div className="flex flex-col items-center gap-3 py-12 text-center">
-          <Icon
-            name="FolderOpen"
-            className="size-5 text-muted-foreground"
-            aria-hidden
-          />
-          <p className="text-sm text-muted-foreground">
-            Pick a project from the sidebar to hire a manager.
-          </p>
-        </div>
-      </PageShell>
-    );
-  }
 
   return (
-    <PageShell contentClassName="pt-4 md:pt-5">
-      <NewManagerForm
-        projectId={projectId}
-        projects={projects}
-        projectsAreLoaded={projectsAreLoaded}
-        providers={providers}
-        providersAreLoaded={providersAreLoaded}
-        hosts={hosts}
-        isLocalHost={isLocalHost}
-        models={models}
-        selectedProviderId={selectedProviderId}
-        onSelectedProviderIdChange={setSelectedProviderId}
-        onProjectChange={handleProjectChange}
-        onHire={handleHire}
-        isHirePending={hireManager.isPending}
-      />
-    </PageShell>
+    <NewManagerForm
+      projectId={selectedProjectId}
+      projects={projects}
+      projectsAreLoaded={projectsAreLoaded}
+      providers={providers}
+      providersAreLoaded={providersAreLoaded}
+      hosts={hosts}
+      isLocalHost={isLocalHost}
+      models={models}
+      selectedProviderId={selectedProviderId}
+      onSelectedProviderIdChange={setSelectedProviderId}
+      onProjectChange={setSelectedProjectId}
+      onHire={handleHire}
+      isHirePending={hireManager.isPending}
+    />
   );
 }
 
@@ -185,7 +198,7 @@ export function NewManagerForm({
   const hasSelectedProvider = selectedProvider !== null;
   const unavailableProviderMessage = providersAreLoaded
     ? "No providers available"
-    : "Loading providers…";
+    : "Loading…";
   const unavailableProjectMessage = projectsAreLoaded
     ? "No projects available"
     : "Loading projects…";
@@ -423,137 +436,106 @@ export function NewManagerForm({
   return (
     <form
       aria-label="Hire manager"
-      className="space-y-1"
+      className="space-y-3"
       onSubmit={handleHire}
     >
-      <div className="flex items-center px-3.5">
-        {projectOptions.length > 0 ? (
-          <OptionPicker
-            label="Project"
-            value={effectiveProjectId}
-            options={projectOptions}
-            onChange={handleProjectChange}
-            className="h-8 text-sm"
-          />
-        ) : (
-          <LoadingOrEmptyText
-            isLoading={!projectsAreLoaded}
-            message={unavailableProjectMessage}
-          />
-        )}
-      </div>
-
-      <div className="relative w-full rounded-lg border border-border bg-background pb-2">
-        <div className="space-y-3 px-4 pt-3">
-          <div className="space-y-1">
-            <div className="flex items-center gap-2 text-sm">
-              <Icon
-                name="UserRoundPlus"
-                className="size-4 shrink-0 text-primary"
-              />
-              <span className="font-medium text-foreground">New Manager</span>
-            </div>
-            <p className="text-sm leading-relaxed text-muted-foreground">
-              A manager is a teammate that coordinates work for you and
-              delegates to worker threads. They remember your preferences
-              and use bb just like you do.
-            </p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-foreground">They can:</p>
-            <ul className="list-disc space-y-0.5 pl-5 text-sm leading-relaxed text-muted-foreground">
-              <li>Orchestrate work across multiple threads</li>
-              <li>Handle the repetitive parts of your work</li>
-              <li>Schedule recurring check-ins or future tasks</li>
-            </ul>
-          </div>
-        </div>
-
-        <div className="px-4 pt-3">
+      <DetailCard appearance="flat" labelWidth="64px">
+        <DetailRow label="Project" valueClassName="min-w-0">
+          {projectOptions.length > 0 ? (
+            <OptionPicker
+              label="Project"
+              value={effectiveProjectId}
+              options={projectOptions}
+              onChange={handleProjectChange}
+            />
+          ) : (
+            <LoadingOrEmptyText
+              isLoading={!projectsAreLoaded}
+              message={unavailableProjectMessage}
+            />
+          )}
+        </DetailRow>
+        <DetailRow
+          label={<label htmlFor={nameInputId}>Name</label>}
+          valueClassName="min-w-0"
+        >
           <Input
             id={nameInputId}
             value={managerName}
             placeholder="Give them a name (optional)"
             disabled={isPending}
-            aria-label="Manager name"
-            className="h-10 border-input text-sm"
+            className="h-7 text-xs"
             onChange={(event) => {
               setManagerName(event.target.value);
               setError(null);
             }}
           />
-        </div>
-
-        <div className="flex flex-row items-center gap-3 pl-3.5 pr-4 pt-1.5">
-          <div className="flex min-w-0 flex-1 flex-row items-center gap-1">
-            {hasSelectedProvider ? (
-              modelOptions.length > 0 ? (
-                <>
-                  <ProviderModelPicker
-                    providerOptions={providerOptions}
-                    selectedProviderId={selectedProviderValue}
-                    onSelectedProviderChange={handleProviderChange}
-                    hasMultipleProviders={providers.length > 1}
-                    modelValue={selectedModel}
-                    modelOptions={modelOptions}
-                    onModelChange={handleModelChange}
-                    formatModelLabel={formatModelLabel}
-                    fastModeEnabled={false}
-                    onFastModeChange={() => {}}
-                    showFastModeToggle={false}
-                    muted
+        </DetailRow>
+        <DetailRow label="Model" valueClassName="min-w-0">
+          {hasSelectedProvider ? (
+            modelOptions.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1">
+                <ProviderModelPicker
+                  providerOptions={providerOptions}
+                  selectedProviderId={selectedProviderValue}
+                  onSelectedProviderChange={handleProviderChange}
+                  hasMultipleProviders={providers.length > 1}
+                  modelValue={selectedModel}
+                  modelOptions={modelOptions}
+                  onModelChange={handleModelChange}
+                  formatModelLabel={formatModelLabel}
+                  fastModeEnabled={false}
+                  onFastModeChange={() => {}}
+                  showFastModeToggle={false}
+                />
+                {reasoningOptions.length > 0 ? (
+                  <OptionPicker
+                    label="Reasoning"
+                    value={
+                      effectiveReasoningLevel ?? reasoningOptions[0]!.value
+                    }
+                    options={reasoningOptions}
+                    onChange={handleReasoningLevelChange}
                   />
-                  {reasoningOptions.length > 0 ? (
-                    <OptionPicker
-                      label="Reasoning"
-                      value={
-                        effectiveReasoningLevel ?? reasoningOptions[0]!.value
-                      }
-                      options={reasoningOptions}
-                      onChange={handleReasoningLevelChange}
-                      muted
-                    />
-                  ) : null}
-                  <HostPicker
-                    hosts={hosts}
-                    eligibleHosts={eligibleHosts}
-                    selectedHostId={selectedHostId}
-                    onChange={setSelectedHostId}
-                    isLocalHost={isLocalHost}
-                    muted
-                  />
-                </>
-              ) : (
-                <LoadingOrEmptyText isLoading message="Loading models…" />
-              )
+                ) : null}
+              </div>
             ) : (
-              <LoadingOrEmptyText
-                isLoading={!providersAreLoaded}
-                message={unavailableProviderMessage}
-              />
-            )}
-          </div>
-          <div className="flex shrink-0 flex-row items-center gap-1">
-            <Button
-              type="submit"
-              size="sm"
-              variant="default"
-              title={isSubmitInProgress ? "Hiring…" : "Hire manager"}
-              aria-label="Hire Manager"
-              disabled={isSubmitInProgress}
-              className={COARSE_POINTER_PROMPT_ACTION_BUTTON_CLASS}
-            >
-              {isSubmitInProgress ? (
-                <Icon name="Spinner" className="size-4 animate-spin" />
-              ) : (
-                <Icon name="UserRoundPlus" className="size-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
+              <LoadingOrEmptyText isLoading message="Loading…" />
+            )
+          ) : (
+            <LoadingOrEmptyText
+              isLoading={!providersAreLoaded}
+              message={unavailableProviderMessage}
+            />
+          )}
+        </DetailRow>
+        {eligibleHosts.length > 1 ? (
+          <DetailRow label="Host" valueClassName="min-w-0">
+            <HostPicker
+              hosts={hosts}
+              eligibleHosts={eligibleHosts}
+              selectedHostId={selectedHostId}
+              onChange={setSelectedHostId}
+              isLocalHost={isLocalHost}
+            />
+          </DetailRow>
+        ) : null}
+      </DetailCard>
 
       <FormError message={error} />
+
+      <DialogFooter>
+        <Button type="submit" disabled={isSubmitInProgress}>
+          {isSubmitInProgress ? (
+            <>
+              <Icon name="Spinner" className="mr-2 size-4 animate-spin" />
+              Creating…
+            </>
+          ) : (
+            "Create"
+          )}
+        </Button>
+      </DialogFooter>
     </form>
   );
 }

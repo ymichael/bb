@@ -17,6 +17,8 @@ function labelWidthStyle(
   return { "--detail-label-width": labelWidth } as CSSProperties;
 }
 
+export type DetailCardAppearance = "card" | "flat";
+
 export interface DetailCardProps {
   children: ReactNode;
   className?: string;
@@ -25,17 +27,29 @@ export interface DetailCardProps {
    * rows inherit it without prop drilling. Defaults to 96px.
    */
   labelWidth?: string;
+  /**
+   * `card` (default) wraps the rows in a bordered, padded panel.
+   * `flat` drops the chrome so the rows sit inline with surrounding content
+   * — useful inside modals or other containers that already provide framing.
+   */
+  appearance?: DetailCardAppearance;
 }
+
+const DETAIL_CARD_BASE_CLASS = "flex flex-col gap-1";
+const DETAIL_CARD_CARD_CLASS =
+  "rounded-md border border-border bg-surface-raised px-2 py-1";
 
 export function DetailCard({
   children,
   className,
   labelWidth,
+  appearance = "card",
 }: DetailCardProps) {
   return (
     <dl
       className={cn(
-        "flex flex-col gap-1 rounded-md border border-border bg-surface-raised px-2 py-1",
+        DETAIL_CARD_BASE_CLASS,
+        appearance === "card" && DETAIL_CARD_CARD_CLASS,
         className,
       )}
       style={labelWidthStyle(labelWidth)}

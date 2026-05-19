@@ -618,8 +618,9 @@ export function ThreadMetadataCard({
 }: DetailCardWrapperProps) {
   return (
     <DetailCard
+      appearance="flat"
       className={cn(
-        "h-full min-h-0 rounded-none border-0 bg-transparent px-0 py-0",
+        "h-full min-h-0",
         hasFlexibleHeight ? "flex-1" : "shrink-0",
       )}
     >

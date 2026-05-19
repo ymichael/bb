@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/sidebar.js";
 import { COARSE_POINTER_CHILD_ICON_BUTTON_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
 import { ProjectList, ProjectListActionButtons } from "./ProjectList";
+import { useNewManagerDialog } from "@/hooks/useNewManagerDialog";
 import { useQuickCreateProjectController } from "@/hooks/useQuickCreateProject";
 
 interface AppSidebarProps {
@@ -31,6 +32,7 @@ export function AppSidebar({
   isManagerActionPending = false,
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
+  const newManagerDialog = useNewManagerDialog();
   const navigate = useNavigate();
   const { isCompactViewport, setOpenMobile } = useSidebar();
   const isCompactViewportRef = useRef(isCompactViewport);
@@ -52,9 +54,9 @@ export function AppSidebar({
   const handleNewManager = useCallback(
     (managerProjectId: string) => {
       closeOnMobile();
-      void navigate(`/projects/${managerProjectId}/managers/new`);
+      newManagerDialog.open(managerProjectId);
     },
-    [closeOnMobile, navigate],
+    [closeOnMobile, newManagerDialog],
   );
 
   const newChatAction = selectedProjectId ? handleNewChat : undefined;

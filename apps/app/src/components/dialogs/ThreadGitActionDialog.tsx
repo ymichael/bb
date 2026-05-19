@@ -198,12 +198,12 @@ export function ThreadGitActionDialogContent({
         <DialogTitle>{dialogCopy.title}</DialogTitle>
         <DialogDescription>{dialogCopy.description}</DialogDescription>
       </DialogHeader>
-      <form className="space-y-5 px-6 pt-3 pb-5" onSubmit={handleSubmit}>
+      <form className="space-y-4 px-6 pt-1 pb-5" onSubmit={handleSubmit}>
         {branchName ||
         gitStatusDisplay ||
         canShowMergeBase ||
         shouldShowChangedFilesRow ? (
-          <DetailCard className="border-border bg-surface-recessed">
+          <DetailCard appearance="flat">
             {branchName ? (
               <DetailRow label="Branch" valueClassName="min-w-0 truncate">
                 <span className="block truncate" title={branchName}>
