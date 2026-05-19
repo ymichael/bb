@@ -104,6 +104,7 @@ interface CodexResponseFormat {
 
 interface CodexResponsesRequest {
   model: string;
+  instructions: string;
   store: boolean;
   stream: boolean;
   input: CodexInputMessage[];
@@ -543,11 +544,39 @@ function parseStructuredResult(rawText: string): JsonObject {
   return object;
 }
 
+function withStrictObjectSchemas(value: JsonValue): JsonValue {
+  if (Array.isArray(value)) {
+    return value.map((item) => withStrictObjectSchemas(item));
+  }
+
+  const object = jsonObject(value);
+  if (!object) {
+    return value;
+  }
+
+  const normalized: JsonObject = {};
+  for (const [key, childValue] of Object.entries(object)) {
+    normalized[key] = withStrictObjectSchemas(childValue);
+  }
+  if (
+    normalized.type === "object" &&
+    normalized.additionalProperties === undefined
+  ) {
+    normalized.additionalProperties = false;
+  }
+  if (normalized.type === "object") {
+    normalized.required = Object.keys(jsonObject(normalized.properties) ?? {});
+  }
+  return normalized;
+}
+
 function buildCodexResponsesRequest(
   command: InferenceCompleteCommand,
 ): CodexResponsesRequest {
   return {
     model: command.model,
+    instructions:
+      "Follow the user prompt and respond with structured JSON that matches the requested schema.",
     store: false,
     stream: true,
     input: [
@@ -566,7 +595,7 @@ function buildCodexResponsesRequest(
         type: "json_schema",
         name: "result",
         strict: true,
-        schema: command.outputSchema,
+        schema: withStrictObjectSchemas(command.outputSchema),
       },
     },
   };

@@ -221,6 +221,8 @@ describe("Codex ChatGPT client", () => {
     const requestBody = JSON.parse(textBodyFromInit(init));
     expect(requestBody).toMatchObject({
       model: "gpt-5.4-mini",
+      instructions:
+        "Follow the user prompt and respond with structured JSON that matches the requested schema.",
       stream: true,
       text: {
         format: {
@@ -275,6 +277,8 @@ describe("Codex ChatGPT client", () => {
     const requestBody = JSON.parse(textBodyFromInit(init));
     expect(requestBody).toMatchObject({
       model: "gpt-5.4-mini",
+      instructions:
+        "Follow the user prompt and respond with structured JSON that matches the requested schema.",
       stream: true,
       text: {
         format: {
@@ -322,6 +326,12 @@ describe("Codex ChatGPT client", () => {
       `Bearer ${oldAccessToken}`,
     );
     expect(headersFromInit(init).get("chatgpt-account-id")).toBe("account-old");
+    const requestBody = JSON.parse(textBodyFromInit(init));
+    expect(requestBody.text.format.schema).toMatchObject({
+      type: "object",
+      additionalProperties: false,
+      required: [],
+    });
     await expect(fs.readFile(authPath, "utf8")).resolves.toBe(originalAuthJson);
   });
 

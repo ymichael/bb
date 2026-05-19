@@ -51,8 +51,7 @@ export interface ThreadMetadataGenerationOutcome {
 }
 
 interface RawGeneratedThreadMetadata {
-  branchSlug?: string;
-  title?: string;
+  title: string;
 }
 
 function cleanPromptText(input: PromptInput[]): string {
@@ -110,8 +109,7 @@ export function deriveBranchSlugFromTitle(title: string): string | null {
 }
 
 const threadMetadataSchema = Type.Object({
-  branchSlug: Type.Optional(Type.String()),
-  title: Type.Optional(Type.String()),
+  title: Type.String(),
 });
 
 function normalizeGeneratedThreadMetadata(

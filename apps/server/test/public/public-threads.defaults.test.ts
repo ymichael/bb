@@ -35,7 +35,7 @@ describe("public thread default routes", () => {
         hostId: host.id,
         path: "/tmp/thread-defaults-create",
       });
-      const environment = seedEnvironment(harness.deps, {
+      seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
         path: "/tmp/thread-defaults-create",
@@ -58,8 +58,12 @@ describe("public thread default routes", () => {
             { type: "text", text: "Create with explicit execution options" },
           ],
           environment: {
-            type: "reuse",
-            environmentId: environment.id,
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "unmanaged",
+              path: null,
+            },
           },
         }),
       });
