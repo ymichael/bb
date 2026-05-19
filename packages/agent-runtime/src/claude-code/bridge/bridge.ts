@@ -40,6 +40,10 @@ import { shouldAutoDenyInteractiveRequest } from "../../shared/permission-policy
 import { SdkSession, type SdkSessionOptions } from "./sdk-session.js";
 import { listClaudeCodeBridgeModels } from "./model-list.js";
 import {
+  buildUserMessageContent,
+  type ClaudeMessageContent,
+} from "./prompt-input-content.js";
+import {
   decodeClaudeCodeJsonRpcRequest,
   type ClaudeCodeJsonRpcRequest,
   type ThreadResumeParams,
@@ -77,11 +81,6 @@ import {
   toPendingInteractionPermissionProfile,
 } from "../interactive-contract.js";
 export { buildSessionOptions } from "./session-options.js";
-
-const promptTextInputSchema = z.object({
-  type: z.literal("text"),
-  text: z.string(),
-});
 
 // Claude Agent SDK 0.2.111 types stale resume failures as generic
 // SDKResultError.errors. The bundled Claude Code CLI can also emit the same
@@ -190,7 +189,7 @@ interface CloseThreadSessionArgs {
 }
 
 interface ClaudeResumeRecoveryState {
-  acceptedInputTexts: string[];
+  acceptedInputs: ClaudeMessageContent[];
   attemptedProviderThreadId: string;
   retryAttempted: boolean;
 }
@@ -217,7 +216,7 @@ interface StartFreshSessionAfterStaleResumeArgs {
 }
 
 interface ReplaceThreadSessionArgs {
-  acceptedInputTexts: string[];
+  acceptedInputs: ClaudeMessageContent[];
   providerThreadId: string;
   replacementSession: ThreadSession;
   threadId: string;
@@ -492,8 +491,8 @@ function startFreshSessionAfterStaleResume(
     ...args.threadSession.sessionOptions,
     sessionId: providerThreadId,
   };
-  const acceptedInputTexts = [
-    ...(args.threadSession.resumeRecovery?.acceptedInputTexts ?? []),
+  const acceptedInputs = [
+    ...(args.threadSession.resumeRecovery?.acceptedInputs ?? []),
   ];
   const replacementSession = createThreadSession({
     permissionEscalation: args.threadSession.permissionEscalation,
@@ -506,7 +505,7 @@ function startFreshSessionAfterStaleResume(
   });
 
   replaceThreadSession({
-    acceptedInputTexts,
+    acceptedInputs,
     providerThreadId,
     replacementSession,
     threadId: args.threadId,
@@ -530,8 +529,8 @@ function replaceThreadSession(args: ReplaceThreadSessionArgs): void {
   args.replacementSession.session.start();
   sendThreadIdentity(args.threadId, args.providerThreadId);
 
-  for (const inputText of args.acceptedInputTexts) {
-    args.replacementSession.session.pushInput(inputText);
+  for (const inputContent of args.acceptedInputs) {
+    args.replacementSession.session.pushInput(inputContent);
   }
 }
 
@@ -1131,10 +1130,10 @@ async function handleRequest(request: ClaudeCodeJsonRpcRequest): Promise<void> {
       await handleThreadResume(request.id, request.params);
       break;
     case "turn/start":
-      handleTurnStart(request.id, request.params);
+      await handleTurnStart(request.id, request.params);
       break;
     case "turn/steer":
-      handleTurnSteer(request.id, request.params);
+      await handleTurnSteer(request.id, request.params);
       break;
     case "thread/stop":
       sendResult(request.id, await handleThreadStop(request.params));
@@ -1225,7 +1224,7 @@ async function handleThreadResume(
       : {}),
     resumeRecovery: requestedProviderThreadId
       ? {
-          acceptedInputTexts: [],
+          acceptedInputs: [],
           attemptedProviderThreadId: requestedProviderThreadId,
           retryAttempted: false,
         }
@@ -1243,39 +1242,45 @@ async function handleThreadResume(
   });
 }
 
-function handleTurnStart(id: string | number, params: TurnStartParams): void {
+async function handleTurnStart(
+  id: string | number,
+  params: TurnStartParams,
+): Promise<void> {
   const threadSession = sessions.get(params.threadId);
   if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
     return;
   }
 
-  const input = extractInputText(params.input);
-  if (!input) {
+  const content = await buildUserMessageContent(params.input);
+  if (content === undefined) {
     sendError(id, -32602, "Missing input text");
     return;
   }
 
-  threadSession.resumeRecovery?.acceptedInputTexts.push(input);
-  threadSession.session.pushInput(input);
+  threadSession.resumeRecovery?.acceptedInputs.push(content);
+  threadSession.session.pushInput(content);
   sendResult(id, { threadId: params.threadId });
 }
 
-function handleTurnSteer(id: string | number, params: TurnSteerParams): void {
+async function handleTurnSteer(
+  id: string | number,
+  params: TurnSteerParams,
+): Promise<void> {
   const threadSession = sessions.get(params.threadId);
   if (!threadSession || threadSession.closing) {
     sendError(id, -32000, "No active session");
     return;
   }
 
-  const input = extractInputText(params.input);
-  if (!input) {
+  const content = await buildUserMessageContent(params.input);
+  if (content === undefined) {
     sendError(id, -32602, "Missing input text");
     return;
   }
 
-  threadSession.resumeRecovery?.acceptedInputTexts.push(input);
-  threadSession.session.pushInput(input);
+  threadSession.resumeRecovery?.acceptedInputs.push(content);
+  threadSession.session.pushInput(content);
   sendResult(id, { threadId: params.threadId });
 }
 
@@ -1288,21 +1293,6 @@ async function handleThreadStop(
     threadId: params.threadId,
   });
   return { ok: true };
-}
-
-function extractInputText(input: unknown): string | undefined {
-  if (typeof input === "string") return input;
-  if (!Array.isArray(input)) return undefined;
-
-  const chunks: string[] = [];
-  for (const item of input) {
-    const parsed = promptTextInputSchema.safeParse(item);
-    if (parsed.success) {
-      chunks.push(parsed.data.text);
-    }
-  }
-
-  return chunks.length > 0 ? chunks.join("\n") : undefined;
 }
 
 export function handleLine(line: string): void {

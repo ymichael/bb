@@ -297,6 +297,18 @@ async function readNextPromptText(call: ClaudeQueryCall): Promise<string> {
   return content;
 }
 
+type ClaudePromptContent = SDKUserMessage["message"]["content"];
+
+async function readNextPromptContent(
+  call: ClaudeQueryCall,
+): Promise<ClaudePromptContent> {
+  const result = await call.prompt[Symbol.asyncIterator]().next();
+  if (result.done) {
+    throw new Error("Expected Claude prompt input");
+  }
+  return result.value.message.content;
+}
+
 function createResultUsage(): SdkResultUsage {
   return {
     cache_creation: {
@@ -2082,6 +2094,145 @@ describe("bridge", () => {
       await bridge.flushWork();
       queries[1]?.finish();
       await bridge.waitForResponse(14);
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("forwards prompt text as a plain string to preserve SDK cache hits", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    try {
+      const threadId = "thread-prompt-text-only";
+      await startBridgeThread({ bridge, threadId });
+
+      bridge.sendRequest(2, "turn/start", {
+        input: [{ type: "text", text: "Hello there" }],
+        providerThreadId: null,
+        threadId,
+      });
+      await bridge.waitForResponse(2);
+
+      await expect(readNextPromptContent(getLatestQueryCall())).resolves.toBe(
+        "Hello there",
+      );
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("forwards a localImage attachment as a base64 ImageBlockParam", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    const stagingDir = mkdtempSync(join(tmpdir(), "bb-bridge-attach-"));
+    tempDirs.push(stagingDir);
+    const imagePath = join(stagingDir, "000-screenshot.png");
+    const imageBase64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
+    writeFileSync(imagePath, Buffer.from(imageBase64, "base64"));
+
+    try {
+      const threadId = "thread-prompt-local-image";
+      await startBridgeThread({ bridge, threadId });
+
+      bridge.sendRequest(2, "turn/start", {
+        input: [
+          { type: "text", text: "Describe this image" },
+          { type: "localImage", path: imagePath },
+        ],
+        providerThreadId: null,
+        threadId,
+      });
+      await bridge.waitForResponse(2);
+
+      const content = await readNextPromptContent(getLatestQueryCall());
+      if (typeof content === "string") {
+        throw new Error("Expected ContentBlockParam[] content for attachments");
+      }
+      expect(content).toEqual([
+        { type: "text", text: "Describe this image" },
+        {
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/png",
+            data: imageBase64,
+          },
+        },
+      ]);
+
+      await stopBridgeThread({ bridge, queries, threadId });
+    } finally {
+      bridge.restore();
+    }
+  });
+
+  it("forwards a text localFile attachment as a DocumentBlockParam", async () => {
+    const bridge = createBridgeJsonRpcTestHarness(handleLine);
+    const queries: ControlledClaudeQuery[] = [];
+    queryMock.mockImplementation(() => {
+      const query = createControlledClaudeQuery();
+      queries.push(query);
+      return query;
+    });
+
+    const stagingDir = mkdtempSync(join(tmpdir(), "bb-bridge-attach-"));
+    tempDirs.push(stagingDir);
+    const filePath = join(stagingDir, "000-notes.md");
+    const fileBody = "# Title\n\nthe body";
+    writeFileSync(filePath, fileBody);
+
+    try {
+      const threadId = "thread-prompt-local-file";
+      await startBridgeThread({ bridge, threadId });
+
+      bridge.sendRequest(2, "turn/start", {
+        input: [
+          { type: "text", text: "Summarize this doc" },
+          {
+            type: "localFile",
+            path: filePath,
+            name: "notes.md",
+            sizeBytes: fileBody.length,
+          },
+        ],
+        providerThreadId: null,
+        threadId,
+      });
+      await bridge.waitForResponse(2);
+
+      const content = await readNextPromptContent(getLatestQueryCall());
+      if (typeof content === "string") {
+        throw new Error("Expected ContentBlockParam[] content for attachments");
+      }
+      expect(content).toEqual([
+        { type: "text", text: "Summarize this doc" },
+        {
+          type: "document",
+          source: {
+            type: "text",
+            media_type: "text/plain",
+            data: fileBody,
+          },
+          title: "notes.md",
+        },
+      ]);
+
+      await stopBridgeThread({ bridge, queries, threadId });
     } finally {
       bridge.restore();
     }

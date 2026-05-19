@@ -8,6 +8,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudePermissionMode } from "../interactive-contract.js";
+import type { ClaudeMessageContent } from "./prompt-input-content.js";
 
 export interface SdkSessionOptions {
   cwd: string;
@@ -124,10 +125,10 @@ export class SdkSession {
     void this.consumeStream();
   }
 
-  pushInput(text: string): void {
+  pushInput(content: ClaudeMessageContent): void {
     const message: SDKUserMessage = {
       type: "user",
-      message: { role: "user", content: text },
+      message: { role: "user", content },
       parent_tool_use_id: null,
       session_id: this.sessionId ?? "",
     };
