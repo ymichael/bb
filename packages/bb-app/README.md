@@ -10,9 +10,9 @@
 
 [![npm version](https://img.shields.io/npm/v/bb-app.svg)](https://www.npmjs.com/package/bb-app)
 
-bb is a programmable IDE that lets you run your favorite coding agents
-(Codex, Claude Code or Pi). It's built to be used by both you and your
-agents so you can seamlessly delegate any task to them.
+bb is an agentic IDE that can control itself. You can seamlessly
+orchestrate all of your favorite coding agents together and have them
+programmatically use bb too.
 
 This package provides the `npx bb-app` launcher. Every surface — the web
 app, CLI, and HTTP API — is a first-class way to drive bb. Work runs in
