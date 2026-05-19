@@ -78,10 +78,27 @@ import {
 } from "../interactive-contract.js";
 export { buildSessionOptions } from "./session-options.js";
 
-const promptTextInputSchema = z.object({
-  type: z.literal("text"),
-  text: z.string(),
-});
+const promptInputItemSchema = z.discriminatedUnion("type", [
+  z.object({
+    type: z.literal("text"),
+    text: z.string(),
+  }),
+  z.object({
+    type: z.literal("image"),
+    url: z.string(),
+  }),
+  z.object({
+    type: z.literal("localImage"),
+    path: z.string(),
+  }),
+  z.object({
+    type: z.literal("localFile"),
+    path: z.string(),
+    name: z.string().optional(),
+    sizeBytes: z.number().optional(),
+    mimeType: z.string().optional(),
+  }),
+]);
 
 // Claude Agent SDK 0.2.111 types stale resume failures as generic
 // SDKResultError.errors. The bundled Claude Code CLI can also emit the same
@@ -1250,7 +1267,7 @@ function handleTurnStart(id: string | number, params: TurnStartParams): void {
     return;
   }
 
-  const input = extractInputText(params.input);
+  const input = buildPromptText(params.input);
   if (!input) {
     sendError(id, -32602, "Missing input text");
     return;
@@ -1268,7 +1285,7 @@ function handleTurnSteer(id: string | number, params: TurnSteerParams): void {
     return;
   }
 
-  const input = extractInputText(params.input);
+  const input = buildPromptText(params.input);
   if (!input) {
     sendError(id, -32602, "Missing input text");
     return;
@@ -1290,15 +1307,54 @@ async function handleThreadStop(
   return { ok: true };
 }
 
-function extractInputText(input: unknown): string | undefined {
-  if (typeof input === "string") return input;
+function localAttachmentMarker(args: {
+  kind: "image" | "file";
+  path: string;
+  name?: string | undefined;
+  mimeType?: string | undefined;
+  sizeBytes?: number | undefined;
+}): string {
+  const namePart =
+    args.name && args.name.length > 0 ? ` "${args.name}"` : "";
+  const details: string[] = [];
+  if (args.mimeType) details.push(args.mimeType);
+  if (args.sizeBytes !== undefined) details.push(`${args.sizeBytes} bytes`);
+  const suffix = details.length > 0 ? ` (${details.join(", ")})` : "";
+  return `[Attached ${args.kind}${namePart}${suffix}. It is on disk at ${args.path} — use the Read tool to view it.]`;
+}
+
+function buildPromptText(input: unknown): string | undefined {
+  if (typeof input === "string") {
+    return input.length > 0 ? input : undefined;
+  }
   if (!Array.isArray(input)) return undefined;
 
   const chunks: string[] = [];
   for (const item of input) {
-    const parsed = promptTextInputSchema.safeParse(item);
-    if (parsed.success) {
-      chunks.push(parsed.data.text);
+    const parsed = promptInputItemSchema.safeParse(item);
+    if (!parsed.success) continue;
+    const entry = parsed.data;
+    switch (entry.type) {
+      case "text":
+        if (entry.text.length > 0) chunks.push(entry.text);
+        break;
+      case "image":
+        chunks.push(`[Attached image: ${entry.url}]`);
+        break;
+      case "localImage":
+        chunks.push(localAttachmentMarker({ kind: "image", path: entry.path }));
+        break;
+      case "localFile":
+        chunks.push(
+          localAttachmentMarker({
+            kind: "file",
+            path: entry.path,
+            name: entry.name,
+            mimeType: entry.mimeType,
+            sizeBytes: entry.sizeBytes,
+          }),
+        );
+        break;
     }
   }
 
