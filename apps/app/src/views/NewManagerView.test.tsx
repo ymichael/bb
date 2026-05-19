@@ -9,6 +9,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { QueryClient } from "@tanstack/react-query";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import type { AvailableModel, Host, ProviderInfo, Thread } from "@bb/domain";
 import type {
@@ -46,6 +47,11 @@ interface InstallHireManagerRoutesArgs {
 }
 
 type SystemProvidersFixture = ProviderInfo[] | (() => ProviderInfo[]);
+
+interface RefetchExecutionOptionsArgs {
+  providerId: string;
+  queryClient: QueryClient;
+}
 
 function installMatchMedia() {
   Object.defineProperty(window, "matchMedia", {
@@ -206,6 +212,19 @@ async function selectProviderModel(args: {
   await openProviderModelPicker();
   fireEvent.click(await screen.findByTitle(args.provider));
   fireEvent.click(await waitFor(() => findOptionLabel(args.model)));
+}
+
+async function refetchExecutionOptions(
+  args: RefetchExecutionOptionsArgs,
+): Promise<void> {
+  await act(async () => {
+    await args.queryClient.refetchQueries({
+      queryKey: systemExecutionOptionsQueryKey({
+        environmentId: null,
+        providerId: args.providerId,
+      }),
+    });
+  });
 }
 
 function createDefaultSystemProviders(): ProviderInfo[] {
@@ -530,24 +549,20 @@ describe("NewManagerView", () => {
     systemProviders = systemProviders.filter(
       (provider) => provider.id === "pi",
     );
-    await queryClient.refetchQueries({
-      queryKey: systemExecutionOptionsQueryKey({
-        environmentId: null,
-        providerId: "codex",
-      }),
-    });
+    await refetchExecutionOptions({ queryClient, providerId: "codex" });
 
     await waitFor(() => {
       expectProviderModelTitle(["Pi"]);
     });
 
     systemProviders = createDefaultSystemProviders();
-    await queryClient.refetchQueries({
-      queryKey: systemExecutionOptionsQueryKey({
-        environmentId: null,
-        providerId: "pi",
-      }),
+    await refetchExecutionOptions({ queryClient, providerId: "codex" });
+
+    await waitFor(() => {
+      expectProviderModelTitle(["Pi"]);
     });
+
+    await refetchExecutionOptions({ queryClient, providerId: "pi" });
 
     await waitFor(() => {
       expectProviderModelTitle(["Pi"]);
@@ -708,12 +723,7 @@ describe("NewManagerView", () => {
       }),
     ];
 
-    await queryClient.refetchQueries({
-      queryKey: systemExecutionOptionsQueryKey({
-        environmentId: null,
-        providerId: "pi",
-      }),
-    });
+    await refetchExecutionOptions({ queryClient, providerId: "pi" });
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: "Reasoning" }).title).toContain(

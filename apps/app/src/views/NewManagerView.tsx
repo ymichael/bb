@@ -213,6 +213,22 @@ export function NewManagerForm({
 
   const projectSources = selectedProject?.sources ?? EMPTY_PROJECT_SOURCES;
 
+  useEffect(() => {
+    // Keep the controlled id aligned with the visible fallback so a stale
+    // provider returning later cannot snap the picker back.
+    if (!providersAreLoaded || !selectedProviderId || !selectedProvider) {
+      return;
+    }
+    if (selectedProvider.id !== selectedProviderId) {
+      onSelectedProviderIdChange(selectedProvider.id);
+    }
+  }, [
+    onSelectedProviderIdChange,
+    providersAreLoaded,
+    selectedProvider,
+    selectedProviderId,
+  ]);
+
   const selectedModelData = useMemo(
     () => models.find((m) => m.model === selectedModel),
     [models, selectedModel],
