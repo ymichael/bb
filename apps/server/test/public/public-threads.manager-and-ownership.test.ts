@@ -387,19 +387,12 @@ describe("public thread manager and ownership routes", () => {
     }
   });
 
-  it("copies user-authored default preferences alongside bundled status into new manager thread storage", async () => {
+  it("copies user-authored default template files into new manager thread storage", async () => {
     const harness = await createTestAppHarness();
     const hostId = "host-manager-template-default";
     const dataDir = hostDataDir({ hostId });
     await rm(dataDir, { recursive: true, force: true });
     try {
-      const bundledStatusContent = await readFile(
-        new URL(
-          "../../src/services/threads/default-template/STATUS.html",
-          import.meta.url,
-        ),
-        "utf8",
-      );
       const { host } = seedHostSession(harness.deps, { id: hostId });
       const { project, source } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -414,7 +407,7 @@ describe("public thread manager and ownership routes", () => {
         name: "default",
         files: {
           "PREFERENCES.md": "default prefs\n",
-          "STATUS.html": bundledStatusContent,
+          "STATUS.html": "default status\n",
         },
       });
 
@@ -448,7 +441,7 @@ describe("public thread manager and ownership routes", () => {
       ).resolves.toBe("default prefs\n");
       await expect(
         readFile(path.join(storagePath, "STATUS.html"), "utf8"),
-      ).resolves.toBe(bundledStatusContent);
+      ).resolves.toBe("default status\n");
     } finally {
       await harness.cleanup();
       await rm(dataDir, { recursive: true, force: true });

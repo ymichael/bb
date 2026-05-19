@@ -5,7 +5,6 @@ import {
   mkdir,
   readdir,
   readFile,
-  stat,
   writeFile,
 } from "node:fs/promises";
 import path from "node:path";
@@ -40,11 +39,6 @@ interface BuiltInManagerTemplateSet {
   name: ManagerTemplateName;
 }
 
-interface EnsureBuiltInManagerTemplatesInstalledArgs {
-  dataDir: string;
-  logger: ManagerTemplateLogger;
-}
-
 interface ResolveManagerTemplateNameArgs {
   dataDir: string;
   explicitTemplateName: ManagerTemplateName | null;
@@ -66,6 +60,14 @@ interface CopyTemplateFilesArgs {
   threadStoragePath: string;
 }
 
+interface CopyBuiltInTemplateFilesArgs {
+  files: readonly BuiltInManagerTemplateFile[];
+  logger: ManagerTemplateLogger;
+  templateName: ManagerTemplateName;
+  threadId: string;
+  threadStoragePath: string;
+}
+
 interface FsErrorWithCodeArgs {
   code: string;
   error: unknown;
@@ -79,26 +81,19 @@ interface ManagerTemplateSetPathArgs extends ManagerTemplateRootPathArgs {
   templateName: ManagerTemplateName;
 }
 
-interface PathExistsArgs {
-  filePath: string;
-}
+type CopyTemplateFilesResult = "copied" | "missing";
 
-interface WriteFileIfAbsentArgs {
-  content: string;
-  filePath: string;
-}
-
-const BUILT_IN_MANAGER_TEMPLATE_SETS: readonly BuiltInManagerTemplateSet[] = [
-  {
-    name: DEFAULT_MANAGER_TEMPLATE_NAME,
-    files: [
-      {
-        fileName: "STATUS.html",
-        content: loadDefaultTemplateAsset("STATUS.html"),
-      },
-    ],
-  },
-];
+// Built-in defaults stay in the server bundle. They are copied only as a
+// seed-time fallback when the user has not authored manager-templates/default.
+const BUILT_IN_DEFAULT_MANAGER_TEMPLATE_SET: BuiltInManagerTemplateSet = {
+  name: DEFAULT_MANAGER_TEMPLATE_NAME,
+  files: [
+    {
+      fileName: "STATUS.html",
+      content: loadDefaultTemplateAsset("STATUS.html"),
+    },
+  ],
+};
 
 function isFsErrorWithCode(args: FsErrorWithCodeArgs): boolean {
   return (
@@ -127,64 +122,6 @@ function activeManagerTemplatePath(args: ManagerTemplateRootPathArgs): string {
     managerTemplateRootPath({ dataDir: args.dataDir }),
     ACTIVE_MANAGER_TEMPLATE_FILE_NAME,
   );
-}
-
-async function pathExists(args: PathExistsArgs): Promise<boolean> {
-  try {
-    await stat(args.filePath);
-    return true;
-  } catch (error) {
-    if (isFsErrorWithCode({ error, code: "ENOENT" })) {
-      return false;
-    }
-    throw error;
-  }
-}
-
-async function writeFileIfAbsent(args: WriteFileIfAbsentArgs): Promise<void> {
-  try {
-    await writeFile(args.filePath, args.content, {
-      encoding: "utf8",
-      flag: "wx",
-    });
-  } catch (error) {
-    if (!isFsErrorWithCode({ error, code: "EEXIST" })) {
-      throw error;
-    }
-  }
-}
-
-export async function ensureBuiltInManagerTemplatesInstalled(
-  args: EnsureBuiltInManagerTemplatesInstalledArgs,
-): Promise<void> {
-  const templateRootPath = managerTemplateRootPath({ dataDir: args.dataDir });
-  await mkdir(templateRootPath, { recursive: true });
-  await writeFileIfAbsent({
-    filePath: activeManagerTemplatePath({ dataDir: args.dataDir }),
-    content: `${DEFAULT_MANAGER_TEMPLATE_NAME}\n`,
-  });
-
-  for (const templateSet of BUILT_IN_MANAGER_TEMPLATE_SETS) {
-    const templateSetPath = managerTemplateSetPath({
-      dataDir: args.dataDir,
-      templateName: templateSet.name,
-    });
-    if (await pathExists({ filePath: templateSetPath })) {
-      continue;
-    }
-    await mkdir(templateSetPath, { recursive: true });
-    for (const file of templateSet.files) {
-      await writeFile(
-        path.join(templateSetPath, file.fileName),
-        file.content,
-        "utf8",
-      );
-    }
-    args.logger.debug(
-      { templateName: templateSet.name, templateSetPath },
-      "Installed built-in manager template set",
-    );
-  }
 }
 
 async function readActiveManagerTemplateName(
@@ -227,21 +164,15 @@ async function readActiveManagerTemplateName(
   return DEFAULT_MANAGER_TEMPLATE_NAME;
 }
 
-async function copyTemplateFiles(args: CopyTemplateFilesArgs): Promise<void> {
+async function copyTemplateFiles(
+  args: CopyTemplateFilesArgs,
+): Promise<CopyTemplateFilesResult> {
   let entries: Dirent[];
   try {
     entries = await readdir(args.templateDirPath, { withFileTypes: true });
   } catch (error) {
     if (isFsErrorWithCode({ error, code: "ENOENT" })) {
-      args.logger.warn(
-        {
-          templateName: args.templateName,
-          templateDirPath: args.templateDirPath,
-          threadId: args.threadId,
-        },
-        "Manager template directory is missing; skipping storage seed",
-      );
-      return;
+      return "missing";
     }
     throw error;
   }
@@ -274,6 +205,38 @@ async function copyTemplateFiles(args: CopyTemplateFilesArgs): Promise<void> {
       throw error;
     }
   }
+
+  return "copied";
+}
+
+async function copyBuiltInTemplateFiles(
+  args: CopyBuiltInTemplateFilesArgs,
+): Promise<void> {
+  await mkdir(args.threadStoragePath, { recursive: true });
+
+  for (const file of args.files) {
+    const destinationPath = path.join(args.threadStoragePath, file.fileName);
+    try {
+      await writeFile(destinationPath, file.content, {
+        encoding: "utf8",
+        flag: "wx",
+      });
+    } catch (error) {
+      if (isFsErrorWithCode({ error, code: "EEXIST" })) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  args.logger.debug(
+    {
+      templateName: args.templateName,
+      threadId: args.threadId,
+      threadStoragePath: args.threadStoragePath,
+    },
+    "Seeded manager storage from built-in template fallback",
+  );
 }
 
 export async function seedManagerThreadStorage(
@@ -288,14 +251,38 @@ export async function seedManagerThreadStorage(
     explicitTemplateName: args.explicitTemplateName,
     logger: deps.logger,
   });
-  await copyTemplateFiles({
+  const templateDirPath = managerTemplateSetPath({
+    dataDir: session.dataDir,
+    templateName,
+  });
+  const copyResult = await copyTemplateFiles({
     logger: deps.logger,
-    templateDirPath: managerTemplateSetPath({
-      dataDir: session.dataDir,
-      templateName,
-    }),
+    templateDirPath,
     templateName,
     threadId: args.threadId,
     threadStoragePath: args.threadStoragePath,
   });
+  if (copyResult === "copied") {
+    return;
+  }
+
+  if (templateName === BUILT_IN_DEFAULT_MANAGER_TEMPLATE_SET.name) {
+    await copyBuiltInTemplateFiles({
+      files: BUILT_IN_DEFAULT_MANAGER_TEMPLATE_SET.files,
+      logger: deps.logger,
+      templateName,
+      threadId: args.threadId,
+      threadStoragePath: args.threadStoragePath,
+    });
+    return;
+  }
+
+  deps.logger.warn(
+    {
+      templateName,
+      templateDirPath,
+      threadId: args.threadId,
+    },
+    "Manager template directory is missing; skipping storage seed",
+  );
 }
