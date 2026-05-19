@@ -531,6 +531,66 @@ describe("ProjectList", () => {
     expect(screen.queryByText("No projects")).toBeNull();
   });
 
+  it("renders a nested manager under its parent and exposes its children", async () => {
+    const rootManager: ProjectThreadListEntry = {
+      ...makeThreadListEntry("project-1", 1),
+      id: "thr_root_manager",
+      title: "Root Manager",
+      titleFallback: "Root Manager",
+      type: "manager",
+    };
+    const nestedManager: ProjectThreadListEntry = {
+      ...makeThreadListEntry("project-1", 2),
+      id: "thr_nested_manager",
+      parentThreadId: rootManager.id,
+      title: "Nested Manager",
+      titleFallback: "Nested Manager",
+      type: "manager",
+    };
+    const nestedChild: ProjectThreadListEntry = {
+      ...makeThreadListEntry("project-1", 3),
+      id: "thr_nested_child",
+      parentThreadId: nestedManager.id,
+      title: "Nested Child Task",
+      titleFallback: "Nested Child Task",
+    };
+    const projects = [makeProjectResponse({ id: "project-1" })];
+    const threadsByProjectId = new Map<string, ProjectThreadListEntry[]>([
+      ["project-1", [rootManager, nestedManager, nestedChild]],
+    ]);
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: buildProjectListHandler({ projects, threadsByProjectId }),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    wsManager.connect();
+    FakeReconnectingWebSocket.latest().open();
+
+    await renderProjectList();
+
+    expect(await screen.findByText("Root Manager")).toBeTruthy();
+    expect(await screen.findByText("Nested Manager")).toBeTruthy();
+    expect(await screen.findByText("Nested Child Task")).toBeTruthy();
+  });
+
   it("shows threads unavailable when a project thread list fails after the websocket connects", async () => {
     installFetchRoutes([
       {

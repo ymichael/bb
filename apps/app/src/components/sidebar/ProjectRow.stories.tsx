@@ -335,6 +335,54 @@ export function Overview() {
         })}
       </StoryRow>
       <StoryRow
+        label="nested manager"
+        hint="manager-of-managers: a root manager owns one standard child and one nested manager that owns its own children — each level keeps the user icon + chevron and indents one step further"
+      >
+        {singleProject({
+          threadListState: {
+            status: "ready",
+            threads: [
+              makeThread({
+                id: "thr_root_manager",
+                type: "manager",
+                title: "Release Coordinator",
+                titleFallback: "Release Coordinator",
+              }),
+              makeThread({
+                id: "thr_root_child",
+                title: "Audit release blockers",
+                titleFallback: "Audit release blockers",
+                parentThreadId: "thr_root_manager",
+              }),
+              makeThread({
+                id: "thr_nested_manager",
+                type: "manager",
+                title: "Frontend Sub-Team",
+                titleFallback: "Frontend Sub-Team",
+                parentThreadId: "thr_root_manager",
+              }),
+              makeThread({
+                id: "thr_nested_child_a",
+                title: "Update Timeline Row Types",
+                titleFallback: "Update Timeline Row Types",
+                parentThreadId: "thr_nested_manager",
+              }),
+              makeThread({
+                id: "thr_nested_child_b",
+                title: "Fix Timeline Pagination Bugs",
+                titleFallback: "Fix Timeline Pagination Bugs",
+                parentThreadId: "thr_nested_manager",
+                status: "active",
+                runtime: {
+                  displayStatus: "active",
+                  hostReconnectGraceExpiresAt: null,
+                },
+              }),
+            ],
+          },
+        })}
+      </StoryRow>
+      <StoryRow
         label="environment group"
         hint="two unmanaged standard threads sharing one worktree environment — grouped under a worktree header that surfaces the branch"
       >

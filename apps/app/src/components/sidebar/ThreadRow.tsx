@@ -23,14 +23,26 @@ import { isBusyThread, isUnreadDoneThread } from "@/lib/thread-activity";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 import {
+  SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS,
   SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ROW_PADDING_CLASS,
-  SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS,
+  SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS,
+  SIDEBAR_NESTED_MANAGER_ROW_PADDING_CLASS,
   SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
 } from "./sidebarRowClasses";
+
+// Depth in the manager hierarchy. 0 = root manager (rendered at the project
+// level). 1+ = nested manager (rendered inside another manager's group).
+// Indent caps at 1: deeper chains keep the depth-1 padding so the sidebar
+// can never overflow horizontally.
+export type ManagerRowDepth = 0 | 1;
+
+// Depth of a managed child relative to the project root. 1 = direct child of
+// a root manager. 2+ = child of a nested manager. Indent caps at 2.
+export type ManagedChildRowDepth = 1 | 2;
 
 export type ThreadRowOptions =
   | {
@@ -38,15 +50,18 @@ export type ThreadRowOptions =
     }
   | {
       kind: "managed-child";
+      depth: ManagedChildRowDepth;
     }
   | {
       kind: "env-grouped-child";
     }
   | {
       kind: "env-grouped-managed-child";
+      depth: ManagedChildRowDepth;
     }
   | {
       kind: "manager";
+      depth: ManagerRowDepth;
       isCollapsed: boolean;
       managedChildCount: number;
       onToggleCollapsed: (threadId: string) => void;
@@ -277,10 +292,7 @@ function ThreadTrailingIcon({
   return environmentIcon ? (
     <Icon
       name={environmentIcon}
-      className={cn(
-        "text-muted-foreground",
-        COARSE_POINTER_ICON_SIZE_CLASS,
-      )}
+      className={cn("text-muted-foreground", COARSE_POINTER_ICON_SIZE_CLASS)}
       aria-label={environmentIconLabel ?? undefined}
     />
   ) : null;
@@ -327,9 +339,25 @@ function ThreadRowComponent({
     : getEnvironmentWorkspaceDisplayIconLabel(
         thread.environmentWorkspaceDisplayKind,
       );
+  const managerRowPaddingClass =
+    managerOptions !== null && managerOptions.depth >= 1
+      ? SIDEBAR_NESTED_MANAGER_ROW_PADDING_CLASS
+      : SIDEBAR_MANAGER_ROW_PADDING_CLASS;
+  const managedChildPaddingClass =
+    options.kind === "managed-child"
+      ? options.depth >= 2
+        ? SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS
+        : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS
+      : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
+  const envGroupedManagedChildPaddingClass =
+    options.kind === "env-grouped-managed-child" && options.depth >= 2
+      ? SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS
+      : SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS;
   const childPaddingClass = isEnvGroupedManagedChild
-    ? SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS
-    : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
+    ? envGroupedManagedChildPaddingClass
+    : isManagedChild
+      ? managedChildPaddingClass
+      : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
   const rowClassName = cn(
     "group/thread-row",
     SIDEBAR_ROW_BASE_CLASS,
@@ -338,7 +366,7 @@ function ThreadRowComponent({
       ? COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS
       : COARSE_POINTER_ROW_HEIGHT_CLASS,
     isManager
-      ? SIDEBAR_MANAGER_ROW_PADDING_CLASS
+      ? managerRowPaddingClass
       : isCompactChild
         ? childPaddingClass
         : SIDEBAR_PROJECT_THREAD_ROW_PADDING_CLASS,

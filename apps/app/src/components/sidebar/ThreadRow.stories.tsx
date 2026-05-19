@@ -32,12 +32,20 @@ const makeThread = (overrides: Partial<ThreadListEntry> = {}) =>
 const noop = () => {};
 
 const defaultOption: ThreadRowOptions = { kind: "default" };
-const managedChildOption: ThreadRowOptions = { kind: "managed-child" };
+const managedChildOption: ThreadRowOptions = {
+  kind: "managed-child",
+  depth: 1,
+};
+const nestedManagedChildOption: ThreadRowOptions = {
+  kind: "managed-child",
+  depth: 2,
+};
 function managerOption(
   overrides: Partial<Extract<ThreadRowOptions, { kind: "manager" }>> = {},
 ): ThreadRowOptions {
   return {
     kind: "manager",
+    depth: 0,
     isCollapsed: false,
     managedChildCount: 0,
     onToggleCollapsed: noop,
@@ -279,6 +287,44 @@ export function Overview() {
             })}
             isActive={false}
             options={managedChildOption}
+          />
+        </SidebarStage>
+      </StoryRow>
+      <StoryRow
+        label="nested manager"
+        hint="manager that is itself a child of another manager — indented like a managed child but keeps the user icon + chevron, and its own children indent one level deeper"
+      >
+        <SidebarStage>
+          <ThreadRow
+            projectId="proj_demo"
+            thread={managerThread}
+            isActive={false}
+            options={managerOption({
+              depth: 0,
+              isCollapsed: false,
+              managedChildCount: 1,
+            })}
+          />
+          <ThreadRow
+            projectId="proj_demo"
+            thread={makeThread({
+              id: "thr_nested_manager",
+              type: "manager",
+              title: "Codex Sub-Manager",
+              titleFallback: "Codex Sub-Manager",
+            })}
+            isActive={false}
+            options={managerOption({
+              depth: 1,
+              isCollapsed: false,
+              managedChildCount: 1,
+            })}
+          />
+          <ThreadRow
+            projectId="proj_demo"
+            thread={childThread}
+            isActive={false}
+            options={nestedManagedChildOption}
           />
         </SidebarStage>
       </StoryRow>

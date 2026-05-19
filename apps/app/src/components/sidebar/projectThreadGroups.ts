@@ -14,12 +14,13 @@ export interface EnvironmentThreadGroup {
   threads: ThreadListEntry[];
 }
 
-// A single render slot in a project's or manager's thread list. Threads and
-// env groups interleave by recency, so the renderer iterates one ordered list
-// rather than two parallel arrays.
+// A single render slot in a project's or manager's thread list. Threads,
+// env groups, and nested manager groups interleave by recency, so the
+// renderer iterates one ordered list rather than three parallel arrays.
 export type ProjectThreadItem =
   | { kind: "thread"; thread: ThreadListEntry }
-  | { kind: "environment"; group: EnvironmentThreadGroup };
+  | { kind: "environment"; group: EnvironmentThreadGroup }
+  | { kind: "manager"; group: ManagerThreadGroup };
 
 export interface ManagerThreadGroup {
   managerThread: ThreadListEntry;
@@ -38,11 +39,6 @@ function isWorktreeDisplayKind(
   kind: EnvironmentWorkspaceDisplayKind,
 ): kind is WorktreeDisplayKind {
   return kind === "managed-worktree" || kind === "unmanaged-worktree";
-}
-
-interface KnownManagerParentArgs {
-  managerThreadIds: ReadonlySet<string>;
-  thread: ThreadListEntry;
 }
 
 function compareByCreatedAtDescending(
@@ -93,7 +89,14 @@ function compareStandardThreads(
 }
 
 function representativeThread(item: ProjectThreadItem): ThreadListEntry {
-  return item.kind === "thread" ? item.thread : item.group.threads[0];
+  switch (item.kind) {
+    case "thread":
+      return item.thread;
+    case "environment":
+      return item.group.threads[0];
+    case "manager":
+      return item.group.managerThread;
+  }
 }
 
 function compareProjectThreadItems(
@@ -106,7 +109,7 @@ function compareProjectThreadItems(
   );
 }
 
-function buildSortedItems(
+function buildSortedStandardItems(
   threads: ThreadListEntry[],
 ): ProjectThreadItem[] {
   const { environmentThreadGroups, looseThreads } =
@@ -122,72 +125,138 @@ function buildSortedItems(
   return items;
 }
 
-function getKnownManagerParentId({
-  managerThreadIds,
-  thread,
-}: KnownManagerParentArgs): string | null {
-  if (thread.type !== "standard") return null;
-  if (thread.parentThreadId === null) return null;
-  if (!managerThreadIds.has(thread.parentThreadId)) return null;
+interface BuildManagerGroupArgs {
+  managerThread: ThreadListEntry;
+  childrenByParentId: ReadonlyMap<string, ThreadListEntry[]>;
+  visited: Set<string>;
+}
 
-  return thread.parentThreadId;
+function buildManagerGroup({
+  managerThread,
+  childrenByParentId,
+  visited,
+}: BuildManagerGroupArgs): ManagerThreadGroup {
+  // Defensive cycle guard. The server enforces parent must be a live manager
+  // in the same project, but does not prevent a manager from being its own
+  // ancestor. If we revisit, drop the cycle edge rather than recurse.
+  if (visited.has(managerThread.id)) {
+    return {
+      managerThread,
+      managedItems: [],
+      stats: { managedChildBusyCount: 0, managedChildCount: 0 },
+    };
+  }
+  visited.add(managerThread.id);
+
+  const directChildren = childrenByParentId.get(managerThread.id) ?? [];
+  const standardChildren: ThreadListEntry[] = [];
+  const managerChildren: ThreadListEntry[] = [];
+  for (const child of directChildren) {
+    if (child.type === "manager") {
+      managerChildren.push(child);
+    } else {
+      standardChildren.push(child);
+    }
+  }
+
+  const standardItems = buildSortedStandardItems(standardChildren);
+  const nestedManagerItems: ProjectThreadItem[] = managerChildren
+    .slice()
+    .sort(compareByCreatedAtDescending)
+    .map((child) => ({
+      kind: "manager" as const,
+      group: buildManagerGroup({
+        managerThread: child,
+        childrenByParentId,
+        visited,
+      }),
+    }));
+  const managedItems: ProjectThreadItem[] = [
+    ...standardItems,
+    ...nestedManagerItems,
+  ];
+  managedItems.sort(compareProjectThreadItems);
+
+  let managedChildBusyCount = 0;
+  for (const child of directChildren) {
+    if (isBusyThread(child)) {
+      managedChildBusyCount += 1;
+    }
+  }
+
+  return {
+    managerThread,
+    managedItems,
+    stats: {
+      managedChildBusyCount,
+      managedChildCount: directChildren.length,
+    },
+  };
 }
 
 export function buildProjectThreadGroups(
   projectThreads: ThreadListEntry[],
 ): ProjectThreadGroups {
-  const managerThreads = projectThreads
-    .filter((thread) => thread.type === "manager")
-    .sort(compareByCreatedAtDescending);
+  const managerThreads = projectThreads.filter(
+    (thread) => thread.type === "manager",
+  );
   const managerThreadIds = new Set(managerThreads.map((thread) => thread.id));
-  const childrenByManagerId = new Map<string, ThreadListEntry[]>();
-  const statsByManagerId = new Map<string, ManagerThreadStats>();
+
+  const childrenByParentId = new Map<string, ThreadListEntry[]>();
   const unmanagedStandardThreads: ThreadListEntry[] = [];
 
-  for (const managerThread of managerThreads) {
-    childrenByManagerId.set(managerThread.id, []);
-    statsByManagerId.set(managerThread.id, {
-      managedChildBusyCount: 0,
-      managedChildCount: 0,
-    });
-  }
-
   for (const thread of projectThreads) {
-    if (thread.type !== "standard") continue;
-
-    const managerId = getKnownManagerParentId({ managerThreadIds, thread });
-    if (managerId === null) {
-      unmanagedStandardThreads.push(thread);
+    const parentId = thread.parentThreadId;
+    // A child sits under a manager only when its parent is a live manager in
+    // this project. Children of unknown parents (cross-project, deleted) fall
+    // through to the project-root unmanaged bucket so they remain reachable.
+    if (parentId !== null && managerThreadIds.has(parentId)) {
+      let bucket = childrenByParentId.get(parentId);
+      if (!bucket) {
+        bucket = [];
+        childrenByParentId.set(parentId, bucket);
+      }
+      bucket.push(thread);
       continue;
     }
-
-    const children = childrenByManagerId.get(managerId);
-    const stats = statsByManagerId.get(managerId);
-    if (!children || !stats) continue;
-
-    children.push(thread);
-    stats.managedChildCount += 1;
-    if (isBusyThread(thread)) {
-      stats.managedChildBusyCount += 1;
+    if (thread.type === "standard") {
+      unmanagedStandardThreads.push(thread);
     }
+    // Manager threads without an in-project manager parent become root
+    // managers in the next pass; standard threads without one are unmanaged.
   }
 
-  const managerThreadGroups: ManagerThreadGroup[] = managerThreads.map(
-    (managerThread) => ({
-      managerThread,
-      managedItems: buildSortedItems(
-        childrenByManagerId.get(managerThread.id) ?? [],
-      ),
-      stats: statsByManagerId.get(managerThread.id) ?? {
-        managedChildBusyCount: 0,
-        managedChildCount: 0,
-      },
-    }),
-  );
+  const rootManagerThreads = managerThreads
+    .filter((manager) => {
+      const parentId = manager.parentThreadId;
+      return parentId === null || !managerThreadIds.has(parentId);
+    })
+    .sort(compareByCreatedAtDescending);
+
+  const visited = new Set<string>();
+  const managerThreadGroups: ManagerThreadGroup[] = [];
+  for (const managerThread of rootManagerThreads) {
+    managerThreadGroups.push(
+      buildManagerGroup({ managerThread, childrenByParentId, visited }),
+    );
+  }
+  // Any manager not reached from an explicit root is part of a cycle with no
+  // entry point. Promote each unvisited manager to a root so it still
+  // surfaces in the tree — buildManagerGroup's visited guard breaks the
+  // cycle when it would recurse back into a placed manager.
+  const orphanedCycleManagers = managerThreads
+    .filter((manager) => !visited.has(manager.id))
+    .sort(compareByCreatedAtDescending);
+  for (const managerThread of orphanedCycleManagers) {
+    if (visited.has(managerThread.id)) continue;
+    managerThreadGroups.push(
+      buildManagerGroup({ managerThread, childrenByParentId, visited }),
+    );
+  }
 
   return {
     managerThreadGroups,
-    unmanagedItems: buildSortedItems(unmanagedStandardThreads),
+    unmanagedItems: buildSortedStandardItems(unmanagedStandardThreads),
   };
 }
 

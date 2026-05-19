@@ -14,15 +14,24 @@ import {
   ProjectActionsContextMenu,
   ProjectActionsMenu,
 } from "@/components/project/ProjectActionsMenu";
-import { SidebarMenuItem, SidebarMenuSkeleton } from "@/components/ui/sidebar.js";
-import { COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS, COARSE_POINTER_GLYPH_BOX_CLASS, COARSE_POINTER_ICON_SIZE_CLASS, COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS, COARSE_POINTER_ROW_ACTION_SIZE_CLASS } from "@/components/ui/coarse-pointer-sizing.js";
-import { cn } from "@/lib/utils";
 import {
-  getEnvironmentWorkspaceLabelIconName,
-} from "@/lib/environment-workspace-display";
+  SidebarMenuItem,
+  SidebarMenuSkeleton,
+} from "@/components/ui/sidebar.js";
+import {
+  COARSE_POINTER_COMPACT_ROW_HEIGHT_CLASS,
+  COARSE_POINTER_GLYPH_BOX_CLASS,
+  COARSE_POINTER_ICON_SIZE_CLASS,
+  COARSE_POINTER_PROJECT_ROW_ACTION_SIZE_CLASS,
+  COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
+} from "@/components/ui/coarse-pointer-sizing.js";
+import { cn } from "@/lib/utils";
+import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
 import {
   CollapsedChildCountBadge,
   ThreadRow,
+  type ManagedChildRowDepth,
+  type ManagerRowDepth,
   type ThreadRowOptions,
 } from "./ThreadRow";
 import {
@@ -36,21 +45,32 @@ import {
   SIDEBAR_MANAGER_GROUP_LINE_CLASS,
   SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS,
   SIDEBAR_MANAGER_ROW_PADDING_CLASS,
+  SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS,
+  SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS,
+  SIDEBAR_NESTED_MANAGER_LINE_CONTINUATION_CLASS,
   SIDEBAR_PROJECT_GROUP_LINE_CLASS,
   SIDEBAR_ROW_BASE_CLASS,
   SIDEBAR_ROW_INTERACTIVE_STATE_CLASS,
 } from "./sidebarRowClasses";
 
 const THREAD_ROW_DEFAULT_OPTIONS: ThreadRowOptions = { kind: "default" };
-const THREAD_ROW_MANAGED_CHILD_OPTIONS: ThreadRowOptions = {
-  kind: "managed-child",
-};
 const THREAD_ROW_ENV_GROUPED_CHILD_OPTIONS: ThreadRowOptions = {
   kind: "env-grouped-child",
 };
-const THREAD_ROW_ENV_GROUPED_MANAGED_CHILD_OPTIONS: ThreadRowOptions = {
-  kind: "env-grouped-managed-child",
-};
+
+// Indent caps at depth 2 — chains deeper than nested-of-nested keep the
+// depth-2 padding so the sidebar never overflows horizontally. The manager
+// hierarchy itself can still recurse arbitrarily deep structurally.
+const MANAGER_DEPTH_CAP: ManagerRowDepth = 1;
+const MANAGED_CHILD_DEPTH_CAP: ManagedChildRowDepth = 2;
+
+function clampManagerDepth(depth: number): ManagerRowDepth {
+  return depth >= MANAGER_DEPTH_CAP ? MANAGER_DEPTH_CAP : 0;
+}
+
+function clampManagedChildDepth(depth: number): ManagedChildRowDepth {
+  return depth >= MANAGED_CHILD_DEPTH_CAP ? MANAGED_CHILD_DEPTH_CAP : 1;
+}
 
 type EnvironmentStickyTier = Extract<
   SidebarStickyTierKind,
@@ -90,8 +110,11 @@ interface ManagerThreadGroupRowProps {
   projectId: string;
   managerThreadGroup: ManagerThreadGroup;
   selectedThreadId?: string;
-  isManagerCollapsed: boolean;
+  collapsedManagerIds: Set<string>;
   collapsedEnvironmentIds: Set<string>;
+  // Depth in the manager hierarchy. 0 = root manager. 1+ = nested manager.
+  // Padding caps at depth 1 but the renderer still recurses structurally.
+  depth: number;
   onProjectSelect?: () => void;
   onToggleManagerCollapsed: (threadId: string) => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
@@ -217,7 +240,10 @@ function EnvironmentThreadGroupHeader({
             COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
           )}
         >
-          <Icon name="MessageSquarePlus" className={COARSE_POINTER_ICON_SIZE_CLASS} />
+          <Icon
+            name="MessageSquarePlus"
+            className={COARSE_POINTER_ICON_SIZE_CLASS}
+          />
         </Button>
       ) : (
         <span
@@ -269,7 +295,10 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
       />
       {!isCollapsed ? (
         <div
-          className={cn("relative space-y-px", SIDEBAR_MANAGER_GROUP_LINE_CLASS)}
+          className={cn(
+            "relative space-y-px",
+            SIDEBAR_MANAGER_GROUP_LINE_CLASS,
+          )}
         >
           {threads.map((thread) => (
             <ThreadRow
@@ -292,6 +321,9 @@ interface ManagedEnvironmentThreadSubGroupProps {
   environmentThreadGroup: EnvironmentThreadGroup;
   selectedThreadId?: string;
   isCollapsed: boolean;
+  childDepth: ManagedChildRowDepth;
+  headerPaddingClass: string;
+  parentLineClass: string;
   onProjectSelect?: () => void;
   onToggleEnvironmentCollapsed: (environmentId: string) => void;
 }
@@ -301,6 +333,9 @@ function ManagedEnvironmentThreadSubGroup({
   environmentThreadGroup,
   selectedThreadId,
   isCollapsed,
+  childDepth,
+  headerPaddingClass,
+  parentLineClass,
   onProjectSelect,
   onToggleEnvironmentCollapsed,
 }: ManagedEnvironmentThreadSubGroupProps) {
@@ -313,14 +348,18 @@ function ManagedEnvironmentThreadSubGroup({
     onProjectSelect?.();
     createThreadInWorktree();
   }, [createThreadInWorktree, onProjectSelect]);
+  const childOptions = useMemo<ThreadRowOptions>(
+    () => ({ kind: "env-grouped-managed-child", depth: childDepth }),
+    [childDepth],
+  );
   return (
     <>
       <EnvironmentThreadGroupHeader
         environmentId={environmentId}
         representativeThread={threads[0]}
-        paddingClass={SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS}
+        paddingClass={headerPaddingClass}
         stickyTier="environment"
-        parentLineClass={SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS}
+        parentLineClass={parentLineClass}
         childCount={threads.length}
         isCollapsed={isCollapsed}
         onCreateNewThread={handleCreateNewThread}
@@ -340,7 +379,7 @@ function ManagedEnvironmentThreadSubGroup({
               thread={thread}
               isActive={selectedThreadId === thread.id}
               onProjectSelect={onProjectSelect}
-              options={THREAD_ROW_ENV_GROUPED_MANAGED_CHILD_OPTIONS}
+              options={childOptions}
             />
           ))}
         </div>
@@ -353,21 +392,51 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   projectId,
   managerThreadGroup,
   selectedThreadId,
-  isManagerCollapsed,
+  collapsedManagerIds,
   collapsedEnvironmentIds,
+  depth,
   onProjectSelect,
   onToggleManagerCollapsed,
   onToggleEnvironmentCollapsed,
 }: ManagerThreadGroupRowProps) {
   const { managerThread, managedItems, stats } = managerThreadGroup;
+  const isManagerCollapsed = collapsedManagerIds.has(managerThread.id);
+  const managerDepth = clampManagerDepth(depth);
+  const childDepth = clampManagedChildDepth(depth + 1);
+  const childGroupLineClass =
+    depth === 0
+      ? SIDEBAR_MANAGER_GROUP_LINE_CLASS
+      : SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS;
+  const envSubGroupHeaderPaddingClass =
+    childDepth >= 2
+      ? SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS
+      : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
+  // The env sub-group header sits at the managed-child indent under its
+  // manager, so its parent-line continuation must match the depth-0
+  // managed-children hairline above it. For a root manager the continuation
+  // is left-10; for a nested manager it is left-16.
+  const envSubGroupParentLineClass =
+    depth === 0
+      ? SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS
+      : SIDEBAR_NESTED_MANAGER_LINE_CONTINUATION_CLASS;
   const managerOptions = useMemo<ThreadRowOptions>(
     () => ({
       kind: "manager",
+      depth: managerDepth,
       isCollapsed: isManagerCollapsed,
       managedChildCount: stats.managedChildCount,
       onToggleCollapsed: onToggleManagerCollapsed,
     }),
-    [isManagerCollapsed, onToggleManagerCollapsed, stats.managedChildCount],
+    [
+      isManagerCollapsed,
+      managerDepth,
+      onToggleManagerCollapsed,
+      stats.managedChildCount,
+    ],
+  );
+  const managedChildOptions = useMemo<ThreadRowOptions>(
+    () => ({ kind: "managed-child", depth: childDepth }),
+    [childDepth],
   );
   const showManagedChildren = !isManagerCollapsed && managedItems.length > 0;
   return (
@@ -380,36 +449,53 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
         options={managerOptions}
       />
       {showManagedChildren ? (
-        <div
-          className={cn(
-            "relative space-y-px",
-            SIDEBAR_MANAGER_GROUP_LINE_CLASS,
-          )}
-        >
-          {managedItems.map((item) =>
-            item.kind === "thread" ? (
-              <ThreadRow
-                key={`thread:${item.thread.id}`}
+        <div className={cn("relative space-y-px", childGroupLineClass)}>
+          {managedItems.map((item) => {
+            if (item.kind === "thread") {
+              return (
+                <ThreadRow
+                  key={`thread:${item.thread.id}`}
+                  projectId={projectId}
+                  thread={item.thread}
+                  isActive={selectedThreadId === item.thread.id}
+                  onProjectSelect={onProjectSelect}
+                  options={managedChildOptions}
+                />
+              );
+            }
+            if (item.kind === "environment") {
+              return (
+                <ManagedEnvironmentThreadSubGroup
+                  key={`env:${item.group.environmentId}`}
+                  projectId={projectId}
+                  environmentThreadGroup={item.group}
+                  selectedThreadId={selectedThreadId}
+                  isCollapsed={collapsedEnvironmentIds.has(
+                    item.group.environmentId,
+                  )}
+                  childDepth={childDepth}
+                  headerPaddingClass={envSubGroupHeaderPaddingClass}
+                  parentLineClass={envSubGroupParentLineClass}
+                  onProjectSelect={onProjectSelect}
+                  onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+                />
+              );
+            }
+            return (
+              <ManagerThreadGroupRow
+                key={`manager:${item.group.managerThread.id}`}
                 projectId={projectId}
-                thread={item.thread}
-                isActive={selectedThreadId === item.thread.id}
-                onProjectSelect={onProjectSelect}
-                options={THREAD_ROW_MANAGED_CHILD_OPTIONS}
-              />
-            ) : (
-              <ManagedEnvironmentThreadSubGroup
-                key={`env:${item.group.environmentId}`}
-                projectId={projectId}
-                environmentThreadGroup={item.group}
+                managerThreadGroup={item.group}
                 selectedThreadId={selectedThreadId}
-                isCollapsed={collapsedEnvironmentIds.has(
-                  item.group.environmentId,
-                )}
+                collapsedManagerIds={collapsedManagerIds}
+                collapsedEnvironmentIds={collapsedEnvironmentIds}
+                depth={depth + 1}
                 onProjectSelect={onProjectSelect}
+                onToggleManagerCollapsed={onToggleManagerCollapsed}
                 onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
               />
-            ),
-          )}
+            );
+          })}
         </div>
       ) : null}
     </div>
@@ -489,7 +575,8 @@ function ProjectRowComponent({
                 COARSE_POINTER_ICON_SIZE_CLASS,
               )}
             >
-              <Icon name="ChevronRight"
+              <Icon
+                name="ChevronRight"
                 className={cn(
                   "absolute opacity-0 transition-all duration-150 group-hover/project-row:opacity-100",
                   COARSE_POINTER_ICON_SIZE_CLASS,
@@ -497,14 +584,16 @@ function ProjectRowComponent({
                 )}
               />
               {isCollapsed ? (
-                <Icon name="Folder"
+                <Icon
+                  name="Folder"
                   className={cn(
                     "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
                     COARSE_POINTER_ICON_SIZE_CLASS,
                   )}
                 />
               ) : (
-                <Icon name="FolderOpen"
+                <Icon
+                  name="FolderOpen"
                   className={cn(
                     "absolute opacity-100 transition-opacity duration-150 group-hover/project-row:opacity-0",
                     COARSE_POINTER_ICON_SIZE_CLASS,
@@ -530,7 +619,10 @@ function ProjectRowComponent({
                 COARSE_POINTER_ROW_ACTION_SIZE_CLASS,
               )}
             >
-              <Icon name="AlertTriangle" className={COARSE_POINTER_ICON_SIZE_CLASS} />
+              <Icon
+                name="AlertTriangle"
+                className={COARSE_POINTER_ICON_SIZE_CLASS}
+              />
             </NavLink>
           ) : null}
           <ProjectActionsMenu
@@ -565,39 +657,61 @@ function ProjectRowComponent({
                 projectId={project.id}
                 managerThreadGroup={managerThreadGroup}
                 selectedThreadId={selectedThreadId}
-                isManagerCollapsed={collapsedManagerIds.has(
-                  managerThreadGroup.managerThread.id,
-                )}
+                collapsedManagerIds={collapsedManagerIds}
                 collapsedEnvironmentIds={collapsedEnvironmentIds}
+                depth={0}
                 onProjectSelect={onProjectSelect}
                 onToggleManagerCollapsed={onToggleManagerCollapsed}
                 onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
               />
             ))}
-            {unmanagedItems.map((item) =>
-              item.kind === "thread" ? (
-                <ThreadRow
-                  key={`thread:${item.thread.id}`}
+            {unmanagedItems.map((item) => {
+              if (item.kind === "thread") {
+                return (
+                  <ThreadRow
+                    key={`thread:${item.thread.id}`}
+                    projectId={project.id}
+                    thread={item.thread}
+                    isActive={selectedThreadId === item.thread.id}
+                    onProjectSelect={onProjectSelect}
+                    options={THREAD_ROW_DEFAULT_OPTIONS}
+                  />
+                );
+              }
+              if (item.kind === "environment") {
+                return (
+                  <EnvironmentThreadGroupRow
+                    key={`env:${item.group.environmentId}`}
+                    projectId={project.id}
+                    environmentThreadGroup={item.group}
+                    selectedThreadId={selectedThreadId}
+                    isCollapsed={collapsedEnvironmentIds.has(
+                      item.group.environmentId,
+                    )}
+                    onProjectSelect={onProjectSelect}
+                    onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+                  />
+                );
+              }
+              // unmanagedItems is built from standard threads only, so a
+              // manager item never reaches this branch in practice. The
+              // exhaustive switch keeps the type system happy if the
+              // ProjectThreadItem union ever grows another variant.
+              return (
+                <ManagerThreadGroupRow
+                  key={`manager:${item.group.managerThread.id}`}
                   projectId={project.id}
-                  thread={item.thread}
-                  isActive={selectedThreadId === item.thread.id}
-                  onProjectSelect={onProjectSelect}
-                  options={THREAD_ROW_DEFAULT_OPTIONS}
-                />
-              ) : (
-                <EnvironmentThreadGroupRow
-                  key={`env:${item.group.environmentId}`}
-                  projectId={project.id}
-                  environmentThreadGroup={item.group}
+                  managerThreadGroup={item.group}
                   selectedThreadId={selectedThreadId}
-                  isCollapsed={collapsedEnvironmentIds.has(
-                    item.group.environmentId,
-                  )}
+                  collapsedManagerIds={collapsedManagerIds}
+                  collapsedEnvironmentIds={collapsedEnvironmentIds}
+                  depth={0}
                   onProjectSelect={onProjectSelect}
+                  onToggleManagerCollapsed={onToggleManagerCollapsed}
                   onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
                 />
-              ),
-            )}
+              );
+            })}
           </div>
         ) : (
           <EmptyState

@@ -40,24 +40,40 @@ function createThread(
   };
 }
 
-type ItemSummary = string | { env: string; threads: string[] };
+type ItemSummary =
+  | string
+  | { env: string; threads: string[] }
+  | { manager: string; items: ItemSummary[] };
 
 function summarizeItems(items: readonly ProjectThreadItem[]): ItemSummary[] {
-  return items.map((item) =>
-    item.kind === "thread"
-      ? item.thread.id
-      : {
+  return items.map((item) => {
+    switch (item.kind) {
+      case "thread":
+        return item.thread.id;
+      case "environment":
+        return {
           env: item.group.environmentId,
           threads: item.group.threads.map((thread) => thread.id),
-        },
-  );
+        };
+      case "manager":
+        return {
+          manager: item.group.managerThread.id,
+          items: summarizeItems(item.group.managedItems),
+        };
+    }
+  });
 }
 
 function looseThreadIds(items: readonly ProjectThreadItem[]): string[] {
   return items.map((item) => {
-    if (item.kind !== "thread") {
+    if (item.kind === "environment") {
       throw new Error(
         `expected thread item, got env group ${item.group.environmentId}`,
+      );
+    }
+    if (item.kind === "manager") {
+      throw new Error(
+        `expected thread item, got nested manager ${item.group.managerThread.id}`,
       );
     }
     return item.thread.id;
@@ -549,6 +565,228 @@ describe("buildProjectThreadGroups", () => {
     expect(
       summarizeItems(groups.managerThreadGroups[0]?.managedItems ?? []),
     ).toEqual(["managed-env-solo"]);
+  });
+
+  it("nests a manager whose parent is another manager under its parent's group", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "root-manager",
+        type: "manager",
+        createdAt: 100,
+      }),
+      createThread({
+        id: "nested-manager",
+        type: "manager",
+        parentThreadId: "root-manager",
+        createdAt: 200,
+      }),
+      createThread({
+        id: "nested-child",
+        parentThreadId: "nested-manager",
+        createdAt: 300,
+        latestAttentionAt: 500,
+      }),
+      createThread({
+        id: "root-child",
+        parentThreadId: "root-manager",
+        createdAt: 250,
+        latestAttentionAt: 400,
+      }),
+    ]);
+
+    expect(groups.managerThreadGroups).toHaveLength(1);
+    expect(groups.managerThreadGroups[0]?.managerThread.id).toBe(
+      "root-manager",
+    );
+    expect(groups.managerThreadGroups[0]?.stats).toEqual({
+      managedChildBusyCount: 0,
+      managedChildCount: 2,
+    });
+    expect(
+      summarizeItems(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual([
+      "root-child",
+      {
+        manager: "nested-manager",
+        items: ["nested-child"],
+      },
+    ]);
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([]);
+  });
+
+  it("renders a manager whose parent is missing as a root manager", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "orphan-manager",
+        type: "manager",
+        parentThreadId: "deleted-manager",
+        createdAt: 100,
+      }),
+      createThread({
+        id: "orphan-child",
+        parentThreadId: "orphan-manager",
+        createdAt: 50,
+      }),
+    ]);
+
+    expect(groups.managerThreadGroups).toHaveLength(1);
+    expect(groups.managerThreadGroups[0]?.managerThread.id).toBe(
+      "orphan-manager",
+    );
+    expect(looseThreadIds(groups.managerThreadGroups[0]?.managedItems ?? []))
+      .toEqual(["orphan-child"]);
+    expect(summarizeItems(groups.unmanagedItems)).toEqual([]);
+  });
+
+  it("recurses through 3+ levels of nested managers", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "m-root",
+        type: "manager",
+        createdAt: 100,
+      }),
+      createThread({
+        id: "m-mid",
+        type: "manager",
+        parentThreadId: "m-root",
+        createdAt: 200,
+      }),
+      createThread({
+        id: "m-deep",
+        type: "manager",
+        parentThreadId: "m-mid",
+        createdAt: 300,
+      }),
+      createThread({
+        id: "leaf",
+        parentThreadId: "m-deep",
+        createdAt: 400,
+      }),
+    ]);
+
+    expect(summarizeItems(groups.managerThreadGroups.map((group) => ({
+      kind: "manager" as const,
+      group,
+    })))).toEqual([
+      {
+        manager: "m-root",
+        items: [
+          {
+            manager: "m-mid",
+            items: [
+              {
+                manager: "m-deep",
+                items: ["leaf"],
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+  });
+
+  it("does not infinite-loop when a manager forms a cycle with another manager", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "m-a",
+        type: "manager",
+        parentThreadId: "m-b",
+        createdAt: 100,
+      }),
+      createThread({
+        id: "m-b",
+        type: "manager",
+        parentThreadId: "m-a",
+        createdAt: 200,
+      }),
+    ]);
+
+    // Both managers reference each other as parent, so each is an in-project
+    // parent for the other. The grouping pass picks the first manager visited
+    // as the root and breaks the cycle when it would recurse back into a
+    // visited manager. Either ordering is fine, but the renderer must not
+    // hang and each manager must appear exactly once.
+    const managerIds = new Set<string>();
+    function collectManagerIds(items: readonly ProjectThreadItem[]): void {
+      for (const item of items) {
+        if (item.kind === "manager") {
+          managerIds.add(item.group.managerThread.id);
+          collectManagerIds(item.group.managedItems);
+        }
+      }
+    }
+    for (const group of groups.managerThreadGroups) {
+      managerIds.add(group.managerThread.id);
+      collectManagerIds(group.managedItems);
+    }
+    expect(managerIds).toEqual(new Set(["m-a", "m-b"]));
+  });
+
+  it("counts both standard and nested-manager direct children in stats", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "root-manager",
+        type: "manager",
+        createdAt: 100,
+      }),
+      createThread({
+        id: "nested-manager",
+        type: "manager",
+        parentThreadId: "root-manager",
+        createdAt: 200,
+      }),
+      createThread({
+        id: "standard-child",
+        parentThreadId: "root-manager",
+        createdAt: 300,
+      }),
+    ]);
+
+    expect(groups.managerThreadGroups[0]?.stats).toEqual({
+      managedChildBusyCount: 0,
+      managedChildCount: 2,
+    });
+  });
+
+  it("interleaves a nested manager between standard children by recency", () => {
+    const groups = buildProjectThreadGroups([
+      createThread({
+        id: "root-manager",
+        type: "manager",
+        createdAt: 100,
+      }),
+      createThread({
+        id: "older-child",
+        parentThreadId: "root-manager",
+        createdAt: 200,
+        latestAttentionAt: 200,
+      }),
+      createThread({
+        id: "nested-manager",
+        type: "manager",
+        parentThreadId: "root-manager",
+        createdAt: 300,
+        latestAttentionAt: 500,
+      }),
+      createThread({
+        id: "newer-child",
+        parentThreadId: "root-manager",
+        createdAt: 400,
+        latestAttentionAt: 700,
+      }),
+    ]);
+
+    // newer-child (attention 700) > nested-manager (attention 500) > older-child (attention 200)
+    expect(
+      summarizeItems(groups.managerThreadGroups[0]?.managedItems ?? []),
+    ).toEqual([
+      "newer-child",
+      {
+        manager: "nested-manager",
+        items: [],
+      },
+      "older-child",
+    ]);
   });
 
   it("keeps managed children inside their manager group instead of globally interleaving them", () => {
