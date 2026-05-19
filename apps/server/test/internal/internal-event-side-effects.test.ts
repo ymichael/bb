@@ -44,7 +44,15 @@ import {
 import { createCommandApprovalPayload } from "../helpers/pending-interactions.js";
 import { queueManagerSystemMessage } from "../../src/services/threads/manager-system-messages.js";
 import { sendNextQueuedMessageIfPresent } from "../../src/services/threads/queued-messages.js";
+import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+
+function managerToolReminderInput() {
+  return {
+    type: "text",
+    text: buildManagerToolReminderText("codex"),
+  };
+}
 
 describe("internal event side effects", () => {
   it("logs side-effect failures and continues processing the rest of the batch", async () => {
@@ -303,7 +311,10 @@ describe("internal event side effects", () => {
           command.type === "turn.submit" && command.threadId === thread.id,
       );
       expect(queuedCommand.command).toMatchObject({
-        input: [{ type: "text", text: "Queued manager follow-up" }],
+        input: [
+          { type: "text", text: "Queued manager follow-up" },
+          managerToolReminderInput(),
+        ],
         options: {
           model: "gpt-5",
           serviceTier: "default",
@@ -784,6 +795,7 @@ describe("internal event side effects", () => {
               titleSuffix: " (Backend port validation cleanup)",
             }),
           },
+          managerToolReminderInput(),
         ],
         options: {
           model: "gpt-5.4",
@@ -983,6 +995,7 @@ describe("internal event side effects", () => {
               titleSuffix: " (Backend port validation cleanup)",
             }),
           },
+          managerToolReminderInput(),
         ],
         options: {
           model: "gpt-5.4",
@@ -1134,6 +1147,7 @@ describe("internal event side effects", () => {
               titleSuffix: " (Command event duplicate guard)",
             }),
           },
+          managerToolReminderInput(),
         ],
       });
       expect(
@@ -1312,6 +1326,7 @@ describe("internal event side effects", () => {
               titleSuffix: " (Backend port validation cleanup)",
             }),
           },
+          managerToolReminderInput(),
         ],
         options: {
           model: "gpt-5.4",

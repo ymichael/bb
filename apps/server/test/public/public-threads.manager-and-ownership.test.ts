@@ -20,6 +20,7 @@ import {
   threadSchema,
 } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
+import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import {
   reportQueuedCommandError,
   waitForQueuedCommand,
@@ -58,6 +59,13 @@ interface WriteActiveManagerTemplateArgs {
 
 function hostDataDir(args: HostDataDirArgs): string {
   return `/tmp/bb-host-data/${args.hostId}`;
+}
+
+function managerToolReminderInput() {
+  return {
+    type: "text",
+    text: buildManagerToolReminderText("codex"),
+  };
 }
 
 async function writeManagerTemplateSet(
@@ -787,6 +795,7 @@ describe("public thread manager and ownership routes", () => {
               threadLabel: `${thread.id}: Test Thread`,
             }),
           },
+          managerToolReminderInput(),
         ],
         options: {
           model: "gpt-5.4",
@@ -1169,6 +1178,7 @@ describe("public thread manager and ownership routes", () => {
               threadLabel: `${thread.id}: Test Thread`,
             }),
           },
+          managerToolReminderInput(),
         ],
         options: {
           model: "gpt-5.4",

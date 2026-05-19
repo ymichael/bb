@@ -10,6 +10,7 @@ import {
 import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { sweepDueNudges } from "../../src/services/scheduling/nudge-sweep.js";
+import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   reportQueuedCommandError,
@@ -27,6 +28,13 @@ import {
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
+
+function managerToolReminderInput() {
+  return {
+    type: "text",
+    text: buildManagerToolReminderText("codex"),
+  };
+}
 
 function seedRunnableManagerThread(args: {
   environmentId: string;
@@ -133,6 +141,7 @@ describe("nudge sweep", () => {
           type: "text",
           text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
         },
+        managerToolReminderInput(),
       ]);
       expect(
         harness.db.select().from(threads).where(eq(threads.id, thread.id)).get()
@@ -475,6 +484,7 @@ describe("nudge sweep", () => {
             type: "text",
             text: "[bb system]\n\nScheduled nudge: active-check. Check ASYNC.md.",
           },
+          managerToolReminderInput(),
         ],
         target: {
           mode: "auto",

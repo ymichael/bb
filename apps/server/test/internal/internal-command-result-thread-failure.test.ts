@@ -4,6 +4,7 @@ import { events, getThread, hostDaemonCommands, queueCommand } from "@bb/db";
 import { turnScope } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
 import { describe, expect, it } from "vitest";
+import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
 import {
   createTestDaemonEventEnvelope,
   internalAuthHeaders,
@@ -47,6 +48,13 @@ interface QueueManagedTurnSubmitScenarioArgs {
   turnId: string;
 }
 
+function managerToolReminderInput() {
+  return {
+    type: "text",
+    text: buildManagerToolReminderText("codex"),
+  };
+}
+
 async function expectFailedManagerNotificationQueued(
   harness: TestAppHarness,
   args: ExpectFailedManagerNotificationArgs,
@@ -86,6 +94,7 @@ async function expectFailedManagerNotificationQueued(
           titleSuffix: ` (${args.childTitle})`,
         }),
       },
+      managerToolReminderInput(),
     ],
     options: {
       model: "gpt-5.4",
@@ -688,6 +697,7 @@ describe("thread command failure side effects", () => {
               titleSuffix: " (Completed event owns outcome)",
             }),
           },
+          managerToolReminderInput(),
         ],
         resumeContext: {
           providerId: "codex",
@@ -726,6 +736,7 @@ describe("thread command failure side effects", () => {
               titleSuffix: " (Completed event owns outcome)",
             }),
           },
+          managerToolReminderInput(),
         ],
       });
       const errorEvents = harness.db

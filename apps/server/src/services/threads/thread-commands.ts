@@ -11,6 +11,7 @@ import {
 } from "@bb/db";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import {
+  type AgentProviderId,
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
 } from "@bb/agent-providers";
@@ -44,6 +45,7 @@ import {
   type ResolvedThreadRuntimeCommandConfig,
   type ThreadRuntimeCommandEnvironment,
 } from "./thread-runtime-config.js";
+import { appendManagerToolReminder } from "./manager-tool-reminder.js";
 
 export interface ExecutionOptionsRequest {
   model?: CreateThreadRequest["model"];
@@ -250,6 +252,18 @@ function toRuntimeExecutionOptions(
   };
 }
 
+function requireAgentProviderId(providerId: string): AgentProviderId {
+  if (isAgentProviderId(providerId)) {
+    return providerId;
+  }
+
+  throw new ApiError(
+    500,
+    "internal_error",
+    `Manager thread has unsupported provider ${providerId}`,
+  );
+}
+
 export async function buildExecutionOptions(
   deps: Pick<AppDeps, "db" | "hub">,
   request: ExecutionOptionsRequest,
@@ -362,11 +376,18 @@ export async function prepareTurnSubmitCommandPayload(
     thread: args.thread,
     environment: args.environment,
   });
+  const input =
+    args.thread.type === "manager"
+      ? appendManagerToolReminder(
+          args.input,
+          requireAgentProviderId(args.thread.providerId),
+        )
+      : args.input;
   return buildPreparedTurnSubmitCommandPayload({
     environmentId: args.environment.id,
     execution: args.execution,
     permissionEscalation: args.permissionEscalation,
-    input: args.input,
+    input,
     providerThreadId,
     runtimeContext,
     target: args.target,
