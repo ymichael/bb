@@ -3,7 +3,12 @@ import type { HostDaemonCommandResult } from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
 import type { CommandOf } from "../command-dispatch-support.js";
 import { isFsErrorWithCode } from "../fs-errors.js";
-import { finalizeListedFiles, listFilesRecursively } from "./file-list.js";
+import {
+  finalizeListedFiles,
+  finalizeListedPaths,
+  listFilesRecursively,
+  listPathsRecursively,
+} from "./file-list.js";
 import { readFileForTransport, readFileFromGitRef } from "./file-read.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
 
@@ -48,6 +53,39 @@ export async function listHostFiles(
   } catch (error) {
     if (isFsErrorWithCode(error, "ENOENT")) {
       return { files: [], truncated: false };
+    }
+    throw error;
+  }
+}
+
+export async function listHostPaths(
+  command: CommandOf<"host.list_paths">,
+): Promise<HostDaemonCommandResult<"host.list_paths">> {
+  if (!path.isAbsolute(command.path)) {
+    throw new CommandDispatchError("invalid_path", "Path must be absolute");
+  }
+
+  try {
+    const realRootPath = await resolveNonSymlinkDirectoryPath({
+      description: "Path",
+      path: command.path,
+    });
+
+    return finalizeListedPaths({
+      paths: await listPathsRecursively({
+        dir: realRootPath,
+        root: realRootPath,
+        includeFiles: command.includeFiles,
+        includeDirectories: command.includeDirectories,
+      }),
+      limit: command.limit,
+      includeFiles: command.includeFiles,
+      includeDirectories: command.includeDirectories,
+      ...(command.query ? { query: command.query } : {}),
+    });
+  } catch (error) {
+    if (isFsErrorWithCode(error, "ENOENT")) {
+      return { paths: [], truncated: false };
     }
     throw error;
   }

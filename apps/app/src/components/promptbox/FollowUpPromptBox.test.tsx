@@ -50,6 +50,7 @@ function makeFollowUpPromptBoxProps(): FollowUpPromptBoxProps {
     },
     mentions: {
       suggestions: [],
+      threadSectionMode: "threads",
       isLoading: false,
       isError: false,
       onQueryChange: vi.fn(),

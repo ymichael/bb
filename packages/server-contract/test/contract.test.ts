@@ -824,6 +824,16 @@ describe("server-contract clients", () => {
       }).pathname,
     ).toBe("/api/v1/projects/proj_123/managers");
     expect(
+      publicClient.projects[":id"].paths.$url({
+        param: { id: "proj_123" },
+        query: {
+          environmentId: "",
+          includeFiles: "true",
+          includeDirectories: "true",
+        },
+      }).pathname,
+    ).toBe("/api/v1/projects/proj_123/paths");
+    expect(
       publicClient.projects[":id"].automations.$url({
         param: { id: "proj_123" },
       }).pathname,
@@ -848,6 +858,15 @@ describe("server-contract clients", () => {
         param: { id: "thr_123" },
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/thread-storage/files");
+    expect(
+      publicClient.threads[":id"]["thread-storage"].paths.$url({
+        param: { id: "thr_123" },
+        query: {
+          includeFiles: "true",
+          includeDirectories: "true",
+        },
+      }).pathname,
+    ).toBe("/api/v1/threads/thr_123/thread-storage/paths");
     expect(
       publicClient.threads[":id"]["thread-storage"].content.$url({
         param: { id: "thr_123" },

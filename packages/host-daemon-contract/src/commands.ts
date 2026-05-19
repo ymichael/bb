@@ -22,7 +22,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 17 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 18 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -39,6 +39,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "codex.inference.complete",
   "codex.voice.transcribe",
   "host.list_files",
+  "host.list_paths",
   "host.list_branches",
   "host.read_file",
   "provider.list",
@@ -280,6 +281,31 @@ export const hostListFilesCommandSchema = z.object({
   limit: z.number().int().positive().max(FILE_LIST_LIMIT_MAX),
 });
 
+export const hostPathEntryKindSchema = z.enum(["file", "directory"]);
+export type HostPathEntryKind = z.infer<typeof hostPathEntryKindSchema>;
+
+export const hostPathEntrySchema = z.object({
+  kind: hostPathEntryKindSchema,
+  path: z.string(),
+  name: z.string(),
+  score: z.number(),
+  positions: z.array(z.number().int().nonnegative()),
+});
+export type HostPathEntry = z.infer<typeof hostPathEntrySchema>;
+
+export const hostListPathsCommandSchema = z
+  .object({
+    type: z.literal("host.list_paths"),
+    path: z.string().min(1),
+    query: z.string().max(FILE_LIST_QUERY_MAX_LENGTH).optional(),
+    limit: z.number().int().positive().max(FILE_LIST_LIMIT_MAX),
+    includeFiles: z.boolean(),
+    includeDirectories: z.boolean(),
+  })
+  .refine((command) => command.includeFiles || command.includeDirectories, {
+    message: "At least one path kind must be included",
+  });
+
 /**
  * List git branches at an absolute host path. Path-only sibling of
  * `host.list_files`. Does not require an environment row, does not
@@ -431,6 +457,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   codexInferenceCompleteCommandSchema,
   codexVoiceTranscribeCommandSchema,
   hostListFilesCommandSchema,
+  hostListPathsCommandSchema,
   hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
   providerListCommandSchema,
@@ -461,6 +488,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "environment.destroy":
     case "host.list_branches":
     case "host.list_files":
+    case "host.list_paths":
     case "host.read_file":
     case "codex.inference.complete":
     case "provider.list":
@@ -495,6 +523,11 @@ const fileListResultSchema = z.object({
   truncated: z.boolean(),
 });
 
+const pathListResultSchema = z.object({
+  paths: z.array(hostPathEntrySchema),
+  truncated: z.boolean(),
+});
+
 export const hostDaemonCommandResultSchemaByType = {
   "thread.start": z.object({
     providerThreadId: z.string().min(1),
@@ -521,6 +554,7 @@ export const hostDaemonCommandResultSchemaByType = {
     text: z.string(),
   }),
   "host.list_files": fileListResultSchema,
+  "host.list_paths": pathListResultSchema,
   "host.list_branches": z.object({
     branches: z.array(z.string()),
     /** HEAD of the primary checkout at `path`. Null when the path is not a git repo. */

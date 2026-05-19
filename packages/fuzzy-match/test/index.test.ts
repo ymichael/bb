@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { FUZZY_MATCH_QUERY_MAX_LENGTH, fuzzyMatchPaths } from "../src/index.js";
+import {
+  FUZZY_MATCH_QUERY_MAX_LENGTH,
+  fuzzyMatchPaths,
+  fuzzyMatchText,
+} from "../src/index.js";
 
 describe("fuzzyMatchPaths", () => {
   it("returns the first limited paths for an empty query", () => {
@@ -259,5 +263,90 @@ describe("fuzzyMatchPaths", () => {
     });
 
     expect(matches).toEqual([]);
+  });
+});
+
+interface ThreadSearchFixture {
+  id: string;
+  title: string;
+}
+
+function getThreadSearchTexts(thread: ThreadSearchFixture): readonly string[] {
+  return [thread.title, thread.id];
+}
+
+describe("fuzzyMatchText", () => {
+  it("returns the first limited items for an empty query", () => {
+    const items = ["Alpha", "Beta", "Gamma"];
+
+    expect(
+      fuzzyMatchText({
+        items,
+        query: "",
+        getText: (item) => item,
+        limit: 2,
+      }).map((match) => match.item),
+    ).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("matches non-contiguous title queries", () => {
+    const threads: ThreadSearchFixture[] = [
+      { id: "thr_research", title: "Research notes" },
+      { id: "thr_prompt", title: "Prompt mention improvements" },
+      { id: "thr_release", title: "Release checklist" },
+    ];
+
+    const matches = fuzzyMatchText({
+      items: threads,
+      query: "pmi",
+      getText: getThreadSearchTexts,
+      limit: 3,
+    });
+
+    expect(matches.map((match) => match.item.id)).toEqual(["thr_prompt"]);
+    expect(matches[0].positions.length).toBeGreaterThan(0);
+  });
+
+  it("matches secondary text values such as ids", () => {
+    const threads: ThreadSearchFixture[] = [
+      { id: "thr_alpha", title: "Design review" },
+      { id: "thr_beta", title: "Implementation plan" },
+    ];
+
+    expect(
+      fuzzyMatchText({
+        items: threads,
+        query: "beta",
+        getText: getThreadSearchTexts,
+        limit: 3,
+      }).map((match) => match.item.id),
+    ).toEqual(["thr_beta"]);
+  });
+
+  it("keeps deterministic ordering for equal text matches", () => {
+    const threads: ThreadSearchFixture[] = [
+      { id: "thr_b", title: "Shared title" },
+      { id: "thr_a", title: "Shared title" },
+    ];
+
+    expect(
+      fuzzyMatchText({
+        items: threads,
+        query: "shared",
+        getText: getThreadSearchTexts,
+        limit: 3,
+      }).map((match) => match.item.id),
+    ).toEqual(["thr_b", "thr_a"]);
+  });
+
+  it("returns no matches when the query is too long", () => {
+    expect(
+      fuzzyMatchText({
+        items: ["Alpha"],
+        query: "a".repeat(FUZZY_MATCH_QUERY_MAX_LENGTH + 1),
+        getText: (item) => item,
+        limit: 3,
+      }),
+    ).toEqual([]);
   });
 });

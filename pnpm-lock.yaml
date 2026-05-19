@@ -53,6 +53,9 @@ importers:
       '@bb/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@bb/fuzzy-match':
+        specifier: workspace:*
+        version: link:../../packages/fuzzy-match
       '@bb/host-daemon-contract':
         specifier: workspace:*
         version: link:../../packages/host-daemon-contract

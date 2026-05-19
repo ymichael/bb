@@ -19,11 +19,13 @@ import type {
   ThreadResponse,
   ThreadWithIncludesResponse,
   ThreadStorageFileListResponse,
+  ThreadStoragePathListResponse,
   ThreadTimelineResponse,
   TimelineTurnSummaryDetailsRequest,
   TimelineTurnSummaryDetailsResponse,
 } from "@bb/server-contract";
 import type { ThreadListFilters, FilePreview } from "@/lib/api";
+import type { PathListOptions } from "@/lib/path-list-options";
 import type { ThreadStorageFileListOptions } from "@/lib/thread-storage-files";
 import * as api from "@/lib/api";
 import { getCachedThreadListPlaceholder } from "./query-cache";
@@ -47,6 +49,7 @@ import {
   threadPromptHistoryQueryKey,
   threadQueryKey,
   threadStorageFilesQueryKey,
+  threadStoragePathsQueryKey,
   threadStorageFilePreviewQueryKey,
   threadHostFilePreviewQueryKey,
   threadTimelineQueryKey,
@@ -371,6 +374,25 @@ export function useThreadStorageFiles(
       }),
     enabled: (options?.enabled ?? true) && Boolean(id),
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadStoragePaths(
+  id: string,
+  listOptions: PathListOptions,
+  options?: QueryOptions,
+) {
+  return useQuery<ThreadStoragePathListResponse>({
+    queryKey: threadStoragePathsQueryKey(id, listOptions),
+    queryFn: ({ signal }) =>
+      api.listThreadStoragePaths({
+        id: requireThreadId(id, "useThreadStoragePaths"),
+        options: listOptions,
+        signal,
+      }),
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchOnWindowFocus: false,
+    placeholderData: (previousData) => previousData,
   });
 }
 

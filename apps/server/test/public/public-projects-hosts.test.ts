@@ -1116,6 +1116,79 @@ describe("public project and host routes", () => {
     }
   });
 
+  it("queues host.list_paths for project paths with directories included", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-paths",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-paths",
+      });
+
+      const responsePromise = harness.app.request(
+        `/api/v1/projects/${project.id}/paths?query=src&limit=2&environmentId=&includeFiles=true&includeDirectories=true`,
+      );
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.list_paths" &&
+          command.path === "/tmp/project-paths",
+      );
+      expect(queued.command).toMatchObject({
+        path: "/tmp/project-paths",
+        query: "src",
+        limit: 2,
+        includeFiles: true,
+        includeDirectories: true,
+      });
+      await reportQueuedCommandSuccess(harness, queued, {
+        paths: [
+          {
+            kind: "directory",
+            path: "src",
+            name: "src",
+            score: 100,
+            positions: [0, 1, 2],
+          },
+          {
+            kind: "file",
+            path: "src/index.ts",
+            name: "index.ts",
+            score: 75,
+            positions: [0, 1, 2],
+          },
+        ],
+        truncated: false,
+      });
+
+      const response = await responsePromise;
+      expect(response.status).toBe(200);
+      await expect(readJson(response)).resolves.toEqual({
+        paths: [
+          {
+            kind: "directory",
+            path: "src",
+            name: "src",
+            score: 100,
+            positions: [0, 1, 2],
+          },
+          {
+            kind: "file",
+            path: "src/index.ts",
+            name: "index.ts",
+            score: 75,
+            positions: [0, 1, 2],
+          },
+        ],
+        truncated: false,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
   it("queues host.list_branches for the default project source", async () => {
     const harness = await createTestAppHarness();
     try {

@@ -5,12 +5,17 @@ import {
   DEFAULT_THREAD_STORAGE_FILE_LIST_OPTIONS,
   type ThreadStorageFileListOptions,
 } from "@/lib/thread-storage-files";
+import {
+  DEFAULT_FILE_ONLY_PATH_LIST_OPTIONS,
+  type PathListOptions,
+} from "@/lib/path-list-options";
 import type { ManagerTimelineView } from "@bb/server-contract";
 
 export const HOSTS_QUERY_KEY = "hosts";
 export const HOST_QUERY_KEY = "host";
 export const PROJECTS_QUERY_KEY = "projects";
 export const PROJECT_FILES_QUERY_KEY = "projectFiles";
+export const PROJECT_PATHS_QUERY_KEY = "projectPaths";
 export const PROJECT_SOURCE_BRANCHES_QUERY_KEY = "projectSourceBranches";
 export const PROJECT_PROMPT_HISTORY_QUERY_KEY = "projectPromptHistory";
 export const SIDEBAR_BOOTSTRAP_QUERY_KEY = "sidebarBootstrap";
@@ -27,6 +32,7 @@ export const THREAD_PENDING_INTERACTIONS_QUERY_KEY =
   "threadPendingInteractions";
 export const THREAD_TERMINALS_QUERY_KEY = "threadTerminals";
 export const THREAD_STORAGE_FILES_QUERY_KEY = "threadStorageFiles";
+export const THREAD_STORAGE_PATHS_QUERY_KEY = "threadStoragePaths";
 export const THREAD_STORAGE_FILE_PREVIEW_QUERY_KEY = "threadStorageFilePreview";
 export const THREAD_HOST_FILE_PREVIEW_QUERY_KEY = "threadHostFilePreview";
 export const ENVIRONMENT_QUERY_KEY = "environment";
@@ -74,6 +80,9 @@ export type ProjectsQueryKey = readonly [typeof PROJECTS_QUERY_KEY];
 export type AllProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
 ];
+export type AllProjectPathsQueryKeyPrefix = readonly [
+  typeof PROJECT_PATHS_QUERY_KEY,
+];
 export type AllProjectSourceBranchesQueryKeyPrefix = readonly [
   typeof PROJECT_SOURCE_BRANCHES_QUERY_KEY,
 ];
@@ -95,8 +104,21 @@ export type ProjectFilesQueryKey = readonly [
   number,
   string | null,
 ];
+export type ProjectPathsQueryKey = readonly [
+  typeof PROJECT_PATHS_QUERY_KEY,
+  string | undefined,
+  string,
+  number,
+  string | null,
+  boolean,
+  boolean,
+];
 export type ProjectFilesQueryKeyPrefix = readonly [
   typeof PROJECT_FILES_QUERY_KEY,
+  string,
+];
+export type ProjectPathsQueryKeyPrefix = readonly [
+  typeof PROJECT_PATHS_QUERY_KEY,
   string,
 ];
 export type ProjectSourceBranchesQueryKey = readonly [
@@ -179,11 +201,23 @@ export type ThreadStorageFilesQueryKey = readonly [
   string,
   ThreadStorageFileListOptions,
 ];
+export type ThreadStoragePathsQueryKey = readonly [
+  typeof THREAD_STORAGE_PATHS_QUERY_KEY,
+  string,
+  PathListOptions,
+];
 export type AllThreadStorageFilesQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILES_QUERY_KEY,
 ];
+export type AllThreadStoragePathsQueryKeyPrefix = readonly [
+  typeof THREAD_STORAGE_PATHS_QUERY_KEY,
+];
 export type ThreadStorageFilesForThreadQueryKeyPrefix = readonly [
   typeof THREAD_STORAGE_FILES_QUERY_KEY,
+  string,
+];
+export type ThreadStoragePathsForThreadQueryKeyPrefix = readonly [
+  typeof THREAD_STORAGE_PATHS_QUERY_KEY,
   string,
 ];
 export type AllThreadStorageFilePreviewQueryKeyPrefix = readonly [
@@ -344,8 +378,31 @@ export function projectFilesQueryKey(
   return [PROJECT_FILES_QUERY_KEY, projectId, query, limit, environmentId];
 }
 
+export function projectPathsQueryKey(
+  projectId: string | undefined,
+  query: string,
+  limit: number,
+  environmentId: string | null,
+  includeFiles: boolean,
+  includeDirectories: boolean,
+): ProjectPathsQueryKey {
+  return [
+    PROJECT_PATHS_QUERY_KEY,
+    projectId,
+    query,
+    limit,
+    environmentId,
+    includeFiles,
+    includeDirectories,
+  ];
+}
+
 export function allProjectFilesQueryKeyPrefix(): AllProjectFilesQueryKeyPrefix {
   return [PROJECT_FILES_QUERY_KEY];
+}
+
+export function allProjectPathsQueryKeyPrefix(): AllProjectPathsQueryKeyPrefix {
+  return [PROJECT_PATHS_QUERY_KEY];
 }
 
 export function projectPromptHistoryQueryKey(
@@ -362,6 +419,12 @@ export function projectFilesQueryKeyPrefix(
   projectId: string,
 ): ProjectFilesQueryKeyPrefix {
   return [PROJECT_FILES_QUERY_KEY, projectId];
+}
+
+export function projectPathsQueryKeyPrefix(
+  projectId: string,
+): ProjectPathsQueryKeyPrefix {
+  return [PROJECT_PATHS_QUERY_KEY, projectId];
 }
 
 export function projectSourceBranchesQueryKey(
@@ -506,14 +569,31 @@ export function threadStorageFilesQueryKey(
   return [THREAD_STORAGE_FILES_QUERY_KEY, threadId, options];
 }
 
+export function threadStoragePathsQueryKey(
+  threadId: string,
+  options: PathListOptions = DEFAULT_FILE_ONLY_PATH_LIST_OPTIONS,
+): ThreadStoragePathsQueryKey {
+  return [THREAD_STORAGE_PATHS_QUERY_KEY, threadId, options];
+}
+
 export function allThreadStorageFilesQueryKeyPrefix(): AllThreadStorageFilesQueryKeyPrefix {
   return [THREAD_STORAGE_FILES_QUERY_KEY];
+}
+
+export function allThreadStoragePathsQueryKeyPrefix(): AllThreadStoragePathsQueryKeyPrefix {
+  return [THREAD_STORAGE_PATHS_QUERY_KEY];
 }
 
 export function threadStorageFilesForThreadQueryKeyPrefix(
   threadId: string,
 ): ThreadStorageFilesForThreadQueryKeyPrefix {
   return [THREAD_STORAGE_FILES_QUERY_KEY, threadId];
+}
+
+export function threadStoragePathsForThreadQueryKeyPrefix(
+  threadId: string,
+): ThreadStoragePathsForThreadQueryKeyPrefix {
+  return [THREAD_STORAGE_PATHS_QUERY_KEY, threadId];
 }
 
 export function threadStorageFilePreviewQueryKey(

@@ -1215,7 +1215,8 @@ describe("public thread data routes", () => {
       expect(bootstrap.queuedMessages).toHaveLength(1);
       expect(bootstrap.executionOptions.providers).toHaveLength(1);
       expect(
-        bootstrap.executionOptions.providers[0]?.capabilities.supportsUserQuestion,
+        bootstrap.executionOptions.providers[0]?.capabilities
+          .supportsUserQuestion,
       ).toBe(false);
       expect(bootstrap.executionOptions.models[0]?.model).toBe("gpt-5.5");
       expect(bootstrap.queuedMessages[0]?.content).toEqual([
@@ -1600,6 +1601,88 @@ describe("public thread data routes", () => {
         files: [
           { path: "notes/plan.md", name: "plan.md" },
           { path: "notes/todo.md", name: "todo.md" },
+        ],
+        truncated: false,
+        storageRootPath: threadStoragePath,
+      });
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("lists thread storage paths via host.list_paths", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-source",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/project-source",
+      });
+      const thread = seedThread(harness.deps, {
+        projectId: project.id,
+        environmentId: environment.id,
+        type: "manager",
+      });
+      const threadStoragePath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
+
+      const pathsPromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/thread-storage/paths?query=notes&includeFiles=true&includeDirectories=true`,
+      );
+      const pathsCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.list_paths" &&
+          command.path === threadStoragePath,
+      );
+      expect(pathsCommand.command).toMatchObject({
+        path: threadStoragePath,
+        query: "notes",
+        limit: 1000,
+        includeFiles: true,
+        includeDirectories: true,
+      });
+      await reportQueuedCommandSuccess(harness, pathsCommand, {
+        paths: [
+          {
+            kind: "directory",
+            path: "notes",
+            name: "notes",
+            score: 100,
+            positions: [0, 1, 2, 3, 4],
+          },
+          {
+            kind: "file",
+            path: "notes/plan.md",
+            name: "plan.md",
+            score: 75,
+            positions: [0, 1, 2, 3, 4],
+          },
+        ],
+        truncated: false,
+      });
+      const pathsResponse = await pathsPromise;
+      expect(pathsResponse.status).toBe(200);
+      await expect(readJson(pathsResponse)).resolves.toEqual({
+        paths: [
+          {
+            kind: "directory",
+            path: "notes",
+            name: "notes",
+            score: 100,
+            positions: [0, 1, 2, 3, 4],
+          },
+          {
+            kind: "file",
+            path: "notes/plan.md",
+            name: "plan.md",
+            score: 75,
+            positions: [0, 1, 2, 3, 4],
+          },
         ],
         truncated: false,
         storageRootPath: threadStoragePath,

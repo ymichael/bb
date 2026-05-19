@@ -23,6 +23,7 @@ import {
   projectBranchesQuerySchema,
   projectDefaultExecutionOptionsQuerySchema,
   projectFilesQuerySchema,
+  projectPathsQuerySchema,
   projectListIncludeOptionSchema,
   projectListQuerySchema,
   promptHistoryQuerySchema,
@@ -63,6 +64,7 @@ import {
   requestProjectDeletionAdvance,
 } from "../services/projects/project-deletion.js";
 import { listProjectPromptHistory } from "../services/prompt-history.js";
+import { parsePathKindInclusion } from "./path-list-inclusion.js";
 
 function buildProjectResponses(
   deps: AppDeps,
@@ -422,6 +424,52 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
         },
       });
       return context.json({ files: result.files, truncated: result.truncated });
+    },
+  );
+
+  get(
+    "/projects/:id/paths",
+    projectPathsQuerySchema,
+    async (context, query) => {
+      const projectId = context.req.param("id");
+      requirePublicProject(deps.db, projectId);
+
+      const limit = Math.min(
+        parseOptionalInteger(query.limit, "limit") ?? 1000,
+        FILE_LIST_LIMIT_MAX,
+      );
+      if (limit <= 0) {
+        throw new ApiError(
+          400,
+          "invalid_request",
+          "limit must be a positive integer",
+        );
+      }
+
+      const target =
+        query.environmentId !== null
+          ? resolveEnvironmentPath(deps, {
+              projectId,
+              environmentId: query.environmentId,
+            })
+          : resolveProjectSourcePath(deps, { projectId, hostId: null });
+      const inclusion = parsePathKindInclusion({
+        includeFiles: query.includeFiles,
+        includeDirectories: query.includeDirectories,
+      });
+      const result = await queueCommandAndWait(deps, {
+        hostId: target.hostId,
+        timeoutMs: COMMAND_TIMEOUT_MS,
+        command: {
+          type: "host.list_paths",
+          path: target.path,
+          ...(query.query ? { query: query.query } : {}),
+          limit,
+          includeFiles: inclusion.includeFiles,
+          includeDirectories: inclusion.includeDirectories,
+        },
+      });
+      return context.json({ paths: result.paths, truncated: result.truncated });
     },
   );
 

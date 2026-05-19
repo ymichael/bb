@@ -17,6 +17,7 @@ import {
 } from "./queries/query-cache";
 import {
   allProjectFilesQueryKeyPrefix,
+  allProjectPathsQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   allHostQueryKeyPrefix,
   allSystemExecutionOptionsQueryKeyPrefix,
@@ -32,6 +33,7 @@ import {
   hostsQueryKey,
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
+  projectPathsQueryKeyPrefix,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
@@ -46,6 +48,7 @@ import {
   threadsQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
+  threadStoragePathsForThreadQueryKeyPrefix,
   threadTimelineQueryKeyPrefix,
 } from "./queries/query-keys";
 
@@ -524,6 +527,7 @@ function dirtyThreadStorageQueriesForEnvironment({
   const queryKeys: QueryKey[] = [];
   for (const threadId of getCachedThreadIdsForEnvironment()) {
     queryKeys.push(threadStorageFilesForThreadQueryKeyPrefix(threadId));
+    queryKeys.push(threadStoragePathsForThreadQueryKeyPrefix(threadId));
     queryKeys.push(threadStorageFilePreviewQueryKeyPrefix(threadId));
   }
   return queryKeys;
@@ -544,12 +548,14 @@ function dirtyProjectSourceDependentQueries({
     return [
       ...sharedKeys,
       allProjectFilesQueryKeyPrefix(),
+      allProjectPathsQueryKeyPrefix(),
       allProjectSourceBranchesQueryKeyPrefix(),
     ];
   }
   return [
     ...sharedKeys,
     projectFilesQueryKeyPrefix(projectId),
+    projectPathsQueryKeyPrefix(projectId),
     projectSourceBranchesQueryKeyPrefix(projectId),
   ];
 }

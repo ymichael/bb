@@ -17,6 +17,7 @@ import {
 import type {
   MentionMenuState,
   PromptMentionSuggestion,
+  ThreadMentionSectionMode,
 } from "@/components/promptbox/mentions/types";
 import { Button } from "@/components/ui/button.js";
 import { Icon } from "@/components/ui/icon.js";
@@ -66,6 +67,7 @@ export interface PromptBoxSubmissionConfig {
 
 export interface MentionsConfig {
   suggestions: readonly PromptMentionSuggestion[];
+  threadSectionMode: ThreadMentionSectionMode;
   isLoading: boolean;
   isError: boolean;
   /** Called whenever the active @-mention query changes; null when no mention is active. */
@@ -187,7 +189,7 @@ export function PromptBoxInternal({
   value,
   onChange,
   onSubmit,
-  placeholder = "Ask anything. @ to mention files",
+  placeholder = "Ask anything. @ to mention files or folders",
   className,
   header,
   footerStart,
@@ -213,6 +215,7 @@ export function PromptBoxInternal({
   } = submission;
   const {
     suggestions: mentionSuggestions,
+    threadSectionMode,
     isLoading: mentionLoading,
     isError: mentionError,
     onQueryChange: onMentionQueryChange,
@@ -456,7 +459,11 @@ export function PromptBoxInternal({
         ? { kind: "loading" }
         : mentionError
           ? { kind: "error" }
-          : { kind: "results", suggestions: mentionSuggestions };
+          : {
+              kind: "results",
+              suggestions: mentionSuggestions,
+              threadSectionMode,
+            };
 
   useEffect(() => {
     if (mentionSuggestions.length === 0) {

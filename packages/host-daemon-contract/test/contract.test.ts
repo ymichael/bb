@@ -243,6 +243,22 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
+        type: "host.list_paths",
+        path: "/tmp/workspace",
+        limit: 1000,
+        includeFiles: true,
+        includeDirectories: true,
+      }),
+    ).toMatchObject({
+      type: "host.list_paths",
+      path: "/tmp/workspace",
+      limit: 1000,
+      includeFiles: true,
+      includeDirectories: true,
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
         type: "host.list_branches",
         path: "/tmp/workspace",
       }),
@@ -830,6 +846,37 @@ describe("host-daemon command schemas", () => {
         limit: contract.FILE_LIST_LIMIT_MAX + 1,
       }),
     ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.list_paths",
+        path: "/tmp/workspace",
+        query: longQuery,
+        limit: 100,
+        includeFiles: true,
+        includeDirectories: true,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.list_paths",
+        path: "/tmp/workspace",
+        limit: contract.FILE_LIST_LIMIT_MAX + 1,
+        includeFiles: true,
+        includeDirectories: true,
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.list_paths",
+        path: "/tmp/workspace",
+        limit: 100,
+        includeFiles: false,
+        includeDirectories: false,
+      }),
+    ).toThrow();
   });
 
   it("keeps typed per-command result schemas", () => {
@@ -840,6 +887,34 @@ describe("host-daemon command schemas", () => {
       }),
     ).toMatchObject({
       files: [{ path: "notes/today.md", name: "today.md" }],
+      truncated: false,
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.list_paths"].parse({
+        paths: [
+          {
+            kind: "directory",
+            path: "notes",
+            name: "notes",
+            score: 0,
+            positions: [],
+          },
+          {
+            kind: "file",
+            path: "notes/today.md",
+            name: "today.md",
+            score: 240,
+            positions: [0, 1, 2],
+          },
+        ],
+        truncated: false,
+      }),
+    ).toMatchObject({
+      paths: [
+        { kind: "directory", path: "notes" },
+        { kind: "file", path: "notes/today.md" },
+      ],
       truncated: false,
     });
 

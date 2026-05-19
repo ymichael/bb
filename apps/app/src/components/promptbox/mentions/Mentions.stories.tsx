@@ -2,6 +2,7 @@ import { MentionMenu } from "@/components/promptbox/mentions/MentionMenu";
 import type {
   MentionMenuState,
   PromptMentionSuggestion,
+  ThreadMentionSectionMode,
 } from "@/components/promptbox/mentions/types";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 
@@ -19,35 +20,63 @@ function PromptStage({ children }: { children: React.ReactNode }) {
 }
 
 // ---------------------------------------------------------------------------
-// Realistic suggestion fixtures — bb-flavored file paths + thread refs.
+// Realistic suggestion fixtures — bb-flavored paths + thread refs.
 // ---------------------------------------------------------------------------
 
-const fileSuggestions: PromptMentionSuggestion[] = [
-  {
-    kind: "file",
-    path: "apps/app/src/components/promptbox/PromptBoxInternal.tsx",
-    replacement: "apps/app/src/components/promptbox/PromptBoxInternal.tsx",
-  },
-  {
-    kind: "file",
-    path: "apps/app/src/components/promptbox/banner/ContextBanner.tsx",
-    replacement: "apps/app/src/components/promptbox/banner/ContextBanner.tsx",
-  },
-  {
-    kind: "file",
-    path: "apps/app/src/components/promptbox/mentions/MentionMenu.tsx",
-    replacement: "apps/app/src/components/promptbox/mentions/MentionMenu.tsx",
-  },
-  {
-    kind: "file",
-    path: "packages/domain/src/thread.ts",
-    replacement: "packages/domain/src/thread.ts",
-  },
-  {
-    kind: "file",
-    path: "packages/server-contract/src/api-types.ts",
-    replacement: "packages/server-contract/src/api-types.ts",
-  },
+function getPathName(path: string): string {
+  return path.split("/").at(-1) ?? path;
+}
+
+function workspaceFile(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "workspace",
+    entryKind: "file",
+    path,
+    name: getPathName(path),
+    replacement: path,
+  };
+}
+
+function workspaceFolder(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "workspace",
+    entryKind: "directory",
+    path,
+    name: getPathName(path),
+    replacement: `${path}/`,
+  };
+}
+
+function storageFile(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "thread-storage",
+    entryKind: "file",
+    path,
+    name: getPathName(path),
+    replacement: `thread-storage:${path}`,
+  };
+}
+
+function storageFolder(path: string): PromptMentionSuggestion {
+  return {
+    kind: "path",
+    source: "thread-storage",
+    entryKind: "directory",
+    path,
+    name: getPathName(path),
+    replacement: `thread-storage:${path}/`,
+  };
+}
+
+const pathSuggestions: PromptMentionSuggestion[] = [
+  workspaceFile("apps/app/src/components/promptbox/PromptBoxInternal.tsx"),
+  workspaceFile("apps/app/src/components/promptbox/banner/ContextBanner.tsx"),
+  workspaceFolder("apps/app/src/components/promptbox/mentions"),
+  storageFile("notes/status.md"),
+  storageFolder("scratch/reports"),
 ];
 
 const threadSuggestions: PromptMentionSuggestion[] = [
@@ -78,23 +107,17 @@ const threadSuggestions: PromptMentionSuggestion[] = [
 ];
 
 const longPathSuggestions: PromptMentionSuggestion[] = [
-  {
-    kind: "file",
-    path: "apps/server/src/routes/internal/long/path/that/keeps/going/and/going/threads.ts",
-    replacement:
-      "apps/server/src/routes/internal/long/path/that/keeps/going/and/going/threads.ts",
-  },
-  {
-    kind: "file",
-    path: "packages/agent-providers/src/codex/internal/long/nested/module/streaming/event-decoder.ts",
-    replacement:
-      "packages/agent-providers/src/codex/internal/long/nested/module/streaming/event-decoder.ts",
-  },
+  workspaceFile(
+    "apps/server/src/routes/internal/long/path/that/keeps/going/and/going/threads.ts",
+  ),
+  workspaceFile(
+    "packages/agent-providers/src/codex/internal/long/nested/module/streaming/event-decoder.ts",
+  ),
 ];
 
 const mixedSuggestions: PromptMentionSuggestion[] = [
   ...threadSuggestions.slice(0, 2),
-  ...fileSuggestions.slice(0, 3),
+  ...pathSuggestions.slice(0, 4),
 ];
 
 // ---------------------------------------------------------------------------
@@ -106,14 +129,23 @@ interface RowConfig {
   selectedIndex?: number;
 }
 
+interface ResultsStateConfig {
+  suggestions: readonly PromptMentionSuggestion[];
+  threadSectionMode?: ThreadMentionSectionMode;
+}
+
+function makeResultsState(args: ResultsStateConfig): MentionMenuState {
+  return {
+    kind: "results",
+    suggestions: args.suggestions,
+    threadSectionMode: args.threadSectionMode ?? "all",
+  };
+}
+
 function Row({ state, selectedIndex = 0 }: RowConfig) {
   return (
     <PromptStage>
-      <MentionMenu
-        state={state}
-        selectedIndex={selectedIndex}
-        onApply={noop}
-      />
+      <MentionMenu state={state} selectedIndex={selectedIndex} onApply={noop} />
     </PromptStage>
   );
 }
@@ -121,10 +153,7 @@ function Row({ state, selectedIndex = 0 }: RowConfig) {
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow
-        label="hint"
-        hint='@ typed alone — "Type to search files"'
-      >
+      <StoryRow label="hint" hint='@ typed alone — "Type to search mentions"'>
         <Row state={{ kind: "hint" }} />
       </StoryRow>
       <StoryRow label="loading" hint="suggestions fetching">
@@ -134,37 +163,37 @@ export function Overview() {
         <Row state={{ kind: "error" }} />
       </StoryRow>
       <StoryRow label="no matches" hint="query returned zero results">
-        <Row state={{ kind: "results", suggestions: [] }} />
+        <Row state={makeResultsState({ suggestions: [] })} />
       </StoryRow>
-      <StoryRow label="file matches" hint="five real bb files">
-        <Row state={{ kind: "results", suggestions: fileSuggestions }} />
+      <StoryRow label="path matches" hint="workspace and manager storage paths">
+        <Row state={makeResultsState({ suggestions: pathSuggestions })} />
       </StoryRow>
       <StoryRow
-        label="file matches (selected index)"
+        label="path matches (selected index)"
         hint="third item highlighted (keyboard arrow nav)"
       >
         <Row
-          state={{ kind: "results", suggestions: fileSuggestions }}
+          state={makeResultsState({ suggestions: pathSuggestions })}
           selectedIndex={2}
         />
       </StoryRow>
       <StoryRow
         label="thread matches"
-        hint='manager + standard threads — type label badge ("Manager"/"Thread")'
+        hint="manager + standard threads with leading row icons"
       >
-        <Row state={{ kind: "results", suggestions: threadSuggestions }} />
+        <Row state={makeResultsState({ suggestions: threadSuggestions })} />
       </StoryRow>
       <StoryRow
-        label="mixed file + thread"
+        label="mixed path + thread"
         hint="threads first (production order: usePromptMentions prepends threads)"
       >
-        <Row state={{ kind: "results", suggestions: mixedSuggestions }} />
+        <Row state={makeResultsState({ suggestions: mixedSuggestions })} />
       </StoryRow>
       <StoryRow
         label="long path truncation"
         hint="TruncateStart on directory; basename stays visible"
       >
-        <Row state={{ kind: "results", suggestions: longPathSuggestions }} />
+        <Row state={makeResultsState({ suggestions: longPathSuggestions })} />
       </StoryRow>
     </StoryCard>
   );

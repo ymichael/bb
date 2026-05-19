@@ -123,8 +123,8 @@ function getPromptPlaceholder(
     case "idle":
     case "active":
       return isManagerThread
-        ? "Send a message. @ to mention files or threads"
-        : "Ask for follow-up changes. @ to mention files";
+        ? "Send a message. @ to mention threads, files, or folders"
+        : "Ask for follow-up changes. @ to mention files, or folders";
     default:
       return assertNever(displayStatus);
   }
@@ -201,6 +201,7 @@ export function ThreadDetailPromptArea({
   const promptMentions = usePromptMentions(projectId, {
     threadSuggestionMode: thread.type === "manager" ? "all" : "managers",
     currentThreadId: thread.id,
+    currentThreadType: thread.type,
     environmentId: thread.environmentId ?? null,
   });
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -694,6 +695,7 @@ export function ThreadDetailPromptArea({
   const mentionsConfig = useMemo(
     () => ({
       suggestions: promptMentions.suggestions,
+      threadSectionMode: promptMentions.threadSectionMode,
       isLoading: promptMentions.isLoading,
       isError: promptMentions.isError,
       onQueryChange: promptMentions.setQuery,
@@ -703,6 +705,7 @@ export function ThreadDetailPromptArea({
       promptMentions.isLoading,
       promptMentions.setQuery,
       promptMentions.suggestions,
+      promptMentions.threadSectionMode,
     ],
   );
 

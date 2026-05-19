@@ -129,6 +129,38 @@ describe("workspace command dispatch", () => {
     expect(result.truncated).toBe(false);
   });
 
+  it("covers host.list_paths with directories included", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-list-paths-");
+    await fs.mkdir(path.join(tempDir, "notes"));
+    await fs.writeFile(path.join(tempDir, "notes", "todo.md"), "world");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.list_paths",
+        path: tempDir,
+        limit: 1000,
+        includeFiles: true,
+        includeDirectories: true,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(
+      result.paths
+        .map((pathEntry) => ({
+          kind: pathEntry.kind,
+          path: pathEntry.path,
+          name: pathEntry.name,
+        }))
+        .sort((left, right) => left.path.localeCompare(right.path)),
+    ).toEqual([
+      { kind: "directory", path: "notes", name: "notes" },
+      { kind: "file", path: path.join("notes", "todo.md"), name: "todo.md" },
+    ]);
+    expect(result.truncated).toBe(false);
+  });
+
   it("returns empty files for host.list_files when path does not exist", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-list-missing-");
     const missingPath = path.join(tempDir, "does-not-exist");
@@ -144,6 +176,26 @@ describe("workspace command dispatch", () => {
     );
 
     expect(result.files).toEqual([]);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("returns empty paths for host.list_paths when path does not exist", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-list-paths-missing-");
+    const missingPath = path.join(tempDir, "does-not-exist");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.list_paths",
+        path: missingPath,
+        limit: 1000,
+        includeFiles: true,
+        includeDirectories: true,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.paths).toEqual([]);
     expect(result.truncated).toBe(false);
   });
 

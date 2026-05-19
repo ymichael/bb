@@ -596,6 +596,17 @@ export const projectFilesQuerySchema = z.object({
 });
 export type ProjectFilesQuery = z.infer<typeof projectFilesQuerySchema>;
 
+export const pathListIncludeQueryValueSchema = z.enum(["true", "false"]);
+export type PathListIncludeQueryValue = z.infer<
+  typeof pathListIncludeQueryValueSchema
+>;
+
+export const projectPathsQuerySchema = projectFilesQuerySchema.extend({
+  includeFiles: pathListIncludeQueryValueSchema,
+  includeDirectories: pathListIncludeQueryValueSchema,
+});
+export type ProjectPathsQuery = z.infer<typeof projectPathsQuerySchema>;
+
 export const projectBranchesQuerySchema = z.object({
   hostId: z.string().min(1),
 });
@@ -857,6 +868,15 @@ export const threadStorageFilesQuerySchema = z
   .partial();
 export type ThreadStorageFilesQuery = z.infer<
   typeof threadStorageFilesQuerySchema
+>;
+
+export const threadStoragePathsQuerySchema =
+  threadStorageFilesQuerySchema.extend({
+    includeFiles: pathListIncludeQueryValueSchema,
+    includeDirectories: pathListIncludeQueryValueSchema,
+  });
+export type ThreadStoragePathsQuery = z.infer<
+  typeof threadStoragePathsQuerySchema
 >;
 
 export const threadStorageContentQuerySchema = z.object({
@@ -1189,12 +1209,34 @@ export const workspaceFileSchema = z.object({
 });
 export type WorkspaceFile = z.infer<typeof workspaceFileSchema>;
 
+export const workspacePathEntryKindSchema = z.enum(["file", "directory"]);
+export type WorkspacePathEntryKind = z.infer<
+  typeof workspacePathEntryKindSchema
+>;
+
+export const workspacePathEntrySchema = z.object({
+  kind: workspacePathEntryKindSchema,
+  path: z.string(),
+  name: z.string(),
+  score: z.number(),
+  positions: z.array(z.number().int().nonnegative()),
+});
+export type WorkspacePathEntry = z.infer<typeof workspacePathEntrySchema>;
+
 export const workspaceFileListResponseSchema = z.object({
   files: z.array(workspaceFileSchema),
   truncated: z.boolean(),
 });
 export type WorkspaceFileListResponse = z.infer<
   typeof workspaceFileListResponseSchema
+>;
+
+export const workspacePathListResponseSchema = z.object({
+  paths: z.array(workspacePathEntrySchema),
+  truncated: z.boolean(),
+});
+export type WorkspacePathListResponse = z.infer<
+  typeof workspacePathListResponseSchema
 >;
 
 export const threadStorageFileListResponseSchema =
@@ -1210,6 +1252,21 @@ export const threadStorageFileListResponseSchema =
   });
 export type ThreadStorageFileListResponse = z.infer<
   typeof threadStorageFileListResponseSchema
+>;
+
+export const threadStoragePathListResponseSchema =
+  workspacePathListResponseSchema.extend({
+    /**
+     * Absolute on-host path to the thread's storage directory. Useful for
+     * clients that need to construct a full path for filesystem operations
+     * (e.g. opening a storage file in the user's editor). The path is on
+     * the thread's host machine, so it is only usable when that host is the
+     * user's local machine.
+     */
+    storageRootPath: z.string(),
+  });
+export type ThreadStoragePathListResponse = z.infer<
+  typeof threadStoragePathListResponseSchema
 >;
 
 export const projectResponseSchema = projectSchema.extend({

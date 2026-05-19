@@ -65,6 +65,7 @@ export function makeMentionsConfig(
 ): MentionsConfig {
   const base: MentionsConfig = {
     suggestions: [],
+    threadSectionMode: "threads",
     isLoading: false,
     isError: false,
     onQueryChange: noop,

@@ -11,6 +11,7 @@ import {
   threadComposerBootstrapEnvironmentQueryKeyPrefix,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
+  threadStoragePathsForThreadQueryKeyPrefix,
 } from "./queries/query-keys";
 import type {
   EnvironmentArg,
@@ -97,6 +98,9 @@ export function invalidateThreadStorageQueries({
 }: ThreadArg): void {
   queryClient.invalidateQueries({
     queryKey: threadStorageFilesForThreadQueryKeyPrefix(threadId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: threadStoragePathsForThreadQueryKeyPrefix(threadId),
   });
   queryClient.invalidateQueries({
     queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),

@@ -16,7 +16,11 @@ import {
 } from "./command-dispatch-support.js";
 import { provisionEnvironment } from "./command-handlers/environment.js";
 import { listHostBranches } from "./command-handlers/host-branches.js";
-import { listHostFiles, readHostFile } from "./command-handlers/host-files.js";
+import {
+  listHostFiles,
+  listHostPaths,
+  readHostFile,
+} from "./command-handlers/host-files.js";
 import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
 import {
   getReplayCapture,
@@ -249,6 +253,10 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "host.list_files" }>,
     _options: CommandDispatchOptions,
   ) => listHostFiles(command),
+  "host.list_paths": async (
+    command: Extract<HostDaemonCommand, { type: "host.list_paths" }>,
+    _options: CommandDispatchOptions,
+  ) => listHostPaths(command),
   "host.list_branches": async (
     command: Extract<HostDaemonCommand, { type: "host.list_branches" }>,
     _options: CommandDispatchOptions,

@@ -3,6 +3,7 @@ import { distance } from "fastest-levenshtein";
 import type { FzfResultItem, Selector, Tiebreaker } from "fzf";
 
 export type FuzzyPathGetter<T> = (item: T) => string;
+export type FuzzyTextGetter<T> = (item: T) => string | readonly string[];
 
 export interface FuzzyMatch<T> {
   item: T;
@@ -14,6 +15,13 @@ export interface FuzzyMatchPathsArgs<T> {
   items: readonly T[];
   query: string;
   getPath: FuzzyPathGetter<T>;
+  limit: number;
+}
+
+export interface FuzzyMatchTextArgs<T> {
+  items: readonly T[];
+  query: string;
+  getText: FuzzyTextGetter<T>;
   limit: number;
 }
 
@@ -29,6 +37,23 @@ interface RankedPathMatch<T> {
 interface NormalizedPathItem<T> {
   item: T;
   path: string;
+}
+
+interface NormalizedTextCandidate<T> {
+  item: T;
+  itemIndex: number;
+  text: string;
+  textIndex: number;
+}
+
+interface RankedTextMatch<T> {
+  item: T;
+  itemIndex: number;
+  text: string;
+  textIndex: number;
+  positions: number[];
+  score: number;
+  start: number;
 }
 
 interface PathQueryParts {
@@ -73,6 +98,13 @@ const PATH_RELEVANCE_SCORE = {
   baseNameSubsequence: 5_000,
   pathContains: 1_000,
   repeatedPathHit: 500,
+};
+
+const TEXT_RELEVANCE_SCORE = {
+  exact: 20_000,
+  prefix: 15_000,
+  contains: 10_000,
+  subsequence: 5_000,
 };
 
 const SEGMENT_SCORE = {
@@ -562,6 +594,138 @@ function rankedMatchesToFuzzyMatches<T>(
   }));
 }
 
+function getTextRelevanceBonus(text: string, query: string): number {
+  const comparable = getComparableValues(query, text);
+
+  if (comparable.value === comparable.query) {
+    return TEXT_RELEVANCE_SCORE.exact;
+  }
+  if (comparable.value.startsWith(comparable.query)) {
+    return TEXT_RELEVANCE_SCORE.prefix;
+  }
+  if (comparable.value.includes(comparable.query)) {
+    return TEXT_RELEVANCE_SCORE.contains;
+  }
+  if (isSubsequence(comparable.query, comparable.value)) {
+    return TEXT_RELEVANCE_SCORE.subsequence;
+  }
+
+  return 0;
+}
+
+function getTextValues<T>(item: T, getText: FuzzyTextGetter<T>): string[] {
+  const text = getText(item);
+  if (typeof text === "string") {
+    return text.length > 0 ? [text] : [];
+  }
+
+  return text.filter((value) => value.length > 0);
+}
+
+function getTextCandidates<T>(
+  items: readonly T[],
+  getText: FuzzyTextGetter<T>,
+): NormalizedTextCandidate<T>[] {
+  const candidates: NormalizedTextCandidate<T>[] = [];
+  let itemIndex = 0;
+  for (const item of items) {
+    const values = getTextValues(item, getText);
+    let textIndex = 0;
+    for (const text of values) {
+      candidates.push({
+        item,
+        itemIndex,
+        text,
+        textIndex,
+      });
+      textIndex += 1;
+    }
+    itemIndex += 1;
+  }
+  return candidates;
+}
+
+function compareRankedTextMatches<T>(
+  left: RankedTextMatch<T>,
+  right: RankedTextMatch<T>,
+): number {
+  if (left.score !== right.score) {
+    return right.score - left.score;
+  }
+  if (left.start !== right.start) {
+    return left.start - right.start;
+  }
+  if (left.textIndex !== right.textIndex) {
+    return left.textIndex - right.textIndex;
+  }
+  if (left.text.length !== right.text.length) {
+    return left.text.length - right.text.length;
+  }
+  if (left.text < right.text) {
+    return -1;
+  }
+  if (left.text > right.text) {
+    return 1;
+  }
+  return left.itemIndex - right.itemIndex;
+}
+
+function rankTextQueryMatches<T>(
+  candidates: NormalizedTextCandidate<T>[],
+  query: string,
+): RankedTextMatch<T>[] {
+  const tiebreakers: Tiebreaker<NormalizedTextCandidate<T>>[] = [
+    byPathStartAsc,
+    byPathLengthAsc,
+  ];
+  const matcher = new Fzf<readonly NormalizedTextCandidate<T>[]>(candidates, {
+    selector: (candidate: NormalizedTextCandidate<T>) => candidate.text,
+    casing: "smart-case",
+    forward: true,
+    tiebreakers,
+  });
+  const matches: FzfResultItem<NormalizedTextCandidate<T>>[] =
+    matcher.find(query);
+
+  return matches
+    .map((match) => ({
+      item: match.item.item,
+      itemIndex: match.item.itemIndex,
+      text: match.item.text,
+      textIndex: match.item.textIndex,
+      positions: [...match.positions].sort((left, right) => left - right),
+      score: match.score + getTextRelevanceBonus(match.item.text, query),
+      start: match.start,
+    }))
+    .sort(compareRankedTextMatches);
+}
+
+function mergeRankedTextMatches<T>(
+  matches: RankedTextMatch<T>[],
+): RankedTextMatch<T>[] {
+  const matchesByItemIndex = new Map<number, RankedTextMatch<T>>();
+
+  for (const match of matches) {
+    const existing = matchesByItemIndex.get(match.itemIndex);
+    if (!existing || compareRankedTextMatches(match, existing) < 0) {
+      matchesByItemIndex.set(match.itemIndex, match);
+    }
+  }
+
+  return [...matchesByItemIndex.values()].sort(compareRankedTextMatches);
+}
+
+function rankedTextMatchesToFuzzyMatches<T>(
+  matches: RankedTextMatch<T>[],
+  limit: number,
+): FuzzyMatch<T>[] {
+  return matches.slice(0, limit).map((match) => ({
+    item: match.item,
+    score: match.score,
+    positions: match.positions,
+  }));
+}
+
 export function fuzzyMatchPaths<T>(
   args: FuzzyMatchPathsArgs<T>,
 ): FuzzyMatch<T>[] {
@@ -598,6 +762,36 @@ export function fuzzyMatchPaths<T>(
 
   return rankedMatchesToFuzzyMatches(
     rankPlainQueryMatches(normalizedItems, normalizedQuery),
+    args.limit,
+  );
+}
+
+export function fuzzyMatchText<T>(
+  args: FuzzyMatchTextArgs<T>,
+): FuzzyMatch<T>[] {
+  if (args.limit <= 0) {
+    return [];
+  }
+
+  if (!args.query) {
+    return args.items.slice(0, args.limit).map((item) => ({
+      item,
+      score: 0,
+      positions: [],
+    }));
+  }
+
+  if (args.query.length > FUZZY_MATCH_QUERY_MAX_LENGTH) {
+    return [];
+  }
+
+  return rankedTextMatchesToFuzzyMatches(
+    mergeRankedTextMatches(
+      rankTextQueryMatches(
+        getTextCandidates(args.items, args.getText),
+        args.query,
+      ),
+    ),
     args.limit,
   );
 }

@@ -5,10 +5,12 @@ import type {
   ProjectWithThreadsResponse,
   PromptHistoryResponse,
   WorkspaceFileListResponse,
+  WorkspacePathListResponse,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
   projectFilesQueryKey,
+  projectPathsQueryKey,
   projectPromptHistoryQueryKey,
   projectSourceBranchesQueryKey,
   projectsQueryKey,
@@ -18,6 +20,15 @@ import {
 
 interface QueryOptions {
   enabled?: boolean;
+}
+
+interface UseProjectPathSuggestionsArgs {
+  projectId: string | undefined;
+  query: string | null;
+  limit?: number;
+  environmentId: string | null;
+  includeFiles: boolean;
+  includeDirectories: boolean;
 }
 
 function requireProjectId(
@@ -136,6 +147,43 @@ export function useProjectFileSuggestions(args: {
     refetchOnWindowFocus: false,
     // Hold the previous query's results while a new query is fetching so the
     // mention menu doesn't flicker through "loading" between every keystroke.
+    placeholderData: (previousData) => previousData,
+  });
+}
+
+export function useProjectPathSuggestions(args: UseProjectPathSuggestionsArgs) {
+  const {
+    projectId,
+    query,
+    limit = 8,
+    environmentId,
+    includeFiles,
+    includeDirectories,
+  } = args;
+  const trimmedQuery = query?.trim() ?? "";
+
+  return useQuery<WorkspacePathListResponse>({
+    queryKey: projectPathsQueryKey(
+      projectId,
+      trimmedQuery,
+      limit,
+      environmentId,
+      includeFiles,
+      includeDirectories,
+    ),
+    queryFn: () =>
+      api.searchProjectPaths({
+        projectId: projectId ?? "",
+        query: trimmedQuery,
+        limit,
+        environmentId,
+        includeFiles,
+        includeDirectories,
+      }),
+    enabled: Boolean(projectId) && trimmedQuery.length > 0,
+    staleTime: 15_000,
+    retry: false,
+    refetchOnWindowFocus: false,
     placeholderData: (previousData) => previousData,
   });
 }

@@ -18,6 +18,7 @@
     "@bb/agent-providers": "workspace:*",
     "@bb/core-ui": "workspace:*",
     "@bb/domain": "workspace:*",
+    "@bb/fuzzy-match": "workspace:*",
     "@bb/host-daemon-contract": "workspace:*",
     "@bb/server-contract": "workspace:*",
     "@bb/templates": "workspace:*",

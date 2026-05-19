@@ -64,8 +64,8 @@ import {
 } from "../services/threads/managed-thread-notifications.js";
 import { tryTransitionInTransaction } from "../services/threads/thread-transitions.js";
 
-export type CommandResultSideEffectsDeps = InteractiveLifecycleCoordinationDeps &
-  Pick<AppDeps, "terminalSessions">;
+export type CommandResultSideEffectsDeps =
+  InteractiveLifecycleCoordinationDeps & Pick<AppDeps, "terminalSessions">;
 export type CommandResultSettlementDeps = Omit<
   CommandResultSideEffectsDeps,
   "db" | "hub"
@@ -710,6 +710,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   }),
   "host.list_branches": null,
   "host.list_files": null,
+  "host.list_paths": null,
   "host.read_file": null,
   "codex.inference.complete": null,
   "interactive.resolve": defineCommandResultOwner({

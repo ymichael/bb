@@ -45,7 +45,9 @@ import type {
   ThreadListResponse,
   ThreadResponse,
   ThreadWithIncludesResponse,
+  PathListIncludeQueryValue,
   ThreadStorageFilesQuery,
+  ThreadStoragePathsQuery,
   TerminalSession,
   ThreadTerminalListResponse,
   ThreadTimelineResponse,
@@ -60,7 +62,9 @@ import type {
   UpdateProjectSourceRequest,
   UploadedPromptAttachment,
   ThreadStorageFileListResponse,
+  ThreadStoragePathListResponse,
   WorkspaceFileListResponse,
+  WorkspacePathListResponse,
   ReplayCaptureListResponse,
   ReplayRunRequest,
   ReplayRunResponse,
@@ -78,6 +82,7 @@ import {
   buildThreadStorageContentUrl,
 } from "./file-content-urls";
 import type { ThreadStorageFileListOptions } from "./thread-storage-files";
+import type { PathListOptions } from "./path-list-options";
 export type { FilePreview } from "./file-preview";
 
 interface GetThreadTimelineArgs {
@@ -530,12 +535,21 @@ export async function removeProjectSource(
   );
 }
 
-export async function searchProjectFiles(args: {
+interface SearchProjectFilesArgs {
   projectId: string;
   query: string;
   limit: number;
   environmentId: string | null;
-}): Promise<WorkspaceFileListResponse> {
+}
+
+interface SearchProjectPathsArgs extends SearchProjectFilesArgs {
+  includeFiles: boolean;
+  includeDirectories: boolean;
+}
+
+export async function searchProjectFiles(
+  args: SearchProjectFilesArgs,
+): Promise<WorkspaceFileListResponse> {
   return request<WorkspaceFileListResponse>(
     apiClient.projects[":id"].files.$get({
       param: { id: args.projectId },
@@ -543,6 +557,31 @@ export async function searchProjectFiles(args: {
         query: args.query,
         limit: String(args.limit),
         environmentId: args.environmentId ?? "",
+      },
+    }),
+  );
+}
+
+function toPathListIncludeQueryValue(
+  value: boolean,
+): PathListIncludeQueryValue {
+  return value ? "true" : "false";
+}
+
+export async function searchProjectPaths(
+  args: SearchProjectPathsArgs,
+): Promise<WorkspacePathListResponse> {
+  return request<WorkspacePathListResponse>(
+    apiClient.projects[":id"].paths.$get({
+      param: { id: args.projectId },
+      query: {
+        query: args.query,
+        limit: String(args.limit),
+        environmentId: args.environmentId ?? "",
+        includeFiles: toPathListIncludeQueryValue(args.includeFiles),
+        includeDirectories: toPathListIncludeQueryValue(
+          args.includeDirectories,
+        ),
       },
     }),
   );
@@ -702,6 +741,40 @@ export async function listThreadStorageFiles({
       {
         param: { id },
         query: toThreadStorageFilesQuery(options),
+      },
+      requestOptions(signal),
+    ),
+  );
+}
+
+interface ListThreadStoragePathsArgs {
+  id: string;
+  options: PathListOptions;
+  signal?: AbortSignal;
+}
+
+function toThreadStoragePathsQuery(
+  options: PathListOptions,
+): ThreadStoragePathsQuery {
+  const trimmedQuery = options.query?.trim() ?? "";
+  return {
+    ...(trimmedQuery.length > 0 ? { query: trimmedQuery } : {}),
+    limit: String(options.limit),
+    includeFiles: toPathListIncludeQueryValue(options.includeFiles),
+    includeDirectories: toPathListIncludeQueryValue(options.includeDirectories),
+  };
+}
+
+export async function listThreadStoragePaths({
+  id,
+  options,
+  signal,
+}: ListThreadStoragePathsArgs): Promise<ThreadStoragePathListResponse> {
+  return request<ThreadStoragePathListResponse>(
+    apiClient.threads[":id"]["thread-storage"].paths.$get(
+      {
+        param: { id },
+        query: toThreadStoragePathsQuery(options),
       },
       requestOptions(signal),
     ),

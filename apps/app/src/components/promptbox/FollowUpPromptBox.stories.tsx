@@ -133,6 +133,7 @@ const usage: ThreadContextWindowUsage = {
 
 const mentionsBase: MentionsConfig = {
   suggestions: [],
+  threadSectionMode: "threads",
   isLoading: false,
   isError: false,
   onQueryChange: noop,

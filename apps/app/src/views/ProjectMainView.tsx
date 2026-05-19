@@ -417,6 +417,7 @@ export function ProjectMainView() {
   const mentionsConfig = useMemo(
     () => ({
       suggestions: promptMentions.suggestions,
+      threadSectionMode: promptMentions.threadSectionMode,
       isLoading: promptMentions.isLoading,
       isError: promptMentions.isError,
       onQueryChange: promptMentions.setQuery,
@@ -426,6 +427,7 @@ export function ProjectMainView() {
       promptMentions.isLoading,
       promptMentions.setQuery,
       promptMentions.suggestions,
+      promptMentions.threadSectionMode,
     ],
   );
   const attachmentsConfig = useMemo(

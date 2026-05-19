@@ -8,6 +8,7 @@ import {
   threadHostFileContentQuerySchema,
   threadStorageContentQuerySchema,
   threadStorageFilesQuerySchema,
+  threadStoragePathsQuerySchema,
   threadEventWaitQuerySchema,
   threadEventsQuerySchema,
   threadTimelineQuerySchema,
@@ -52,6 +53,7 @@ import {
   parseInteger,
   parseOptionalInteger,
 } from "../../services/lib/validation.js";
+import { parsePathKindInclusion } from "../path-list-inclusion.js";
 
 interface ThreadComposerExecutionOptionsSource {
   archivedAt: number | null;
@@ -395,6 +397,50 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
         if (error instanceof ApiError && error.body.code === "ENOENT") {
           return context.json({
             files: [],
+            truncated: false,
+            storageRootPath: target.storagePath,
+          });
+        }
+        throw error;
+      }
+    },
+  );
+
+  get(
+    "/threads/:id/thread-storage/paths",
+    threadStoragePathsQuerySchema,
+    async (context, query) => {
+      const target = await requireThreadStorageTarget(deps, {
+        threadId: context.req.param("id"),
+      });
+      const limit = parseThreadStorageFileListLimit(query.limit);
+      const inclusion = parsePathKindInclusion({
+        includeFiles: query.includeFiles,
+        includeDirectories: query.includeDirectories,
+      });
+
+      try {
+        const result = await queueCommandAndWait(deps, {
+          hostId: target.hostId,
+          timeoutMs: COMMAND_TIMEOUT_MS,
+          command: {
+            type: "host.list_paths",
+            path: target.storagePath,
+            ...(query.query ? { query: query.query } : {}),
+            limit,
+            includeFiles: inclusion.includeFiles,
+            includeDirectories: inclusion.includeDirectories,
+          },
+        });
+        return context.json({
+          paths: result.paths,
+          truncated: result.truncated,
+          storageRootPath: target.storagePath,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.body.code === "ENOENT") {
+          return context.json({
+            paths: [],
             truncated: false,
             storageRootPath: target.storagePath,
           });

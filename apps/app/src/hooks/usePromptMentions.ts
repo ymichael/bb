@@ -1,37 +1,54 @@
 import { useMemo, useState } from "react";
-import { useDebounceValue } from "usehooks-ts";
-import { useProjectFileSuggestions } from "./queries/project-queries";
+import type { Dispatch, SetStateAction } from "react";
+import type { ThreadType } from "@bb/domain";
+import { buildPathMentionSuggestions } from "./pathMentionSuggestions";
+import { useThreads, type UseThreadsFilters } from "./queries/thread-queries";
 import {
-  useThreads,
-  type UseThreadsFilters,
-} from "./queries/thread-queries";
-import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
+  buildThreadMentionSuggestions,
+  getThreadMentionSectionMode,
+  type ThreadSuggestionMode,
+} from "./threadMentionSuggestions";
+import { usePathSuggestions } from "./usePathSuggestions";
+import type {
+  PromptMentionSuggestion,
+  ThreadMentionSectionMode,
+} from "@/components/promptbox/mentions/types";
 
-const FILE_MENTION_DEBOUNCE_MS = 120;
-const FILE_MENTION_LIMIT = 8;
+const PROMPT_MENTION_LIMIT = 8;
+
+export interface UsePromptMentionsOptions {
+  threadSuggestionMode?: ThreadSuggestionMode;
+  currentThreadId?: string;
+  currentThreadType?: ThreadType;
+  environmentId: string | null;
+}
+
+export interface UsePromptMentionsResult {
+  query: string | null;
+  setQuery: Dispatch<SetStateAction<string | null>>;
+  suggestions: PromptMentionSuggestion[];
+  threadSectionMode: ThreadMentionSectionMode;
+  isLoading: boolean;
+  isError: boolean;
+}
 
 export function usePromptMentions(
   projectId: string | undefined,
-  options: {
-    threadSuggestionMode?: "none" | "managers" | "all";
-    currentThreadId?: string;
-    environmentId: string | null;
-  },
-) {
+  options: UsePromptMentionsOptions,
+): UsePromptMentionsResult {
   const [query, setQuery] = useState<string | null>(null);
-  const [debouncedNonNull] = useDebounceValue(query, FILE_MENTION_DEBOUNCE_MS);
-  const debouncedQuery = query === null ? null : debouncedNonNull;
 
-  // useProjectFileSuggestions uses placeholderData to keep the previous
-  // query's results visible while a new query is fetching, so the menu does
-  // not flicker through "loading" between every keystroke.
-  const search = useProjectFileSuggestions({
+  const pathSearch = usePathSuggestions({
     projectId,
-    query: debouncedQuery,
-    limit: FILE_MENTION_LIMIT,
+    query,
+    limit: PROMPT_MENTION_LIMIT,
     environmentId: options.environmentId,
+    currentThreadId: options.currentThreadId,
+    currentThreadType: options.currentThreadType,
+    includeDirectories: true,
   });
   const threadSuggestionMode = options.threadSuggestionMode ?? "none";
+  const threadSectionMode = getThreadMentionSectionMode(threadSuggestionMode);
   const threadFilters: UseThreadsFilters =
     threadSuggestionMode === "managers"
       ? { archived: false, projectId, type: "manager" }
@@ -41,64 +58,33 @@ export function usePromptMentions(
   });
 
   const hasQuery = (query?.trim().length ?? 0) > 0;
-  const isDebouncing = hasQuery && query !== debouncedQuery;
-  const trimmedQuery = query?.trim().toLowerCase() ?? "";
+  const trimmedQuery = query?.trim() ?? "";
   const currentThreadId = options.currentThreadId;
-  const fileSuggestions = useMemo(
+  const pathSuggestions = useMemo(
     () =>
-      (search.data?.files ?? []).map<PromptMentionSuggestion>((item) => ({
-        kind: "file",
-        path: item.path,
-        replacement: item.path,
-      })),
-    [search.data?.files],
+      buildPathMentionSuggestions({
+        paths: pathSearch.suggestions,
+      }),
+    [pathSearch.suggestions],
   );
   const threadSuggestions = useMemo(() => {
-    if (threadSuggestionMode === "none" || trimmedQuery.length === 0) {
-      return [];
-    }
-    return (threadsQuery.data ?? [])
-      .filter((thread) => thread.id !== currentThreadId)
-      .filter((thread) =>
-        threadSuggestionMode === "managers" ? thread.type === "manager" : true,
-      )
-      .filter((thread) => {
-        const title = thread.title?.trim().toLowerCase() ?? "";
-        return (
-          thread.id.toLowerCase().includes(trimmedQuery) ||
-          title.includes(trimmedQuery)
-        );
-      })
-      .sort((left, right) => {
-        if (left.type !== right.type) {
-          return left.type === "manager" ? -1 : 1;
-        }
-
-        const leftTitle = left.title?.trim().toLowerCase() ?? "";
-        const rightTitle = right.title?.trim().toLowerCase() ?? "";
-        return (
-          leftTitle.localeCompare(rightTitle) || left.id.localeCompare(right.id)
-        );
-      })
-      .slice(0, FILE_MENTION_LIMIT)
-      .map<PromptMentionSuggestion>((thread) => ({
-        kind: "thread",
-        path: `thread:${thread.id}`,
-        replacement: `thread:${thread.id}`,
-        threadId: thread.id,
-        title: thread.title ?? thread.titleFallback ?? undefined,
-        threadType: thread.type,
-      }));
+    return buildThreadMentionSuggestions({
+      threads: threadsQuery.data ?? [],
+      query: trimmedQuery,
+      mode: threadSuggestionMode,
+      currentThreadId,
+      limit: PROMPT_MENTION_LIMIT,
+    });
   }, [currentThreadId, threadSuggestionMode, threadsQuery.data, trimmedQuery]);
   const suggestions = useMemo(
     () =>
       hasQuery
-        ? [...threadSuggestions, ...fileSuggestions].slice(
+        ? [...threadSuggestions, ...pathSuggestions].slice(
             0,
-            FILE_MENTION_LIMIT,
+            PROMPT_MENTION_LIMIT,
           )
         : [],
-    [hasQuery, fileSuggestions, threadSuggestions],
+    [hasQuery, pathSuggestions, threadSuggestions],
   );
 
   // Loading flips on only when there are zero suggestions to show. Once the
@@ -108,13 +94,14 @@ export function usePromptMentions(
   const isLoading =
     hasQuery &&
     suggestions.length === 0 &&
-    (isDebouncing || search.isPending || search.isFetching);
-  const isError = search.isError;
+    (pathSearch.isDebouncing || pathSearch.isLoading);
+  const isError = pathSearch.isError;
 
   return {
     query,
     setQuery,
     suggestions,
+    threadSectionMode,
     isLoading,
     isError,
   };

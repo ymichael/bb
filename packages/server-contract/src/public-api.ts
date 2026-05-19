@@ -50,6 +50,7 @@ import type {
   ProjectDefaultExecutionOptionsQuery,
   ProjectAttachmentUploadForm,
   ProjectFilesQuery,
+  ProjectPathsQuery,
   ProjectListQuery,
   PromptHistoryQuery,
   PromptHistoryResponse,
@@ -93,7 +94,10 @@ import type {
   UpdateThreadRequest,
   UploadedPromptAttachment,
   ThreadStorageFileListResponse,
+  ThreadStoragePathListResponse,
+  ThreadStoragePathsQuery,
   WorkspaceFileListResponse,
+  WorkspacePathListResponse,
   ReplayCaptureListResponse,
   ReplayRunRequest,
   ReplayRunResponse,
@@ -189,6 +193,18 @@ export type PublicApiSchema = {
     $get: Endpoint<
       PathProjectId & { query: ProjectFilesQuery },
       WorkspaceFileListResponse
+    >;
+  };
+  "/projects/:id/paths": {
+    /**
+     * Search files and/or folders in the project. Proxies to `host.list_paths`
+     * against the path of the environment identified by `environmentId` when
+     * provided, falling back to the project's default source path when
+     * `environmentId` is null.
+     */
+    $get: Endpoint<
+      PathProjectId & { query: ProjectPathsQuery },
+      WorkspacePathListResponse
     >;
   };
   "/projects/:id/branches": {
@@ -501,6 +517,17 @@ export type PublicApiSchema = {
     $get: Endpoint<
       PathId & { query?: ThreadStorageFilesQuery },
       ThreadStorageFileListResponse
+    >;
+  };
+  "/threads/:id/thread-storage/paths": {
+    /**
+     * List files and/or folders in durable thread storage for a thread
+     * environment. Resolves the thread storage root from the active host
+     * session `dataDir` and proxies to `host.list_paths`.
+     */
+    $get: Endpoint<
+      PathId & { query: ThreadStoragePathsQuery },
+      ThreadStoragePathListResponse
     >;
   };
   "/threads/:id/thread-storage/content": {

@@ -1,8 +1,10 @@
 import {
   allProjectFilesQueryKeyPrefix,
+  allProjectPathsQueryKeyPrefix,
   allProjectSourceBranchesQueryKeyPrefix,
   localPathExistenceQueryKeyPrefix,
   projectFilesQueryKeyPrefix,
+  projectPathsQueryKeyPrefix,
   projectPromptHistoryQueryKey,
   projectPromptHistoryQueryKeyPrefix,
   projectSourceBranchesQueryKeyPrefix,
@@ -15,6 +17,7 @@ import {
   threadsQueryKey,
   threadStorageFilePreviewQueryKeyPrefix,
   threadStorageFilesForThreadQueryKeyPrefix,
+  threadStoragePathsForThreadQueryKeyPrefix,
   threadTimelineQueryKeyPrefix,
 } from "./queries/query-keys";
 import type {
@@ -42,6 +45,9 @@ export function invalidateProjectUpdateQueries({
   queryClient.invalidateQueries({
     queryKey: projectFilesQueryKeyPrefix(projectId),
   });
+  queryClient.invalidateQueries({
+    queryKey: projectPathsQueryKeyPrefix(projectId),
+  });
   queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
 }
 
@@ -65,12 +71,18 @@ export function invalidateProjectSourceQueries({
       queryKey: allProjectFilesQueryKeyPrefix(),
     });
     queryClient.invalidateQueries({
+      queryKey: allProjectPathsQueryKeyPrefix(),
+    });
+    queryClient.invalidateQueries({
       queryKey: allProjectSourceBranchesQueryKeyPrefix(),
     });
     return;
   }
   queryClient.invalidateQueries({
     queryKey: projectFilesQueryKeyPrefix(projectId),
+  });
+  queryClient.invalidateQueries({
+    queryKey: projectPathsQueryKeyPrefix(projectId),
   });
   queryClient.invalidateQueries({
     queryKey: projectSourceBranchesQueryKeyPrefix(projectId),
@@ -221,6 +233,9 @@ export function removeThreadScopedQueries({
   });
   queryClient.removeQueries({
     queryKey: threadStorageFilesForThreadQueryKeyPrefix(threadId),
+  });
+  queryClient.removeQueries({
+    queryKey: threadStoragePathsForThreadQueryKeyPrefix(threadId),
   });
   queryClient.removeQueries({
     queryKey: threadStorageFilePreviewQueryKeyPrefix(threadId),

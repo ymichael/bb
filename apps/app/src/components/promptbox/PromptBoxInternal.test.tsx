@@ -10,7 +10,10 @@ import {
 import { useState } from "react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import type { PromptDraftState } from "@/lib/prompt-draft";
-import type { PromptMentionSuggestion } from "@/components/promptbox/mentions/types";
+import type {
+  PromptMentionSuggestion,
+  ThreadMentionSectionMode,
+} from "@/components/promptbox/mentions/types";
 import { PromptBoxInternal } from "./PromptBoxInternal";
 
 vi.mock("@/hooks/useAutoGrow", () => ({
@@ -29,6 +32,7 @@ interface PromptBoxHarnessProps {
   historyEntries: PromptDraftState[];
   initialDraft: PromptDraftState;
   mentionSuggestions?: PromptMentionSuggestion[];
+  threadSectionMode?: ThreadMentionSectionMode;
   resetKey?: string | number;
 }
 
@@ -66,6 +70,7 @@ function PromptBoxHarness(args: PromptBoxHarnessProps) {
       }}
       mentions={{
         suggestions: args.mentionSuggestions ?? [],
+        threadSectionMode: args.threadSectionMode ?? "threads",
         isLoading: false,
         isError: false,
         onQueryChange: () => {},
@@ -132,8 +137,11 @@ describe("PromptBoxInternal mentions", () => {
         historyEntries={[]}
         mentionSuggestions={[
           {
-            kind: "file",
+            kind: "path",
+            source: "workspace",
+            entryKind: "file",
             path: "a.md",
+            name: "a.md",
             replacement: "a.md",
           },
         ]}
@@ -161,6 +169,167 @@ describe("PromptBoxInternal mentions", () => {
     fireEvent.click(textarea);
 
     expect(screen.queryByRole("button", { name: /a\.md/ })).toBeNull();
+  });
+
+  it("renders mixed thread, workspace path, and thread-storage suggestions", async () => {
+    const { container } = render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "Please check @pro",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        threadSectionMode="all"
+        mentionSuggestions={[
+          {
+            kind: "thread",
+            path: "thread:thr_project",
+            replacement: "thread:thr_project",
+            threadId: "thr_project",
+            title: "Project planning",
+            threadType: "manager",
+          },
+          {
+            kind: "thread",
+            path: "thread:thr_standard_project",
+            replacement: "thread:thr_standard_project",
+            threadId: "thr_standard_project",
+            title: "Project implementation",
+            threadType: "standard",
+          },
+          {
+            kind: "path",
+            source: "workspace",
+            entryKind: "file",
+            path: "src/project.ts",
+            name: "project.ts",
+            replacement: "src/project.ts",
+          },
+          {
+            kind: "path",
+            source: "workspace",
+            entryKind: "directory",
+            path: "src/projects",
+            name: "projects",
+            replacement: "src/projects/",
+          },
+          {
+            kind: "path",
+            source: "thread-storage",
+            entryKind: "file",
+            path: "notes/project.md",
+            name: "project.md",
+            replacement: "thread-storage:notes/project.md",
+          },
+        ]}
+      />,
+    );
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    fireEvent.click(textarea);
+
+    expect(await screen.findByText("Managers & threads")).toBeTruthy();
+    expect(screen.getByText("Workspace")).toBeTruthy();
+    expect(screen.getByText("Manager Storage")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Project planning/ }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Project implementation/ }),
+    ).toBeTruthy();
+    expect(screen.getByRole("button", { name: /project\.ts/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /projects/ })).toBeTruthy();
+    expect(container.querySelector('[data-icon="UserRound"]')).not.toBeNull();
+    expect(
+      container.querySelector('[data-icon="MessageSquare"]'),
+    ).not.toBeNull();
+    expect(container.querySelector('[data-icon="File"]')).not.toBeNull();
+    expect(container.querySelector('[data-icon="Folder"]')).not.toBeNull();
+    expect(screen.queryByText("Paths")).toBeNull();
+    expect(screen.queryByText("Thread storage")).toBeNull();
+    expect(screen.queryByText("Folder")).toBeNull();
+  });
+
+  it("inserts workspace folder mentions with trailing slash", async () => {
+    render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "Open @src/com",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        mentionSuggestions={[
+          {
+            kind: "path",
+            source: "workspace",
+            entryKind: "directory",
+            path: "src/components",
+            name: "components",
+            replacement: "src/components/",
+          },
+        ]}
+      />,
+    );
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    fireEvent.click(textarea);
+
+    const mentionButton = await screen.findByRole("button", {
+      name: /components/,
+    });
+    fireEvent.mouseDown(mentionButton);
+    await waitForAnimationFrame();
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("Open @src/components/ ");
+      expect(textarea.selectionStart).toBe("Open @src/components/ ".length);
+      expect(textarea.selectionEnd).toBe("Open @src/components/ ".length);
+    });
+  });
+
+  it("inserts thread-storage folder mentions with source-qualified text", async () => {
+    render(
+      <PromptBoxHarness
+        initialDraft={{
+          text: "Use @notes",
+          attachments: [],
+        }}
+        historyEntries={[]}
+        mentionSuggestions={[
+          {
+            kind: "path",
+            source: "thread-storage",
+            entryKind: "directory",
+            path: "notes",
+            name: "notes",
+            replacement: "thread-storage:notes/",
+          },
+        ]}
+      />,
+    );
+
+    const textarea = screen.getByRole<HTMLTextAreaElement>("textbox");
+    textarea.focus();
+    textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+    fireEvent.click(textarea);
+
+    const mentionButton = await screen.findByRole("button", {
+      name: /notes/,
+    });
+    fireEvent.mouseDown(mentionButton);
+    await waitForAnimationFrame();
+
+    await waitFor(() => {
+      expect(textarea.value).toBe("Use @thread-storage:notes/ ");
+      expect(textarea.selectionStart).toBe(
+        "Use @thread-storage:notes/ ".length,
+      );
+      expect(textarea.selectionEnd).toBe("Use @thread-storage:notes/ ".length);
+    });
   });
 });
 
@@ -320,8 +489,11 @@ describe("PromptBoxInternal history navigation", () => {
         ]}
         mentionSuggestions={[
           {
-            kind: "file",
+            kind: "path",
+            source: "workspace",
+            entryKind: "file",
             path: "README.md",
+            name: "README.md",
             replacement: "README.md",
           },
         ]}
@@ -371,13 +543,19 @@ describe("PromptBoxInternal history navigation", () => {
         historyEntries={[{ text: "history command", attachments: [] }]}
         mentionSuggestions={[
           {
-            kind: "file",
+            kind: "path",
+            source: "workspace",
+            entryKind: "file",
             path: "README.md",
+            name: "README.md",
             replacement: "README.md",
           },
           {
-            kind: "file",
+            kind: "path",
+            source: "workspace",
+            entryKind: "file",
             path: "src/App.tsx",
+            name: "App.tsx",
             replacement: "src/App.tsx",
           },
         ]}
