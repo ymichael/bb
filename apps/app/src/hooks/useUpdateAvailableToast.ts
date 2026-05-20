@@ -44,13 +44,11 @@ function markDismissedForVersion(latestVersion: string): void {
 }
 
 interface ToastContentArgs {
-  currentVersion: string;
-  latestVersion: string;
   upgradeCommand: string;
 }
 
 function toastDescription(args: ToastContentArgs): string {
-  return `You're running ${args.currentVersion}. Stop the running bb process, then run: ${args.upgradeCommand}`;
+  return `Restart \`${args.upgradeCommand}\` to get the latest version`;
 }
 
 export function useUpdateAvailableToast(): void {
@@ -67,7 +65,7 @@ export function useUpdateAvailableToast(): void {
     if (!data.updateAvailable) {
       return;
     }
-    const { currentVersion, latestVersion, upgradeCommand } = data;
+    const { latestVersion, upgradeCommand } = data;
     if (latestVersion === null) {
       return;
     }
@@ -81,11 +79,7 @@ export function useUpdateAvailableToast(): void {
     shownForVersionRef.current = latestVersion;
     toast(`Update available: bb-app ${latestVersion}`, {
       id: `bb-update-available:${latestVersion}`,
-      description: toastDescription({
-        currentVersion,
-        latestVersion,
-        upgradeCommand,
-      }),
+      description: toastDescription({ upgradeCommand }),
       duration: Infinity,
       action: {
         label: "Dismiss",
