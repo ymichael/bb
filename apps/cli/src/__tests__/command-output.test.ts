@@ -400,7 +400,7 @@ describe("CLI command output contracts", () => {
 
     const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
     expect(output.trim().length).toBeGreaterThan(0);
-    expect(output).toContain("STATUS.html styling");
+    expect(output).toContain("Status styling");
     expect(output).toContain("https://cdn.tailwindcss.com");
     expect(output).toContain("--background: oklch(0.9551 0 0);");
     expect(output).toContain("@media (prefers-color-scheme: dark)");
