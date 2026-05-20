@@ -94,6 +94,7 @@ describe("consumer-specific config", () => {
     vi.stubEnv("BB_SERVER_PORT", undefined);
     vi.stubEnv("BB_DATABASE_URL", undefined);
     vi.stubEnv("BB_APP_URL", undefined);
+    vi.stubEnv("BB_APP_VERSION", undefined);
     vi.stubEnv("BB_EXTERNAL_URL", undefined);
     vi.stubEnv("BB_FF_ASK_USER_QUESTION", undefined);
     vi.stubEnv("BB_FF_TERMINALS", undefined);
@@ -107,6 +108,7 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_SERVER_PORT).toBe(3334);
     expect(serverConfig.BB_DATABASE_URL).toBe("/tmp/bb-data/bb.db");
     expect(serverConfig.BB_APP_URL).toBe("");
+    expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
     expect(serverConfig.BB_EXTERNAL_URL).toBe("");
     expect(serverConfig.featureFlags).toEqual({
       askUserQuestion: false,
@@ -115,6 +117,28 @@ describe("consumer-specific config", () => {
     expect(serverConfig.BB_INFERENCE).toBe("codex/gpt-5.4-mini");
     expect(serverConfig.BB_TRANSCRIPTION).toBe("codex/gpt-4o-mini-transcribe");
     expect(serverConfig.OPENAI_API_KEY).toBe("test-openai-key");
+  });
+
+  it("uses 0.0.0-dev as the default BB_APP_VERSION in production", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_APP_VERSION", undefined);
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+
+    const { serverConfig } =
+      await importFresh<typeof import("../src/server.js")>("../src/server.js");
+
+    expect(serverConfig.BB_APP_VERSION).toBe("0.0.0-dev");
+  });
+
+  it("honors an explicit BB_APP_VERSION env override", async () => {
+    vi.stubEnv("NODE_ENV", "production");
+    vi.stubEnv("BB_APP_VERSION", "0.1.2");
+    vi.stubEnv("OPENAI_API_KEY", "test-openai-key");
+
+    const { serverConfig } =
+      await importFresh<typeof import("../src/server.js")>("../src/server.js");
+
+    expect(serverConfig.BB_APP_VERSION).toBe("0.1.2");
   });
 
   it("lets tooling read the server port without validating unrelated server env", async () => {

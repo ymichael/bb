@@ -18,6 +18,11 @@ const rawServerConfig = envsafe({
     default: DEFAULTS.hostDaemonPort.prod,
     devDefault: DEFAULTS.hostDaemonPort.dev,
   }),
+  BB_APP_VERSION: str({
+    desc: "Version of the running bb-app package. The bb-app launcher sets this from packages/bb-app/package.json; defaults to a sentinel for dev/source runs.",
+    default: "0.0.0-dev",
+    devDefault: "0.0.0-dev",
+  }),
   BB_APP_URL: str({
     desc: "Human-facing app/server base URL used for generated links and allowed browser origins. Does not control which host or port the server binds to.",
     default: "",

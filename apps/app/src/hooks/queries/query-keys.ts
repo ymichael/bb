@@ -45,6 +45,7 @@ export const ENVIRONMENT_FILE_PREVIEW_QUERY_KEY = "environmentFilePreview";
 export const THREAD_TIMELINE_QUERY_KEY = "threadTimeline";
 export const SYSTEM_PROVIDERS_QUERY_KEY = "systemProviders";
 export const SYSTEM_EXECUTION_OPTIONS_QUERY_KEY = "systemExecutionOptions";
+export const SYSTEM_VERSION_QUERY_KEY = "systemVersion";
 export const LOCAL_PATH_EXISTENCE_QUERY_KEY = "localPathExistence";
 export const REPLAY_CAPTURES_QUERY_KEY = "internalReplayCaptures";
 export const CONVERSATION_MANAGER_TIMELINE_VIEW =
@@ -329,6 +330,7 @@ export type EnvironmentFilePreviewQueryKeyPrefix = readonly [
 export type SystemProvidersQueryKey = readonly [
   typeof SYSTEM_PROVIDERS_QUERY_KEY,
 ];
+export type SystemVersionQueryKey = readonly [typeof SYSTEM_VERSION_QUERY_KEY];
 export type SystemExecutionOptionsQueryKey = readonly [
   typeof SYSTEM_EXECUTION_OPTIONS_QUERY_KEY,
   string | null,
@@ -785,6 +787,10 @@ export function environmentFilePreviewQueryKeyPrefix(
 
 export function systemProvidersQueryKey(): SystemProvidersQueryKey {
   return [SYSTEM_PROVIDERS_QUERY_KEY];
+}
+
+export function systemVersionQueryKey(): SystemVersionQueryKey {
+  return [SYSTEM_VERSION_QUERY_KEY];
 }
 
 export interface SystemExecutionOptionsQueryKeyArgs {

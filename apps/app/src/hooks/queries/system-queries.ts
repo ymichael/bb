@@ -3,6 +3,7 @@ import type { Host } from "@bb/domain";
 import type {
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
+  SystemVersionResponse,
 } from "@bb/server-contract";
 import * as api from "@/lib/api";
 import {
@@ -11,6 +12,7 @@ import {
   hostsQueryKey,
   systemExecutionOptionsQueryKey,
   systemProvidersQueryKey,
+  systemVersionQueryKey,
 } from "./query-keys";
 
 export interface UseSystemExecutionOptionsArgs {
@@ -73,5 +75,18 @@ export function useSystemProviders(options?: QueryOptions) {
     queryFn: () => api.listSystemProviders(),
     enabled: options?.enabled ?? true,
     staleTime: 60_000,
+  });
+}
+
+const SYSTEM_VERSION_STALE_TIME_MS = 60 * 60 * 1000;
+
+export function useSystemVersion(options?: QueryOptions) {
+  return useQuery<SystemVersionResponse>({
+    queryKey: systemVersionQueryKey(),
+    queryFn: () => api.getSystemVersion(),
+    enabled: options?.enabled ?? true,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    staleTime: SYSTEM_VERSION_STALE_TIME_MS,
   });
 }

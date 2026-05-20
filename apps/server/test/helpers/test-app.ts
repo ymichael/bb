@@ -14,6 +14,10 @@ import { createApp } from "../../src/server.js";
 import { createHostLifecycleService } from "../../src/services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "../../src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../src/services/machine-auth.js";
+import {
+  createAppVersionService,
+  type AppVersionService,
+} from "../../src/services/system/app-version.js";
 import { createBbAppManagedConfigReloader } from "../../src/services/system/bb-app-managed-config.js";
 import { TerminalSessionLifecycle } from "../../src/services/terminals/terminal-session-lifecycle.js";
 import { createLifecycleDedupers } from "../../src/lifecycle-dedupers.js";
@@ -45,6 +49,7 @@ export type TestAppHarnessConfigOverrides = Omit<
   Partial<ServerRuntimeConfig>,
   "featureFlags"
 > & {
+  appVersionService?: AppVersionService;
   featureFlags?: TestFeatureFlagOverrides;
 };
 
@@ -104,7 +109,11 @@ export function createTestDaemonHostKey(
 export async function createTestAppHarness(
   overrides: TestAppHarnessConfigOverrides = {},
 ): Promise<TestAppHarness> {
-  const { featureFlags: featureFlagOverrides, ...configOverrides } = overrides;
+  const {
+    appVersionService,
+    featureFlags: featureFlagOverrides,
+    ...configOverrides
+  } = overrides;
   const dataDir = await mkdtemp(join(tmpdir(), "bb-server-test-"));
   const db = initDb(":memory:");
   const hub = new NotificationHubImpl();
@@ -143,6 +152,7 @@ export async function createTestAppHarness(
     },
   };
   const config: ServerRuntimeConfig = {
+    appVersion: "0.0.0-test",
     dataDir,
     featureFlags: resolveTestFeatureFlags(featureFlagOverrides),
     hostDaemonPort: 3001,
@@ -159,7 +169,14 @@ export async function createTestAppHarness(
     hub,
     logger: testLogger,
   });
+  const appVersion =
+    appVersionService ??
+    createAppVersionService({
+      config,
+      logger: testLogger,
+    });
   const deps: ServerAppDeps = {
+    appVersion,
     bbAppManagedConfig,
     config,
     db,
