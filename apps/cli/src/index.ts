@@ -10,13 +10,14 @@ import { registerReplayCommands } from "./commands/replay.js";
 import { registerStatusCommand } from "./commands/status.js";
 import { registerThreadCommands } from "./commands/thread/index.js";
 import { resolveContextSnapshot, resolveServerUrl } from "./context-env.js";
+import { resolveBbCliVersion } from "./version.js";
 
 const program = new Command();
 
 program
   .name("bb")
   .description("BB CLI - manage your AI coding agents")
-  .version("0.0.1");
+  .version(resolveBbCliVersion());
 
 program.addHelpText("after", () => {
   const context = resolveContextSnapshot();

@@ -35,6 +35,7 @@ import type {
   SendMessageRequest,
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
+  SystemVersionResponse,
   ManagerTimelineView,
   TimelinePaginationCursor,
   SystemVoiceTranscriptionResponse,
@@ -1231,6 +1232,10 @@ export async function listSystemProviders(): Promise<SystemProviderInfo[]> {
   return request<SystemProviderInfo[]>(
     apiClient.system.providers.$get({ query: {} }),
   );
+}
+
+export async function getSystemVersion(): Promise<SystemVersionResponse> {
+  return request<SystemVersionResponse>(apiClient.system.version.$get());
 }
 
 export async function listHosts(): Promise<Host[]> {

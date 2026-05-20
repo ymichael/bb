@@ -4,6 +4,7 @@ import type { Logger } from "@bb/logger";
 import type { HostLifecycleService } from "./services/hosts/host-lifecycle-service.js";
 import type { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
 import type { MachineAuthService } from "./services/machine-auth.js";
+import type { AppVersionService } from "./services/system/app-version.js";
 import type { BbAppManagedConfigReloader } from "./services/system/bb-app-managed-config.js";
 import type { TerminalSessionLifecycle } from "./services/terminals/terminal-session-lifecycle.js";
 import type { LifecycleDedupers } from "./lifecycle-dedupers.js";
@@ -12,6 +13,7 @@ import type { NotificationHub } from "./ws/hub.js";
 export type ServerLogger = Pick<Logger, "debug" | "error" | "info" | "warn">;
 
 export interface ServerRuntimeConfig {
+  appVersion: string;
   dataDir: string;
   featureFlags: FeatureFlags;
   hostDaemonPort: number;
@@ -36,6 +38,7 @@ export interface AppDeps {
 }
 
 export interface ServerAppDeps extends AppDeps {
+  appVersion: AppVersionService;
   bbAppManagedConfig: BbAppManagedConfigReloader;
 }
 

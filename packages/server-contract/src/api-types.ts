@@ -1288,6 +1288,22 @@ export const systemConfigResponseSchema = z.object({
 });
 export type SystemConfigResponse = z.infer<typeof systemConfigResponseSchema>;
 
+export const systemVersionResponseSchema = z.object({
+  /** Version of the running bb-app package, read from package.json. */
+  currentVersion: z.string(),
+  /** Latest version published to npm, or null when the lookup is unavailable. */
+  latestVersion: z.string().nullable(),
+  /** Identifier for where the latest version was fetched from. */
+  source: z.literal("npm"),
+  /** True only when prod-mode, both versions parse, and latest > current. */
+  updateAvailable: z.boolean(),
+  /** Mirrors deps.config.isDevelopment so the frontend can skip the toast. */
+  isDevelopment: z.boolean(),
+  /** Command users should run to upgrade. Server-owned product policy. */
+  upgradeCommand: z.string(),
+});
+export type SystemVersionResponse = z.infer<typeof systemVersionResponseSchema>;
+
 export const systemConfigReloadResponseSchema = z.object({
   ok: z.literal(true),
 });

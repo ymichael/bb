@@ -49,6 +49,7 @@ function createCountingLogger(): CountingLogger {
 function createRuntimeConfig(): ServerRuntimeConfig {
   return {
     appUrl: "https://ambient-app.example.test",
+    appVersion: "0.0.0-test",
     dataDir: "/tmp/bb-test",
     featureFlags: defaultFeatureFlags,
     hostDaemonPort: 38887,

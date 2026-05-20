@@ -2,7 +2,7 @@
 import type { ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import {
   access,
   mkdir,
@@ -61,6 +61,12 @@ const MANAGED_CONFIG_KEY_VALUES = new Set<string>(MANAGED_CONFIG_KEYS);
 const PORTABLE_ENV_NAME_PATTERN = /^[A-Za-z_][A-Za-z0-9_]*$/u;
 const SECRET_SHAPED_ENV_NAME_PATTERN =
   /(?:^|_)(?:API_KEY|TOKEN|SECRET|PASSWORD)$/u;
+
+const bbAppPackageJsonSchema = z
+  .object({
+    version: z.string().min(1),
+  })
+  .passthrough();
 
 const hostJoinResponseSchema = z
   .object({
@@ -126,6 +132,7 @@ export interface ResolveBbAppRuntimeContextArgs {
 
 export interface BbAppStartContext {
   appDistDir: string;
+  appVersion: string;
   configFile: string;
   daemonBundleDir: string;
   daemonEntry: string;
@@ -846,6 +853,18 @@ async function writeManagedEnvFile(
   }
 }
 
+const BB_APP_VERSION_DEV_FALLBACK = "0.0.0-dev";
+
+export function readBbAppPackageVersion(packageRoot: string): string {
+  try {
+    const packageJsonPath = join(packageRoot, "package.json");
+    const rawContents = readFileSync(packageJsonPath, "utf8");
+    return bbAppPackageJsonSchema.parse(JSON.parse(rawContents)).version;
+  } catch {
+    return BB_APP_VERSION_DEV_FALLBACK;
+  }
+}
+
 export function resolveBbAppStartContext(
   args: ResolveBbAppStartContextArgs,
 ): BbAppStartContext {
@@ -866,6 +885,7 @@ export function resolveBbAppStartContext(
 
   return {
     appDistDir: resolve(packageRoot, "app", "dist"),
+    appVersion: readBbAppPackageVersion(packageRoot),
     configFile: formatBbAppConfigPath(dataDir),
     daemonBundleDir,
     daemonEntry: resolve(daemonBundleDir, "daemon-bundle.mjs"),
@@ -1543,6 +1563,7 @@ async function terminateProcessIfRunning(
 function createSharedEnv(args: CreateSharedEnvArgs): NodeJS.ProcessEnv {
   return {
     ...args.env,
+    BB_APP_VERSION: args.context.appVersion,
     BB_DATA_DIR: args.context.dataDir,
     BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
     BB_SERVER_PORT: String(args.context.serverPort),
@@ -1553,6 +1574,7 @@ function createSharedEnv(args: CreateSharedEnvArgs): NodeJS.ProcessEnv {
 function createServerEnv(args: CreateServerEnvArgs): NodeJS.ProcessEnv {
   return {
     ...args.env,
+    BB_APP_VERSION: args.context.appVersion,
     BB_DATA_DIR: args.context.dataDir,
     BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
     BB_SERVER_PORT: String(args.context.serverPort),
@@ -1566,6 +1588,7 @@ function createDaemonEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...autoJoinEnv,
+    BB_APP_VERSION: context.appVersion,
     BB_BRIDGE_DIR: context.daemonBundleDir,
     BB_CLI_DIR: context.daemonBundleDir,
     BB_DATA_DIR: context.dataDir,
@@ -1578,6 +1601,7 @@ function createDaemonEnv(
 function createCliEnv(args: CreateCliEnvArgs): NodeJS.ProcessEnv {
   const cliEnv: NodeJS.ProcessEnv = {
     ...args.env,
+    BB_APP_VERSION: args.context.appVersion,
     BB_HOST_DAEMON_PORT: String(args.context.daemonPort),
     NODE_ENV: "production",
   };
@@ -1600,6 +1624,7 @@ function createHostDaemonOnlyEnv(
 ): NodeJS.ProcessEnv {
   return {
     ...args.env,
+    BB_APP_VERSION: args.context.appVersion,
     BB_BRIDGE_DIR: args.context.daemonBundleDir,
     BB_CLI_DIR: args.context.daemonBundleDir,
     BB_DATA_DIR: args.context.dataDir,

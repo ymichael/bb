@@ -29,7 +29,7 @@ import {
   resolveBbAppCommand,
   runBbApp,
 } from "../src/index.js";
-import { waitForProcessExit } from "../src/launcher.js";
+import { readBbAppPackageVersion, waitForProcessExit } from "../src/launcher.js";
 
 interface DelayArgs {
   ms: number;
@@ -196,6 +196,22 @@ describe("bb-app launcher", () => {
     );
     expect(context.daemonEntry).toBe(
       "/repo/packages/bb-app/host-daemon/dist/daemon-bundle.mjs",
+    );
+    expect(context.appVersion).toBe("0.0.0-dev");
+  });
+
+  it("reads appVersion from the package.json next to the resolved package root", () => {
+    const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+    const expectedVersion = z
+      .object({ version: z.string() })
+      .parse(JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")))
+      .version;
+    expect(readBbAppPackageVersion(packageRoot)).toBe(expectedVersion);
+  });
+
+  it("falls back to the dev sentinel when package.json is missing", () => {
+    expect(readBbAppPackageVersion("/nonexistent/bb-app/path")).toBe(
+      "0.0.0-dev",
     );
   });
 

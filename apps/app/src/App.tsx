@@ -6,6 +6,7 @@ import { MainView } from "./views/MainView";
 import { ProjectMainView } from "./views/ProjectMainView";
 import { NewManagerDialogProvider } from "./hooks/useNewManagerDialog";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
+import { useUpdateAvailableToast } from "./hooks/useUpdateAvailableToast";
 import { useWebSocket } from "./hooks/useWebSocket";
 import {
   APP_ROOT_ROUTE_PATH,
@@ -81,6 +82,8 @@ function AppRoutes() {
 export function App() {
   // Connect WebSocket for real-time invalidation
   useWebSocket();
+  // Show a toast when the server reports a newer bb-app published on npm.
+  useUpdateAvailableToast();
 
   return (
     <QuickCreateProjectProvider>

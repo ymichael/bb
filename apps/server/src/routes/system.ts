@@ -84,4 +84,8 @@ export function registerSystemRoutes(app: Hono, deps: ServerAppDeps): void {
       }),
     });
   });
+
+  get("/system/version", async (context) =>
+    context.json(await deps.appVersion.getSystemVersion()),
+  );
 }

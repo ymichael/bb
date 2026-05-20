@@ -69,6 +69,7 @@ import type {
   SystemExecutionOptionsResponse,
   SystemProviderInfo,
   SystemProvidersQuery,
+  SystemVersionResponse,
   SystemVoiceTranscriptionForm,
   SystemVoiceTranscriptionResponse,
   TerminalSession,
@@ -582,6 +583,14 @@ export type PublicApiSchema = {
       { form: SystemVoiceTranscriptionForm },
       SystemVoiceTranscriptionResponse
     >;
+  };
+  "/system/version": {
+    /**
+     * Compares the running bb-app package version against the latest published
+     * npm version. Skips the network lookup in dev mode and on cached failure.
+     * Used by the frontend to show an update-available toast.
+     */
+    $get: Endpoint<EmptyInput, SystemVersionResponse>;
   };
 };
 
