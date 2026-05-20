@@ -500,15 +500,18 @@ describe("public thread manager and ownership routes", () => {
       expect(startCommand.command.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("Current PREFERENCES.md contents:"),
+        visibility: "agent-only",
       });
       expect(startCommand.command.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("default prefs"),
+        visibility: "agent-only",
       });
       expect(startCommand.command.input[1]).toEqual({
         type: "text",
         text: renderTemplate("systemMessageManagerWelcome", {}),
       });
+      expect(startCommand.command.input[1]).not.toHaveProperty("visibility");
       const storagePath = path.join(dataDir, "thread-storage", thread.id);
       await expect(
         readFile(path.join(storagePath, "PREFERENCES.md"), "utf8"),
@@ -627,15 +630,18 @@ describe("public thread manager and ownership routes", () => {
         text: expect.stringContaining(
           "PREFERENCES.md has been updated. New contents:",
         ),
+        visibility: "agent-only",
       });
       expect(turnSubmit.command.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("beta prefs"),
+        visibility: "agent-only",
       });
       expect(turnSubmit.command.input[1]).toEqual({
         type: "text",
         text: "ack prefs test",
       });
+      expect(turnSubmit.command.input[1]).not.toHaveProperty("visibility");
       expect(turnSubmit.command.input.at(-1)).toEqual(managerToolReminderInput());
     } finally {
       await harness.cleanup();
@@ -1012,6 +1018,7 @@ describe("public thread manager and ownership routes", () => {
             text: expect.stringContaining(
               "PREFERENCES.md has been updated. New contents:",
             ),
+            visibility: "agent-only",
           },
           {
             type: "text",
@@ -1046,7 +1053,9 @@ describe("public thread manager and ownership routes", () => {
       expect(queuedCommand.command.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("ownership assignment updated prefs"),
+        visibility: "agent-only",
       });
+      expect(queuedCommand.command.input[1]).not.toHaveProperty("visibility");
       const managerTurnRequest = harness.db
         .select({ data: events.data, type: events.type })
         .from(events)
@@ -1445,6 +1454,7 @@ describe("public thread manager and ownership routes", () => {
             text: expect.stringContaining(
               "PREFERENCES.md has been updated. New contents:",
             ),
+            visibility: "agent-only",
           },
           {
             type: "text",
@@ -1479,7 +1489,9 @@ describe("public thread manager and ownership routes", () => {
       expect(queuedCommand.command.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("ownership removal updated prefs"),
+        visibility: "agent-only",
       });
+      expect(queuedCommand.command.input[1]).not.toHaveProperty("visibility");
       const managerTurnRequest = harness.db
         .select({ data: events.data, type: events.type })
         .from(events)

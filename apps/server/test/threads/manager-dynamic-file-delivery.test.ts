@@ -270,10 +270,12 @@ describe("manager dynamic file delivery", () => {
       expect(prepared.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("Current PREFERENCES.md contents:"),
+        visibility: "agent-only",
       });
       expect(prepared.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("terse updates"),
+        visibility: "agent-only",
       });
       recordManagerDynamicFileDelivery(
         setup.harness.deps,
@@ -345,6 +347,7 @@ describe("manager dynamic file delivery", () => {
         text: expect.stringContaining(
           "PREFERENCES.md has been updated. New contents:",
         ),
+        visibility: "agent-only",
       });
       recordManagerDynamicFileDelivery(setup.harness.deps, updated.stateUpdate);
 
@@ -370,6 +373,7 @@ describe("manager dynamic file delivery", () => {
       expect(warning.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("larger than the 256 KiB inline limit"),
+        visibility: "agent-only",
       });
       recordManagerDynamicFileDelivery(setup.harness.deps, warning.stateUpdate);
 
@@ -394,6 +398,7 @@ describe("manager dynamic file delivery", () => {
       expect(nonUtf8.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("not UTF-8 text"),
+        visibility: "agent-only",
       });
       recordManagerDynamicFileDelivery(setup.harness.deps, nonUtf8.stateUpdate);
 
@@ -414,6 +419,7 @@ describe("manager dynamic file delivery", () => {
       expect(removed.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("PREFERENCES.md was removed."),
+        visibility: "agent-only",
       });
       recordManagerDynamicFileDelivery(setup.harness.deps, removed.stateUpdate);
 
@@ -457,6 +463,7 @@ describe("manager dynamic file delivery", () => {
       expect(first.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("larger than the 256 KiB inline limit"),
+        visibility: "agent-only",
       });
       recordManagerDynamicFileDelivery(setup.harness.deps, first.stateUpdate);
 
@@ -508,6 +515,7 @@ describe("manager dynamic file delivery", () => {
       expect(changed.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("larger than the 256 KiB inline limit"),
+        visibility: "agent-only",
       });
       expect(changed.stateUpdate).not.toBeNull();
     } finally {
@@ -599,6 +607,7 @@ describe("manager dynamic file delivery", () => {
       expect(eventInput[0]).toEqual({
         type: "text",
         text: expect.stringContaining("Current PREFERENCES.md contents:"),
+        visibility: "agent-only",
       });
       expect(eventInput[1]).toEqual(setup.input[0]);
     } finally {
@@ -665,6 +674,7 @@ describe("manager dynamic file delivery", () => {
       expect(injectedPreferencesMessages[0]).toEqual({
         type: "text",
         text: expect.stringContaining("concurrent prefs"),
+        visibility: "agent-only",
       });
       expect(
         turnInputs.some((input) =>
@@ -742,6 +752,7 @@ describe("manager dynamic file delivery", () => {
         text: expect.stringContaining(
           "PREFERENCES.md has been updated. New contents:",
         ),
+        visibility: "agent-only",
       });
       expect(turnSubmit.command.input[1]).toEqual({
         type: "text",
@@ -815,6 +826,7 @@ describe("manager dynamic file delivery", () => {
         text: expect.stringContaining(
           "PREFERENCES.md has been updated. New contents:",
         ),
+        visibility: "agent-only",
       });
       expect(turnSubmit.command.input[1]).toEqual({
         type: "text",

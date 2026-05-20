@@ -816,6 +816,7 @@ describe("internal event side effects", () => {
             text: expect.stringContaining(
               "PREFERENCES.md has been updated. New contents:",
             ),
+            visibility: "agent-only",
           },
           {
             type: "text",
@@ -851,7 +852,9 @@ describe("internal event side effects", () => {
       expect(queuedCommand.command.input[0]).toEqual({
         type: "text",
         text: expect.stringContaining("child completion updated prefs"),
+        visibility: "agent-only",
       });
+      expect(queuedCommand.command.input[1]).not.toHaveProperty("visibility");
       const managerTurnRequest = harness.db
         .select({ data: events.data, type: events.type })
         .from(events)

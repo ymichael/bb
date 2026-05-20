@@ -10,6 +10,10 @@ import {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { TimelineRow } from "@bb/server-contract";
 import {
+  buildThreadTimelineFromEvents,
+  type ThreadEventWithMeta,
+} from "@bb/thread-view";
+import {
   commandRow,
   conversationRow,
   delegationRow,
@@ -118,6 +122,66 @@ afterEach(() => {
 });
 
 describe("ThreadTimelineRows", () => {
+  it("renders visible prompt input while omitting agent-only input items", () => {
+    const eventWithMeta: ThreadEventWithMeta = {
+      event: {
+        type: "client/turn/requested",
+        threadId: "thread-1",
+        scope: { kind: "thread" },
+        direction: "outbound",
+        requestId: "creq_23456789ab",
+        source: "tell",
+        initiator: "system",
+        senderThreadId: null,
+        input: [
+          {
+            type: "text",
+            text: "[bb system]\n\nCurrent PREFERENCES.md contents:\n\nsecret",
+            visibility: "agent-only",
+          },
+          {
+            type: "text",
+            text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
+          },
+        ],
+        target: { kind: "new-turn" },
+        request: { method: "turn/start", params: {} },
+        execution: {
+          model: "gpt-5",
+          serviceTier: "default",
+          reasoningLevel: "medium",
+          permissionMode: "full",
+          source: "client/turn/requested",
+        },
+      },
+      meta: {
+        id: "event-1",
+        seq: 1,
+        createdAt: 1,
+      },
+    };
+    const timeline = buildThreadTimelineFromEvents({
+      contextWindowEvents: [],
+      events: [eventWithMeta],
+      options: {
+        includeDebugRawEvents: false,
+        includeNestedRows: true,
+        includeProviderUnhandledOperations: false,
+        isLatestPage: true,
+        systemClientRequestVisibility: "visible",
+        threadStatus: "active",
+        turnMessageDetail: "full",
+        viewMode: "standard",
+      },
+    });
+
+    const view = renderTimelineRows({ timelineRows: timeline.rows });
+
+    expect(view.container.textContent ?? "").toContain("Scheduled nudge");
+    expect(view.container.textContent ?? "").not.toContain("PREFERENCES.md");
+    expect(view.container.textContent ?? "").not.toContain("secret");
+  });
+
   it("renders an unread divider before the first row newer than the frozen read cutoff", () => {
     renderTimelineRows({
       overrides: {

@@ -234,11 +234,15 @@ describe("nudge sweep", () => {
         text: expect.stringContaining(
           "PREFERENCES.md has been updated. New contents:",
         ),
+        visibility: "agent-only",
       });
       expect(queuedTurnSubmit.command.input[1]).toEqual({
         type: "text",
         text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
       });
+      expect(queuedTurnSubmit.command.input[1]).not.toHaveProperty(
+        "visibility",
+      );
       expect(queuedTurnSubmit.command.input[2]).toEqual(
         managerToolReminderInput(),
       );

@@ -37,6 +37,10 @@ export function parsePromptInput(
   const localFilePaths: string[] = [];
 
   for (const part of input) {
+    if (part.visibility === "agent-only") {
+      continue;
+    }
+
     switch (part.type) {
       case "text":
         if (part.text.length > 0) {

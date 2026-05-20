@@ -7,6 +7,7 @@ import { decodeThreadEventRow } from "../src/event-decode.js";
 import type { BuildEventProjectionMessagesOptions } from "../src/event-projection-types.js";
 import {
   type AcceptedClientRequest,
+  parsePromptInput,
   parseAcceptedSteerFromClientRequest,
   parsePendingSteerFromClientRequest,
   parseUserFromClientRequest,
@@ -97,6 +98,45 @@ function acceptedClientRequest(): AcceptedClientRequest {
 }
 
 describe("user message parsing", () => {
+  it("omits agent-only prompt input parts from timeline text and attachments", () => {
+    const parsed = parsePromptInput([
+      {
+        type: "text",
+        text: "[bb system]\n\nCurrent PREFERENCES.md contents:\n\nsecret",
+        visibility: "agent-only",
+      },
+      { type: "text", text: "Visible request" },
+      {
+        type: "localFile",
+        path: "/tmp/hidden.md",
+        visibility: "agent-only",
+      },
+      { type: "localFile", path: "/tmp/visible.md" },
+    ]);
+
+    expect(parsed).toEqual({
+      text: "Visible request",
+      webImages: 0,
+      localImages: 0,
+      localFiles: 1,
+      imageUrls: [],
+      localImagePaths: [],
+      localFilePaths: ["/tmp/visible.md"],
+    });
+  });
+
+  it("hides prompt input rows that only contain agent-only parts", () => {
+    const parsed = parsePromptInput([
+      {
+        type: "text",
+        text: "[bb system]\n\nPREFERENCES.md was removed.",
+        visibility: "agent-only",
+      },
+    ]);
+
+    expect(parsed).toBeNull();
+  });
+
   it("populates initiator, senderThreadId, and turnRequest for user-initiated messages", () => {
     const { event, meta } = decodeThreadEventRow(userMessageRequest());
 

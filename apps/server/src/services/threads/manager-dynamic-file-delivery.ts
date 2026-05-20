@@ -324,7 +324,10 @@ export async function prependManagerPreferencesSystemMessageIfChanged(
   });
   const shownAt = Date.now();
   return {
-    input: [{ type: "text", text: message }, ...args.input],
+    input: [
+      { type: "text", text: message, visibility: "agent-only" },
+      ...args.input,
+    ],
     stateUpdate: {
       contentHash: snapshot.contentHash,
       contentStatus: snapshot.contentStatus,

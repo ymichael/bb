@@ -36,18 +36,31 @@ export const permissionEscalationValues = ["ask", "deny"] as const;
 export const permissionEscalationSchema = z.enum(permissionEscalationValues);
 export type PermissionEscalation = z.infer<typeof permissionEscalationSchema>;
 
+export const promptInputVisibilityValues = ["agent-only"] as const;
+export const promptInputVisibilitySchema = z.enum(promptInputVisibilityValues);
+export type PromptInputVisibility = z.infer<
+  typeof promptInputVisibilitySchema
+>;
+
+const promptInputVisibilityFields = {
+  visibility: promptInputVisibilitySchema.optional(),
+};
+
 export const promptInputSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("text"),
     text: z.string(),
+    ...promptInputVisibilityFields,
   }),
   z.object({
     type: z.literal("image"),
     url: z.string().url(),
+    ...promptInputVisibilityFields,
   }),
   z.object({
     type: z.literal("localImage"),
     path: z.string(),
+    ...promptInputVisibilityFields,
   }),
   z.object({
     type: z.literal("localFile"),
@@ -55,6 +68,7 @@ export const promptInputSchema = z.discriminatedUnion("type", [
     name: z.string().optional(),
     sizeBytes: z.number().int().nonnegative().optional(),
     mimeType: z.string().optional(),
+    ...promptInputVisibilityFields,
   }),
 ]);
 export type PromptInput = z.infer<typeof promptInputSchema>;
