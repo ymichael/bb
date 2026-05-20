@@ -44,6 +44,7 @@ import type {
   ThreadStorageContentQuery,
   ThreadHostFileContentQuery,
   ThreadStorageFilesQuery,
+  ThreadStatusVersionResponse,
   ProjectAttachmentContentQuery,
   ProjectBranchesQuery,
   ProjectBranchesResponse,
@@ -508,6 +509,10 @@ export type PublicApiSchema = {
   "/threads/:id/default-execution-options": {
     /** Returns the last used options for the thread for use as defaults in the UI. */
     $get: Endpoint<PathId, ResolvedThreadExecutionOptions | null>;
+  };
+  "/threads/:id/status-version": {
+    /** Get the resolved STATUS source and stat-based content hash for iframe cache busting. */
+    $get: Endpoint<PathId, ThreadStatusVersionResponse>;
   };
   "/threads/:id/thread-storage/files": {
     /**

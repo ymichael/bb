@@ -893,6 +893,24 @@ export type ThreadHostFileContentQuery = z.infer<
   typeof threadHostFileContentQuerySchema
 >;
 
+export const threadStatusVersionSourceSchema = z.enum([
+  "folder",
+  "html",
+  "md",
+  "empty",
+]);
+export type ThreadStatusVersionSource = z.infer<
+  typeof threadStatusVersionSourceSchema
+>;
+
+export const threadStatusVersionResponseSchema = z.object({
+  source: threadStatusVersionSourceSchema,
+  hash: z.string().min(1),
+});
+export type ThreadStatusVersionResponse = z.infer<
+  typeof threadStatusVersionResponseSchema
+>;
+
 export const systemExecutionOptionsQuerySchema = z
   .object({
     providerId: z.string().min(1),

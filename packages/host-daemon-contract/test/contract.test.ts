@@ -281,6 +281,39 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
+        type: "host.status_version",
+        sources: [
+          {
+            source: "folder",
+            rootPath: "/tmp/bb-data/thread-storage/thread-123/STATUS",
+            indexPath: "index.html",
+            dotfiles: "deny",
+          },
+          {
+            source: "html",
+            rootPath: "/tmp/bb-data/thread-storage/thread-123",
+            path: "STATUS.html",
+            dotfiles: "allow",
+          },
+          {
+            source: "md",
+            rootPath: "/tmp/bb-data/thread-storage/thread-123",
+            path: "STATUS.md",
+            dotfiles: "allow",
+          },
+        ],
+      }),
+    ).toMatchObject({
+      type: "host.status_version",
+      sources: [
+        { source: "folder", indexPath: "index.html", dotfiles: "deny" },
+        { source: "html", path: "STATUS.html", dotfiles: "allow" },
+        { source: "md", path: "STATUS.md", dotfiles: "allow" },
+      ],
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         rootPath: "/tmp/bb-data/thread-storage/thread-123",
@@ -990,6 +1023,16 @@ describe("host-daemon command schemas", () => {
       path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
       modifiedAtMs: 1234.5,
       sizeBytes: 26_214_401,
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.status_version"].parse({
+        source: "folder",
+        hash: "abc123",
+      }),
+    ).toEqual({
+      source: "folder",
+      hash: "abc123",
     });
 
     expect(() =>

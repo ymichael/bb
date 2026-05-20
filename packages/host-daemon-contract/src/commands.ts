@@ -22,7 +22,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 20 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 21 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -42,6 +42,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "host.list_paths",
   "host.list_branches",
   "host.file_metadata",
+  "host.status_version",
   "host.read_file",
   "host.read_file_relative",
   "provider.list",
@@ -306,6 +307,71 @@ export const hostFileMetadataCommandSchema = z
   })
   .strict();
 
+export const hostStatusVersionSourceSchema = z.enum([
+  "folder",
+  "html",
+  "md",
+  "empty",
+]);
+export type HostStatusVersionSource = z.infer<
+  typeof hostStatusVersionSourceSchema
+>;
+
+export const hostStatusVersionFolderSourceSchema = z
+  .object({
+    source: z.literal("folder"),
+    rootPath: z.string().min(1),
+    indexPath: z.string().min(1),
+    dotfiles: hostReadFileRelativeDotfilePolicySchema,
+  })
+  .strict();
+export type HostStatusVersionFolderSource = z.infer<
+  typeof hostStatusVersionFolderSourceSchema
+>;
+
+export const hostStatusVersionHtmlSourceSchema = z
+  .object({
+    source: z.literal("html"),
+    rootPath: z.string().min(1),
+    path: z.string().min(1),
+    dotfiles: hostReadFileRelativeDotfilePolicySchema,
+  })
+  .strict();
+export type HostStatusVersionHtmlSource = z.infer<
+  typeof hostStatusVersionHtmlSourceSchema
+>;
+
+export const hostStatusVersionMarkdownSourceSchema = z
+  .object({
+    source: z.literal("md"),
+    rootPath: z.string().min(1),
+    path: z.string().min(1),
+    dotfiles: hostReadFileRelativeDotfilePolicySchema,
+  })
+  .strict();
+export type HostStatusVersionMarkdownSource = z.infer<
+  typeof hostStatusVersionMarkdownSourceSchema
+>;
+
+export const hostStatusVersionFileSourceSchema = z.union([
+  hostStatusVersionHtmlSourceSchema,
+  hostStatusVersionMarkdownSourceSchema,
+]);
+export type HostStatusVersionFileSource = z.infer<
+  typeof hostStatusVersionFileSourceSchema
+>;
+
+export const hostStatusVersionCommandSchema = z
+  .object({
+    type: z.literal("host.status_version"),
+    sources: z.tuple([
+      hostStatusVersionFolderSourceSchema,
+      hostStatusVersionHtmlSourceSchema,
+      hostStatusVersionMarkdownSourceSchema,
+    ]),
+  })
+  .strict();
+
 export const hostListFilesCommandSchema = z.object({
   type: z.literal("host.list_files"),
   path: z.string().min(1),
@@ -492,6 +558,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostListPathsCommandSchema,
   hostListBranchesCommandSchema,
   hostFileMetadataCommandSchema,
+  hostStatusVersionCommandSchema,
   hostReadFileCommandSchema,
   hostReadFileRelativeCommandSchema,
   providerListCommandSchema,
@@ -522,6 +589,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "environment.destroy":
     case "host.list_branches":
     case "host.file_metadata":
+    case "host.status_version":
     case "host.list_files":
     case "host.list_paths":
     case "host.read_file":
@@ -558,6 +626,11 @@ const fileMetadataResultSchema = z.object({
   path: z.string(),
   modifiedAtMs: z.number().nonnegative(),
   sizeBytes: z.number().int().nonnegative(),
+});
+
+const statusVersionResultSchema = z.object({
+  source: hostStatusVersionSourceSchema,
+  hash: z.string().min(1),
 });
 
 const fileListResultSchema = z.object({
@@ -598,6 +671,7 @@ export const hostDaemonCommandResultSchemaByType = {
   "host.list_files": fileListResultSchema,
   "host.list_paths": pathListResultSchema,
   "host.file_metadata": fileMetadataResultSchema,
+  "host.status_version": statusVersionResultSchema,
   "host.list_branches": z.object({
     branches: z.array(z.string()),
     /** HEAD of the primary checkout at `path`. Null when the path is not a git repo. */

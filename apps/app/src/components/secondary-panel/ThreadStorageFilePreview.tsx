@@ -1,5 +1,6 @@
 import { FilePreview as FilePreviewSurface } from "./FilePreview";
 import { MANAGER_STATUS_FILE_PATH } from "./managerStorage";
+import { useThreadStatusVersion } from "@/hooks/queries/thread-queries";
 import { HttpError } from "@/lib/api";
 import { buildThreadStatusContentUrl } from "@/lib/file-content-urls";
 import type {
@@ -141,6 +142,10 @@ export function ThreadStorageFilePreview({
   pinnedPath,
   threadId,
 }: ThreadStorageFilePreviewProps) {
+  const statusVersion = useThreadStatusVersion(threadId, {
+    enabled: activePath === MANAGER_STATUS_FILE_PATH,
+  });
+
   if (activePath === MANAGER_STATUS_FILE_PATH) {
     return (
       <FilePreviewSurface
@@ -149,7 +154,7 @@ export function ThreadStorageFilePreview({
         state={{
           kind: "iframe",
           title: "Manager status",
-          url: buildThreadStatusContentUrl(threadId),
+          url: buildThreadStatusContentUrl(threadId, statusVersion.data?.hash),
         }}
       />
     );

@@ -24,8 +24,14 @@ export function buildThreadStorageContentUrl(
   );
 }
 
-export function buildThreadStatusContentUrl(threadId: string): string {
-  return `/api/v1/threads/${encodeURIComponent(threadId)}/status/`;
+export function buildThreadStatusContentUrl(
+  threadId: string,
+  hash?: string,
+): string {
+  const baseUrl = `/api/v1/threads/${encodeURIComponent(threadId)}/status/`;
+  return hash === undefined
+    ? baseUrl
+    : `${baseUrl}?v=${encodeURIComponent(hash)}`;
 }
 
 export function buildThreadHostFileContentUrl(

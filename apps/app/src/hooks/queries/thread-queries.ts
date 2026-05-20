@@ -17,6 +17,7 @@ import type {
   ManagerTimelineView,
   ThreadPendingInteractionsResponse,
   ThreadResponse,
+  ThreadStatusVersionResponse,
   ThreadWithIncludesResponse,
   ThreadStorageFileListResponse,
   ThreadStoragePathListResponse,
@@ -51,6 +52,7 @@ import {
   threadStorageFilesQueryKey,
   threadStoragePathsQueryKey,
   threadStorageFilePreviewQueryKey,
+  threadStatusVersionQueryKey,
   threadHostFilePreviewQueryKey,
   threadTimelineQueryKey,
   type ArchivedThreadsKindFilter,
@@ -62,6 +64,8 @@ interface QueryOptions {
   refetchOnMount?: boolean | "always";
   staleTime?: number;
 }
+
+const THREAD_STATUS_VERSION_REFETCH_INTERVAL_MS = 2_000;
 
 interface ThreadComposerBootstrapQueryOptions extends QueryOptions {
   environmentId?: string;
@@ -411,6 +415,22 @@ export function useThreadStorageFilePreview(
       ),
     enabled: (options?.enabled ?? true) && Boolean(id) && Boolean(path),
     refetchOnWindowFocus: false,
+  });
+}
+
+export function useThreadStatusVersion(id: string, options?: QueryOptions) {
+  return useQuery<ThreadStatusVersionResponse>({
+    queryKey: threadStatusVersionQueryKey(id),
+    queryFn: ({ signal }) =>
+      api.getThreadStatusVersion(
+        requireThreadId(id, "useThreadStatusVersion"),
+        signal,
+      ),
+    enabled: (options?.enabled ?? true) && Boolean(id),
+    refetchInterval: THREAD_STATUS_VERSION_REFETCH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: true,
+    staleTime: options?.staleTime,
   });
 }
 

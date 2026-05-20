@@ -19,9 +19,11 @@ import {
   turnScope,
 } from "@bb/domain";
 import {
+  type ThreadStatusVersionResponse,
   type TimelineRow,
   threadComposerBootstrapResponseSchema,
   threadQueuedMessageListResponseSchema,
+  threadStatusVersionResponseSchema,
   threadTimelineResponseSchema,
   threadWithIncludesResponseSchema,
   timelineTurnSummaryDetailsResponseSchema,
@@ -29,6 +31,7 @@ import {
 import { z } from "zod";
 import { describe, expect, it } from "vitest";
 import {
+  type QueuedCommand,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -1952,15 +1955,86 @@ describe("public thread data routes", () => {
       const assetResponse = await assetPromise;
       expect(assetResponse.status).toBe(200);
       expect(assetResponse.headers.get("content-type")).toBe("image/png");
-      expect(assetResponse.headers.get("cache-control")).toBe(
-        "private, max-age=30",
-      );
+      expect(assetResponse.headers.get("cache-control")).toBe("no-store");
       expect(assetResponse.headers.get("x-content-type-options")).toBe(
         "nosniff",
       );
       expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(
         assetBytes,
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns the resolved STATUS version across all source modes", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+      const expectedVersions: ThreadStatusVersionResponse[] = [
+        { source: "folder", hash: "folder-hash-1" },
+        { source: "folder", hash: "folder-hash-2" },
+        { source: "html", hash: "html-hash" },
+        { source: "md", hash: "md-hash" },
+        { source: "empty", hash: "empty-hash" },
+      ];
+
+      let previousCursor: number | null = null;
+      for (const expectedVersion of expectedVersions) {
+        const versionPromise = harness.app.request(
+          `/api/v1/threads/${fixture.threadId}/status-version`,
+        );
+        const versionCommand: QueuedCommand =
+          previousCursor === null
+            ? await waitForQueuedCommand(
+                harness,
+                ({ command }) => command.type === "host.status_version",
+              )
+            : await waitForQueuedCommandAfter(
+                harness,
+                previousCursor,
+                ({ command }) => command.type === "host.status_version",
+              );
+
+        expect(versionCommand.command).toMatchObject({
+          type: "host.status_version",
+          sources: [
+            {
+              source: "folder",
+              rootPath: `${fixture.storageRootPath}/STATUS`,
+              indexPath: "index.html",
+              dotfiles: "deny",
+            },
+            {
+              source: "html",
+              rootPath: fixture.storageRootPath,
+              path: "STATUS.html",
+              dotfiles: "allow",
+            },
+            {
+              source: "md",
+              rootPath: fixture.storageRootPath,
+              path: "STATUS.md",
+              dotfiles: "allow",
+            },
+          ],
+        });
+        await reportQueuedCommandSuccess(
+          harness,
+          versionCommand,
+          expectedVersion,
+        );
+
+        const versionResponse = await versionPromise;
+        expect(versionResponse.status).toBe(200);
+        expect(versionResponse.headers.get("cache-control")).toBe("no-store");
+        expect(
+          threadStatusVersionResponseSchema.parse(
+            await readJson(versionResponse),
+          ),
+        ).toEqual(expectedVersion);
+        previousCursor = versionCommand.row.cursor;
+      }
     } finally {
       await harness.cleanup();
     }

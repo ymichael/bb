@@ -12,6 +12,7 @@ secondary panel. External resources such as Google Fonts, Tailwind CDN, remote
 images, and stylesheets load normally. For local assets, use the folder form:
 put `index.html` plus any local images, CSS, JS, or fonts inside `STATUS/`, then
 reference them with relative URLs like `style.css`, `app.js`, or `logo.png`.
+The dashboard auto-refreshes when resolved STATUS content changes.
 
 Unless the user asks for a different visual direction, make the HTML status
 surface look like bb: dense, minimal, and built from the same tokens. Use

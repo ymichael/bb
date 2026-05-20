@@ -3,6 +3,7 @@ import path from "node:path";
 import { listQueuedThreadMessages } from "@bb/db";
 import {
   FILE_LIST_LIMIT_MAX,
+  type HostDaemonCommand,
   type HostReadFileRelativeDotfilePolicy,
 } from "@bb/host-daemon-contract";
 import type { Hono } from "hono";
@@ -21,6 +22,7 @@ import {
   typedRoutes,
   type PublicApiSchema,
   type ThreadComposerBootstrapResponse,
+  type ThreadStatusVersionResponse,
   type ThreadTimelineQuery,
 } from "@bb/server-contract";
 import type {
@@ -143,9 +145,13 @@ interface ReadThreadStorageStatusFileArgs {
   dotfiles: HostReadFileRelativeDotfilePolicy;
 }
 
+type HostStatusVersionCommand = Extract<
+  HostDaemonCommand,
+  { type: "host.status_version" }
+>;
+
 interface StatusAssetPath {
   relativePath: string;
-  isIndex: boolean;
 }
 
 const STATUS_DIRECTORY_NAME = "STATUS";
@@ -154,7 +160,6 @@ const STATUS_HTML_FILE_PATH = "STATUS.html";
 const STATUS_MARKDOWN_FILE_PATH = "STATUS.md";
 const STATUS_ROUTE_SEGMENT = "/status/";
 const STATUS_NO_STORE_CACHE_CONTROL = "no-store";
-const STATUS_ASSET_CACHE_CONTROL = "private, max-age=30";
 const STATUS_HTML_CONTENT_TYPE = "text/html; charset=utf-8";
 const STATUS_CONTENT_TYPE_OPTIONS = "nosniff";
 const UNUSABLE_STATUS_SOURCE_ERROR_CODES = new Set([
@@ -306,9 +311,6 @@ function parseStatusAssetPath(rawPath: string): StatusAssetPath {
 
   return {
     relativePath: segments.join("/"),
-    isIndex:
-      requestedDirectoryIndex ||
-      segments[segments.length - 1] === STATUS_INDEX_FILE_PATH,
   };
 }
 
@@ -380,6 +382,46 @@ async function tryReadThreadStorageStatusFile(
     }
     throw error;
   }
+}
+
+function buildStatusVersionCommand(
+  target: ThreadStorageTarget,
+): HostStatusVersionCommand {
+  return {
+    type: "host.status_version",
+    sources: [
+      {
+        source: "folder",
+        rootPath: path.join(target.storagePath, STATUS_DIRECTORY_NAME),
+        indexPath: STATUS_INDEX_FILE_PATH,
+        dotfiles: "deny",
+      },
+      {
+        source: "html",
+        rootPath: target.storagePath,
+        path: STATUS_HTML_FILE_PATH,
+        dotfiles: "allow",
+      },
+      {
+        source: "md",
+        rootPath: target.storagePath,
+        path: STATUS_MARKDOWN_FILE_PATH,
+        dotfiles: "allow",
+      },
+    ],
+  };
+}
+
+async function readThreadStatusVersion(
+  deps: LoggedWorkSessionDeps,
+  threadId: string,
+): Promise<ThreadStatusVersionResponse> {
+  const target = await requireThreadStorageTarget(deps, { threadId });
+  return queueCommandAndWait(deps, {
+    hostId: target.hostId,
+    timeoutMs: COMMAND_TIMEOUT_MS,
+    command: buildStatusVersionCommand(target),
+  });
 }
 
 function createStatusHtmlResponse(html: string): Response {
@@ -579,12 +621,7 @@ async function serveThreadStatusAsset(
       relativePath: assetPath.relativePath,
       dotfiles: "deny",
     });
-    return createStatusFileResponse(
-      result,
-      assetPath.isIndex
-        ? STATUS_NO_STORE_CACHE_CONTROL
-        : STATUS_ASSET_CACHE_CONTROL,
-    );
+    return createStatusFileResponse(result, STATUS_NO_STORE_CACHE_CONTROL);
   } catch (error) {
     return remapStatusAssetReadError(error);
   }
@@ -740,6 +777,13 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     return context.json(getLastExecutionOptions(deps, context.req.param("id")));
   });
 
+  get("/threads/:id/status-version", async (context) => {
+    context.header("cache-control", STATUS_NO_STORE_CACHE_CONTROL);
+    return context.json(
+      await readThreadStatusVersion(deps, context.req.param("id")),
+    );
+  });
+
   app.get("/threads/:id/status", (context) => {
     const requestPath = new URL(context.req.url).pathname;
     return context.redirect(`${requestPath}/`, 308);
@@ -757,11 +801,7 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     if (rawStatusPath.length === 0) {
       return serveThreadStatusRoot(deps, context.req.param("id"));
     }
-    return serveThreadStatusAsset(
-      deps,
-      context.req.param("id"),
-      rawStatusPath,
-    );
+    return serveThreadStatusAsset(deps, context.req.param("id"), rawStatusPath);
   });
 
   get(

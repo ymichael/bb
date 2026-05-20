@@ -19,6 +19,7 @@ import {
   useThreadQueuedMessages,
   useThreadPendingInteractions,
   useThreadPromptHistory,
+  useThreadStatusVersion,
 } from "./thread-queries";
 import {
   hostsQueryKey,
@@ -29,6 +30,7 @@ import {
   threadPendingInteractionsQueryKey,
   threadPromptHistoryQueryKey,
   threadQueryKey,
+  threadStatusVersionQueryKey,
 } from "./query-keys";
 
 interface TestWrapperProps {
@@ -112,6 +114,7 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  vi.useRealTimers();
 });
 
 describe("thread query bootstraps", () => {
@@ -479,6 +482,51 @@ describe("thread prompt history query", () => {
     await waitFor(() => {
       expect(route.getSignal()?.aborted).toBe(true);
     });
+  });
+});
+
+describe("thread status version query", () => {
+  it("polls every two seconds and stops when unmounted", async () => {
+    vi.useFakeTimers();
+    let requestCount = 0;
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/threads/thread-1/status-version",
+        handler: () => {
+          requestCount += 1;
+          return jsonResponse({
+            source: "folder",
+            hash: `status-hash-${requestCount}`,
+          });
+        },
+      },
+    ]);
+    const { queryClient, wrapper } = createWrapper();
+
+    const { result, unmount } = renderHook(
+      () => useThreadStatusVersion("thread-1"),
+      { wrapper },
+    );
+
+    await vi.waitFor(() => {
+      expect(result.current.status).toBe("success");
+    });
+    expect(requestCount).toBe(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_000);
+    });
+    expect(requestCount).toBe(2);
+    expect(
+      queryClient.getQueryData(threadStatusVersionQueryKey("thread-1")),
+    ).toEqual({ source: "folder", hash: "status-hash-2" });
+
+    unmount();
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2_100);
+    });
+    expect(requestCount).toBe(2);
   });
 });
 

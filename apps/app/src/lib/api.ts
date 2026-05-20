@@ -45,6 +45,7 @@ import type {
   ThreadQueuedMessageListResponse,
   ThreadListResponse,
   ThreadResponse,
+  ThreadStatusVersionResponse,
   ThreadWithIncludesResponse,
   PathListIncludeQueryValue,
   ThreadStorageFilesQuery,
@@ -793,6 +794,18 @@ export async function getThreadStorageFilePreview(
       url: buildThreadStorageContentUrl(id, path),
     },
     signal,
+  );
+}
+
+export async function getThreadStatusVersion(
+  id: string,
+  signal?: AbortSignal,
+): Promise<ThreadStatusVersionResponse> {
+  return request<ThreadStatusVersionResponse>(
+    apiClient.threads[":id"]["status-version"].$get(
+      { param: { id } },
+      requestOptions(signal),
+    ),
   );
 }
 
