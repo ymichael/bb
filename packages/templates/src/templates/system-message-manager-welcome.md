@@ -64,10 +64,10 @@ After scope and landing mode are settled, figure out together:
 Create, replace, or update `PREFERENCES.md` with what you learn. If the user gives you a
 name, vibe, or other identity details for yourself, record those too.
 
-`STATUS.md`, `STATUS.html`, and `ASYNC.md` may also already exist from user
+`STATUS/`, `STATUS.html`, `STATUS.md`, and `ASYNC.md` may also already exist from user
 templates. Preserve any seeded structure and keep the files current as you work.
 
-Depending on user preferences you might want to update the STATUS.html file to match their landing mode.
+Depending on user preferences you might want to update the status surface to match their landing mode.
 
 If there is no `PREFERENCES.md` fill out this template with what you learn and save it:
 
@@ -95,19 +95,19 @@ This file is the manager's durable memory of how the user wants to be worked wit
   - Merge into a local branch (like a staging area) automatically without PRs, and push to origin on user go-ahead.
 
 ## Keeping the user updated
-  Adjust `STATUS.html` to match the chosen mode (see next bullet).
-- **STATUS.html mode**: if the user opens PRs, `STATUS.html` tracks open PRs in its primary section. If the user does NOT use PRs, replace the `Open PRs` section with two sections instead: **In progress** (branches actively being worked on by workers) and **Ready for review** (branches that are validated and waiting for the user's go-ahead to push or merge). Snippet patterns for both modes live in the HTML comment block at the bottom of `STATUS.html` — copy/paste as needed.
-- **STATUS.html refresh**: keep `STATUS.html` current with the state of the world
+  Adjust the status surface (`STATUS/index.html`, `STATUS.html`, or `STATUS.md`) to match the chosen mode (see next bullet).
+- **Status mode**: if the user opens PRs, the status surface tracks open PRs in its primary section. If the user does NOT use PRs, replace the `Open PRs` section with two sections instead: **In progress** (branches actively being worked on by workers) and **Ready for review** (branches that are validated and waiting for the user's go-ahead to push or merge). If you use an HTML template with snippet patterns, copy/paste as needed.
+- **Status refresh**: keep the status surface current with the state of the world
   - after any state-affecting action (worker spawn, branch ready, PR opened, merge, close, push).
   - **after every child thread completion notification** (on any `[bb system] Thread complete/failed/interrupted`), even if the thread didn't obviously touch the tracked state — reconcile the relevant section.
-- **STATUS.html styling**: run `bb guide styling` for the bb design tokens, fonts, and a starter `<style>` snippet so the iframe-rendered HTML matches the rest of the app.
-- Also keep running tasks and any user action items in STATUS.html
+- **Status styling**: run `bb guide styling` for the bb design tokens, fonts, and a starter `<style>` snippet so an iframe-rendered HTML status surface matches the rest of the app. Use `STATUS/` when local assets need to be served.
+- Also keep running tasks and any user action items in the status surface
 
 ## Open questions to resolve when natural
 
 - Preferred name / how to address the user
 - Worker defaults (provider / reasoning level / permission mode / preferred model) — ask the user when it comes up; do not assume a default.
-- Anything else the user wants surfaced in `STATUS.html` (extra sections, custom info, integrations) — ask once when natural and update the template accordingly.
+- Anything else the user wants surfaced in the status surface (extra sections, custom info, integrations) — ask once when natural and update the template accordingly.
 - Update verbosity preference (terse vs detailed)
 - Any specific area of the codebase that's currently the focus
 ```

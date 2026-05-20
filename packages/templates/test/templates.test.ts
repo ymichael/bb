@@ -100,10 +100,12 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("mcp__bb-bridge__message_user");
     expect(rendered).toContain("bb thread spawn");
     expect(rendered).toContain("Simple delegation");
-    expect(rendered).toContain("write to `STATUS.html` instead");
-    expect(rendered).toContain("the UI renders it in an unsandboxed iframe");
     expect(rendered).toContain(
-      "Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind.",
+      "Use `STATUS/index.html` when you want a rich multi-asset dashboard",
+    );
+    expect(rendered).toContain("The UI renders HTML status surfaces");
+    expect(rendered).toContain(
+      "Unless otherwise specified, make `STATUS/index.html` or `STATUS.html` styled like bb and use Tailwind.",
     );
     expect(rendered).toContain("bb guide styling");
     expect(rendered).toContain("bb guide async");
@@ -160,9 +162,12 @@ describe("@bb/templates", () => {
 
     const rendered = renderTemplate("bbGuideStyling", {});
 
-    expect(rendered).toContain("STATUS.html styling");
+    expect(rendered).toContain("Status styling");
     expect(rendered).toContain(
-      "Unless the user asks for a different visual direction, make `STATUS.html` look",
+      "For local assets, use the folder form",
+    );
+    expect(rendered).toContain(
+      "Unless the user asks for a different visual direction, make the HTML status",
     );
     expect(rendered).toContain(
       '<script src="https://cdn.tailwindcss.com"></script>',

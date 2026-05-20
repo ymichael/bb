@@ -38,6 +38,7 @@
     "drizzle-orm": "^0.38.4",
     "gray-matter": "^4.0.3",
     "hono": "^4.7.0",
+    "marked": "^15.0.12",
     "mime-types": "^3.0.2",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",

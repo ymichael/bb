@@ -42,5 +42,5 @@ Run `bb guide <chapter>` for command details:
   providers      Discovering providers and models
   projects       Project CRUD and sources
   hosts          Listing and understanding hosts
-  styling        How to style STATUS.html to match the bb UI
+  styling        How to style STATUS/ and STATUS.html surfaces to match the bb UI
   async          Defining scheduled nudges with ASYNC.md

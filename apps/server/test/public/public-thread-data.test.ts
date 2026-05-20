@@ -8,6 +8,7 @@ import {
   events,
   getQueuedThreadMessage,
   getThread,
+  hostDaemonCommands,
   queuedThreadMessages,
 } from "@bb/db";
 import {
@@ -34,6 +35,7 @@ import {
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
+import type { TestAppHarness } from "../helpers/test-app.js";
 import {
   seedQueuedMessage,
   seedEnvironment,
@@ -61,6 +63,37 @@ const threadEventWaitResponseSchema = z.object({
 });
 
 type TimelineTurnRow = Extract<TimelineRow, { kind: "turn" }>;
+
+interface ManagerThreadStorageFixture {
+  hostId: string;
+  threadId: string;
+  storageRootPath: string;
+}
+
+function seedManagerThreadStorage(
+  harness: TestAppHarness,
+): ManagerThreadStorageFixture {
+  const { host } = seedHostSession(harness.deps);
+  const { project } = seedProjectWithSource(harness.deps, {
+    hostId: host.id,
+    path: "/tmp/project-source",
+  });
+  const environment = seedEnvironment(harness.deps, {
+    hostId: host.id,
+    projectId: project.id,
+    path: "/tmp/project-source",
+  });
+  const thread = seedThread(harness.deps, {
+    projectId: project.id,
+    environmentId: environment.id,
+    type: "manager",
+  });
+  return {
+    hostId: host.id,
+    threadId: thread.id,
+    storageRootPath: `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`,
+  };
+}
 
 describe("public thread data routes", () => {
   it("embeds thread environment and host snapshots when requested", async () => {
@@ -1845,6 +1878,466 @@ describe("public thread data routes", () => {
       expect(new Uint8Array(await fileResponse.arrayBuffer())).toEqual(
         pngBytes,
       );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("serves STATUS/index.html and sibling assets from the unified status route", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+      const statusRootPath = `${fixture.storageRootPath}/STATUS`;
+      const statusHtml = `<img src="logo.png"><link rel="stylesheet" href="style.css">`;
+
+      const statusPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/`,
+      );
+      const statusCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === statusRootPath &&
+          command.path === "index.html",
+      );
+      expect(statusCommand.command).toMatchObject({
+        type: "host.read_file_relative",
+        rootPath: statusRootPath,
+        path: "index.html",
+        dotfiles: "deny",
+      });
+      await reportQueuedCommandSuccess(harness, statusCommand, {
+        path: "index.html",
+        content: statusHtml,
+        contentEncoding: "utf8",
+        mimeType: "text/html",
+        sizeBytes: Buffer.byteLength(statusHtml),
+      });
+
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.headers.get("content-type")).toBe("text/html");
+      expect(statusResponse.headers.get("cache-control")).toBe("no-store");
+      expect(statusResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      await expect(statusResponse.text()).resolves.toBe(statusHtml);
+
+      const assetBytes = Uint8Array.from([137, 80, 78, 71]);
+      const assetPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/logo.png`,
+      );
+      const assetCommand = await waitForQueuedCommandAfter(
+        harness,
+        statusCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === statusRootPath &&
+          command.path === "logo.png",
+      );
+      expect(assetCommand.command).toMatchObject({
+        type: "host.read_file_relative",
+        rootPath: statusRootPath,
+        path: "logo.png",
+        dotfiles: "deny",
+      });
+      await reportQueuedCommandSuccess(harness, assetCommand, {
+        path: "logo.png",
+        content: Buffer.from(assetBytes).toString("base64"),
+        contentEncoding: "base64",
+        mimeType: "image/png",
+        sizeBytes: assetBytes.byteLength,
+      });
+
+      const assetResponse = await assetPromise;
+      expect(assetResponse.status).toBe(200);
+      expect(assetResponse.headers.get("content-type")).toBe("image/png");
+      expect(assetResponse.headers.get("cache-control")).toBe(
+        "private, max-age=30",
+      );
+      expect(assetResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      expect(new Uint8Array(await assetResponse.arrayBuffer())).toEqual(
+        assetBytes,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("falls back from a missing STATUS/index.html to STATUS.html", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+      const statusRootPath = `${fixture.storageRootPath}/STATUS`;
+      const statusHtml = "<h1>Single file status</h1>";
+
+      const statusPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/`,
+      );
+      const indexCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === statusRootPath &&
+          command.path === "index.html",
+      );
+      await reportQueuedCommandError(harness, indexCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: index.html",
+      });
+      const htmlCommand = await waitForQueuedCommandAfter(
+        harness,
+        indexCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === fixture.storageRootPath &&
+          command.path === "STATUS.html",
+      );
+      expect(htmlCommand.command).toMatchObject({
+        type: "host.read_file_relative",
+        rootPath: fixture.storageRootPath,
+        path: "STATUS.html",
+        dotfiles: "allow",
+      });
+      await reportQueuedCommandSuccess(harness, htmlCommand, {
+        path: "STATUS.html",
+        content: statusHtml,
+        contentEncoding: "utf8",
+        mimeType: "text/html",
+        sizeBytes: Buffer.byteLength(statusHtml),
+      });
+
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.headers.get("cache-control")).toBe("no-store");
+      expect(statusResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      await expect(statusResponse.text()).resolves.toBe(statusHtml);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("falls back from an unreadable STATUS/index.html to STATUS.html", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+      const statusRootPath = `${fixture.storageRootPath}/STATUS`;
+      const statusHtml = "<h1>Readable single file status</h1>";
+
+      const statusPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/`,
+      );
+      const indexCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === statusRootPath &&
+          command.path === "index.html",
+      );
+      await reportQueuedCommandError(harness, indexCommand, {
+        errorCode: "EACCES",
+        errorMessage: "Permission denied: index.html",
+      });
+      const htmlCommand = await waitForQueuedCommandAfter(
+        harness,
+        indexCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === fixture.storageRootPath &&
+          command.path === "STATUS.html",
+      );
+      await reportQueuedCommandSuccess(harness, htmlCommand, {
+        path: "STATUS.html",
+        content: statusHtml,
+        contentEncoding: "utf8",
+        mimeType: "text/html",
+        sizeBytes: Buffer.byteLength(statusHtml),
+      });
+
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      await expect(statusResponse.text()).resolves.toBe(statusHtml);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("renders STATUS.md server-side when folder and html status sources are missing", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+      const markdown = "# Markdown status\n\n- ready";
+
+      const statusPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/`,
+      );
+      const indexCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === `${fixture.storageRootPath}/STATUS` &&
+          command.path === "index.html",
+      );
+      await reportQueuedCommandError(harness, indexCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: index.html",
+      });
+      const htmlCommand = await waitForQueuedCommandAfter(
+        harness,
+        indexCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === fixture.storageRootPath &&
+          command.path === "STATUS.html",
+      );
+      await reportQueuedCommandError(harness, htmlCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: STATUS.html",
+      });
+      const markdownCommand = await waitForQueuedCommandAfter(
+        harness,
+        htmlCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === fixture.storageRootPath &&
+          command.path === "STATUS.md",
+      );
+      expect(markdownCommand.command).toMatchObject({
+        type: "host.read_file_relative",
+        rootPath: fixture.storageRootPath,
+        path: "STATUS.md",
+        dotfiles: "allow",
+      });
+      await reportQueuedCommandSuccess(harness, markdownCommand, {
+        path: "STATUS.md",
+        content: markdown,
+        contentEncoding: "utf8",
+        mimeType: "text/markdown",
+        sizeBytes: Buffer.byteLength(markdown),
+      });
+
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.headers.get("content-type")).toBe(
+        "text/html; charset=utf-8",
+      );
+      expect(statusResponse.headers.get("cache-control")).toBe("no-store");
+      expect(statusResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      const body = await statusResponse.text();
+      expect(body).toContain("<h1>Markdown status</h1>");
+      expect(body).toContain("<li>ready</li>");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns an empty status page when no status source exists", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+
+      const statusPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/`,
+      );
+      const indexCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === `${fixture.storageRootPath}/STATUS` &&
+          command.path === "index.html",
+      );
+      await reportQueuedCommandError(harness, indexCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: index.html",
+      });
+      const htmlCommand = await waitForQueuedCommandAfter(
+        harness,
+        indexCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === fixture.storageRootPath &&
+          command.path === "STATUS.html",
+      );
+      await reportQueuedCommandError(harness, htmlCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: STATUS.html",
+      });
+      const markdownCommand = await waitForQueuedCommandAfter(
+        harness,
+        htmlCommand.row.cursor,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === fixture.storageRootPath &&
+          command.path === "STATUS.md",
+      );
+      await reportQueuedCommandError(harness, markdownCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: STATUS.md",
+      });
+
+      const statusResponse = await statusPromise;
+      expect(statusResponse.status).toBe(200);
+      expect(statusResponse.headers.get("content-type")).toBe(
+        "text/html; charset=utf-8",
+      );
+      expect(statusResponse.headers.get("cache-control")).toBe("no-store");
+      expect(statusResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      expect(await statusResponse.text()).toContain("No manager status yet");
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("serves subdirectory index files under STATUS when requested with a trailing slash", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+      const body = "<p>Nested status</p>";
+
+      const nestedPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/widgets/`,
+      );
+      const nestedCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === `${fixture.storageRootPath}/STATUS` &&
+          command.path === "widgets/index.html",
+      );
+      await reportQueuedCommandSuccess(harness, nestedCommand, {
+        path: "widgets/index.html",
+        content: body,
+        contentEncoding: "utf8",
+        mimeType: "text/html",
+        sizeBytes: Buffer.byteLength(body),
+      });
+
+      const nestedResponse = await nestedPromise;
+      expect(nestedResponse.status).toBe(200);
+      expect(nestedResponse.headers.get("cache-control")).toBe("no-store");
+      expect(nestedResponse.headers.get("x-content-type-options")).toBe(
+        "nosniff",
+      );
+      await expect(nestedResponse.text()).resolves.toBe(body);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("blocks dotfiles and invalid STATUS asset paths before reading", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+
+      const dotfileResponse = await harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/assets/.env`,
+      );
+      expect(dotfileResponse.status).toBe(404);
+      await expect(readJson(dotfileResponse)).resolves.toMatchObject({
+        code: "ENOENT",
+      });
+
+      const normalizedTraversalResponse = await harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/%2e%2e/secrets.txt`,
+      );
+      expect(normalizedTraversalResponse.status).toBe(404);
+
+      const encodedTraversalResponse = await harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/%2e%2e%2fsecrets.txt`,
+      );
+      expect(encodedTraversalResponse.status).toBe(400);
+      await expect(readJson(encodedTraversalResponse)).resolves.toMatchObject({
+        code: "invalid_path",
+      });
+
+      const invalidPathResponse = await harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/assets%5Csecrets.txt`,
+      );
+      expect(invalidPathResponse.status).toBe(400);
+      await expect(readJson(invalidPathResponse)).resolves.toMatchObject({
+        code: "invalid_path",
+      });
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        0,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("returns 404 for missing STATUS assets without falling back to root status sources", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+
+      const assetPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/missing.png`,
+      );
+      const assetCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === `${fixture.storageRootPath}/STATUS` &&
+          command.path === "missing.png",
+      );
+      await reportQueuedCommandError(harness, assetCommand, {
+        errorCode: "ENOENT",
+        errorMessage: "Path does not exist: missing.png",
+      });
+
+      const assetResponse = await assetPromise;
+      expect(assetResponse.status).toBe(404);
+      await expect(readJson(assetResponse)).resolves.toEqual({
+        code: "ENOENT",
+        message: "Path does not exist: missing.png",
+        retryable: false,
+      });
+      expect(harness.db.select().from(hostDaemonCommands).all()).toHaveLength(
+        1,
+      );
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("maps STATUS asset symlink escapes to invalid_path", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const fixture = seedManagerThreadStorage(harness);
+
+      const assetPromise = harness.app.request(
+        `/api/v1/threads/${fixture.threadId}/status/assets/secrets.txt`,
+      );
+      const assetCommand = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file_relative" &&
+          command.rootPath === `${fixture.storageRootPath}/STATUS` &&
+          command.path === "assets/secrets.txt",
+      );
+      await reportQueuedCommandError(harness, assetCommand, {
+        errorCode: "invalid_path",
+        errorMessage: "Path escapes read root",
+      });
+
+      const assetResponse = await assetPromise;
+      expect(assetResponse.status).toBe(400);
+      await expect(readJson(assetResponse)).resolves.toEqual({
+        code: "invalid_path",
+        message: "Path escapes read root",
+        retryable: false,
+      });
     } finally {
       await harness.cleanup();
     }

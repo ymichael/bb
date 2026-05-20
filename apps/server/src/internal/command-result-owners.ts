@@ -712,6 +712,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "host.list_files": null,
   "host.list_paths": null,
   "host.read_file": null,
+  "host.read_file_relative": null,
   "codex.inference.complete": null,
   "interactive.resolve": defineCommandResultOwner({
     applySideEffects: handleInteractiveResolveResult,

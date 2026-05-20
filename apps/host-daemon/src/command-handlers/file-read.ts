@@ -2,6 +2,7 @@ import { isUtf8 } from "node:buffer";
 import fs from "node:fs/promises";
 import path from "node:path";
 import mimeTypes from "mime-types";
+import type { HostReadFileRelativeDotfilePolicy } from "@bb/host-daemon-contract";
 import { readGitBlob, WorkspaceError } from "@bb/host-workspace";
 import {
   CommandDispatchError,
@@ -29,9 +30,25 @@ export interface ReadFileForTransportArgs {
   rootPath?: string;
 }
 
+export interface ReadRootRelativeFileForTransportArgs {
+  rootPath: string;
+  relativePath: string;
+  dotfiles: HostReadFileRelativeDotfilePolicy;
+}
+
 interface ResolveRootPathForReadArgs {
   resultPath: string;
   rootPath: string;
+}
+
+interface ValidateRootRelativePathArgs {
+  relativePath: string;
+  dotfiles: HostReadFileRelativeDotfilePolicy;
+}
+
+interface ValidatedRootRelativePath {
+  segments: readonly string[];
+  resultPath: string;
 }
 
 export interface ReadFileFromGitRefArgs {
@@ -93,6 +110,48 @@ function createMissingPathError(resultPath: string): CommandDispatchError {
     "ENOENT",
     `Path does not exist: ${resultPath}`,
   );
+}
+
+function createDotfileDeniedError(
+  resultPath: string,
+): ExpectedCommandDispatchError {
+  return new ExpectedCommandDispatchError(
+    "ENOENT",
+    `Path does not exist: ${resultPath}`,
+  );
+}
+
+function validateRootRelativePath(
+  args: ValidateRootRelativePathArgs,
+): ValidatedRootRelativePath {
+  if (
+    args.relativePath.includes("\0") ||
+    args.relativePath.includes("\\") ||
+    path.posix.isAbsolute(args.relativePath)
+  ) {
+    throw new CommandDispatchError("invalid_path", "Path must be relative");
+  }
+
+  const segments = args.relativePath.split("/");
+  if (
+    segments.some(
+      (segment) => segment.length === 0 || segment === "." || segment === "..",
+    )
+  ) {
+    throw new CommandDispatchError("invalid_path", "Path must be relative");
+  }
+
+  if (
+    args.dotfiles === "deny" &&
+    segments.some((segment) => segment.startsWith("."))
+  ) {
+    throw createDotfileDeniedError(args.relativePath);
+  }
+
+  return {
+    segments,
+    resultPath: segments.join("/"),
+  };
 }
 
 async function resolveRootPathOrThrowMissingPath(
@@ -261,6 +320,51 @@ export async function readFileForTransport(
   const contentEncoding = getContentEncoding(fileContents, mimeType);
   return {
     path: args.resultPath,
+    content:
+      contentEncoding === "utf8"
+        ? fileContents.toString("utf8")
+        : fileContents.toString("base64"),
+    contentEncoding,
+    ...(mimeType ? { mimeType } : {}),
+    sizeBytes: stat.size,
+  };
+}
+
+export async function readRootRelativeFileForTransport(
+  args: ReadRootRelativeFileForTransportArgs,
+): Promise<ReadFileForTransportResult> {
+  if (!path.isAbsolute(args.rootPath)) {
+    throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
+  }
+
+  const relativePath = validateRootRelativePath({
+    relativePath: args.relativePath,
+    dotfiles: args.dotfiles,
+  });
+  const resolvedPath = path.join(args.rootPath, ...relativePath.segments);
+  const readArgs: ReadFileForTransportArgs = {
+    resolvedPath,
+    resultPath: relativePath.resultPath,
+    rootPath: args.rootPath,
+  };
+  const readablePath = await resolveReadablePath(readArgs);
+  const stat = await fs
+    .stat(readablePath)
+    .catch((error: unknown) => throwMissingTargetOrRethrow(readArgs, error));
+  if (stat.isDirectory()) {
+    throw new CommandDispatchError(
+      "invalid_path",
+      "Path is a directory, not a file",
+    );
+  }
+
+  const mimeType = mimeTypes.lookup(relativePath.resultPath) || undefined;
+  const fileContents = await fs
+    .readFile(readablePath)
+    .catch((error: unknown) => throwMissingTargetOrRethrow(readArgs, error));
+  const contentEncoding = getContentEncoding(fileContents, mimeType);
+  return {
+    path: relativePath.resultPath,
     content:
       contentEncoding === "utf8"
         ? fileContents.toString("utf8")

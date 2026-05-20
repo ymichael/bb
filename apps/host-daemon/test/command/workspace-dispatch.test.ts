@@ -288,6 +288,148 @@ describe("workspace command dispatch", () => {
     expect(result.sizeBytes).toBe(imageBytes.length);
   });
 
+  it("covers host.read_file_relative for nested status assets", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-relative-");
+    const assetDir = path.join(tempDir, "assets");
+    const assetPath = path.join(assetDir, "logo.png");
+    const imageBytes = Buffer.from([0x89, 0x50, 0x4e, 0x47]);
+    await fs.mkdir(assetDir);
+    await fs.writeFile(assetPath, imageBytes);
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file_relative",
+        rootPath: tempDir,
+        path: "assets/logo.png",
+        dotfiles: "deny",
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.path).toBe("assets/logo.png");
+    expect(result.content).toBe(imageBytes.toString("base64"));
+    expect(result.contentEncoding).toBe("base64");
+    expect(result.mimeType).toBe("image/png");
+    expect(result.sizeBytes).toBe(imageBytes.length);
+  });
+
+  it("does not apply host.read_file size caps to host.read_file_relative", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-relative-large-");
+    const imagePath = path.join(tempDir, "large.png");
+    const imageBytes = Buffer.alloc(10 * 1024 * 1024 + 1);
+    await fs.writeFile(imagePath, imageBytes);
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.read_file_relative",
+        rootPath: tempDir,
+        path: "large.png",
+        dotfiles: "deny",
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.path).toBe("large.png");
+    expect(result.contentEncoding).toBe("base64");
+    expect(result.sizeBytes).toBe(imageBytes.length);
+  });
+
+  it("rejects host.read_file_relative traversal", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-relative-dotdot-");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file_relative",
+          rootPath: tempDir,
+          path: "../secrets.txt",
+          dotfiles: "deny",
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: "Path must be relative",
+    });
+  });
+
+  it("hides host.read_file_relative dotfiles when dotfiles are denied", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-read-relative-dotfile-");
+    await fs.writeFile(path.join(tempDir, ".env"), "secret");
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file_relative",
+          rootPath: tempDir,
+          path: ".env",
+          dotfiles: "deny",
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "ENOENT",
+      message: expect.stringContaining("Path does not exist"),
+    });
+  });
+
+  it("rejects host.read_file_relative symlink escapes", async () => {
+    const tempDir = await makeTempDir(
+      "bb-dispatch-host-read-relative-symlink-",
+    );
+    const outsidePath = path.join(tempDir, "..", "outside.txt");
+    await fs.writeFile(outsidePath, "outside");
+    await fs.symlink(outsidePath, path.join(tempDir, "outside-link.txt"));
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file_relative",
+          rootPath: tempDir,
+          path: "outside-link.txt",
+          dotfiles: "deny",
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("escapes read root"),
+    });
+  });
+
+  it("rejects host.read_file_relative when rootPath itself is a symlink", async () => {
+    const tempDir = await makeTempDir(
+      "bb-dispatch-host-read-relative-root-symlink-",
+    );
+    const targetRoot = path.join(tempDir, "target-root");
+    const symlinkRoot = path.join(tempDir, "root-link");
+    await fs.mkdir(targetRoot);
+    await fs.writeFile(path.join(targetRoot, "index.html"), "<p>Status</p>");
+    await fs.symlink(targetRoot, symlinkRoot);
+
+    const harness = createHarness();
+
+    await expect(
+      dispatchCommand(
+        {
+          type: "host.read_file_relative",
+          rootPath: symlinkRoot,
+          path: "index.html",
+          dotfiles: "deny",
+        },
+        harness.dispatchOptions(),
+      ),
+    ).rejects.toMatchObject({
+      code: "invalid_path",
+      message: expect.stringContaining("must not be a symlink"),
+    });
+  });
+
   it("rejects host.read_file with a relative path", async () => {
     const harness = createHarness();
 

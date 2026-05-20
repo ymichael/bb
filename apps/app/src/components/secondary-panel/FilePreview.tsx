@@ -30,6 +30,7 @@ export type FilePreviewState =
   | { kind: "error"; message?: string }
   | { kind: "image"; url: string }
   | { kind: "html"; file: FilePreviewFile }
+  | { kind: "iframe"; title: string; url: string }
   | { kind: "ready"; file: FilePreviewFile; lineNumber: number | null };
 
 export interface FilePreviewProps {
@@ -57,6 +58,11 @@ interface FilePreviewHeaderProps {
 
 interface HtmlFilePreviewProps {
   file: FilePreviewFile;
+}
+
+interface IframeFilePreviewProps {
+  title: string;
+  url: string;
 }
 
 type MarkdownViewMode = "preview" | "source";
@@ -116,7 +122,7 @@ export function FilePreview({
   return (
     <div
       className={
-        state.kind === "html"
+        state.kind === "html" || state.kind === "iframe"
           ? "@container/page flex h-full min-h-0 flex-col"
           : "@container/page"
       }
@@ -167,6 +173,9 @@ function FilePreviewBody({ state, path, markdownMode }: FilePreviewBodyProps) {
   }
   if (state.kind === "html") {
     return <HtmlFilePreview file={state.file} />;
+  }
+  if (state.kind === "iframe") {
+    return <IframeFilePreview title={state.title} url={state.url} />;
   }
   if (isMarkdownFile(state.file.name) && markdownMode === "preview") {
     return <MarkdownFilePreview file={state.file} />;
@@ -289,6 +298,14 @@ function HtmlFilePreview({ file }: HtmlFilePreviewProps) {
         srcDoc={file.contents}
         style={HTML_FILE_PREVIEW_IFRAME_STYLE}
       />
+    </div>
+  );
+}
+
+function IframeFilePreview({ title, url }: IframeFilePreviewProps) {
+  return (
+    <div className="min-h-0 flex-1">
+      <iframe title={title} src={url} style={HTML_FILE_PREVIEW_IFRAME_STYLE} />
     </div>
   );
 }

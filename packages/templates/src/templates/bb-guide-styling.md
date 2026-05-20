@@ -1,20 +1,23 @@
 ---
 kind: instruction
 title: bb Guide - Styling
-summary: Styling reference for STATUS.html surfaces rendered inside bb.
-intent: Give agents the tokens and starter CSS needed to make STATUS.html match the bb UI.
-editingNotes: Keep this as the canonical styling reference for STATUS.html. Manager prompts should point here instead of inlining tokens.
+summary: Styling reference for manager status surfaces rendered inside bb.
+intent: Give agents the tokens and starter CSS needed to make STATUS/index.html or STATUS.html match the bb UI.
+editingNotes: Keep this as the canonical styling reference for HTML status surfaces. Manager prompts should point here instead of inlining tokens.
 ---
-STATUS.html styling
+Status styling
 
-`STATUS.html` renders in an unsandboxed iframe in the bb secondary panel.
-External resources such as Google Fonts, Tailwind CDN, images, and stylesheets
-load normally.
+`STATUS/index.html` and `STATUS.html` render in an unsandboxed iframe in the bb
+secondary panel. External resources such as Google Fonts, Tailwind CDN, remote
+images, and stylesheets load normally. For local assets, use the folder form:
+put `index.html` plus any local images, CSS, JS, or fonts inside `STATUS/`, then
+reference them with relative URLs like `style.css`, `app.js`, or `logo.png`.
 
-Unless the user asks for a different visual direction, make `STATUS.html` look
-like bb: dense, minimal, and built from the same tokens. Use Tailwind for layout,
-spacing, grids, flex rows, responsive behavior, and small utility styling, then
-use the bb CSS variables below for colors, fonts, borders, radius, and shadows.
+Unless the user asks for a different visual direction, make the HTML status
+surface look like bb: dense, minimal, and built from the same tokens. Use
+Tailwind for layout, spacing, grids, flex rows, responsive behavior, and small
+utility styling, then use the bb CSS variables below for colors, fonts, borders,
+radius, and shadows.
 
 Load Tailwind and bb's app fonts with:
 
@@ -26,12 +29,12 @@ Load Tailwind and bb's app fonts with:
 ```
 
 bb's app dark mode is class-based on the parent app root. The iframe does not
-inherit that `.dark` class, so a `STATUS.html` document that wants light and
-dark rendering should use `@media (prefers-color-scheme: dark)` as the closest
+inherit that `.dark` class, so an HTML status document that wants light and dark
+rendering should use `@media (prefers-color-scheme: dark)` as the closest
 available signal for the user's OS theme.
 
-Paste this starter block into `STATUS.html` so the page uses bb's actual design
-tokens:
+Paste this starter block into `STATUS/index.html` or `STATUS.html` so the page
+uses bb's actual design tokens:
 
 ```html
 <style>

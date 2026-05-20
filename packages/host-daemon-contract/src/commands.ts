@@ -22,7 +22,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 18 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 19 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -42,6 +42,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "host.list_paths",
   "host.list_branches",
   "host.read_file",
+  "host.read_file_relative",
   "provider.list",
   "provider.list_models",
   "environment.provision",
@@ -274,6 +275,28 @@ export const hostReadFileCommandSchema = z
     }
   });
 
+export const hostReadFileRelativeDotfilePolicySchema = z.enum([
+  "allow",
+  "deny",
+]);
+export type HostReadFileRelativeDotfilePolicy = z.infer<
+  typeof hostReadFileRelativeDotfilePolicySchema
+>;
+
+/**
+ * Read a file beneath an absolute root by POSIX-style relative path. The daemon
+ * resolves the root and target with realpath, rejects symlink escapes, and can
+ * make dot-prefixed path segments indistinguishable from missing files.
+ */
+export const hostReadFileRelativeCommandSchema = z
+  .object({
+    type: z.literal("host.read_file_relative"),
+    rootPath: z.string().min(1),
+    path: z.string().min(1),
+    dotfiles: hostReadFileRelativeDotfilePolicySchema,
+  })
+  .strict();
+
 export const hostListFilesCommandSchema = z.object({
   type: z.literal("host.list_files"),
   path: z.string().min(1),
@@ -460,6 +483,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostListPathsCommandSchema,
   hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
+  hostReadFileRelativeCommandSchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
   environmentDestroyCommandSchema,
@@ -490,6 +514,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
     case "host.list_files":
     case "host.list_paths":
     case "host.read_file":
+    case "host.read_file_relative":
     case "codex.inference.complete":
     case "provider.list":
     case "provider.list_models":
@@ -563,6 +588,7 @@ export const hostDaemonCommandResultSchemaByType = {
     defaultBranch: z.string().nullable(),
   }),
   "host.read_file": fileReadResultSchema,
+  "host.read_file_relative": fileReadResultSchema,
   "provider.list": z.object({
     providers: z.array(providerInfoSchema),
   }),
