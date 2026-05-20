@@ -80,7 +80,6 @@ describe("@bb/templates", () => {
     const rendered = renderTemplate("managerAgentInstructions", {
       hostId: "test-host-id",
       localTimezone: "America/Los_Angeles",
-      managerPreferencesContent: "No preferences yet.",
       managerThreadId: "test-thread-123",
       threadStoragePath: "/tmp/test-thread-storage",
       projectId: "test-project-id",
@@ -120,7 +119,36 @@ describe("@bb/templates", () => {
     expect(rendered).toContain("Test Project");
     expect(rendered).toContain("America/Los_Angeles");
     expect(rendered).toContain("/tmp/test-thread-storage");
-    expect(rendered).toContain("No preferences yet.");
+    expect(rendered).not.toContain("PREFERENCES.md contents");
+  });
+
+  it("renders manager preferences system messages", () => {
+    const current = renderTemplate("systemMessageManagerPreferencesCurrent", {
+      fence: "````",
+      preferencesContent: "# Preferences\n\n```md\nnested\n```",
+    });
+    expect(current).toContain("[bb system]");
+    expect(current).toContain("Current PREFERENCES.md contents:");
+    expect(current).toContain("````md");
+    expect(current).toContain("```md\nnested\n```");
+
+    const updated = renderTemplate("systemMessageManagerPreferencesUpdated", {
+      fence: "```",
+      preferencesContent: "- concise updates\n",
+    });
+    expect(updated).toContain(
+      "PREFERENCES.md has been updated. New contents:",
+    );
+    expect(updated).toContain("- concise updates");
+
+    expect(
+      renderTemplate("systemMessageManagerPreferencesRemoved", {}),
+    ).toContain("PREFERENCES.md was removed.");
+    expect(
+      renderTemplate("systemMessageManagerPreferencesWarning", {
+        reason: "The file is larger than the 256 KiB inline limit.",
+      }),
+    ).toContain("The file is larger than the 256 KiB inline limit.");
   });
 
   it("renders systemMessageManagerWelcome with first-boot guidance", () => {

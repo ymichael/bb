@@ -24,6 +24,7 @@ import type {
   ServiceTier,
   TerminalSessionCloseReason,
   TerminalSessionStatus,
+  ThreadDynamicContextFileStatus,
   ThreadOperationKind,
   ThreadProvisioningStage,
   ThreadType,
@@ -327,6 +328,29 @@ export const managerThreadNudges = sqliteTable(
       table.projectId,
       table.threadId,
       table.name,
+    ),
+  ],
+);
+
+export const threadDynamicContextFileStates = sqliteTable(
+  "thread_dynamic_context_file_states",
+  {
+    threadId: text("thread_id")
+      .notNull()
+      .references(() => threads.id, { onDelete: "cascade" }),
+    fileKey: text("file_key").notNull(),
+    contentStatus: text("content_status")
+      .$type<ThreadDynamicContextFileStatus>()
+      .notNull(),
+    contentHash: text("content_hash").notNull(),
+    shownAt: integer("shown_at").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("thread_dynamic_context_file_states_thread_file_idx").on(
+      table.threadId,
+      table.fileKey,
     ),
   ],
 );

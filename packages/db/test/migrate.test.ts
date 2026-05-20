@@ -25,6 +25,7 @@ interface ReadIndexNamesArgs {
 const baselineWhen = 1778891867195;
 const publishedTerminalSessionUserInputWhen = 1779139400000;
 const closedSessionPruneIndexesWhen = 1779139400001;
+const threadDynamicContextFileStatesWhen = 1779139400002;
 
 function closeConnection(db: DbConnection): void {
   db.$client.close();
@@ -100,6 +101,10 @@ describe("migrate", () => {
       db.$client
         .prepare("DROP INDEX host_daemon_sessions_closed_prune_idx")
         .run();
+      db.$client
+        .prepare("DROP INDEX thread_dynamic_context_file_states_thread_file_idx")
+        .run();
+      db.$client.prepare("DROP TABLE thread_dynamic_context_file_states").run();
       db.$client.prepare("DELETE FROM __drizzle_migrations").run();
       db.$client
         .prepare<InsertMigrationParameters>(
@@ -145,6 +150,9 @@ describe("migrate", () => {
         .all()
         .map((row) => row.createdAt);
       expect(migrationCreatedAts).toContain(closedSessionPruneIndexesWhen);
+      expect(migrationCreatedAts).toContain(
+        threadDynamicContextFileStatesWhen,
+      );
     } finally {
       closeConnection(db);
     }

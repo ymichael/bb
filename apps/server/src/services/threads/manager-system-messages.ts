@@ -21,6 +21,12 @@ import {
   requireReadyThreadEnvironment,
   type ReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
+import {
+  type ManagerDynamicFileDeliveryStateUpdate,
+  prependManagerPreferencesSystemMessageIfChanged,
+  recordManagerDynamicFileDelivery,
+  withManagerPreferencesDeliveryLock,
+} from "./manager-dynamic-file-delivery.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { tryTransition } from "./thread-transitions.js";
 
@@ -35,6 +41,7 @@ interface QueueReadyManagerSystemMessageArgs {
   environment: ReadyThreadEnvironment;
   execution: ResolvedThreadExecutionOptions;
   input: PromptInput[];
+  stateUpdate: ManagerDynamicFileDeliveryStateUpdate | null;
   thread: Thread;
 }
 
@@ -92,6 +99,7 @@ async function queueReadyManagerSystemMessage(
         workspaceProvisionType: args.environment.workspaceProvisionType,
       },
     });
+    recordManagerDynamicFileDelivery(deps, args.stateUpdate);
     return;
   }
 
@@ -112,6 +120,7 @@ async function queueReadyManagerSystemMessage(
   if (queuedMode === "turn.submit") {
     tryTransition(deps.db, deps.hub, args.thread.id, "active");
   }
+  recordManagerDynamicFileDelivery(deps, args.stateUpdate);
 }
 
 export async function queueManagerSystemMessage(
@@ -148,27 +157,41 @@ export async function queueManagerSystemMessage(
     },
     "client/turn/requested",
   );
+  await withManagerPreferencesDeliveryLock(
+    { thread: managerThread },
+    async () => {
+      const preparedInput =
+        await prependManagerPreferencesSystemMessageIfChanged(deps, {
+          hostId: environment.hostId,
+          input,
+          mode: "change-detection",
+          thread: managerThread,
+        });
 
-  if (
-    await queueTurnDuringReprovision({
-      deps,
-      environment,
-      execution,
-      initiator: "system",
-      input,
-      senderThreadId: null,
-      thread: managerThread,
-    })
-  ) {
-    return true;
-  }
+      if (
+        await queueTurnDuringReprovision({
+          deps,
+          environment,
+          execution,
+          initiator: "system",
+          input: preparedInput.input,
+          senderThreadId: null,
+          thread: managerThread,
+        })
+      ) {
+        recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
+        return;
+      }
 
-  const readyEnvironment = requireReadyThreadEnvironment(environment);
-  await queueReadyManagerSystemMessage(deps, {
-    thread: managerThread,
-    input,
-    execution,
-    environment: readyEnvironment,
-  });
+      const readyEnvironment = requireReadyThreadEnvironment(environment);
+      await queueReadyManagerSystemMessage(deps, {
+        thread: managerThread,
+        input: preparedInput.input,
+        stateUpdate: preparedInput.stateUpdate,
+        execution,
+        environment: readyEnvironment,
+      });
+    },
+  );
   return true;
 }

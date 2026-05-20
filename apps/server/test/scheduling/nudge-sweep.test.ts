@@ -6,6 +6,7 @@ import {
   hostDaemonCommands,
   threads,
   updateManagerThreadNudge,
+  upsertThreadDynamicContextFileState,
 } from "@bb/db";
 import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import { buildManagerToolReminderText } from "../../src/services/threads/manager
 import { appendClientTurnEvent } from "../../src/services/threads/thread-events.js";
 import {
   reportQueuedCommandError,
+  reportQueuedCommandSuccess,
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
@@ -26,6 +28,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
+import { MANAGER_PREFERENCES_FILE_KEY } from "../../src/services/threads/manager-dynamic-file-delivery.js";
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
@@ -151,6 +154,110 @@ describe("nudge sweep", () => {
       const updatedNudge = getManagerThreadNudge(harness.db, nudge.id);
       expect(updatedNudge?.lastFiredAt).toBe(now);
       expect(updatedNudge?.nextFireAt).toBeGreaterThan(now);
+    } finally {
+      await harness.cleanup();
+    }
+  });
+
+  it("prepends changed preferences to scheduled nudge turn events and commands", async () => {
+    const harness = await createTestAppHarness();
+    try {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-nudge-preferences-update",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/nudge-preferences-update-environment",
+      });
+      const thread = seedRunnableManagerThread({
+        harness,
+        environmentId: environment.id,
+        projectId: project.id,
+      });
+      const now = Date.now();
+      upsertThreadDynamicContextFileState(harness.db, {
+        threadId: thread.id,
+        fileKey: MANAGER_PREFERENCES_FILE_KEY,
+        contentStatus: "present",
+        contentHash: "previous-preferences-hash",
+        shownAt: now - 1_000,
+      });
+      createManagerThreadNudge(harness.db, harness.hub, {
+        projectId: project.id,
+        threadId: thread.id,
+        name: "daily-recap",
+        cron: "0 8 * * *",
+        timezone: "UTC",
+        enabled: true,
+        nextFireAt: now - 1,
+      });
+
+      const sweepPromise = sweepDueNudges(harness.deps, { now });
+      const preferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
+      const readPreferences = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "host.read_file" && command.path === preferencesPath,
+      );
+      if (readPreferences.command.type !== "host.read_file") {
+        throw new Error(`Expected host.read_file command`);
+      }
+      const preferencesResponse = await reportQueuedCommandSuccess(
+        harness,
+        { command: readPreferences.command, row: readPreferences.row },
+        {
+          path: preferencesPath,
+          content: "# Preferences\n\n- updated by nudge\n",
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          sizeBytes: "# Preferences\n\n- updated by nudge\n".length,
+        },
+      );
+      expect(preferencesResponse.status).toBe(200);
+
+      await sweepPromise;
+
+      const queuedTurnSubmit = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "turn.submit" && command.threadId === thread.id,
+      );
+      if (queuedTurnSubmit.command.type !== "turn.submit") {
+        throw new Error("Expected turn.submit command");
+      }
+      expect(queuedTurnSubmit.command.input[0]).toEqual({
+        type: "text",
+        text: expect.stringContaining(
+          "PREFERENCES.md has been updated. New contents:",
+        ),
+      });
+      expect(queuedTurnSubmit.command.input[1]).toEqual({
+        type: "text",
+        text: "[bb system]\n\nScheduled nudge: daily-recap. Check ASYNC.md.",
+      });
+      expect(queuedTurnSubmit.command.input[2]).toEqual(
+        managerToolReminderInput(),
+      );
+
+      const turnRequestRow = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, thread.id))
+        .all()
+        .filter((row) => row.type === "client/turn/requested")
+        .at(-1);
+      if (!turnRequestRow) {
+        throw new Error("Expected client turn request event");
+      }
+      const turnRequest = turnRequestEventDataSchema.parse(
+        JSON.parse(turnRequestRow.data),
+      );
+      expect(turnRequest.input[0]).toEqual(queuedTurnSubmit.command.input[0]);
+      expect(turnRequest.input[1]).toEqual(queuedTurnSubmit.command.input[1]);
     } finally {
       await harness.cleanup();
     }

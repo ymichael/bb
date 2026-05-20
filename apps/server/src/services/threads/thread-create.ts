@@ -3,6 +3,7 @@ import {
   createEnvironmentProvisioningId,
   deleteThread,
   findEnvironmentByHostPath,
+  getEnvironment,
 } from "@bb/db";
 import { applyProvisionedEnvironmentRecord } from "@bb/db/internal-lifecycle";
 import type { Environment } from "@bb/domain";
@@ -13,6 +14,12 @@ import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { requireNonDestroyedHostWithStatus } from "../lib/entity-lookup.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
 import { buildExecutionOptions } from "./thread-commands.js";
+import { seedManagerThreadStorage } from "./manager-storage-templates.js";
+import {
+  prependManagerPreferencesSystemMessageIfChanged,
+  recordManagerDynamicFileDelivery,
+  withManagerPreferencesDeliveryLock,
+} from "./manager-dynamic-file-delivery.js";
 import {
   rememberProjectExecutionDefaultsForCreate,
   resolveProjectExecutionDefaultsForCreate,
@@ -40,6 +47,7 @@ import {
   requestThreadProvision,
   type RequestThreadProvisionArgs,
 } from "./thread-provisioning.js";
+import { requireThreadStoragePath } from "./thread-storage.js";
 
 type ThreadCreateDeps = Pick<
   AppDeps,
@@ -75,6 +83,13 @@ interface EnsureProjectSourceEnvironmentArgs {
 type ThreadProvisionEnvironmentIntent =
   RequestThreadProvisionArgs["environmentIntent"];
 
+interface PrepareManagerThreadInitialInputArgs {
+  environmentIntent: ThreadProvisionEnvironmentIntent;
+  input: ThreadCreateServiceRequest["input"];
+  request: ThreadCreateServiceRequest;
+  thread: NonNullable<ReturnType<typeof createThreadRecord>>;
+}
+
 function scheduleThreadProvisioningAdvance(
   deps: ThreadCreateDeps,
   threadId: string,
@@ -86,6 +101,58 @@ function scheduleThreadProvisioningAdvance(
       { err: error, threadId },
       "Failed to advance thread provisioning after thread creation",
     );
+  });
+}
+
+function resolveProvisionHostId(
+  deps: ThreadCreateDeps,
+  environmentIntent: ThreadProvisionEnvironmentIntent,
+): string {
+  switch (environmentIntent.type) {
+    case "direct-managed":
+    case "direct-unmanaged":
+      return environmentIntent.hostId;
+    case "reuse": {
+      const environment = getEnvironment(
+        deps.db,
+        environmentIntent.environmentId,
+      );
+      if (!environment) {
+        throw new ApiError(
+          404,
+          "environment_not_found",
+          "Environment not found",
+        );
+      }
+      return environment.hostId;
+    }
+  }
+}
+
+async function prepareManagerThreadInitialInput(
+  deps: ThreadCreateDeps,
+  args: PrepareManagerThreadInitialInputArgs,
+) {
+  if (args.thread.type !== "manager") {
+    return { input: args.input, stateUpdate: null };
+  }
+
+  const hostId = resolveProvisionHostId(deps, args.environmentIntent);
+  const threadStoragePath = await requireThreadStoragePath(deps, {
+    hostId,
+    threadId: args.thread.id,
+  });
+  await seedManagerThreadStorage(deps, {
+    explicitTemplateName: args.request.managerTemplateName,
+    hostId,
+    threadId: args.thread.id,
+    threadStoragePath,
+  });
+  return prependManagerPreferencesSystemMessageIfChanged(deps, {
+    hostId,
+    input: args.input,
+    mode: "first-boot",
+    thread: args.thread,
   });
 }
 
@@ -144,13 +211,22 @@ async function createProvisioningThread(
       },
       "client/turn/requested",
     );
-    requestThreadProvision(deps, {
-      thread,
-      environmentIntent: args.environmentIntent,
-      execution,
-      input: args.request.input,
-      managerTemplateName: args.request.managerTemplateName,
-      titleProvided: Boolean(args.request.title),
+    await withManagerPreferencesDeliveryLock({ thread }, async () => {
+      const preparedInput = await prepareManagerThreadInitialInput(deps, {
+        environmentIntent: args.environmentIntent,
+        input: args.request.input,
+        request: args.request,
+        thread,
+      });
+      requestThreadProvision(deps, {
+        thread,
+        environmentIntent: args.environmentIntent,
+        execution,
+        input: preparedInput.input,
+        managerTemplateName: args.request.managerTemplateName,
+        titleProvided: Boolean(args.request.title),
+      });
+      recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
     });
   } catch (error) {
     deleteThread(deps.db, deps.hub, thread.id);

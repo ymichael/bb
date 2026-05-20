@@ -37,6 +37,9 @@ export type { FeatureFlags } from "./feature-flags.js";
 export { managerTemplateNameSchema } from "./manager-templates.js";
 export type { ManagerTemplateName } from "./manager-templates.js";
 
+export { threadDynamicContextFileStatusValues } from "./manager-dynamic-context.js";
+export type { ThreadDynamicContextFileStatus } from "./manager-dynamic-context.js";
+
 export {
   TERMINAL_COLS_MAX,
   TERMINAL_DATA_MAX_BASE64_LENGTH,

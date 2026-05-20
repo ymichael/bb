@@ -1,4 +1,3 @@
-import path from "node:path";
 import {
   getBuiltInAgentProviderInfo,
   isAgentProviderId,
@@ -19,10 +18,8 @@ import type {
   WorkspaceProvisionType,
 } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
-import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import { ApiError } from "../../errors.js";
 import type { AppDeps, LoggedWorkSessionDeps } from "../../types.js";
-import { queueCommandAndWait } from "../hosts/command-wait.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { requireThreadStoragePath } from "./thread-storage.js";
 import {
@@ -31,8 +28,6 @@ import {
   resolveThreadExecutionPermissionMode,
 } from "./thread-default-policy.js";
 
-const MANAGER_PREFERENCES_FILE_NAME = "PREFERENCES.md";
-const NO_MANAGER_PREFERENCES = "(file does not exist)";
 type ReasoningPolicyProviderId = "claude-code" | "codex" | "pi";
 const SUPPORTED_REASONING_LEVELS_BY_PROVIDER: Record<
   ReasoningPolicyProviderId,
@@ -96,12 +91,6 @@ export interface RequestedExecutionOptions extends ThreadExecutionOptions {
 export interface ResolveThreadRuntimeCommandConfigArgs {
   environment: ThreadRuntimeCommandEnvironment;
   thread: Thread;
-  /**
-   * True during thread creation. Skips the daemon round-trip to read
-   * PREFERENCES.md because the manager has no preferences yet at
-   * creation time. Preferences are read on subsequent turns.
-   */
-  isThreadCreation?: boolean;
 }
 
 export interface ResolvePermissionEscalationArgs {
@@ -122,11 +111,6 @@ export interface ResolvedThreadRuntimeCommandConfig {
   workspaceProvisionType: WorkspaceProvisionType;
 }
 
-interface ReadManagerPreferencesArgs {
-  hostId: string;
-  threadStoragePath: string;
-}
-
 function requireWorkspacePath(
   environment: ThreadRuntimeCommandEnvironment,
 ): string {
@@ -135,36 +119,6 @@ function requireWorkspacePath(
   }
 
   return environment.path;
-}
-
-async function readManagerPreferences(
-  deps: LoggedWorkSessionDeps,
-  args: ReadManagerPreferencesArgs,
-): Promise<string> {
-  try {
-    const result = await queueCommandAndWait(deps, {
-      hostId: args.hostId,
-      timeoutMs: COMMAND_TIMEOUT_MS,
-      command: {
-        type: "host.read_file",
-        path: path.join(args.threadStoragePath, MANAGER_PREFERENCES_FILE_NAME),
-        rootPath: args.threadStoragePath,
-      },
-    });
-    if (result.contentEncoding !== "utf8") {
-      throw new ApiError(
-        502,
-        "invalid_request",
-        "Manager preferences must be UTF-8 text",
-      );
-    }
-    return result.content;
-  } catch (error) {
-    if (error instanceof ApiError && error.body.code === "ENOENT") {
-      return NO_MANAGER_PREFERENCES;
-    }
-    throw error;
-  }
 }
 
 function validateProviderPermissionMode(
@@ -306,13 +260,6 @@ export async function resolveThreadRuntimeCommandConfig(
     threadId: args.thread.id,
   });
 
-  const managerPreferencesContent = args.isThreadCreation
-    ? NO_MANAGER_PREFERENCES
-    : await readManagerPreferences(deps, {
-        hostId: args.environment.hostId,
-        threadStoragePath,
-      });
-
   return {
     dynamicTools: MANAGER_DYNAMIC_TOOLS,
     disallowedTools: MANAGER_DISALLOWED_TOOLS,
@@ -320,7 +267,6 @@ export async function resolveThreadRuntimeCommandConfig(
     instructions: renderTemplate("managerAgentInstructions", {
       hostId: args.environment.hostId,
       localTimezone: resolveLocalTimezone(),
-      managerPreferencesContent,
       managerThreadId: args.thread.id,
       threadStoragePath,
       projectId: args.thread.projectId,

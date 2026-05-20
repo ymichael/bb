@@ -7,7 +7,6 @@ editingNotes: Organized into system, communication, storage, and work guidance. 
 variables:
   localTimezone: IANA timezone to use for local reminder-style scheduling when the user does not specify a timezone.
   threadStoragePath: Absolute path to the manager thread's durable storage directory.
-  managerPreferencesContent: Current contents of PREFERENCES.md, or a marker when it does not exist.
   managerThreadId: The manager's own thread ID.
   projectName: The project name.
   projectId: The project ID.
@@ -148,9 +147,3 @@ Runtime context:
 - Project root: `{{projectRootPath}}`
 - Thread storage: `{{threadStoragePath}}`
 - Local timezone: `{{localTimezone}}`
-
-`PREFERENCES.md` contents:
-
-```md
-{{managerPreferencesContent}}
-```

@@ -14,6 +14,7 @@ import {
   markThreadStopRequested,
   queueCommand,
   threads,
+  upsertThreadDynamicContextFileState,
 } from "@bb/db";
 import { threadScope, turnRequestEventDataSchema, turnScope } from "@bb/domain";
 import { renderTemplate } from "@bb/templates";
@@ -45,6 +46,7 @@ import { createCommandApprovalPayload } from "../helpers/pending-interactions.js
 import { queueManagerSystemMessage } from "../../src/services/threads/manager-system-messages.js";
 import { sendNextQueuedMessageIfPresent } from "../../src/services/threads/queued-messages.js";
 import { buildManagerToolReminderText } from "../../src/services/threads/manager-tool-reminder.js";
+import { MANAGER_PREFERENCES_FILE_KEY } from "../../src/services/threads/manager-dynamic-file-delivery.js";
 import { createTestAppHarness } from "../helpers/test-app.js";
 
 function managerToolReminderInput() {
@@ -290,7 +292,8 @@ describe("internal event side effects", () => {
       const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}/PREFERENCES.md`;
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
-        ({ command }) =>
+        ({ command, row }) =>
+          row.state === "pending" &&
           command.type === "host.read_file" &&
           command.path === managerPreferencesPath,
       );
@@ -725,6 +728,13 @@ describe("internal event side effects", () => {
         inputText: "Initial manager task",
         model: "gpt-5.4",
       });
+      upsertThreadDynamicContextFileState(harness.db, {
+        threadId: managerThread.id,
+        fileKey: MANAGER_PREFERENCES_FILE_KEY,
+        contentHash: "previous-child-completion-preferences-hash",
+        contentStatus: "present",
+        shownAt: Date.now() - 1,
+      });
       const childThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
@@ -762,16 +772,29 @@ describe("internal event side effects", () => {
       const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
-        ({ command }) =>
+        ({ command, row }) =>
+          row.state === "pending" &&
           command.type === "host.read_file" &&
           command.path === managerPreferencesPath,
       );
-      const readResponse = await reportQueuedCommandError(
+      if (preferencesReadCommand.command.type !== "host.read_file") {
+        throw new Error(
+          `Expected host.read_file, got ${preferencesReadCommand.command.type}`,
+        );
+      }
+      const preferencesContent = "child completion updated prefs\n";
+      const readResponse = await reportQueuedCommandSuccess(
         harness,
-        preferencesReadCommand,
         {
-          errorCode: "ENOENT",
-          errorMessage: "File not found",
+          command: preferencesReadCommand.command,
+          row: preferencesReadCommand.row,
+        },
+        {
+          path: managerPreferencesPath,
+          content: preferencesContent,
+          contentEncoding: "utf8",
+          mimeType: "text/markdown",
+          sizeBytes: Buffer.byteLength(preferencesContent),
         },
       );
       expect(readResponse.status).toBe(200);
@@ -788,6 +811,12 @@ describe("internal event side effects", () => {
       expect(queuedCommand.command).toMatchObject({
         environmentId: environment.id,
         input: [
+          {
+            type: "text",
+            text: expect.stringContaining(
+              "PREFERENCES.md has been updated. New contents:",
+            ),
+          },
           {
             type: "text",
             text: renderTemplate("systemMessageManagedThreadComplete", {
@@ -814,6 +843,31 @@ describe("internal event side effects", () => {
           },
         },
       });
+      if (queuedCommand.command.type !== "turn.submit") {
+        throw new Error(
+          `Expected turn.submit, got ${queuedCommand.command.type}`,
+        );
+      }
+      expect(queuedCommand.command.input[0]).toEqual({
+        type: "text",
+        text: expect.stringContaining("child completion updated prefs"),
+      });
+      const managerTurnRequest = harness.db
+        .select({ data: events.data, type: events.type })
+        .from(events)
+        .where(eq(events.threadId, managerThread.id))
+        .orderBy(events.sequence)
+        .all()
+        .filter((event) => event.type === "client/turn/requested")
+        .at(-1);
+      if (!managerTurnRequest) {
+        throw new Error("Expected persisted manager turn request");
+      }
+      const managerTurnData = turnRequestEventDataSchema.parse(
+        JSON.parse(managerTurnRequest.data),
+      );
+      expect(managerTurnData.input[0]).toEqual(queuedCommand.command.input[0]);
+      expect(managerTurnData.input[1]).toEqual(queuedCommand.command.input[1]);
       expect(getThread(harness.db, managerThread.id)?.status).toBe("active");
       expect(getThread(harness.db, childThread.id)?.status).toBe("idle");
     } finally {
@@ -962,7 +1016,8 @@ describe("internal event side effects", () => {
       const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
-        ({ command }) =>
+        ({ command, row }) =>
+          row.state === "pending" &&
           command.type === "host.read_file" &&
           command.path === managerPreferencesPath,
       );
@@ -1116,7 +1171,8 @@ describe("internal event side effects", () => {
       const preferencesReadCommand = await waitForQueuedCommandAfter(
         harness,
         queued.row.cursor,
-        ({ command }) =>
+        ({ command, row }) =>
+          row.state === "pending" &&
           command.type === "host.read_file" &&
           command.path === managerPreferencesPath,
       );
@@ -1293,7 +1349,8 @@ describe("internal event side effects", () => {
       const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
       const preferencesReadCommand = await waitForQueuedCommand(
         harness,
-        ({ command }) =>
+        ({ command, row }) =>
+          row.state === "pending" &&
           command.type === "host.read_file" &&
           command.path === managerPreferencesPath,
       );
@@ -1382,10 +1439,29 @@ describe("internal event side effects", () => {
         inputText: "Initial manager task",
         model: "gpt-5.4",
       });
-      const queued = await queueManagerSystemMessage(harness.deps, {
+      const queuedPromise = queueManagerSystemMessage(harness.deps, {
         managerThreadId: managerThread.id,
         messageText: "System follow-up during reprovision",
       });
+      const managerPreferencesPath = `/tmp/bb-host-data/${host.id}/thread-storage/${managerThread.id}/PREFERENCES.md`;
+      const preferencesReadCommand = await waitForQueuedCommand(
+        harness,
+        ({ command, row }) =>
+          row.state === "pending" &&
+          command.type === "host.read_file" &&
+          command.path === managerPreferencesPath,
+      );
+      const readResponse = await reportQueuedCommandError(
+        harness,
+        preferencesReadCommand,
+        {
+          errorCode: "ENOENT",
+          errorMessage: "File not found",
+        },
+      );
+      expect(readResponse.status).toBe(200);
+
+      const queued = await queuedPromise;
 
       expect(queued).toBe(true);
 

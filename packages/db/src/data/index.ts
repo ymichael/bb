@@ -156,6 +156,16 @@ export type {
 } from "./manager-thread-nudges.js";
 
 export {
+  getThreadDynamicContextFileState,
+  upsertThreadDynamicContextFileState,
+  upsertThreadDynamicContextFileStateInTransaction,
+} from "./thread-dynamic-context-file-states.js";
+export type {
+  ThreadDynamicContextFileStateKey,
+  UpsertThreadDynamicContextFileStateInput,
+} from "./thread-dynamic-context-file-states.js";
+
+export {
   getEnvironmentOperation,
   getEnvironmentOperationByCommandId,
   listEnvironmentOperations,

@@ -708,6 +708,7 @@ const commandResultOwners: CommandResultOwnerRegistry = {
   "environment.provision": defineCommandResultOwner({
     applySideEffects: handleProvisionCommandResult,
   }),
+  "host.file_metadata": null,
   "host.list_branches": null,
   "host.list_files": null,
   "host.list_paths": null,

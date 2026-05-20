@@ -22,7 +22,7 @@ import {
 } from "@bb/replay-capture/schema";
 import { z } from "zod";
 
-export const HOST_DAEMON_PROTOCOL_VERSION = 19 as const;
+export const HOST_DAEMON_PROTOCOL_VERSION = 20 as const;
 
 export const FILE_LIST_QUERY_MAX_LENGTH = 256;
 export const FILE_LIST_LIMIT_MAX = 10_000;
@@ -41,6 +41,7 @@ export const HOST_DAEMON_COMMAND_TYPES = [
   "host.list_files",
   "host.list_paths",
   "host.list_branches",
+  "host.file_metadata",
   "host.read_file",
   "host.read_file_relative",
   "provider.list",
@@ -297,6 +298,14 @@ export const hostReadFileRelativeCommandSchema = z
   })
   .strict();
 
+export const hostFileMetadataCommandSchema = z
+  .object({
+    type: z.literal("host.file_metadata"),
+    path: z.string().min(1),
+    rootPath: z.string().min(1).optional(),
+  })
+  .strict();
+
 export const hostListFilesCommandSchema = z.object({
   type: z.literal("host.list_files"),
   path: z.string().min(1),
@@ -482,6 +491,7 @@ const hostDaemonNonProvisionCommandSchema = z.discriminatedUnion("type", [
   hostListFilesCommandSchema,
   hostListPathsCommandSchema,
   hostListBranchesCommandSchema,
+  hostFileMetadataCommandSchema,
   hostReadFileCommandSchema,
   hostReadFileRelativeCommandSchema,
   providerListCommandSchema,
@@ -511,6 +521,7 @@ export function shouldFlushEventsBeforeReportingCommandResult(
       return command.initiator !== null;
     case "environment.destroy":
     case "host.list_branches":
+    case "host.file_metadata":
     case "host.list_files":
     case "host.list_paths":
     case "host.read_file":
@@ -540,6 +551,12 @@ const fileReadResultSchema = z.object({
   content: z.string(),
   contentEncoding: z.enum(["base64", "utf8"]),
   mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative(),
+});
+
+const fileMetadataResultSchema = z.object({
+  path: z.string(),
+  modifiedAtMs: z.number().nonnegative(),
   sizeBytes: z.number().int().nonnegative(),
 });
 
@@ -580,6 +597,7 @@ export const hostDaemonCommandResultSchemaByType = {
   }),
   "host.list_files": fileListResultSchema,
   "host.list_paths": pathListResultSchema,
+  "host.file_metadata": fileMetadataResultSchema,
   "host.list_branches": z.object({
     branches: z.array(z.string()),
     /** HEAD of the primary checkout at `path`. Null when the path is not a git repo. */

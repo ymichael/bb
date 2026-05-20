@@ -27,6 +27,7 @@ import {
   projectSources,
   projects,
   queuedThreadMessages,
+  threadDynamicContextFileStates,
   threads,
 } from "../src/index.js";
 
@@ -194,6 +195,17 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
+    db.insert(threadDynamicContextFileStates)
+      .values({
+        threadId,
+        fileKey: "manager-preferences",
+        contentStatus: "present",
+        contentHash: "sha256:abc",
+        shownAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
     db.insert(hostDaemonSessions)
       .values({
         id: sessionId,
@@ -278,6 +290,13 @@ describe("db rebuild schema", () => {
       name: "check-async",
       timezone: "UTC",
     });
+    expect(db.select().from(threadDynamicContextFileStates).get()).toMatchObject(
+      {
+        fileKey: "manager-preferences",
+        contentStatus: "present",
+        contentHash: "sha256:abc",
+      },
+    );
     expect(db.select().from(hostDaemonCommands).get()).toMatchObject({
       sessionId,
       type: "workspace.status",
@@ -471,7 +490,7 @@ describe("db rebuild schema", () => {
     closeConnection(db);
   });
 
-  it("cascades thread deletion to manager thread nudges", () => {
+  it("cascades thread deletion to manager thread-owned rows", () => {
     const db = createConnection(":memory:");
     migrate(db);
 
@@ -525,10 +544,24 @@ describe("db rebuild schema", () => {
         updatedAt: now,
       })
       .run();
+    db.insert(threadDynamicContextFileStates)
+      .values({
+        threadId,
+        fileKey: "manager-preferences",
+        contentStatus: "present",
+        contentHash: "sha256:abc",
+        shownAt: now,
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
     db.delete(threads).where(eq(threads.id, threadId)).run();
 
     expect(db.select().from(managerThreadNudges).all()).toHaveLength(0);
+    expect(db.select().from(threadDynamicContextFileStates).all()).toHaveLength(
+      0,
+    );
 
     closeConnection(db);
   });

@@ -20,6 +20,7 @@ import {
   listHostFiles,
   listHostPaths,
   readHostFile,
+  readHostFileMetadata,
   readHostRelativeFile,
 } from "./command-handlers/host-files.js";
 import { resolveInteractiveRequest } from "./command-handlers/interactive.js";
@@ -262,6 +263,10 @@ const commandHandlers: CommandHandlerMap = {
     command: Extract<HostDaemonCommand, { type: "host.list_branches" }>,
     _options: CommandDispatchOptions,
   ) => listHostBranches(command),
+  "host.file_metadata": async (
+    command: Extract<HostDaemonCommand, { type: "host.file_metadata" }>,
+    _options: CommandDispatchOptions,
+  ) => readHostFileMetadata(command),
   "host.read_file": async (
     command: Extract<HostDaemonCommand, { type: "host.read_file" }>,
     _options: CommandDispatchOptions,

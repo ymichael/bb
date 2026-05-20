@@ -28,6 +28,11 @@ import {
   queueTurnDuringReprovision,
   requireReadyThreadEnvironment,
 } from "./thread-turn-dispatch.js";
+import {
+  prependManagerPreferencesSystemMessageIfChanged,
+  recordManagerDynamicFileDelivery,
+  withManagerPreferencesDeliveryLock,
+} from "./manager-dynamic-file-delivery.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { resolveThreadRuntimeState } from "./thread-runtime-display.js";
 import { tryTransition } from "./thread-transitions.js";
@@ -227,57 +232,93 @@ export async function sendThreadMessage(
     initiator,
   });
 
-  if (
-    await queueTurnDuringReprovision({
+  await withManagerPreferencesDeliveryLock({ thread }, async () => {
+    const preparedInput = await prependManagerPreferencesSystemMessageIfChanged(
       deps,
-      environment,
+      {
+        hostId: environment.hostId,
+        input,
+        mode: "change-detection",
+        thread,
+      },
+    );
+
+    if (
+      await queueTurnDuringReprovision({
+        deps,
+        environment,
+        execution,
+        initiator,
+        input: preparedInput.input,
+        senderThreadId,
+        thread,
+      })
+    ) {
+      recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
+      return;
+    }
+    const readyEnvironment = requireReadyThreadEnvironment(environment);
+    let target: TurnRequestTarget;
+    if (mode === "start") {
+      target = { kind: "new-turn" };
+    } else {
+      target = {
+        kind: mode,
+        expectedTurnId: expectedSteerTurnId,
+      };
+    }
+
+    const request = appendClientTurnEvent(deps, {
+      threadId: thread.id,
+      environmentId: readyEnvironment.id,
+      type: "client/turn/requested",
+      input: preparedInput.input,
       execution,
       initiator,
-      input,
       senderThreadId,
+      requestMethod: "turn/start",
+      source: "tell",
+      target,
+    });
+    recordAcceptedPromptHistoryEntry(deps, {
       thread,
-    })
-  ) {
-    return;
-  }
-  const readyEnvironment = requireReadyThreadEnvironment(environment);
-  let target: TurnRequestTarget;
-  if (mode === "start") {
-    target = { kind: "new-turn" };
-  } else {
-    target = {
-      kind: mode,
-      expectedTurnId: expectedSteerTurnId,
-    };
-  }
+      input: preparedInput.input,
+      initiator,
+      target,
+      requestSequence: request.sequence,
+    });
 
-  const request = appendClientTurnEvent(deps, {
-    threadId: thread.id,
-    environmentId: readyEnvironment.id,
-    type: "client/turn/requested",
-    input,
-    execution,
-    initiator,
-    senderThreadId,
-    requestMethod: "turn/start",
-    source: "tell",
-    target,
-  });
-  recordAcceptedPromptHistoryEntry(deps, {
-    thread,
-    input,
-    initiator,
-    target,
-    requestSequence: request.sequence,
-  });
+    if (mode === "start") {
+      const queuedMode = await queueReadyThreadTurnCommand(deps, {
+        thread,
+        input: preparedInput.input,
+        requestId: request.requestId,
+        execution,
+        permissionEscalation,
+        environment: {
+          id: readyEnvironment.id,
+          hostId: readyEnvironment.hostId,
+          path: readyEnvironment.path,
+          workspaceProvisionType: readyEnvironment.workspaceProvisionType,
+        },
+      });
+      if (queuedMode === "turn.submit") {
+        tryTransition(deps.db, deps.hub, thread.id, "active");
+      }
+      recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
+      return;
+    }
 
-  if (mode === "start") {
-    const queuedMode = await queueReadyThreadTurnCommand(deps, {
+    await queueTurnSubmitCommand(deps, {
       thread,
-      input,
+      input: preparedInput.input,
       requestId: request.requestId,
       execution,
       permissionEscalation,
+      target: {
+        mode,
+        expectedTurnId: expectedSteerTurnId,
+      },
       environment: {
         id: readyEnvironment.id,
         hostId: readyEnvironment.hostId,
@@ -285,27 +326,6 @@ export async function sendThreadMessage(
         workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
     });
-    if (queuedMode === "turn.submit") {
-      tryTransition(deps.db, deps.hub, thread.id, "active");
-    }
-    return;
-  }
-
-  await queueTurnSubmitCommand(deps, {
-    thread,
-    input,
-    requestId: request.requestId,
-    execution,
-    permissionEscalation,
-    target: {
-      mode,
-      expectedTurnId: expectedSteerTurnId,
-    },
-    environment: {
-      id: readyEnvironment.id,
-      hostId: readyEnvironment.hostId,
-      path: readyEnvironment.path,
-      workspaceProvisionType: readyEnvironment.workspaceProvisionType,
-    },
+    recordManagerDynamicFileDelivery(deps, preparedInput.stateUpdate);
   });
 }

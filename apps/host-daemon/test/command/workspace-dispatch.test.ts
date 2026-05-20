@@ -265,6 +265,26 @@ describe("workspace command dispatch", () => {
     expect(result.sizeBytes).toBe("explicit host notes".length);
   });
 
+  it("covers host.file_metadata", async () => {
+    const tempDir = await makeTempDir("bb-dispatch-host-file-metadata-");
+    const filePath = path.join(tempDir, "PREFERENCES.md");
+    await fs.writeFile(filePath, "durable manager notes");
+
+    const harness = createHarness();
+    const result = await dispatchCommand(
+      {
+        type: "host.file_metadata",
+        path: filePath,
+        rootPath: tempDir,
+      },
+      harness.dispatchOptions(),
+    );
+
+    expect(result.path).toBe(filePath);
+    expect(result.sizeBytes).toBe("durable manager notes".length);
+    expect(result.modifiedAtMs).toBeGreaterThan(0);
+  });
+
   it("returns base64 for image files", async () => {
     const tempDir = await makeTempDir("bb-dispatch-host-read-image-");
     const imagePath = path.join(tempDir, "preview.png");

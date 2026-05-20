@@ -12,6 +12,7 @@ import {
 import {
   readFileForTransport,
   readFileFromGitRef,
+  readFileMetadataForTransport,
   readRootRelativeFileForTransport,
 } from "./file-read.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
@@ -25,6 +26,11 @@ import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
  */
 const SAFE_GIT_REF_REGEX = /^[A-Za-z0-9_./~^@-]+$/;
 
+interface HostDiskPathCommand {
+  path: string;
+  rootPath?: string;
+}
+
 function assertSafeGitRef(ref: string): void {
   if (
     ref.length === 0 ||
@@ -33,6 +39,17 @@ function assertSafeGitRef(ref: string): void {
     !SAFE_GIT_REF_REGEX.test(ref)
   ) {
     throw new CommandDispatchError("invalid_ref", `Invalid git ref: ${ref}`);
+  }
+}
+
+function assertAbsoluteHostDiskPathCommand(command: HostDiskPathCommand): void {
+  if (!path.isAbsolute(command.path)) {
+    throw new CommandDispatchError("invalid_path", "Path must be absolute");
+  }
+
+  const rootPath = command.rootPath;
+  if (rootPath !== undefined && !path.isAbsolute(rootPath)) {
+    throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
   }
 }
 
@@ -98,17 +115,10 @@ export async function listHostPaths(
 export async function readHostFile(
   command: CommandOf<"host.read_file">,
 ): Promise<HostDaemonCommandResult<"host.read_file">> {
-  if (!path.isAbsolute(command.path)) {
-    throw new CommandDispatchError("invalid_path", "Path must be absolute");
-  }
-
-  const rootPath = command.rootPath;
-  if (rootPath !== undefined && !path.isAbsolute(rootPath)) {
-    throw new CommandDispatchError("invalid_path", "rootPath must be absolute");
-  }
+  assertAbsoluteHostDiskPathCommand(command);
 
   if (command.ref !== undefined) {
-    if (rootPath === undefined) {
+    if (command.rootPath === undefined) {
       throw new CommandDispatchError(
         "invalid_path",
         "rootPath is required when ref is set",
@@ -116,7 +126,7 @@ export async function readHostFile(
     }
     assertSafeGitRef(command.ref);
     return readFileFromGitRef({
-      rootPath,
+      rootPath: command.rootPath,
       resolvedPath: command.path,
       resultPath: command.path,
       ref: command.ref,
@@ -126,7 +136,18 @@ export async function readHostFile(
   return readFileForTransport({
     resolvedPath: command.path,
     resultPath: command.path,
-    ...(rootPath !== undefined ? { rootPath } : {}),
+    ...(command.rootPath !== undefined ? { rootPath: command.rootPath } : {}),
+  });
+}
+
+export async function readHostFileMetadata(
+  command: CommandOf<"host.file_metadata">,
+): Promise<HostDaemonCommandResult<"host.file_metadata">> {
+  assertAbsoluteHostDiskPathCommand(command);
+  return readFileMetadataForTransport({
+    resolvedPath: command.path,
+    resultPath: command.path,
+    ...(command.rootPath !== undefined ? { rootPath: command.rootPath } : {}),
   });
 }
 

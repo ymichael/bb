@@ -22,6 +22,13 @@
       "when": 1779139400001,
       "tag": "0002_closed_session_prune_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1779139400002,
+      "tag": "0003_thread_dynamic_context_file_states",
+      "breakpoints": true
     }
   ]
 }

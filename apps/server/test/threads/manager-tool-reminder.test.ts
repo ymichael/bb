@@ -92,7 +92,8 @@ async function respondToManagerPreferencesRead(
   const preferencesPath = `/tmp/bb-host-data/${hostId}/thread-storage/${threadId}/PREFERENCES.md`;
   const readPreferences = await waitForQueuedCommand(
     harness,
-    ({ command }) =>
+    ({ command, row }) =>
+      row.state === "pending" &&
       command.type === "host.read_file" && command.path === preferencesPath,
   );
   const response = await reportQueuedCommandError(harness, readPreferences, {
@@ -123,7 +124,7 @@ async function prepareTurnSubmitPayloadForThread(
       type: args.threadType,
     });
 
-    const payloadPromise = prepareTurnSubmitCommandPayload(harness.deps, {
+    const payload = await prepareTurnSubmitCommandPayload(harness.deps, {
       environment,
       execution: testExecution,
       input: args.input,
@@ -133,12 +134,8 @@ async function prepareTurnSubmitPayloadForThread(
       thread,
     });
 
-    if (args.threadType === "manager") {
-      await respondToManagerPreferencesRead(harness, host.id, thread.id);
-    }
-
     return {
-      payload: await payloadPromise,
+      payload,
     };
   } finally {
     await harness.cleanup();

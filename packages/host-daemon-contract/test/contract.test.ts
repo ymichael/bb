@@ -47,7 +47,7 @@ const INTENTIONAL_OPTIONAL_HOST_DAEMON_FIELDS: Record<string, string> = {
   "hostDaemonCommandSchema.ref":
     "host.read_file may omit ref to read from disk; setting ref switches to git history at that ref.",
   "hostDaemonCommandSchema.rootPath":
-    "host.read_file may omit rootPath only for explicit absolute disk reads; ref-based reads still require it.",
+    "host.read_file and host.file_metadata may omit rootPath only for explicit absolute disk reads; ref-based reads still require it.",
   "hostDaemonCommandSchema.threadStoragePath":
     "thread.start may include a storage path for manager threads so the daemon creates the directory before the agent starts.",
   "hostDaemonCommandSchema.disallowedTools":
@@ -265,6 +265,18 @@ describe("host-daemon command schemas", () => {
     ).toMatchObject({
       type: "host.list_branches",
       path: "/tmp/workspace",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
+        type: "host.file_metadata",
+        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        rootPath: "/tmp/bb-data/thread-storage/thread-123",
+      }),
+    ).toMatchObject({
+      type: "host.file_metadata",
+      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      rootPath: "/tmp/bb-data/thread-storage/thread-123",
     });
 
     expect(
@@ -966,6 +978,18 @@ describe("host-daemon command schemas", () => {
       path: "assets/logo.png",
       content: "iVBORw0KGgo=",
       contentEncoding: "base64",
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.file_metadata"].parse({
+        path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+        modifiedAtMs: 1234.5,
+        sizeBytes: 26_214_401,
+      }),
+    ).toMatchObject({
+      path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
+      modifiedAtMs: 1234.5,
+      sizeBytes: 26_214_401,
     });
 
     expect(() =>

@@ -41,6 +41,11 @@ import { requireReadyThreadEnvironment } from "./thread-turn-dispatch.js";
 import { resolvePermissionEscalation } from "./thread-runtime-config.js";
 import { sendThreadMessage } from "./thread-send.js";
 import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
+import {
+  prependManagerPreferencesSystemMessageIfChanged,
+  recordManagerDynamicFileDeliveryInTransaction,
+  withManagerPreferencesDeliveryLock,
+} from "./manager-dynamic-file-delivery.js";
 
 interface SendQueuedMessageArgs {
   mode: SendQueuedMessageMode;
@@ -198,78 +203,93 @@ async function sendClaimedQueuedMessageForIdleProviderThread(
   const session = await ensureHostSessionReadyForWork(deps, {
     hostId: environment.hostId,
   });
-  const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
-    environment,
-    execution,
-    input: payload.input,
-    permissionEscalation,
-    providerThreadId,
-    target: { mode: "start" },
-    thread,
-  });
-
-  const sent = deps.db.transaction(
-    (tx) => {
-      const consumed = deleteClaimedQueuedThreadMessageInTransaction(tx, {
-        id: args.queuedMessage.id,
-        claimToken: args.queuedMessage.claimToken,
-      });
-      if (!consumed) {
-        return false;
-      }
-      const request = appendClientTurnEventInTransaction(tx, {
-        environmentId: environment.id,
-        execution,
-        initiator: "user",
-        input: payload.input,
-        requestMethod: "turn/start",
-        senderThreadId: null,
-        source: "tell",
-        target: { kind: "new-turn" },
-        threadId: thread.id,
-        type: "client/turn/requested",
-      });
-      recordAcceptedPromptHistoryEntry(
-        { db: tx },
-        {
-          thread,
-          input: payload.input,
-          initiator: "user",
-          target: { kind: "new-turn" },
-          requestSequence: request.sequence,
-        },
-      );
-      const command = addRequestIdToTurnSubmitCommandPayload({
-        requestId: request.requestId,
-        preparedCommand,
-      });
-      queueCommandInTransaction(tx, {
+  return await withManagerPreferencesDeliveryLock({ thread }, async () => {
+    const preparedInput = await prependManagerPreferencesSystemMessageIfChanged(
+      deps,
+      {
         hostId: environment.hostId,
-        sessionId: session.id,
-        type: command.type,
-        payload: JSON.stringify(command),
-      });
-      transitionThreadStatusInTransaction(tx, {
-        id: thread.id,
-        newStatus: "active",
-      });
-      return true;
-    },
-    { behavior: "immediate" },
-  );
-  if (!sent) {
-    throw createQueuedMessageClaimLostError();
-  }
+        input: payload.input,
+        mode: "change-detection",
+        thread,
+      },
+    );
+    const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
+      environment,
+      execution,
+      input: preparedInput.input,
+      permissionEscalation,
+      providerThreadId,
+      target: { mode: "start" },
+      thread,
+    });
 
-  deps.hub.notifyThread(
-    thread.id,
-    ["events-appended", "queue-changed", "status-changed"],
-    {
-      eventTypes: ["client/turn/requested"],
-    },
-  );
-  deps.hub.notifyCommand(environment.hostId);
-  return queuedMessage;
+    const sent = deps.db.transaction(
+      (tx) => {
+        const consumed = deleteClaimedQueuedThreadMessageInTransaction(tx, {
+          id: args.queuedMessage.id,
+          claimToken: args.queuedMessage.claimToken,
+        });
+        if (!consumed) {
+          return false;
+        }
+        const request = appendClientTurnEventInTransaction(tx, {
+          environmentId: environment.id,
+          execution,
+          initiator: "user",
+          input: preparedInput.input,
+          requestMethod: "turn/start",
+          senderThreadId: null,
+          source: "tell",
+          target: { kind: "new-turn" },
+          threadId: thread.id,
+          type: "client/turn/requested",
+        });
+        recordAcceptedPromptHistoryEntry(
+          { db: tx },
+          {
+            thread,
+            input: preparedInput.input,
+            initiator: "user",
+            target: { kind: "new-turn" },
+            requestSequence: request.sequence,
+          },
+        );
+        recordManagerDynamicFileDeliveryInTransaction(
+          tx,
+          preparedInput.stateUpdate,
+        );
+        const command = addRequestIdToTurnSubmitCommandPayload({
+          requestId: request.requestId,
+          preparedCommand,
+        });
+        queueCommandInTransaction(tx, {
+          hostId: environment.hostId,
+          sessionId: session.id,
+          type: command.type,
+          payload: JSON.stringify(command),
+        });
+        transitionThreadStatusInTransaction(tx, {
+          id: thread.id,
+          newStatus: "active",
+        });
+        return true;
+      },
+      { behavior: "immediate" },
+    );
+    if (!sent) {
+      throw createQueuedMessageClaimLostError();
+    }
+
+    deps.hub.notifyThread(
+      thread.id,
+      ["events-appended", "queue-changed", "status-changed"],
+      {
+        eventTypes: ["client/turn/requested"],
+      },
+    );
+    deps.hub.notifyCommand(environment.hostId);
+    return queuedMessage;
+  });
 }
 
 async function sendClaimedQueuedMessageForThread(

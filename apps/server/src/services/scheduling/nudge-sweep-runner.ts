@@ -38,6 +38,12 @@ import {
 } from "./schedule-helpers.js";
 import { tryTransition } from "../threads/thread-transitions.js";
 import { renderTemplate } from "@bb/templates";
+import {
+  type ManagerDynamicFileDeliveryStateUpdate,
+  prependManagerPreferencesSystemMessageIfChanged,
+  recordManagerDynamicFileDeliveryInTransaction,
+  withManagerPreferencesDeliveryThreadIdLock,
+} from "../threads/manager-dynamic-file-delivery.js";
 
 export const DUE_NUDGE_BATCH_SIZE = 100;
 export type DueManagerThreadNudgeRow = ReturnType<
@@ -74,6 +80,7 @@ interface QueueDueNudgePreparation {
   kind: "queue";
   preparedCommand: PreparedTurnSubmitCommandPayload;
   sessionId: string;
+  stateUpdate: ManagerDynamicFileDeliveryStateUpdate | null;
   targetIntent: NudgeTurnTargetIntent;
   thread: NudgeThread;
 }
@@ -439,6 +446,15 @@ async function prepareDueNudge(
       expectedTurnId,
       thread,
     });
+    const preparedInput = await prependManagerPreferencesSystemMessageIfChanged(
+      deps,
+      {
+        hostId: environment.hostId,
+        input,
+        mode: "change-detection",
+        thread,
+      },
+    );
     const preparedCommand = await prepareTurnSubmitCommandPayload(deps, {
       environment: {
         id: environment.id,
@@ -451,7 +467,7 @@ async function prepareDueNudge(
         thread,
         initiator: "system",
       }),
-      input,
+      input: preparedInput.input,
       providerThreadId,
       target: renderNudgeTurnSubmitTarget(targetIntent),
       thread,
@@ -460,10 +476,11 @@ async function prepareDueNudge(
     return {
       environment,
       execution,
-      input,
+      input: preparedInput.input,
       kind: "queue",
       preparedCommand,
       sessionId: session.id,
+      stateUpdate: preparedInput.stateUpdate,
       targetIntent,
       thread,
     };
@@ -545,6 +562,10 @@ function queueDueNudgeInTransaction(
     source: "tell",
     target: renderNudgeTurnRequestTarget(args.preparation.targetIntent),
   });
+  recordManagerDynamicFileDeliveryInTransaction(
+    tx,
+    args.preparation.stateUpdate,
+  );
 
   queueTurnSubmitCommandInTransaction(tx, {
     command: addRequestIdToTurnSubmitCommandPayload({
@@ -558,7 +579,7 @@ function queueDueNudgeInTransaction(
   return { kind: "queued" };
 }
 
-export async function runDueNudge(
+async function runDueNudgeWithPreferencesLockHeld(
   deps: LoggedWorkSessionDeps,
   cache: NudgeSweepCache,
   nudge: DueManagerThreadNudgeRow,
@@ -634,4 +655,16 @@ export async function runDueNudge(
   });
   deps.hub.notifyCommand(preparation.environment.hostId);
   tryTransition(deps.db, deps.hub, preparation.thread.id, "active");
+}
+
+export async function runDueNudge(
+  deps: LoggedWorkSessionDeps,
+  cache: NudgeSweepCache,
+  nudge: DueManagerThreadNudgeRow,
+  now: number,
+): Promise<void> {
+  await withManagerPreferencesDeliveryThreadIdLock(
+    { threadId: nudge.threadId },
+    () => runDueNudgeWithPreferencesLockHeld(deps, cache, nudge, now),
+  );
 }
