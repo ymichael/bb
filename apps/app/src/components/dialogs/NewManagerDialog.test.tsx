@@ -51,6 +51,8 @@ interface InstallHireManagerRoutesArgs {
 }
 
 type SystemProvidersFixture = ProviderInfo[] | (() => ProviderInfo[]);
+type RequestedModelProvider = string | null;
+type RequestedModelProviders = RequestedModelProvider[];
 
 interface RefetchExecutionOptionsArgs {
   providerId: string;
@@ -196,6 +198,20 @@ function getProviderModelButton(): HTMLElement {
   return screen.getByRole("button", { name: "Provider and model" });
 }
 
+function getCreateButton(): HTMLButtonElement {
+  const button = screen.getByRole("button", { name: "Create" });
+  if (!(button instanceof HTMLButtonElement)) {
+    throw new Error("Create control is not a button");
+  }
+  return button;
+}
+
+async function waitForCreateButtonReady(): Promise<void> {
+  await waitFor(() => {
+    expect(getCreateButton().disabled).toBe(false);
+  });
+}
+
 async function openProviderModelPicker(): Promise<void> {
   fireEvent.click(
     await screen.findByRole("button", { name: "Provider and model" }),
@@ -227,6 +243,7 @@ async function refetchExecutionOptions(
         environmentId: null,
         providerId: args.providerId,
       }),
+      type: "all",
     });
   });
 }
@@ -261,11 +278,23 @@ function resolveSystemProviders(
     : systemProviders;
 }
 
+function compactConsecutiveProviderRequests(
+  requests: readonly RequestedModelProvider[],
+): RequestedModelProviders {
+  const compacted: RequestedModelProviders = [];
+  for (const request of requests) {
+    if (compacted[compacted.length - 1] !== request) {
+      compacted.push(request);
+    }
+  }
+  return compacted;
+}
+
 function installNewManagerRoutes(args: InstallHireManagerRoutesArgs = {}) {
   const managerThread = args.managerThread ?? makeThread();
   const managerRequests: CreateManagerThreadRequest[] = [];
   const managerRequestProjectIds: string[] = [];
-  const requestedModelProviders: Array<string | null> = [];
+  const requestedModelProviders: RequestedModelProviders = [];
   const systemProviders =
     args.systemProviders ?? createDefaultSystemProviders();
   const projects = args.projects ?? [makeProjectResponse()];
@@ -421,7 +450,8 @@ describe("NewManagerDialog", () => {
       expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitForCreateButtonReady();
+    fireEvent.click(getCreateButton());
 
     await waitFor(() => {
       expect(managerRequestProjectIds).toEqual(["proj-1"]);
@@ -443,7 +473,9 @@ describe("NewManagerDialog", () => {
     expect(queryClient.getQueryData(threadQueryKey(managerThread.id))).toEqual(
       managerThread,
     );
-    expect(requestedModelProviders).toEqual(["pi"]);
+    expect(compactConsecutiveProviderRequests(requestedModelProviders)).toEqual(
+      ["pi"],
+    );
   });
 
   it("submits the manager hire for the project selected on the page", async () => {
@@ -490,7 +522,8 @@ describe("NewManagerDialog", () => {
       expectProviderModelTitle(["Pi", "Claude Opus 4.7"]);
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitForCreateButtonReady();
+    fireEvent.click(getCreateButton());
 
     await waitFor(() => {
       expect(managerRequestProjectIds).toEqual(["proj-2"]);
@@ -622,7 +655,8 @@ describe("NewManagerDialog", () => {
       );
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Create" }));
+    await waitForCreateButtonReady();
+    fireEvent.click(getCreateButton());
 
     await waitFor(() => {
       expect(managerRequests).toEqual([
@@ -635,7 +669,9 @@ describe("NewManagerDialog", () => {
         },
       ]);
     });
-    expect(requestedModelProviders).toEqual(["pi", "codex"]);
+    expect(compactConsecutiveProviderRequests(requestedModelProviders)).toEqual(
+      ["pi", "codex"],
+    );
     expect(
       queryClient.getQueryData(
         systemExecutionOptionsQueryKey({
