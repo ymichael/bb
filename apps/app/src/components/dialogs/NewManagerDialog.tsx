@@ -102,7 +102,9 @@ function NewManagerDialogBody({
   const projectsQuery = useProjects();
   const projects = projectsQuery.data ?? EMPTY_PROJECTS;
   const projectsAreLoaded = projectsQuery.data !== undefined;
-  const { data: hosts = [] } = useEffectiveHosts();
+  const hostsQuery = useEffectiveHosts();
+  const hosts = hostsQuery.data ?? [];
+  const hostsAreLoaded = hostsQuery.data !== undefined;
   const { isLocalHost } = useHostDaemon();
 
   const executionOptionsQuery = useSystemExecutionOptions({
@@ -130,6 +132,7 @@ function NewManagerDialogBody({
       providers={providers}
       providersAreLoaded={providersAreLoaded}
       hosts={hosts}
+      hostsAreLoaded={hostsAreLoaded}
       isLocalHost={isLocalHost}
       models={models}
       selectedProviderId={selectedProviderId}
@@ -148,6 +151,7 @@ export interface NewManagerFormProps {
   providers: readonly ProviderInfo[];
   providersAreLoaded: boolean;
   hosts: Host[];
+  hostsAreLoaded: boolean;
   isLocalHost: IsLocalHostFn;
   models: readonly AvailableModel[];
   selectedProviderId: string;
@@ -164,6 +168,7 @@ export function NewManagerForm({
   providers,
   providersAreLoaded,
   hosts,
+  hostsAreLoaded,
   isLocalHost,
   models,
   selectedProviderId,
@@ -322,7 +327,8 @@ export function NewManagerForm({
     reasoningOptions.find((option) => option.value === selectedReasoningLevel)
       ?.value ?? reasoningOptions[0]?.value;
 
-  // Auto-select the first connected host that has a source for this project.
+  // Resolve the host synchronously from loaded data so submit readiness does
+  // not depend on a follow-up state-sync effect after the hosts query settles.
   const eligibleHosts = useMemo(
     () =>
       hosts.filter(
@@ -333,18 +339,15 @@ export function NewManagerForm({
     [hosts, projectSources],
   );
 
-  useEffect(() => {
-    if (eligibleHosts.length === 0) {
-      if (selectedHostId) {
-        setSelectedHostId("");
-      }
-      return;
-    }
-    if (!eligibleHosts.some((h) => h.id === selectedHostId)) {
-      const local = eligibleHosts.find((h) => isLocalHost(h.id));
-      setSelectedHostId(local?.id ?? eligibleHosts[0]!.id);
-    }
-  }, [eligibleHosts, selectedHostId, isLocalHost]);
+  const defaultHostId = useMemo(() => {
+    const local = eligibleHosts.find((h) => isLocalHost(h.id));
+    return local?.id ?? eligibleHosts[0]?.id ?? "";
+  }, [eligibleHosts, isLocalHost]);
+  const selectedHostIsEligible = eligibleHosts.some(
+    (h) => h.id === selectedHostId,
+  );
+  const effectiveHostId =
+    selectedHostId && selectedHostIsEligible ? selectedHostId : defaultHostId;
 
   const handleProviderChange = useCallback(
     (value: string) => {
@@ -389,7 +392,7 @@ export function NewManagerForm({
         setError("A model is required");
         return;
       }
-      if (!selectedHostId) {
+      if (!effectiveHostId) {
         setError("A host is required");
         return;
       }
@@ -405,7 +408,7 @@ export function NewManagerForm({
           ...(effectiveReasoningLevel
             ? { reasoningLevel: effectiveReasoningLevel }
             : {}),
-          environment: { type: "host", hostId: selectedHostId },
+          environment: { type: "host", hostId: effectiveHostId },
         });
       } catch (err) {
         setError(
@@ -421,24 +424,26 @@ export function NewManagerForm({
     [
       effectiveReasoningLevel,
       effectiveProjectId,
+      effectiveHostId,
       isHirePending,
       isPending,
       managerName,
       onHire,
-      selectedHostId,
       selectedModel,
       selectedProvider,
     ],
   );
 
   const isSubmitInProgress = isPending || isHirePending;
+  const isSubmitReady = Boolean(
+    effectiveProjectId && selectedProvider && selectedModel && effectiveHostId,
+  );
+  const hostAvailabilityMessage = hostsAreLoaded
+    ? "No eligible hosts"
+    : "Loading hosts…";
 
   return (
-    <form
-      aria-label="Hire manager"
-      className="space-y-3"
-      onSubmit={handleHire}
-    >
+    <form aria-label="Hire manager" className="space-y-3" onSubmit={handleHire}>
       <DetailCard appearance="flat" labelWidth="64px">
         <DetailRow label="Project" valueClassName="min-w-0">
           {projectOptions.length > 0 ? (
@@ -514,9 +519,16 @@ export function NewManagerForm({
             <HostPicker
               hosts={hosts}
               eligibleHosts={eligibleHosts}
-              selectedHostId={selectedHostId}
+              selectedHostId={effectiveHostId}
               onChange={setSelectedHostId}
               isLocalHost={isLocalHost}
+            />
+          </DetailRow>
+        ) : !effectiveHostId ? (
+          <DetailRow label="Host" valueClassName="min-w-0">
+            <LoadingOrEmptyText
+              isLoading={!hostsAreLoaded}
+              message={hostAvailabilityMessage}
             />
           </DetailRow>
         ) : null}
@@ -525,7 +537,7 @@ export function NewManagerForm({
       <FormError message={error} />
 
       <DialogFooter>
-        <Button type="submit" disabled={isSubmitInProgress}>
+        <Button type="submit" disabled={isSubmitInProgress || !isSubmitReady}>
           {isSubmitInProgress ? (
             <>
               <Icon name="Spinner" className="mr-2 size-4 animate-spin" />

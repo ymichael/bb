@@ -29,6 +29,7 @@ function NewManagerDialogStage(props: {
   providersAreLoaded: boolean;
   models: readonly AvailableModel[];
   hosts: Host[];
+  hostsAreLoaded?: boolean;
   projectSources: readonly ProjectSource[];
 }) {
   return (
@@ -36,8 +37,8 @@ function NewManagerDialogStage(props: {
       <DialogHeader>
         <DialogTitle>New Manager</DialogTitle>
         <DialogDescription>
-          A manager is a teammate that coordinates work for you and delegates
-          to worker threads.
+          A manager is a teammate that coordinates work for you and delegates to
+          worker threads.
         </DialogDescription>
       </DialogHeader>
       <ControlledNewManagerForm {...props} />
@@ -153,6 +154,7 @@ function ControlledNewManagerForm(props: {
   providersAreLoaded: boolean;
   models: readonly AvailableModel[];
   hosts: Host[];
+  hostsAreLoaded?: boolean;
   projectSources: readonly ProjectSource[];
 }) {
   const [selectedProviderId, setSelectedProviderId] = useState("");
@@ -167,6 +169,7 @@ function ControlledNewManagerForm(props: {
       providers={props.providers}
       providersAreLoaded={props.providersAreLoaded}
       hosts={props.hosts}
+      hostsAreLoaded={props.hostsAreLoaded ?? true}
       isLocalHost={isLocalHost}
       models={props.models}
       selectedProviderId={selectedProviderId}
