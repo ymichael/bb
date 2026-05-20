@@ -175,7 +175,7 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
           "Delegate substantive work by default.",
         );
         expect(managerRuntimeCommand?.instructions).toContain(
-          "(file does not exist)",
+          "Thread storage:",
         );
         expect(managerRuntimeCommand?.instructions).toContain(managerThread.id);
         expect(managerRuntimeCommand?.instructions).toContain(

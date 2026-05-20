@@ -26,6 +26,7 @@ import { createApp } from "../../../apps/server/src/server.js";
 import { createHostLifecycleService } from "../../../apps/server/src/services/hosts/host-lifecycle-service.js";
 import { PendingInteractionLifecycle } from "../../../apps/server/src/services/interactions/pending-interactions.js";
 import { createMachineAuthService } from "../../../apps/server/src/services/machine-auth.js";
+import { createAppVersionService } from "../../../apps/server/src/services/system/app-version.js";
 import { createBbAppManagedConfigReloader } from "../../../apps/server/src/services/system/bb-app-managed-config.js";
 import { TerminalSessionLifecycle } from "../../../apps/server/src/services/terminals/terminal-session-lifecycle.js";
 import type {
@@ -228,6 +229,7 @@ async function startIntegrationServer(
   });
   pendingInteractions.start();
   const config: ServerRuntimeConfig = {
+    appVersion: "0.0.0-dev",
     dataDir: serverDataDir,
     featureFlags: resolveFeatureFlags(options.featureFlags),
     hostDaemonPort: 3001,
@@ -250,7 +252,12 @@ async function startIntegrationServer(
     hub,
     logger: testLogger,
   });
+  const appVersion = createAppVersionService({
+    config,
+    logger: testLogger,
+  });
   const { app, injectWebSocket } = createApp({
+    appVersion,
     bbAppManagedConfig,
     config,
     db,
