@@ -416,6 +416,17 @@ describe("CLI command output contracts", () => {
     expect(output).toContain("No more than 20 schedules.");
   });
 
+  it("bb guide manager-templates prints the manager template chapter", async () => {
+    await runCommand(["guide", "manager-templates"], registerGuideCommand);
+
+    const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output.trim().length).toBeGreaterThan(0);
+    expect(output).toContain("Manager templates");
+    expect(output).toContain("~/.bb-dev/manager-templates/");
+    expect(output).toContain("bb manager hire --template sawyer-next");
+    expect(output).toContain("Only top-level regular files are copied");
+  });
+
   it("bb guide unknown chapter lists styling in available chapters", async () => {
     await expect(
       runCommand(["guide", "missing"], registerGuideCommand),
@@ -424,7 +435,7 @@ describe("CLI command output contracts", () => {
     const errorOutput = collectLogLines(vi.mocked(console.error)).join("\n");
     expect(errorOutput).toContain("Unknown guide chapter 'missing'");
     expect(errorOutput).toContain(
-      "Available: threads, environments, managers, providers, projects, hosts, styling, async.",
+      "Available: threads, environments, managers, manager-templates, providers, projects, hosts, styling, async.",
     );
   });
 

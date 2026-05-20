@@ -37,6 +37,8 @@ Run `bb guide <chapter>` for command details:
   threads        Spawning, inspecting, messaging, and managing threads
   environments   Environment operations, commits, and merges
   managers       Hiring and managing project managers
+  manager-templates
+                 Seeding new manager storage from template bundles
   providers      Discovering providers and models
   projects       Project CRUD and sources
   hosts          Listing and understanding hosts

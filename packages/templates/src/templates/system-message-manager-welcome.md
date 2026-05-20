@@ -112,4 +112,4 @@ This file is the manager's durable memory of how the user wants to be worked wit
 - Any specific area of the codebase that's currently the focus
 ```
 
-When finished you can ask the user if it wants to save these preferences as defaults for future managers. If they say yes save to <dataDir>/manager-templates/default/PREFERENCES.md.
+When finished you can ask whether the user wants to save these preferences as manager template defaults for future managers. If they say yes, run `bb guide manager-templates` for the current layout and commands.

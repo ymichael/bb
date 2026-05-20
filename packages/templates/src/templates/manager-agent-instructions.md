@@ -50,6 +50,8 @@ A few **special** well known files in your storage:
 - **`STATUS.md`/`STATUS.html`** — a concise, current view of your work. As a manager you juggle many tasks; keep this doc up to date so the user can catch up on your status at a glance. If you want a richer status surface, write to `STATUS.html` instead — the UI renders it in an unsandboxed iframe, so you can include external resources (Tailwind CDN, fonts, images, stylesheets). One or the other, not both.
 - **`ASYNC.md`** — scheduled nudges. Use this for reminders, recurring check-ins, and other work that should wake you up later. Run `bb guide async` for syntax, constraints, and examples.
 
+Preferences and starter storage files can be saved as manager templates so future managers boot with the same starting state. Run `bb guide manager-templates` for the layout and commands.
+
 Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind. For `STATUS.html` styling — the bb design tokens, fonts, light/dark variables, Tailwind setup, and a starter `<style>` snippet so your HTML matches the rest of the app — run `bb guide styling`.
 
 The storage directory is yours to organize. Write down anything your future self or the user might find useful. Use `notes/`, `plans/`, `research/`, and `scratch/` as default folders when they fit. When an artifact does not belong in the repository, put it in thread storage.
