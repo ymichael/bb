@@ -11,15 +11,6 @@ export const SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS = "pl-14";
 
 export const SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS = "pl-20";
 
-// Nested manager renders one indent level deeper than a root manager, sharing
-// the indent of a managed child so it lands inside the parent's child list.
-export const SIDEBAR_NESTED_MANAGER_ROW_PADDING_CLASS = "pl-14";
-
-// Direct child of a nested manager. Sits one indent level deeper than a root
-// manager's child, matching the env sub-group indent so the depth caps cleanly
-// even for 3+ level chains.
-export const SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS = "pl-20";
-
 export const SIDEBAR_ROW_INTERACTIVE_STATE_CLASS =
   "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground";
 
@@ -60,20 +51,3 @@ export const SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS =
 
 export const SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS =
   "pointer-events-none absolute -bottom-0.5 -right-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-primary px-0.5 text-[8px] font-semibold leading-none text-primary-foreground transition-opacity duration-150";
-
-/**
- * Hairline that runs through a nested manager's child list. The nested
- * manager row sits at pl-14, so its UserRound icon center lands at left-16,
- * matching the env sub-group line. Reused for any chain of managers below
- * the first nested level since the indent caps at pl-14 for the manager row
- * itself.
- */
-export const SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS =
-  "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
-
-// Continuation line for a nested manager group. Sits at the same x position
-// as SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS (left-16, center of the nested
-// manager's UserRound icon at pl-14) so collapsed nested managers can still
-// participate in their parent's vertical guide.
-export const SIDEBAR_NESTED_MANAGER_LINE_CONTINUATION_CLASS =
-  "pointer-events-none absolute bottom-0 left-16 top-0 z-[1] w-px bg-border-hairline";
