@@ -591,6 +591,88 @@ describe("ProjectList", () => {
     expect(await screen.findByText("Nested Child Task")).toBeTruthy();
   });
 
+  it("indents a depth-2 manager row deeper than its depth-1 parent", async () => {
+    // Three-level manager chain: root (depth 0) → nested (depth 1) →
+    // deeply-nested (depth 2). Each level must render at a distinct indent so
+    // the hierarchy is visually legible; without the depth-2 indent, depth-2
+    // managers visually appear as siblings of their depth-1 parent.
+    const rootManager: ProjectThreadListEntry = {
+      ...makeThreadListEntry("project-1", 1),
+      id: "thr_root_manager",
+      title: "Root Manager",
+      titleFallback: "Root Manager",
+      type: "manager",
+    };
+    const nestedManager: ProjectThreadListEntry = {
+      ...makeThreadListEntry("project-1", 2),
+      id: "thr_nested_manager",
+      parentThreadId: rootManager.id,
+      title: "Nested Manager",
+      titleFallback: "Nested Manager",
+      type: "manager",
+    };
+    const deeplyNestedManager: ProjectThreadListEntry = {
+      ...makeThreadListEntry("project-1", 3),
+      id: "thr_deeply_nested_manager",
+      parentThreadId: nestedManager.id,
+      title: "Deeply Nested Manager",
+      titleFallback: "Deeply Nested Manager",
+      type: "manager",
+    };
+    const projects = [makeProjectResponse({ id: "project-1" })];
+    const threadsByProjectId = new Map<string, ProjectThreadListEntry[]>([
+      [
+        "project-1",
+        [rootManager, nestedManager, deeplyNestedManager],
+      ],
+    ]);
+    installFetchRoutes([
+      {
+        pathname: "/api/v1/projects",
+        handler: buildProjectListHandler({ projects, threadsByProjectId }),
+      },
+      {
+        pathname: "/api/v1/threads",
+        handler: () => jsonResponse([]),
+      },
+      {
+        pathname: "/api/v1/system/config",
+        handler: () =>
+          jsonResponse({
+            hostDaemonPort: null,
+            voiceTranscriptionEnabled: false,
+          }),
+      },
+      {
+        pathname: "/api/v1/hosts",
+        handler: () => jsonResponse([]),
+      },
+    ]);
+
+    wsManager.connect();
+    FakeReconnectingWebSocket.latest().open();
+
+    await renderProjectList();
+
+    async function findRowFor(label: string): Promise<HTMLElement> {
+      const text = await screen.findByText(label);
+      const row = text.closest('[class*="group/thread-row"]');
+      if (!(row instanceof HTMLElement)) {
+        throw new Error(`Could not find row container for ${label}`);
+      }
+      return row;
+    }
+
+    const rootRow = await findRowFor("Root Manager");
+    const nestedRow = await findRowFor("Nested Manager");
+    const deeplyNestedRow = await findRowFor("Deeply Nested Manager");
+
+    expect(rootRow.className).toContain("pl-8");
+    expect(nestedRow.className).toContain("pl-14");
+    expect(deeplyNestedRow.className).toContain("pl-20");
+    expect(deeplyNestedRow.className).not.toContain("pl-14");
+  });
+
   it("shows threads unavailable when a project thread list fails after the websocket connects", async () => {
     installFetchRoutes([
       {

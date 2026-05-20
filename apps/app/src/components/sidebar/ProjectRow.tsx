@@ -40,6 +40,8 @@ import {
   type ManagerThreadGroup,
 } from "./projectThreadGroups";
 import {
+  SIDEBAR_DEEPLY_NESTED_MANAGER_GROUP_LINE_CLASS,
+  SIDEBAR_DEEPLY_NESTED_MANAGER_LINE_CONTINUATION_CLASS,
   SIDEBAR_MANAGED_ENV_GROUP_LINE_CLASS,
   SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_GROUP_LINE_CLASS,
@@ -61,11 +63,13 @@ const THREAD_ROW_ENV_GROUPED_CHILD_OPTIONS: ThreadRowOptions = {
 // Indent caps at depth 2 — chains deeper than nested-of-nested keep the
 // depth-2 padding so the sidebar never overflows horizontally. The manager
 // hierarchy itself can still recurse arbitrarily deep structurally.
-const MANAGER_DEPTH_CAP: ManagerRowDepth = 1;
+const MANAGER_DEPTH_CAP: ManagerRowDepth = 2;
 const MANAGED_CHILD_DEPTH_CAP: ManagedChildRowDepth = 2;
 
 function clampManagerDepth(depth: number): ManagerRowDepth {
-  return depth >= MANAGER_DEPTH_CAP ? MANAGER_DEPTH_CAP : 0;
+  if (depth >= MANAGER_DEPTH_CAP) return MANAGER_DEPTH_CAP;
+  if (depth >= 1) return 1;
+  return 0;
 }
 
 function clampManagedChildDepth(depth: number): ManagedChildRowDepth {
@@ -406,19 +410,23 @@ const ManagerThreadGroupRow = memo(function ManagerThreadGroupRow({
   const childGroupLineClass =
     depth === 0
       ? SIDEBAR_MANAGER_GROUP_LINE_CLASS
-      : SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS;
+      : depth === 1
+        ? SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS
+        : SIDEBAR_DEEPLY_NESTED_MANAGER_GROUP_LINE_CLASS;
   const envSubGroupHeaderPaddingClass =
     childDepth >= 2
       ? SIDEBAR_NESTED_MANAGER_CHILD_ROW_PADDING_CLASS
       : SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS;
   // The env sub-group header sits at the managed-child indent under its
-  // manager, so its parent-line continuation must match the depth-0
-  // managed-children hairline above it. For a root manager the continuation
-  // is left-10; for a nested manager it is left-16.
+  // manager, so its parent-line continuation must match the managed-children
+  // hairline above it. For a root manager that is left-10; for a nested
+  // manager left-16; for a deeply nested manager left-22.
   const envSubGroupParentLineClass =
     depth === 0
       ? SIDEBAR_MANAGER_LINE_CONTINUATION_CLASS
-      : SIDEBAR_NESTED_MANAGER_LINE_CONTINUATION_CLASS;
+      : depth === 1
+        ? SIDEBAR_NESTED_MANAGER_LINE_CONTINUATION_CLASS
+        : SIDEBAR_DEEPLY_NESTED_MANAGER_LINE_CONTINUATION_CLASS;
   const managerOptions = useMemo<ThreadRowOptions>(
     () => ({
       kind: "manager",

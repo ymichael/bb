@@ -24,6 +24,7 @@ import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { cn } from "@/lib/utils";
 import {
   SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS,
+  SIDEBAR_DEEPLY_NESTED_MANAGER_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS,
   SIDEBAR_MANAGER_ROW_PADDING_CLASS,
@@ -35,10 +36,11 @@ import {
 } from "./sidebarRowClasses";
 
 // Depth in the manager hierarchy. 0 = root manager (rendered at the project
-// level). 1+ = nested manager (rendered inside another manager's group).
-// Indent caps at 1: deeper chains keep the depth-1 padding so the sidebar
+// level). 1 = nested manager (rendered inside another manager's group).
+// 2+ = deeply nested manager (rendered inside a nested manager's group).
+// Indent caps at 2: deeper chains keep the depth-2 padding so the sidebar
 // can never overflow horizontally.
-export type ManagerRowDepth = 0 | 1;
+export type ManagerRowDepth = 0 | 1 | 2;
 
 // Depth of a managed child relative to the project root. 1 = direct child of
 // a root manager. 2+ = child of a nested manager. Indent caps at 2.
@@ -340,9 +342,13 @@ function ThreadRowComponent({
         thread.environmentWorkspaceDisplayKind,
       );
   const managerRowPaddingClass =
-    managerOptions !== null && managerOptions.depth >= 1
-      ? SIDEBAR_NESTED_MANAGER_ROW_PADDING_CLASS
-      : SIDEBAR_MANAGER_ROW_PADDING_CLASS;
+    managerOptions === null
+      ? SIDEBAR_MANAGER_ROW_PADDING_CLASS
+      : managerOptions.depth >= 2
+        ? SIDEBAR_DEEPLY_NESTED_MANAGER_ROW_PADDING_CLASS
+        : managerOptions.depth >= 1
+          ? SIDEBAR_NESTED_MANAGER_ROW_PADDING_CLASS
+          : SIDEBAR_MANAGER_ROW_PADDING_CLASS;
   const managedChildPaddingClass =
     options.kind === "managed-child"
       ? options.depth >= 2

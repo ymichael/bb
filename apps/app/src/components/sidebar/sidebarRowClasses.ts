@@ -15,6 +15,11 @@ export const SIDEBAR_MANAGER_ENV_GROUPED_CHILD_ROW_PADDING_CLASS = "pl-20";
 // the indent of a managed child so it lands inside the parent's child list.
 export const SIDEBAR_NESTED_MANAGER_ROW_PADDING_CLASS = "pl-14";
 
+// Manager nested at depth 2 or deeper. Sits one indent level past the first
+// nested manager so a 3-level chain is visually distinct. Padding caps here
+// for arbitrarily deep chains so the sidebar never overflows horizontally.
+export const SIDEBAR_DEEPLY_NESTED_MANAGER_ROW_PADDING_CLASS = "pl-20";
+
 // Direct child of a nested manager. Sits one indent level deeper than a root
 // manager's child, matching the env sub-group indent so the depth caps cleanly
 // even for 3+ level chains.
@@ -64,9 +69,7 @@ export const SIDEBAR_COLLAPSED_CHILD_COUNT_BADGE_CLASS =
 /**
  * Hairline that runs through a nested manager's child list. The nested
  * manager row sits at pl-14, so its UserRound icon center lands at left-16,
- * matching the env sub-group line. Reused for any chain of managers below
- * the first nested level since the indent caps at pl-14 for the manager row
- * itself.
+ * matching the env sub-group line.
  */
 export const SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS =
   "before:pointer-events-none before:absolute before:bottom-0 before:left-16 before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
@@ -77,3 +80,18 @@ export const SIDEBAR_NESTED_MANAGER_GROUP_LINE_CLASS =
 // participate in their parent's vertical guide.
 export const SIDEBAR_NESTED_MANAGER_LINE_CONTINUATION_CLASS =
   "pointer-events-none absolute bottom-0 left-16 top-0 z-[1] w-px bg-border-hairline";
+
+/**
+ * Hairline for a depth-2+ (deeply nested) manager's child list. The deeply
+ * nested manager row sits at pl-20, so its UserRound icon center lands at
+ * left-22. Reused for any chain of managers below depth 2 since both the
+ * row indent and child-list line cap here.
+ */
+export const SIDEBAR_DEEPLY_NESTED_MANAGER_GROUP_LINE_CLASS =
+  "before:pointer-events-none before:absolute before:bottom-0 before:left-[5.5rem] before:top-0 before:z-30 before:w-px before:bg-border-hairline before:content-['']";
+
+// Continuation line for a deeply nested manager group, matching the
+// left-[5.5rem] position used by SIDEBAR_DEEPLY_NESTED_MANAGER_GROUP_LINE_CLASS
+// so collapsed deeply nested managers still participate in the parent guide.
+export const SIDEBAR_DEEPLY_NESTED_MANAGER_LINE_CONTINUATION_CLASS =
+  "pointer-events-none absolute bottom-0 left-[5.5rem] top-0 z-[1] w-px bg-border-hairline";
