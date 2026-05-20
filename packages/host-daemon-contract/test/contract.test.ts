@@ -305,6 +305,20 @@ describe("host-daemon command schemas", () => {
 
     expect(
       hostDaemonCommandSchema.parse({
+        type: "host.read_file_relative",
+        rootPath: "/tmp/bb-data/thread-storage/thread-123/STATUS",
+        path: "assets/logo.png",
+        dotfiles: "deny",
+      }),
+    ).toMatchObject({
+      type: "host.read_file_relative",
+      rootPath: "/tmp/bb-data/thread-storage/thread-123/STATUS",
+      path: "assets/logo.png",
+      dotfiles: "deny",
+    });
+
+    expect(
+      hostDaemonCommandSchema.parse({
         type: "host.list_files",
         path: "/tmp/bb-data/thread-storage/thread-123",
         limit: 100,
@@ -455,6 +469,14 @@ describe("host-daemon command schemas", () => {
         type: "host.read_file",
         path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
         ref: "HEAD",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      hostDaemonCommandSchema.parse({
+        type: "host.read_file_relative",
+        rootPath: "/tmp/bb-data/thread-storage/thread-123/STATUS",
+        path: "assets/logo.png",
       }),
     ).toThrow();
   });
@@ -930,6 +952,20 @@ describe("host-daemon command schemas", () => {
       path: "/tmp/bb-data/thread-storage/thread-123/PREFERENCES.md",
       content: "# Preferences",
       contentEncoding: "utf8",
+    });
+
+    expect(
+      hostDaemonCommandResultSchemaByType["host.read_file_relative"].parse({
+        path: "assets/logo.png",
+        content: "iVBORw0KGgo=",
+        contentEncoding: "base64",
+        mimeType: "image/png",
+        sizeBytes: 8,
+      }),
+    ).toMatchObject({
+      path: "assets/logo.png",
+      content: "iVBORw0KGgo=",
+      contentEncoding: "base64",
     });
 
     expect(() =>

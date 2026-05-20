@@ -4,7 +4,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { FilePreview } from "@/lib/file-preview";
 import {
-  MANAGER_STATUS_HTML_FILE_PATH,
+  MANAGER_STATUS_FILE_PATH,
   MANAGER_STATUS_MARKDOWN_FILE_PATH,
 } from "./managerStorage";
 import { ThreadStorageFilePreview } from "./ThreadStorageFilePreview";
@@ -29,28 +29,23 @@ afterEach(() => {
 });
 
 describe("ThreadStorageFilePreview", () => {
-  it("renders STATUS.html in an unsandboxed srcdoc iframe", () => {
-    const statusHtml = [
-      "<!doctype html>",
-      '<script src="https://cdn.tailwindcss.com"></script>',
-      "<h1>Status</h1>",
-    ].join("\n");
+  it("renders the unified STATUS route in an unsandboxed iframe", () => {
     const { container } = render(
       <ThreadStorageFilePreview
-        activePath={MANAGER_STATUS_HTML_FILE_PATH}
-        filePreview={makeTextPreview({
-          content: statusHtml,
-          path: MANAGER_STATUS_HTML_FILE_PATH,
-        })}
+        activePath={MANAGER_STATUS_FILE_PATH}
+        filePreview={undefined}
         isLoading={false}
-        pinnedPath={MANAGER_STATUS_HTML_FILE_PATH}
+        pinnedPath={MANAGER_STATUS_FILE_PATH}
+        threadId="thr_manager"
       />,
     );
 
     const iframe = container.querySelector("iframe");
 
     expect(iframe).not.toBeNull();
-    expect(iframe?.getAttribute("srcdoc")).toBe(statusHtml);
+    expect(iframe?.getAttribute("src")).toBe(
+      "/api/v1/threads/thr_manager/status/",
+    );
     expect(iframe?.hasAttribute("sandbox")).toBe(false);
     expect(iframe?.style.width).toBe("100%");
     expect(iframe?.style.height).toBe("100%");
@@ -67,6 +62,7 @@ describe("ThreadStorageFilePreview", () => {
         })}
         isLoading={false}
         pinnedPath={MANAGER_STATUS_MARKDOWN_FILE_PATH}
+        threadId="thr_manager"
       />,
     );
 

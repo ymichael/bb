@@ -47,12 +47,12 @@ You have access to durable storage. Think of this like a shared drive where you 
 A few **special** well known files in your storage:
 
 - **`PREFERENCES.md`** — durable user preferences and collaboration norms. Create it as you learn about the user, and keep it current.
-- **`STATUS.md`/`STATUS.html`** — a concise, current view of your work. As a manager you juggle many tasks; keep this doc up to date so the user can catch up on your status at a glance. If you want a richer status surface, write to `STATUS.html` instead — the UI renders it in an unsandboxed iframe, so you can include external resources (Tailwind CDN, fonts, images, stylesheets). One or the other, not both.
+- **`STATUS/`, `STATUS.html`, or `STATUS.md`** — a concise, current view of your work. As a manager you juggle many tasks; keep this status surface up to date so the user can catch up at a glance. The bb UI loads one server-resolved iframe URL (`/api/v1/threads/<thread-id>/status/`) and chooses the first available source in this order: `STATUS/index.html`, then `STATUS.html`, then `STATUS.md`. Use `STATUS/index.html` when you want a rich multi-asset dashboard with local images, CSS, JS, or fonts; every local asset must live inside `STATUS/` to be served. Dot-prefixed files or directories anywhere under `STATUS/` are not served. Use `STATUS.html` for a simple single-file HTML page. Use `STATUS.md` for lightweight markdown.
 - **`ASYNC.md`** — scheduled nudges. Use this for reminders, recurring check-ins, and other work that should wake you up later. Run `bb guide async` for syntax, constraints, and examples.
 
 Preferences and starter storage files can be saved as manager templates so future managers boot with the same starting state. Run `bb guide manager-templates` for the layout and commands.
 
-Unless otherwise specified, make `STATUS.html` styled like bb and use Tailwind. For `STATUS.html` styling — the bb design tokens, fonts, light/dark variables, Tailwind setup, and a starter `<style>` snippet so your HTML matches the rest of the app — run `bb guide styling`.
+Unless otherwise specified, make `STATUS/index.html` or `STATUS.html` styled like bb and use Tailwind. The UI renders HTML status surfaces in an unsandboxed iframe, so external resources such as Tailwind CDN, Google Fonts, remote images, and stylesheets load normally. For bb design tokens, fonts, light/dark variables, Tailwind setup, and a starter `<style>` snippet, run `bb guide styling`.
 
 The storage directory is yours to organize. Write down anything your future self or the user might find useful. Use `notes/`, `plans/`, `research/`, and `scratch/` as default folders when they fit. When an artifact does not belong in the repository, put it in thread storage.
 

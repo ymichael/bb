@@ -1,6 +1,7 @@
 import { FilePreview as FilePreviewSurface } from "./FilePreview";
-import { MANAGER_STATUS_HTML_FILE_PATH } from "./managerStorage";
+import { MANAGER_STATUS_FILE_PATH } from "./managerStorage";
 import { HttpError } from "@/lib/api";
+import { buildThreadStatusContentUrl } from "@/lib/file-content-urls";
 import type {
   FilePreview,
   WorkspaceFilePreviewStatusLabel,
@@ -18,6 +19,7 @@ interface FilePreviewBaseProps {
 
 interface ThreadStorageFilePreviewProps extends FilePreviewBaseProps {
   pinnedPath: string;
+  threadId: string;
 }
 
 interface SecondaryPanelFilePreviewProps extends FilePreviewBaseProps {
@@ -68,27 +70,6 @@ export function SecondaryPanelFilePreview({
         onOpenInEditor={onOpenInEditor}
         statusLabel={statusLabel}
         state={{ kind: "loading" }}
-      />
-    );
-  }
-
-  if (
-    activePath === MANAGER_STATUS_HTML_FILE_PATH &&
-    filePreview.kind === "text"
-  ) {
-    return (
-      <FilePreviewSurface
-        path={activePath}
-        copyPath={copyPath}
-        onOpenInEditor={onOpenInEditor}
-        statusLabel={statusLabel}
-        state={{
-          kind: "html",
-          file: {
-            name: filePreview.name ?? activePath,
-            contents: filePreview.content,
-          },
-        }}
       />
     );
   }
@@ -158,7 +139,22 @@ export function ThreadStorageFilePreview({
   lineNumber,
   onOpenInEditor,
   pinnedPath,
+  threadId,
 }: ThreadStorageFilePreviewProps) {
+  if (activePath === MANAGER_STATUS_FILE_PATH) {
+    return (
+      <FilePreviewSurface
+        path={activePath}
+        copyPath={copyPath}
+        state={{
+          kind: "iframe",
+          title: "Manager status",
+          url: buildThreadStatusContentUrl(threadId),
+        }}
+      />
+    );
+  }
+
   return (
     <SecondaryPanelFilePreview
       activePath={activePath}

@@ -9,7 +9,11 @@ import {
   listFilesRecursively,
   listPathsRecursively,
 } from "./file-list.js";
-import { readFileForTransport, readFileFromGitRef } from "./file-read.js";
+import {
+  readFileForTransport,
+  readFileFromGitRef,
+  readRootRelativeFileForTransport,
+} from "./file-read.js";
 import { resolveNonSymlinkDirectoryPath } from "./root-path.js";
 
 /**
@@ -123,5 +127,15 @@ export async function readHostFile(
     resolvedPath: command.path,
     resultPath: command.path,
     ...(rootPath !== undefined ? { rootPath } : {}),
+  });
+}
+
+export async function readHostRelativeFile(
+  command: CommandOf<"host.read_file_relative">,
+): Promise<HostDaemonCommandResult<"host.read_file_relative">> {
+  return readRootRelativeFileForTransport({
+    rootPath: command.rootPath,
+    relativePath: command.path,
+    dotfiles: command.dotfiles,
   });
 }

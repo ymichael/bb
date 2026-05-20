@@ -5,28 +5,42 @@ import { ApiError } from "../../errors.js";
 const OCTET_STREAM_MIME_TYPE = "application/octet-stream";
 
 export type DaemonFileReadResult =
-  HostDaemonCommandResultByType["host.read_file"];
+  | HostDaemonCommandResultByType["host.read_file"]
+  | HostDaemonCommandResultByType["host.read_file_relative"];
 
-function buildFileContentHeaders(result: DaemonFileReadResult): HeadersInit {
-  return {
-    "content-type": result.mimeType ?? OCTET_STREAM_MIME_TYPE,
-  };
+interface CreateDaemonFileContentResponseOptions {
+  headers?: HeadersInit;
 }
 
-function decodeFileContent(result: DaemonFileReadResult): ArrayBuffer {
+function buildFileContentHeaders(
+  result: DaemonFileReadResult,
+  options: CreateDaemonFileContentResponseOptions,
+): Headers {
+  const headers = new Headers(options.headers);
+  if (!headers.has("content-type")) {
+    headers.set("content-type", result.mimeType ?? OCTET_STREAM_MIME_TYPE);
+  }
+  return headers;
+}
+
+export function decodeDaemonFileContent(
+  result: DaemonFileReadResult,
+): ArrayBuffer {
   const bytes =
     result.contentEncoding === "utf8"
       ? Buffer.from(result.content, "utf8")
       : Buffer.from(result.content, "base64");
-  return Uint8Array.from(bytes).buffer;
+  const view = Uint8Array.from(bytes);
+  return view.buffer.slice(view.byteOffset, view.byteOffset + view.byteLength);
 }
 
 export function createDaemonFileContentResponse(
   result: DaemonFileReadResult,
+  options: CreateDaemonFileContentResponseOptions = {},
 ): Response {
-  return new Response(decodeFileContent(result), {
+  return new Response(decodeDaemonFileContent(result), {
     status: 200,
-    headers: buildFileContentHeaders(result),
+    headers: buildFileContentHeaders(result, options),
   });
 }
 

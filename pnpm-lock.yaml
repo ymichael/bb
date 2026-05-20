@@ -458,6 +458,9 @@ importers:
       hono:
         specifier: ^4.7.0
         version: 4.11.9
+      marked:
+        specifier: ^15.0.12
+        version: 15.0.12
       mime-types:
         specifier: ^3.0.2
         version: 3.0.2

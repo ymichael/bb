@@ -76,6 +76,8 @@ export {
   hostListPathsCommandSchema,
   hostListBranchesCommandSchema,
   hostReadFileCommandSchema,
+  hostReadFileRelativeCommandSchema,
+  hostReadFileRelativeDotfilePolicySchema,
   providerListCommandSchema,
   providerListModelsCommandSchema,
   replayCaptureGetCommandSchema,
@@ -105,6 +107,7 @@ export type {
   HostDaemonExecutionOptions,
   HostPathEntry,
   HostPathEntryKind,
+  HostReadFileRelativeDotfilePolicy,
   TurnSubmitTarget,
   WorkspaceContext,
 } from "./commands.js";
