@@ -21,7 +21,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "test-project",
@@ -35,7 +34,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const newHost = upsertHost(db, noopNotifier, {
       name: "source-test-host",
-      type: "persistent",
     });
     const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
@@ -57,11 +55,9 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const host2 = upsertHost(db, noopNotifier, {
       name: "test-host-2",
-      type: "persistent",
     });
     const host3 = upsertHost(db, noopNotifier, {
       name: "test-host-3",
-      type: "persistent",
     });
     createProjectSource(db, noopNotifier, {
       projectId: project.id,
@@ -84,11 +80,9 @@ describe("project-sources", () => {
     const { db, host, project } = setup();
     const host2 = upsertHost(db, noopNotifier, {
       name: "project-host-2",
-      type: "persistent",
     });
     const host3 = upsertHost(db, noopNotifier, {
       name: "project-host-3",
-      type: "persistent",
     });
     const { project: otherProject } = createProject(db, noopNotifier, {
       name: "other-project",
@@ -121,7 +115,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const secondaryHost = upsertHost(db, noopNotifier, {
       name: "secondary-host",
-      type: "persistent",
     });
     const initialDefault = getDefaultProjectSource(db, project.id);
     const source = createProjectSource(db, noopNotifier, {
@@ -144,7 +137,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const secondaryHost = upsertHost(db, noopNotifier, {
       name: "test-host-2",
-      type: "persistent",
     });
     const secondarySource = createProjectSource(db, noopNotifier, {
       projectId: project.id,
@@ -162,7 +154,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const missingHost = upsertHost(db, noopNotifier, {
       name: "missing-host",
-      type: "persistent",
     });
 
     expect(getProjectSourceByHost(db, project.id, missingHost.id)).toBeNull();
@@ -172,7 +163,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const secondaryHost = upsertHost(db, noopNotifier, {
       name: "source-id-host",
-      type: "persistent",
     });
     const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
@@ -214,7 +204,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const conflictHost = upsertHost(db, noopNotifier, {
       name: "default-conflict-host",
-      type: "persistent",
     });
     const now = Date.now();
 
@@ -241,7 +230,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const updateHost = upsertHost(db, noopNotifier, {
       name: "update-test-host",
-      type: "persistent",
     });
     const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
@@ -265,7 +253,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const deleteHost = upsertHost(db, noopNotifier, {
       name: "delete-test-host",
-      type: "persistent",
     });
     const source = createProjectSource(db, noopNotifier, {
       projectId: project.id,
@@ -283,7 +270,6 @@ describe("project-sources", () => {
     const { db, project } = setup();
     const host2 = upsertHost(db, noopNotifier, {
       name: "test-host-2",
-      type: "persistent",
     });
     const second = createProjectSource(db, noopNotifier, {
       projectId: project.id,

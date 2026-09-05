@@ -21,14 +21,22 @@ branch. Under the hood it's `git worktree add` plus some bookkeeping:
 - It shares the repo's `.git` state with your main checkout — cheap to
   create, no full clone.
 - It gets its own branch so multiple threads can run in parallel.
-- It lives at `<BB_DATA_DIR>/worktrees/<environment-id>/<repo-name>` — for
-  example, `~/.bb/worktrees/env_abc.../myrepo`.
-- Once every thread using the environment is archived or deleted, bb cleans the
-  worktree up (`git worktree remove --force`) along with the branch.
+- It lives at
+  `<BB_DATA_DIR>/plugins/environment-git-worktree/host-data/worktrees/<thread-id>/<repo-name>`
+  — for example, `~/.bb/plugins/environment-git-worktree/host-data/worktrees/thr_abc.../myrepo`.
+- Once every thread using the environment is deleted, bb cleans the worktree up
+  (`git worktree remove --force`). Archiving the last thread starts a
+  five-minute grace period instead, so unarchiving within it keeps the
+  worktree; after it elapses the worktree is removed the same way.
+
+Worktrees are created by bb's built-in **Worktree** plugin, which is enabled by
+default. Disabling it in Extensions → Plugins leaves existing worktrees alone
+but stops bb from making new ones: a thread that asks for one waits until the
+plugin is running again.
 
 ## Start a thread in a worktree
 
-In the app, pick **New worktree** in the environment picker when starting
+In the app, pick **Worktree** in the environment picker when starting
 a thread.
 
 From the CLI:
@@ -106,19 +114,24 @@ Contract:
 
 ## Cleanup
 
-You don't need to clean up worktrees by hand — bb removes them once every
-thread using the environment is archived or deleted, and the branch goes with
-it. If you
-want to keep work the agent did, commit and push (or open a PR) from inside
-the worktree before letting the thread go.
+You don't need to clean up worktrees by hand. The Worktree plugin watches every
+worktree it made and removes the ones nothing is using:
 
-Before bb removes the directory, it stops every process whose working
-directory is inside the worktree — the agent's provider process, its
-background jobs (dev servers, MCP servers, `nohup` jobs), and any process
-you started there yourself, such as a shell you `cd`'d into the worktree or
-an editor terminal. Each process gets `SIGTERM`, then `SIGKILL` after a
-short grace period. Move your own shells out of the worktree before you
-delete the environment if you want to keep them.
+- Deleting the last thread on a worktree removes it right away.
+- Archiving the last thread starts a five-minute grace period. Unarchive a
+  thread within it and the worktree is kept; let it elapse and the worktree
+  goes.
+
+Removal runs `.bb-env-teardown.sh` inside the worktree first, then stops
+every process whose working directory is inside the worktree — the agent's
+provider process, its background jobs (dev servers, MCP servers, `nohup`
+jobs), and any process you started there yourself, such as a shell you `cd`'d
+into the worktree or an editor terminal. Each process gets `SIGTERM`, then
+`SIGKILL` after a short grace period. Then `git worktree remove --force` runs
+and the directory is deleted. The branch is left behind, so work you committed
+to it survives the worktree. If you want to keep uncommitted work, commit and
+push (or open a PR) from inside the worktree before letting the thread go, and
+move your own shells out of the worktree first if you want to keep them.
 
 ## Run teardown with `.bb-env-teardown.sh`
 

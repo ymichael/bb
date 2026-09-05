@@ -61,10 +61,7 @@ export function destroyedThreadEnvironmentDetails(
 export function goneThreadEnvironmentDetails(
   environment: ThreadEnvironmentStatusFields,
 ): ThreadEnvironmentUnavailableErrorDetails | null {
-  if (
-    environment.status !== "destroying" &&
-    environment.status !== "destroyed"
-  ) {
+  if (environment.status !== "destroyed") {
     return null;
   }
   return threadEnvironmentUnavailableDetails(

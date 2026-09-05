@@ -1,7 +1,13 @@
+import {
+  requestEnvironmentRemoval,
+  sweepProviderEnvironment,
+} from "../environments/provider-orchestration.js";
+import { cancelAbandonedProviderLaunches } from "../threads/thread-environment-providers.js";
 import { eq, isNotNull } from "drizzle-orm";
 import {
   deleteProject,
   getProject,
+  getEnvironment,
   listEnvironments,
   markProjectDeleted,
   markThreadDeleted,
@@ -9,16 +15,12 @@ import {
   threads,
   type DbQueryConnection,
 } from "@bb/db";
-import type { Environment, Thread, ThreadStatus } from "@bb/domain";
+import type { Thread, ThreadStatus } from "@bb/domain";
 import type {
   AppDeps,
   LoggedPendingInteractionWorkSessionDeps,
 } from "../../types.js";
 import { deleteProjectAttachments } from "./attachments.js";
-import {
-  requestEnvironmentCleanup,
-  runEnvironmentCleanupAdvance,
-} from "../environments/environment-cleanup-internal.js";
 import { deferAfterResponse } from "../lib/response-deferral.js";
 import {
   finalizeStoppedThread,
@@ -65,7 +67,7 @@ function listProjectDeletionThreads(
 }
 
 function tombstoneProjectThreadsForDeletion(
-  deps: Pick<AppDeps, "db" | "hub">,
+  deps: ProjectDeletionDeps,
   args: ProjectDeletionArgs,
 ): { deletedThreads: Thread[]; projectThreads: ProjectDeletionThread[] } {
   const notificationBuffer = new NotificationBuffer();
@@ -90,7 +92,10 @@ function tombstoneProjectThreadsForDeletion(
     { behavior: "immediate" },
   );
   notificationBuffer.flushInto(deps.hub);
-  for (const thread of result.deletedThreads) emitPluginThreadDeleted(thread);
+  for (const thread of result.deletedThreads) {
+    emitPluginThreadDeleted(thread);
+    cancelAbandonedProviderLaunches(deps, thread.id);
+  }
   return result;
 }
 
@@ -107,12 +112,6 @@ function hasRemainingProjectThreads(
   );
 }
 
-function hasRemainingManagedEnvironments(environments: Environment[]): boolean {
-  return environments.some(
-    (environment) => environment.managed && environment.status !== "destroyed",
-  );
-}
-
 export function beginProjectDeletion(
   deps: ProjectDeletionDeps,
   args: ProjectDeletionArgs,
@@ -121,7 +120,9 @@ export function beginProjectDeletion(
     return;
   }
 
-  const projectEnvironments = listEnvironments(deps.db, args.projectId);
+  const projectEnvironments = listEnvironments(deps.db, {
+    projectId: args.projectId,
+  });
   const environmentsById = new Map(
     projectEnvironments.map((environment) => [environment.id, environment]),
   );
@@ -165,7 +166,9 @@ export async function advanceProjectDeletion(
     return true;
   }
 
-  const projectEnvironments = listEnvironments(deps.db, args.projectId);
+  const projectEnvironments = listEnvironments(deps.db, {
+    projectId: args.projectId,
+  });
   const environmentsById = new Map(
     projectEnvironments.map((environment) => [environment.id, environment]),
   );
@@ -183,6 +186,7 @@ export async function advanceProjectDeletion(
       });
       if (deletedThread) emitPluginThreadDeleted(deletedThread);
     }
+    cancelAbandonedProviderLaunches(deps, thread.id);
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     if (environment) {
       requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
@@ -192,27 +196,17 @@ export async function advanceProjectDeletion(
     });
   }
 
-  for (const environment of projectEnvironments) {
-    if (!environment.managed || environment.status === "destroyed") {
-      continue;
-    }
-
-    requestEnvironmentCleanup(deps, {
-      environmentId: environment.id,
-    });
-    await runEnvironmentCleanupAdvance(deps, {
-      environmentId: environment.id,
-    });
-  }
-
-  const refreshedEnvironments = listEnvironments(deps.db, args.projectId);
-  if (
-    hasRemainingProjectThreads(deps, args.projectId) ||
-    hasRemainingManagedEnvironments(refreshedEnvironments)
-  ) {
+  if (hasRemainingProjectThreads(deps, args.projectId)) {
     return false;
   }
 
+  for (const environment of projectEnvironments) {
+    if (environment.environmentProviderId === null) continue;
+    if (!requestEnvironmentRemoval(deps, environment.id)) return false;
+    await sweepProviderEnvironment(deps, environment.id);
+    const current = getEnvironment(deps.db, environment.id);
+    if (current !== null && current.teardownStatus !== "removed") return false;
+  }
   deleteProject(deps.db, deps.hub, args.projectId);
   await deleteProjectAttachments(deps.config.dataDir, args.projectId);
   return true;

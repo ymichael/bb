@@ -75,7 +75,7 @@ function seedGitEnvironment(harness: TestAppHarness, suffix: string) {
     branchName: "bb/pr-cache",
     defaultBranch: "main",
     path: `/tmp/workspace-read-cache-${suffix}`,
-    workspaceProvisionType: "managed-worktree",
+    environmentProviderId: "git-worktree",
   });
   return { host, environment };
 }

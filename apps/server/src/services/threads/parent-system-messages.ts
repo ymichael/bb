@@ -302,7 +302,6 @@ async function queueActiveParentSystemMessage(
       hostId: args.environment.hostId,
       path: args.environment.path,
       status: args.environment.status,
-      workspaceProvisionType: args.environment.workspaceProvisionType,
     },
   });
 
@@ -360,7 +359,6 @@ async function queueReadyParentSystemMessage(
       hostId: args.environment.hostId,
       path: args.environment.path,
       status: args.environment.status,
-      workspaceProvisionType: args.environment.workspaceProvisionType,
     },
     projectId: args.thread.projectId,
     providerId: args.thread.providerId,

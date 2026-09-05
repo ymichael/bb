@@ -48,7 +48,6 @@ export type ThreadNotWritableErrorDetails = z.infer<
 export const threadEnvironmentUnavailableReasonSchema = z.enum([
   "never_attached",
   "destroyed",
-  "destroying",
   "provisioning",
   "errored",
 ]);

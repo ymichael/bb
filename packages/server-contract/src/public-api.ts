@@ -68,6 +68,7 @@ import type {
   CopyProjectAttachmentsRequest,
   CreateHostJoinCodeRequest,
   CreateHostJoinCodeResponse,
+  CreateMachineRequest,
   CreateTerminalRequest,
   CreateProjectRequest,
   CreateProjectSourceRequest,
@@ -99,6 +100,7 @@ import type {
   EnvironmentStatusResponse,
   HostDirectoryListing,
   HostDirectoryQuery,
+  HostActionResponse,
   HostCloneDefaultPathQuery,
   HostCloneDefaultPathResponse,
   HostFileListRequest,
@@ -171,6 +173,10 @@ import type {
   SystemInstallCliSkillsResponse,
   SystemExecutionOptionsQuery,
   SystemExecutionOptionsResponse,
+  SystemEnvironmentProvidersQuery,
+  SystemEnvironmentProvidersResponse,
+  SystemMachineProvidersQuery,
+  SystemMachineProvidersResponse,
   SystemProviderInfo,
   SystemProvidersQuery,
   SystemProviderStatesResponse,
@@ -223,6 +229,7 @@ import type {
   ThreadWithIncludesResponse,
   TimelineTurnSummaryDetailsQuery,
   TimelineTurnSummaryDetailsResponse,
+  ListEnvironmentsQuery,
   UpdateEnvironmentRequest,
   UpdateThreadSectionRequest,
   UpdateTerminalRequest,
@@ -251,6 +258,7 @@ import {
   restartTerminalRequestSchema,
   createProjectRequestSchema,
   createHostJoinCodeRequestSchema,
+  createMachineRequestSchema,
   createProjectSourceRequestSchema,
   createQueuedMessageRequestSchema,
   queuedMessageListQuerySchema,
@@ -303,6 +311,8 @@ import {
   setQueuedMessageGroupBoundaryRequestSchema,
   sendQueuedMessageRequestSchema,
   systemExecutionOptionsQuerySchema,
+  systemEnvironmentProvidersQuerySchema,
+  systemMachineProvidersQuerySchema,
   systemProvidersQuerySchema,
   systemUsageLimitsQuerySchema,
   systemVersionQuerySchema,
@@ -327,6 +337,7 @@ import {
   systemCliSkillsStatusQuerySchema,
   systemInstallCliSkillsRequestSchema,
   timelineTurnSummaryDetailsQuerySchema,
+  listEnvironmentsQuerySchema,
   updateEnvironmentRequestSchema,
   updateHostRequestSchema,
   updateHostPermissionCeilingRequestSchema,
@@ -699,6 +710,14 @@ export const publicApiRoutes = {
   },
 
   hosts: {
+    create: defineRoute({
+      path: "/hosts",
+      method: "post",
+      request: jsonRequest<EmptyInput, CreateMachineRequest>(
+        createMachineRequestSchema,
+      ),
+      response: jsonResponse<Host>({ status: 201 }),
+    }),
     createJoinCode: defineRoute({
       path: "/hosts/join-codes",
       method: "post",
@@ -738,6 +757,24 @@ export const publicApiRoutes = {
       method: "post",
       request: noRequest<PathId>(),
       response: jsonResponse<HostRetryUpdateResponse>(),
+    }),
+    suspend: defineRoute({
+      path: "/hosts/:id/suspend",
+      method: "post",
+      request: noRequest<PathId>(),
+      response: jsonResponse<HostActionResponse>(),
+    }),
+    resume: defineRoute({
+      path: "/hosts/:id/resume",
+      method: "post",
+      request: noRequest<PathId>(),
+      response: jsonResponse<HostActionResponse>(),
+    }),
+    retryCleanup: defineRoute({
+      path: "/hosts/:id/retry-cleanup",
+      method: "post",
+      request: noRequest<PathId>(),
+      response: jsonResponse<HostActionResponse>(),
     }),
     delete: defineRoute({
       path: "/hosts/:id",
@@ -867,6 +904,24 @@ export const publicApiRoutes = {
   },
 
   environments: {
+    list: defineRoute({
+      path: "/environments",
+      method: "get",
+      request: optionalQueryRequest<EmptyInput, ListEnvironmentsQuery>(
+        listEnvironmentsQuerySchema,
+      ),
+      response: jsonResponse<Environment[]>(),
+    }),
+    delete: defineRoute({
+      path: "/environments/:id",
+      method: "delete",
+      request: noRequest<PathId>(),
+      response: [
+        jsonResponse<{ ok: true }>(),
+        jsonResponse<ApiError>({ status: 404 }),
+        jsonResponse<ApiError>({ status: 409 }),
+      ],
+    }),
     get: defineRoute({
       path: "/environments/:id",
       method: "get",
@@ -1544,6 +1599,23 @@ export const publicApiRoutes = {
         systemExecutionOptionsQuerySchema,
       ),
       response: jsonResponse<SystemExecutionOptionsResponse>(),
+    }),
+    environmentProviders: defineRoute({
+      path: "/system/environment-providers",
+      method: "get",
+      request: optionalQueryRequest<
+        EmptyInput,
+        SystemEnvironmentProvidersQuery
+      >(systemEnvironmentProvidersQuerySchema),
+      response: jsonResponse<SystemEnvironmentProvidersResponse>(),
+    }),
+    machineProviders: defineRoute({
+      path: "/system/machine-providers",
+      method: "get",
+      request: optionalQueryRequest<EmptyInput, SystemMachineProvidersQuery>(
+        systemMachineProvidersQuerySchema,
+      ),
+      response: jsonResponse<SystemMachineProvidersResponse>(),
     }),
     providers: defineRoute({
       path: "/system/providers",

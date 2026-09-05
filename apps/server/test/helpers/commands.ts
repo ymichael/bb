@@ -12,7 +12,7 @@ import {
   hostDaemonServerWsMessageSchema,
   parseHostDaemonRpcResultForCommand,
 } from "@bb/host-daemon-contract";
-import { type HostType, type ThreadEvent } from "@bb/domain";
+import { type ThreadEvent } from "@bb/domain";
 import type {
   HostDaemonCommand,
   HostDaemonEventEnvelope,
@@ -63,32 +63,6 @@ export function listQueuedCommands(
         queued.command.type === type,
     )
     .map((queued) => hostDaemonRpcCommandSchema.parse(queued.command));
-}
-
-type ManagedWorktreeEnvironmentProvisionCommand = Extract<
-  HostDaemonCommand,
-  { type: "environment.provision"; workspaceProvisionType: "managed-worktree" }
->;
-
-type ManagedWorktreeEnvironmentProvisionLiveCommand =
-  QueuedCommand<ManagedWorktreeEnvironmentProvisionCommand>;
-
-function isManagedWorktreeEnvironmentProvisionLiveCommand(
-  queued: QueuedCommand,
-): queued is ManagedWorktreeEnvironmentProvisionLiveCommand {
-  return (
-    queued.command.type === "environment.provision" &&
-    queued.command.workspaceProvisionType === "managed-worktree"
-  );
-}
-
-export function requireManagedWorktreeEnvironmentProvisionLiveCommand(
-  queued: QueuedCommand,
-): ManagedWorktreeEnvironmentProvisionLiveCommand {
-  if (isManagedWorktreeEnvironmentProvisionLiveCommand(queued)) {
-    return queued;
-  }
-  throw new Error("Expected managed-worktree environment.provision command");
 }
 
 export function listQueuedThreadCommands(
@@ -273,6 +247,7 @@ function respondToProviderModelListCommand(
 
 function buildDefaultGitSourceInspectionResult(): HostDaemonOnlineRpcResult<"host.inspect_git_source"> {
   return {
+    isWorktree: false,
     checkout: {
       kind: "branch",
       branchName: "main",
@@ -319,12 +294,11 @@ export function createTestDaemonEventEnvelope(
 
 export function internalAuthHeaders(
   harness: TestAppHarness,
-  args: { hostId?: string; hostType?: HostType } = {},
+  args: { hostId?: string } = {},
 ): HeadersInit {
   const activeSessions = harness.db
     .select({
       hostId: hostDaemonSessions.hostId,
-      hostType: hostDaemonSessions.hostType,
     })
     .from(hostDaemonSessions)
     .where(eq(hostDaemonSessions.status, "active"))
@@ -335,7 +309,6 @@ export function internalAuthHeaders(
   return {
     authorization: `Bearer ${createTestDaemonHostKey({
       hostId: args.hostId ?? inferredHost?.hostId ?? "host-1",
-      hostType: args.hostType ?? inferredHost?.hostType ?? "persistent",
     })}`,
     "content-type": "application/json",
   };
@@ -532,7 +505,7 @@ export async function reportQueuedCommandSuccess<
   harness: TestAppHarness,
   queued: QueuedCommand<TCommand>,
   result: QueuedCommandResult<TCommand>,
-  args: { hostId?: string; hostType?: HostType } = {},
+  args: { hostId?: string } = {},
 ): Promise<Response> {
   const sessionId = queued.row.sessionId;
   if (!sessionId) {
@@ -565,7 +538,7 @@ export async function reportQueuedCommandError(
   harness: TestAppHarness,
   queued: QueuedCommand,
   args: { errorCode: string; errorMessage: string },
-  auth: { hostId?: string; hostType?: HostType } = {},
+  auth: { hostId?: string } = {},
 ): Promise<Response> {
   const sessionId = queued.row.sessionId;
   if (!sessionId) {

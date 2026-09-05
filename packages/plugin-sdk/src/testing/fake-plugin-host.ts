@@ -20,6 +20,10 @@ import {
   isStandardSchema,
   isZodSchemaLike,
   storePluginHook,
+  validatePluginEnvironmentProviderDeclaration,
+  validatePluginMachineProviderDeclaration,
+  type NormalizedPluginEnvironmentProvider,
+  type NormalizedPluginMachineProvider,
   KV_VALUE_MAX_BYTES,
   MENTION_PROVIDER_ID_PATTERN,
   normalizeMentionProviderTriggers,
@@ -62,6 +66,8 @@ import type {
   PluginCliExecutionResult,
   PluginCliResult,
   PluginHookHandler,
+  PluginEnvironments,
+  PluginMachines,
   PluginHookName,
   PluginHooks,
   PluginEvents,
@@ -281,6 +287,11 @@ export interface FakePluginRegistrations {
   hooks: {
     [K in PluginHookName]: PluginHookHandler<K> | null;
   };
+  environmentProviders: ReadonlyMap<
+    string,
+    NormalizedPluginEnvironmentProvider
+  >;
+  machineProviders: ReadonlyMap<string, NormalizedPluginMachineProvider>;
   mentionProviders: FakeMentionProviderRecord[];
   /** Live provider registrations from `bb.providers.register`
    * (normalized declarations, registration order; dispose removes). */
@@ -1782,12 +1793,19 @@ function createFakePluginHostInternal(
     "message.queued": [],
     "message.dispatched": [],
     "turn.failed": [],
+    "message.cancelled": [],
+    "thread.unarchived": [],
   };
   const hooks: {
     [K in PluginHookName]: PluginHookHandler<K> | null;
   } = {
     "message.dispatch": null,
   };
+  const environmentProviders = new Map<
+    string,
+    NormalizedPluginEnvironmentProvider
+  >();
+  const machineProviders = new Map<string, NormalizedPluginMachineProvider>();
   const disposeHooks: Array<() => void | Promise<void>> = [];
   const serviceControllers: AbortController[] = [];
   let nextInteractionId = 1;
@@ -2098,6 +2116,39 @@ function createFakePluginHostInternal(
     },
   };
 
+  const experimental_environments: PluginEnvironments = {
+    register(declaration) {
+      assertLive();
+      const target = validatePluginEnvironmentProviderDeclaration(declaration);
+      const problem =
+        target.icon === null
+          ? null
+          : undeclaredIconProblem(pluginId, declaredIconNames, target.icon);
+      if (problem !== null)
+        throw new Error(providerIconRefusalMessage(target.id, problem));
+      environmentProviders.set(target.id, target);
+    },
+    async recheck() {
+      assertLive();
+      requestedDrains += 1;
+    },
+  };
+
+  const experimental_machines: PluginMachines = {
+    register(declaration) {
+      assertLive();
+      const target = validatePluginMachineProviderDeclaration(declaration);
+      const problem =
+        target.icon === null
+          ? null
+          : undeclaredIconProblem(pluginId, declaredIconNames, target.icon);
+      if (problem !== null) {
+        throw new Error(providerIconRefusalMessage(target.id, problem));
+      }
+      machineProviders.set(target.id, target);
+    },
+  };
+
   const bb: BbPluginApi = {
     pluginId,
     log,
@@ -2113,6 +2164,8 @@ function createFakePluginHostInternal(
     ui,
     events,
     experimental_hooks,
+    experimental_environments,
+    experimental_machines,
     status,
     server,
     hosts,
@@ -2216,10 +2269,18 @@ function createFakePluginHostInternal(
           "message.dispatched":
             threadEventHandlers["message.dispatched"].length,
           "turn.failed": threadEventHandlers["turn.failed"].length,
+          "message.cancelled": threadEventHandlers["message.cancelled"].length,
+          "thread.unarchived": threadEventHandlers["thread.unarchived"].length,
         };
       },
       get hooks() {
         return { ...hooks };
+      },
+      get environmentProviders() {
+        return new Map(environmentProviders);
+      },
+      get machineProviders() {
+        return new Map(machineProviders);
       },
       mentionProviders,
       providerRegistrations,

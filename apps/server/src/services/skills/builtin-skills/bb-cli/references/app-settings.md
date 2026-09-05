@@ -65,7 +65,7 @@ every window and client sees the same value.
   provider default, and the next send records that default. Select the custom
   model again after you turn streamer mode off.
 
-## Worktree branch prefix
+## New branch prefix
 
 - `managedBranchPrefix` defaults to `bb/`. Set it with
   `bb settings general managedBranchPrefix <prefix>`.

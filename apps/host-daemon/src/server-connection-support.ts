@@ -5,7 +5,6 @@ import {
   type HostDaemonConnectSharesReplaceMessage,
   type HostDaemonOnlineRpcRequestMessage,
   type HostDaemonServerWsMessage,
-  type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
   type HostDaemonWatchSetReplaceMessage,
 } from "@bb/host-daemon-contract";
@@ -61,7 +60,6 @@ export interface ServerConnectionOptions {
   onSelfUpdateInstalled?: () => void | Promise<void>;
   hostId: string;
   hostName: string;
-  hostType: HostDaemonSessionOpenRequest["hostType"];
   dataDir: string;
   instanceId: string;
   localApiPort: number | null;

@@ -14,9 +14,7 @@ import {
   promptInputSchema,
   providerForkSchema,
   threadGitDiffResponseSchema,
-  workspaceProvisionTypeSchema,
   runtimeThreadExecutionOptionsSchema,
-  provisioningTranscriptEntrySchema,
   rawDiffFileStatSchema,
   workspaceDiffTargetSchema,
   workspaceStatusSchema,
@@ -72,7 +70,6 @@ const INJECTED_SKILL_NAME_PATTERN =
 
 export const workspaceContextSchema = z.object({
   workspacePath: z.string().min(1),
-  workspaceProvisionType: workspaceProvisionTypeSchema,
 });
 export type WorkspaceContext = z.infer<typeof workspaceContextSchema>;
 
@@ -838,65 +835,19 @@ const provisionInitiatorSchema = z
 
 const environmentProvisionCommandBaseSchema =
   hostDaemonEnvironmentTargetSchema.extend({
-    type: z.literal("environment.provision"),
+    type: z.literal("environment.attach"),
     initiator: provisionInitiatorSchema.nullable(),
   });
-
-const unmanagedCheckoutSchema = z.discriminatedUnion("kind", [
-  z
-    .object({
-      kind: z.literal("existing"),
-      name: gitBranchNameSchema,
-    })
-    .strict(),
-  z
-    .object({
-      kind: z.literal("new"),
-      name: gitBranchNameSchema,
-      baseBranch: gitBranchNameSchema,
-    })
-    .strict(),
-]);
 
 const unmanagedEnvironmentProvisionCommandSchema =
   environmentProvisionCommandBaseSchema
     .extend({
-      workspaceProvisionType: z.literal("unmanaged"),
       path: z.string().min(1),
-      checkout: unmanagedCheckoutSchema.optional(),
     })
     .strict();
 
-const managedEnvironmentProvisionFieldsSchema = z.object({
-  sourcePath: z.string().min(1),
-  targetPath: z.string().min(1),
-  branchName: gitBranchNameSchema,
-  baseBranch: gitBranchNameSchema.nullable(),
-  setupTimeoutMs: z.number().int().positive(),
-});
-
-const managedWorktreeEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema
-    .merge(managedEnvironmentProvisionFieldsSchema)
-    .extend({ workspaceProvisionType: z.literal("managed-worktree") })
-    .strict();
-
-const personalEnvironmentProvisionCommandSchema =
-  environmentProvisionCommandBaseSchema
-    .extend({
-      workspaceProvisionType: z.literal("personal"),
-      targetPath: z.string().min(1),
-    })
-    .strict();
-
-const environmentProvisionCommandSchema = z.discriminatedUnion(
-  "workspaceProvisionType",
-  [
-    unmanagedEnvironmentProvisionCommandSchema,
-    managedWorktreeEnvironmentProvisionCommandSchema,
-    personalEnvironmentProvisionCommandSchema,
-  ],
-);
+const environmentProvisionCommandSchema =
+  unmanagedEnvironmentProvisionCommandSchema;
 export type EnvironmentProvisionCommand = z.infer<
   typeof environmentProvisionCommandSchema
 >;
@@ -904,17 +855,9 @@ export type EnvironmentProvisionCommand = z.infer<
 const environmentProvisionCancelCommandSchema =
   hostDaemonEnvironmentTargetSchema
     .extend({
-      type: z.literal("environment.provision.cancel"),
+      type: z.literal("environment.attach.cancel"),
     })
     .strict();
-
-const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema
-  .extend({
-    type: z.literal("environment.destroy"),
-    /** Maximum time in ms to wait for the teardown script. */
-    teardownTimeoutMs: z.number().int().positive(),
-  })
-  .strict();
 
 const workspaceStatusCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   type: z.literal("workspace.status"),
@@ -1214,18 +1157,10 @@ const projectInspectResultSchema = projectPathResultSchema
   .extend({ gitRemoteUrl: z.string().min(1).nullable() })
   .strict();
 const projectCloneResultSchema = projectInspectResultSchema;
-const environmentProvisionResultSchema =
-  discoveredWorkspacePropertiesSchema.extend({
-    transcript: z.array(provisioningTranscriptEntrySchema),
-  });
+const environmentProvisionResultSchema = discoveredWorkspacePropertiesSchema;
 const environmentProvisionCancelResultSchema = z.object({
   aborted: z.boolean(),
 });
-const environmentDestroyResultSchema = z
-  .object({
-    transcript: z.array(provisioningTranscriptEntrySchema),
-  })
-  .strict();
 const workspaceCommitResultSchema = z.object({
   commitSha: z.string().min(1),
   commitSubject: z.string().min(1),
@@ -1489,8 +1424,8 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: true,
     envLane: null,
   }),
-  "environment.provision": defineHostDaemonCommandDescriptor({
-    type: "environment.provision",
+  "environment.attach": defineHostDaemonCommandDescriptor({
+    type: "environment.attach",
     schema: environmentProvisionCommandSchema,
     resultSchema: environmentProvisionResultSchema,
     transport: "settled",
@@ -1507,23 +1442,14 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: false,
     envLane: null,
   }),
-  "environment.provision.cancel": defineHostDaemonCommandDescriptor({
-    type: "environment.provision.cancel",
+  "environment.attach.cancel": defineHostDaemonCommandDescriptor({
+    type: "environment.attach.cancel",
     schema: environmentProvisionCancelCommandSchema,
     resultSchema: environmentProvisionCancelResultSchema,
     transport: "settled",
     retryable: false,
     flushEventsBeforeResult: true,
     envLane: null,
-  }),
-  "environment.destroy": defineHostDaemonCommandDescriptor({
-    type: "environment.destroy",
-    schema: environmentDestroyCommandSchema,
-    resultSchema: environmentDestroyResultSchema,
-    transport: "settled",
-    retryable: false,
-    flushEventsBeforeResult: false,
-    envLane: "write",
   }),
   "workspace.commit": defineHostDaemonCommandDescriptor({
     type: "workspace.commit",

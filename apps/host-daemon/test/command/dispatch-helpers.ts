@@ -152,7 +152,6 @@ export function createFakeWorkspace(pathname: string) {
   };
   const workspace: FakeHostWorkspace = {
     path: pathname,
-    managed: false,
     isGitRepo: true,
     isWorktree: false,
     async getDefaultBranch() {
@@ -251,9 +250,6 @@ export function createFakeWorkspace(pathname: string) {
       };
     },
     async reset() {},
-    async destroy() {
-      state.destroyed = true;
-    },
   };
 
   return { workspace, state };

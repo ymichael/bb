@@ -1,9 +1,17 @@
 export { assertNever } from "./assert-never.js";
 
-export { formatEnvironmentDisplay } from "./environment-display.js";
+export {
+  formatEnvironmentDisplay,
+  resolveEnvironmentDisplayName,
+  resolveEnvironmentDisplayProvider,
+  resolveEnvironmentProviderLabel,
+} from "./environment-display.js";
 export type {
   EnvironmentDisplayHostContext,
   EnvironmentDisplayInfo,
+  EnvironmentDisplayNameSource,
+  EnvironmentDisplayProvider,
+  EnvironmentDisplayProviderLookup,
 } from "./environment-display.js";
 
 export {

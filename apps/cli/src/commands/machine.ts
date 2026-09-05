@@ -8,6 +8,7 @@ import { confirmDestructiveAction } from "./helpers.js";
 
 interface MachineListCommandOptions {
   json?: boolean;
+  project?: string;
 }
 
 interface MachineMutationCommandOptions extends MachineListCommandOptions {
@@ -126,6 +127,32 @@ export function registerMachineCommands(
     .description("Inspect execution machines");
 
   machine
+    .command("providers")
+    .description("List installed machine providers")
+    .option("--project <id>", "Evaluate availability for a project")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (opts: MachineListCommandOptions) => {
+        const providers = await createCliBbSdk(getUrl()).hosts.listProviders({
+          ...(opts.project === undefined ? {} : { projectId: opts.project }),
+        });
+        if (outputJson(opts, providers)) return;
+        if (providers.length === 0) {
+          console.log("No machine providers found");
+          return;
+        }
+        console.log(
+          providers
+            .map(
+              (provider) =>
+                `${provider.id}  ${provider.displayName}  ${provider.availability?.status ?? "available"}`,
+            )
+            .join("\n"),
+        );
+      }),
+    );
+
+  machine
     .command("list")
     .description("List execution machines")
     .option("--json", "Print machine-readable JSON output")
@@ -221,6 +248,48 @@ export function registerMachineCommands(
       }),
     );
 
+  machine
+    .command("suspend <id-or-name>")
+    .description("Suspend a provider-managed execution machine")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (target: string, opts: MachineListCommandOptions) => {
+        const sdk = createCliBbSdk(getUrl());
+        const hostId = resolveMachineId(await sdk.hosts.list(), target);
+        const result = await sdk.hosts.suspend({ hostId });
+        if (outputJson(opts, result)) return;
+        console.log(`Machine ${hostId} suspended`);
+      }),
+    );
+
+  machine
+    .command("resume <id-or-name>")
+    .description("Resume a suspended provider-managed execution machine")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (target: string, opts: MachineListCommandOptions) => {
+        const sdk = createCliBbSdk(getUrl());
+        const hostId = resolveMachineId(await sdk.hosts.list(), target);
+        const result = await sdk.hosts.resume({ hostId });
+        if (outputJson(opts, result)) return;
+        console.log(`Machine ${hostId} resumed`);
+      }),
+    );
+
+  machine
+    .command("retry-cleanup <id-or-name>")
+    .description("Retry a failed provider teardown immediately")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (target: string, opts: MachineListCommandOptions) => {
+        const sdk = createCliBbSdk(getUrl());
+        const hostId = resolveMachineId(await sdk.hosts.list(), target);
+        const result = await sdk.hosts.retryCleanup({ hostId });
+        if (outputJson(opts, result)) return;
+        console.log(`Machine ${hostId} cleanup retried`);
+      }),
+    );
+
   const providerCli = machine
     .command("provider-cli")
     .description("Inspect and install provider CLIs on a machine");
@@ -272,19 +341,21 @@ function printMachineTable(hosts: Host[]): void {
     host.name,
     host.id,
     host.status,
+    host.machineProviderId ?? "user-enrolled",
     formatMachineLastSeen(host.lastSeenAt, now),
   ]);
   const widths = [
     Math.max(4, ...rows.map((row) => row[0].length)),
     Math.max(2, ...rows.map((row) => row[1].length)),
     Math.max(6, ...rows.map((row) => row[2].length)),
-    Math.max(9, ...rows.map((row) => row[3].length)),
+    Math.max(8, ...rows.map((row) => row[3].length)),
+    Math.max(9, ...rows.map((row) => row[4].length)),
   ];
   console.log("");
   console.log(
     renderBorderlessTable(
       {
-        head: ["Name", "ID", "Status", "Last seen"],
+        head: ["Name", "ID", "Status", "Provider", "Last seen"],
         colWidths: widths,
         trimTrailingWhitespace: true,
       },

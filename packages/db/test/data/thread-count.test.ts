@@ -19,11 +19,9 @@ function setup() {
   const db = createMigratedConnection();
   const hostA = upsertHost(db, noopNotifier, {
     name: "host-a",
-    type: "persistent",
   });
   const hostB = upsertHost(db, noopNotifier, {
     name: "host-b",
-    type: "persistent",
   });
   const { project: projectA } = createProject(db, noopNotifier, {
     name: "project-a",
@@ -34,16 +32,16 @@ function setup() {
     source: { type: "local_path", hostId: hostB.id, path: "/tmp/b" },
   });
   const environmentA = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
     hostId: hostA.id,
     projectId: projectA.id,
     path: "/tmp/a",
-    workspaceProvisionType: "unmanaged",
   });
   const environmentB = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
     hostId: hostB.id,
     projectId: projectB.id,
     path: "/tmp/b",
-    workspaceProvisionType: "unmanaged",
   });
   return { db, environmentA, environmentB, hostA, hostB, projectA, projectB };
 }

@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
 import { loadHostDaemonStartConfig } from "@bb/config/host-daemon";
-import type { HostType } from "@bb/domain";
 import {
   createHostWatcher,
   createSubprocessParcelWatcherBackend,
@@ -37,7 +36,6 @@ interface StartHostDaemonOptions {
   hostName?: string;
   bbExecutableDirectory?: string;
   bridgeBundleDir?: string;
-  hostType?: HostType;
   machineCredential?: string;
   connectMachineId?: string;
   autoUpdate?: boolean;
@@ -88,18 +86,6 @@ export async function startHostDaemon(
       throw new Error("Host daemon server URL is required");
     }
 
-    const hostType =
-      persistedAuth?.hostType ?? options.hostType ?? "persistent";
-    if (
-      persistedAuth &&
-      options.hostType &&
-      persistedAuth.hostType !== options.hostType
-    ) {
-      throw new Error(
-        `Configured host type ${options.hostType} does not match persisted auth state ${persistedAuth.hostType}`,
-      );
-    }
-
     if (persistedAuth && persistedAuth.hostId !== identity.hostId) {
       throw new Error(
         `Resolved host ID ${identity.hostId} does not match persisted auth state ${persistedAuth.hostId}`,
@@ -112,7 +98,6 @@ export async function startHostDaemon(
         await enrollDaemonHost({
           hostId: identity.hostId,
           hostName: identity.hostName,
-          hostType,
           connectMachineId: options.connectMachineId,
           serverUrl,
           machineCredential: options.machineCredential,
@@ -131,7 +116,6 @@ export async function startHostDaemon(
       await writeHostAuthState(dataDir, {
         hostId: identity.hostId,
         hostKey,
-        hostType,
       });
     }
 
@@ -189,7 +173,6 @@ export async function startHostDaemon(
       connectMachineId: options.connectMachineId,
       autoUpdate: options.autoUpdate,
       bridgeBundleDir: options.bridgeBundleDir,
-      hostType,
       hostId: identity.hostId,
       hostName: identity.hostName,
       instanceId,

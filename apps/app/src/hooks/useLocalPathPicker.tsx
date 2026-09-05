@@ -3,7 +3,11 @@ import { normalizeProjectPathInput } from "@bb/domain";
 import type { HostPlatform } from "@bb/host-daemon-contract";
 import { useDialogState } from "@/hooks/useDialogState";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { useHosts, usePrimaryHost } from "@/hooks/queries/host-queries";
+import {
+  selectHosts,
+  useHosts,
+  usePrimaryHost,
+} from "@/hooks/queries/host-queries";
 import { sdk } from "@/lib/sdk";
 import type {
   ProjectPathDialogSubmitHandler,
@@ -71,7 +75,7 @@ export function useLocalPathPicker({
     usePathPickerHost();
   const hostsQuery = useHosts();
   const isLoadingHosts = hostsQuery.isPending;
-  const connectedHostCount = (hostsQuery.data ?? []).filter(
+  const connectedHostCount = selectHosts(hostsQuery.data).filter(
     (host) => host.status === "connected",
   ).length;
   const projectPathDialog = useDialogState<ProjectPathDialogTarget>();

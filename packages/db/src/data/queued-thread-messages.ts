@@ -12,6 +12,7 @@ import {
   lte,
   min,
   notExists,
+  ne,
   notInArray,
   or,
   sql,
@@ -779,13 +780,9 @@ export function listIdleThreadsWithQueuedMessages(
           notExists(manuallyStoppedQueuePauseQuery(db, threads.id)),
           isNotNull(queuedThreadMessages.systemNotice),
         ),
-        // A gone environment (destroying/destroyed) is never reprovisioned, so
-        // its queued rows can never drain. Leave them out of the sweep instead
-        // of failing the same send every cycle (#1789). A thread with NO
-        // environment is not that case — it has simply not provisioned yet.
         or(
           isNull(threads.environmentId),
-          notInArray(environments.status, ["destroying", "destroyed"]),
+          ne(environments.status, "destroyed"),
         ),
         // Only rows an idle thread actually unblocks. A thread whose only
         // queued row is waiting on a clock or a plugin is not a drain

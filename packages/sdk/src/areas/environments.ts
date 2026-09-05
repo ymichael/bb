@@ -1,4 +1,9 @@
-import { environmentSchema, type Environment } from "@bb/domain";
+import { z } from "zod";
+import {
+  environmentSchema,
+  type Environment,
+  type EnvironmentStatus,
+} from "@bb/domain";
 import {
   commitActionResponseSchema,
   pullRequestDraftActionResponseSchema,
@@ -28,6 +33,7 @@ import type {
   EnvironmentStatusQuery,
   UpdateEnvironmentRequest,
   WorkspacePathListResponse,
+  SystemEnvironmentProvider,
 } from "@bb/server-contract";
 import { signalRequestArgs, type CreateSdkAreaArgs } from "./common.js";
 
@@ -123,6 +129,30 @@ export type EnvironmentPathsResult = WorkspacePathListResponse;
 export type EnvironmentPullRequestResult = EnvironmentPullRequestResponse;
 export type EnvironmentStatusResult = EnvironmentStatusResponse;
 export type EnvironmentUpdateResult = Environment;
+export interface EnvironmentListArgs {
+  environmentProviderId?: string;
+  hostId?: string;
+  instanceKey?: string;
+  limit?: number;
+  offset?: number;
+  path?: string;
+  projectId?: string;
+  signal?: AbortSignal;
+  status?: EnvironmentStatus;
+}
+export type EnvironmentListResult = Environment[];
+export interface EnvironmentDeleteArgs {
+  environmentId: string;
+}
+export type EnvironmentDeleteResult = { ok: true };
+export interface EnvironmentListProvidersArgs {
+  projectId?: string;
+  hostId?: string;
+  signal?: AbortSignal;
+}
+export type EnvironmentListProvidersResult = SystemEnvironmentProvider[];
+
+const okResponseSchema = z.object({ ok: z.literal(true) });
 
 export interface EnvironmentsArea {
   archiveThreads(
@@ -139,6 +169,11 @@ export interface EnvironmentsArea {
     args: EnvironmentDiffPatchArgs,
   ): Promise<EnvironmentDiffPatchResult>;
   get(args: EnvironmentGetArgs): Promise<EnvironmentGetResult>;
+  list(args?: EnvironmentListArgs): Promise<EnvironmentListResult>;
+  listProviders(
+    args?: EnvironmentListProvidersArgs,
+  ): Promise<EnvironmentListProvidersResult>;
+  delete(args: EnvironmentDeleteArgs): Promise<EnvironmentDeleteResult>;
   pullRequest(args: EnvironmentGetArgs): Promise<EnvironmentPullRequestResult>;
   markPullRequestDraft(
     args: EnvironmentActionArgs,
@@ -318,6 +353,59 @@ export function createEnvironmentsArea(
           ...signalRequestArgs(input.signal),
         ),
       );
+    },
+    async list(input) {
+      return transport.readJson(
+        transport.api.v1.environments.$get(
+          {
+            query: {
+              ...(input?.projectId === undefined
+                ? {}
+                : { projectId: input.projectId }),
+              ...(input?.hostId === undefined ? {} : { hostId: input.hostId }),
+              ...(input?.environmentProviderId === undefined
+                ? {}
+                : { environmentProviderId: input.environmentProviderId }),
+              ...(input?.instanceKey === undefined
+                ? {}
+                : { instanceKey: input.instanceKey }),
+              ...(input?.status === undefined ? {} : { status: input.status }),
+              ...(input?.path === undefined ? {} : { path: input.path }),
+              ...(input?.limit === undefined
+                ? {}
+                : { limit: String(input.limit) }),
+              ...(input?.offset === undefined
+                ? {}
+                : { offset: String(input.offset) }),
+            },
+          },
+          ...signalRequestArgs(input?.signal),
+        ),
+      );
+    },
+    async listProviders(input) {
+      const response = await transport.readJson(
+        transport.api.v1.system["environment-providers"].$get(
+          {
+            query: {
+              ...(input?.projectId === undefined
+                ? {}
+                : { projectId: input.projectId }),
+              ...(input?.hostId === undefined ? {} : { hostId: input.hostId }),
+            },
+          },
+          ...signalRequestArgs(input?.signal),
+        ),
+      );
+      return response.providers;
+    },
+    async delete(input) {
+      const body = await transport.readJson(
+        transport.api.v1.environments[":id"].$delete({
+          param: { id: input.environmentId },
+        }),
+      );
+      return okResponseSchema.parse(body);
     },
     async get(input) {
       const body = await transport.readJson(

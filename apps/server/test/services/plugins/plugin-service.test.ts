@@ -14,8 +14,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import semver from "semver";
 import {
   createConnection,
+  createEnvironment,
+  createProject,
   getInstalledPlugin,
   migrate,
+  noopNotifier,
+  upsertHost,
   upsertInstalledPlugin,
   upsertPluginMarketplace,
   type DbConnection,
@@ -1203,6 +1207,44 @@ describe("plugin service", () => {
       expect.stringContaining("bb-managed workspace"),
     );
   });
+
+  it("does not warn for a plugin installed from a directory a provider only attached to", async () => {
+    const warnSpy = vi.spyOn(logger, "warn");
+    warnSpy.mockClear();
+    const checkoutRoot = await writePlugin(join(workDir, "checkout"), {
+      name: "bb-plugin-attached",
+      serverSource: `export default function plugin() {}`,
+    });
+    seedEnvironmentAtPath(db, {
+      path: dirname(checkoutRoot),
+      environmentProviderId: "project-checkout",
+      providerOwnsPath: false,
+    });
+
+    await service.installPath(checkoutRoot);
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("bb-managed workspace"),
+    );
+  });
+
+  it("warns for a plugin installed inside a directory a provider owns", async () => {
+    const warnSpy = vi.spyOn(logger, "warn");
+    warnSpy.mockClear();
+    const ownedRoot = await writePlugin(join(workDir, "owned"), {
+      name: "bb-plugin-owned",
+      serverSource: `export default function plugin() {}`,
+    });
+    seedEnvironmentAtPath(db, {
+      path: dirname(ownedRoot),
+      environmentProviderId: "git-worktree",
+      providerOwnsPath: true,
+    });
+
+    await service.installPath(ownedRoot);
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("bb-managed workspace"),
+    );
+  });
 });
 
 describe("plugins-changed broadcast", () => {
@@ -1263,3 +1305,35 @@ describe("plugins-changed broadcast", () => {
     expect(notifySystem).toHaveBeenCalledWith(["plugins-changed"]);
   });
 });
+
+function seedEnvironmentAtPath(
+  db: DbConnection,
+  args: {
+    environmentProviderId: string;
+    path: string;
+    providerOwnsPath: boolean;
+  },
+): void {
+  const host = upsertHost(db, noopNotifier, {
+    name: "Test host",
+  });
+  const { project } = createProject(db, noopNotifier, {
+    name: "Plugin source project",
+    source: { type: "local_path", hostId: host.id, path: args.path },
+  });
+  createEnvironment(db, noopNotifier, {
+    projectId: project.id,
+    hostId: host.id,
+    path: args.path,
+    status: "ready",
+    providerOwnsPath: args.providerOwnsPath,
+    environmentProvider: {
+      environmentProviderId: args.environmentProviderId,
+      instanceKey: null,
+      selection: {
+        machine: { type: "existing", hostId: host.id },
+        inputs: null,
+      },
+    },
+  });
+}

@@ -52,6 +52,7 @@ function environmentItem(
     kind: "environment",
     group: {
       environmentId: representative.environmentId ?? "env_test",
+      environmentProviderId: "git-worktree",
       nodes: [threadNode(representative), threadNode(sibling)],
       stats: {
         childCount: 0,

@@ -84,3 +84,5 @@ Sources:
     --default
 
   bb project source delete <projectId> <sourceId>
+
+Project source deletion remains available while a project is pending deletion so providers can finish cleanup. A live project must retain at least one source; a deleting project may remove its last source.

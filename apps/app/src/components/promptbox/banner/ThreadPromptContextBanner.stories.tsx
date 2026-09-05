@@ -704,10 +704,6 @@ const destroyedEnvironmentFixture: ThreadPromptEnvironmentGoneSection = {
   status: "destroyed",
 };
 
-const destroyingEnvironmentFixture: ThreadPromptEnvironmentGoneSection = {
-  status: "destroying",
-};
-
 export function Overview() {
   return (
     <StoryCard>
@@ -751,11 +747,11 @@ export function Overview() {
         <Row environmentGone={destroyedEnvironmentFixture} mergeBase={null} />
       </StoryRow>
       <StoryRow
-        label="environment archiving + child thread"
-        hint="archiving-environment row plus parent context"
+        label="environment archived + child thread"
+        hint="archived-environment row plus parent context"
       >
         <Row
-          environmentGone={destroyingEnvironmentFixture}
+          environmentGone={destroyedEnvironmentFixture}
           parentThread={parentThreadFixture}
           mergeBase={null}
         />

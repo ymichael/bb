@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import type { Host } from "@bb/domain";
+import type { Host, JsonValue } from "@bb/domain";
+import type { PluginMachineProviderInputsChange } from "@get-bb/plugin-sdk";
+import type { SystemMachineProvider } from "@bb/server-contract";
 import { z } from "zod";
 import { Button } from "@bb/shared-ui/button";
 import {
@@ -13,8 +15,13 @@ import {
   DialogTitle,
 } from "@bb/shared-ui/dialog";
 import { Icon } from "@bb/shared-ui/icon";
+import { cn } from "@bb/shared-ui/lib/utils";
 import { MachineStatusDot } from "@/components/machines/MachineStatusDot";
+import { MachineProviderIcon } from "@/components/plugin/MachineProviderIcon";
+import { PluginSlotMount } from "@/components/plugin/PluginSlotMount";
+import { machineProviderInputsControlRequired } from "@/components/pickers/machine-provider-inputs";
 import { useHosts } from "@/hooks/queries/host-queries";
+import { useSystemMachineProviders } from "@/hooks/queries/machine-provider-queries";
 import { useClipboardCopy } from "@/lib/clipboard";
 import { isLocalOnlyUrl } from "@/lib/loopback-hostname";
 import {
@@ -23,6 +30,7 @@ import {
 } from "@/lib/route-paths";
 import { BbHttpError, sdk } from "@/lib/sdk";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
+import { usePluginSlots } from "@/lib/plugin-slots";
 
 interface AddMachineDialogProps {
   open: boolean;
@@ -198,6 +206,56 @@ function AddMachineDialogContent({
   serverUrl: string | null;
 }) {
   const hostsQuery = useHosts();
+  const { providers: machineProviders } = useSystemMachineProviders();
+  const machineProviderInputsSlots = usePluginSlots().machineProviderInputs;
+  const [selectedMachineProvider, setSelectedMachineProvider] =
+    useState<SystemMachineProvider | null>(null);
+  const [machineInputs, setMachineInputs] = useState<JsonValue | null>(null);
+  const [machineInputsBlocked, setMachineInputsBlocked] = useState<
+    string | null
+  >(null);
+  const machineInputsRegistration =
+    selectedMachineProvider === null
+      ? undefined
+      : machineProviderInputsSlots.find(
+          (slot) =>
+            slot.machineProviderId === selectedMachineProvider.id &&
+            slot.pluginId === selectedMachineProvider.pluginId,
+        );
+  const MachineInputsComponent = machineInputsRegistration?.component;
+  const selectMachineProvider = (provider: SystemMachineProvider): void => {
+    setSelectedMachineProvider(provider);
+    setMachineInputs(
+      provider.inputs === null ? null : provider.acceptsEmptyInputs ? {} : null,
+    );
+    setMachineInputsBlocked(null);
+  };
+  const handleMachineInputsChange = (
+    next: PluginMachineProviderInputsChange,
+  ): void => {
+    if (next.status === "blocked") {
+      setMachineInputsBlocked(next.reason);
+      return;
+    }
+    setMachineInputsBlocked(null);
+    setMachineInputs(next.value);
+  };
+  const createMachine = useMutation({
+    mutationFn: async () => {
+      if (selectedMachineProvider === null) {
+        throw new Error("Select a machine provider.");
+      }
+      return sdk.hosts.create({
+        machineProviderId: selectedMachineProvider.id,
+        projectId: null,
+        inputs: machineInputs,
+      });
+    },
+    onSuccess: async () => {
+      await hostsQuery.refetch();
+      onOpenChange(false);
+    },
+  });
   const mintJoinCode = useMutation({
     meta: { showErrorToast: false },
     mutationFn: async () => {
@@ -279,6 +337,118 @@ function AddMachineDialogContent({
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3">
+        {(machineProviders?.length ?? 0) > 0 ? (
+          <div className="space-y-2">
+            <div className="space-y-1 rounded-md border border-border p-1">
+              {machineProviders?.map((provider) => {
+                const unavailable =
+                  provider.availability?.status === "unavailable";
+                return (
+                  <button
+                    key={provider.id}
+                    type="button"
+                    disabled={unavailable}
+                    onClick={() => selectMachineProvider(provider)}
+                    className="flex w-full items-center gap-2 rounded-sm px-2.5 py-2 text-left text-sm hover:bg-state-hover disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {provider.icon === null ? null : (
+                      <MachineProviderIcon
+                        provider={provider}
+                        className="size-4 shrink-0 text-muted-foreground"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate">
+                        {provider.displayName}
+                      </span>
+                      {provider.availability?.status === "available" ||
+                      provider.availability === null ? null : (
+                        <span className="block text-xs text-muted-foreground">
+                          {provider.availability.message}
+                        </span>
+                      )}
+                    </span>
+                    <Icon
+                      name="Check"
+                      className={cn(
+                        "size-4 shrink-0",
+                        selectedMachineProvider?.id === provider.id
+                          ? "opacity-100"
+                          : "opacity-0",
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+            {selectedMachineProvider === null ? null : (
+              <div className="space-y-2 rounded-md border border-border bg-muted/30 p-3">
+                {machineInputsRegistration === undefined ||
+                MachineInputsComponent === undefined ? null : (
+                  <PluginSlotMount
+                    pluginId={machineInputsRegistration.pluginId}
+                    slotKind="machineProviderInputs"
+                    slotId={machineInputsRegistration.machineProviderId}
+                  >
+                    <MachineInputsComponent
+                      projectId={null}
+                      value={machineInputs}
+                      onChange={handleMachineInputsChange}
+                    />
+                  </PluginSlotMount>
+                )}
+                {selectedMachineProvider.availability?.status ===
+                "setup-required" ? (
+                  <Button asChild size="sm" variant="outline">
+                    <Link
+                      to={getPluginConfigurationRoutePath({
+                        pluginId: selectedMachineProvider.pluginId,
+                      })}
+                    >
+                      Configure {selectedMachineProvider.displayName}
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={
+                      createMachine.isPending ||
+                      machineInputsBlocked !== null ||
+                      (machineProviderInputsControlRequired(
+                        selectedMachineProvider,
+                      ) &&
+                        machineInputsRegistration === undefined) ||
+                      (selectedMachineProvider.inputs !== null &&
+                        machineInputs === null)
+                    }
+                    onClick={() => createMachine.mutate()}
+                  >
+                    {createMachine.isPending
+                      ? "Creating machine…"
+                      : `Create ${selectedMachineProvider.displayName} machine`}
+                  </Button>
+                )}
+                {machineInputsBlocked === null ? null : (
+                  <p className="text-xs text-destructive">
+                    {machineInputsBlocked}
+                  </p>
+                )}
+                {createMachine.isError ? (
+                  <p className="text-xs text-destructive">
+                    {getMutationErrorMessage({
+                      error: createMachine.error,
+                      fallbackMessage: "Couldn't create the machine.",
+                    })}
+                  </p>
+                ) : null}
+              </div>
+            )}
+            <p className="text-xs font-medium text-muted-foreground">
+              Pair your own machine
+            </p>
+          </div>
+        ) : null}
         {mintJoinCode.isError || connectUnavailable ? (
           <div className="space-y-2">
             <p className="text-sm text-destructive">

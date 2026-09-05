@@ -1,101 +1,24 @@
 // @vitest-environment jsdom
 
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Host, ProjectSource } from "@bb/domain";
+import type { Host } from "@bb/domain";
 import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ProjectlessMachineSlot, ThreadEnvSlot } from "./NewThreadPromptBox";
+import type { SystemEnvironmentProvider } from "@bb/server-contract";
+import {
+  ProjectlessEnvSlot,
+  ProjectlessMachineSlot,
+} from "./NewThreadPromptBox";
 
 const host = makeHost({
   id: "host_test",
   name: "Local host",
 });
 
-const sources: readonly ProjectSource[] = [
-  {
-    id: "src_test",
-    projectId: "proj_test",
-    type: "local_path",
-    hostId: host.id,
-    path: "/tmp/project",
-    isDefault: true,
-    createdAt: 0,
-    updatedAt: 0,
-  },
-];
-
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-});
-
-describe("ThreadEnvSlot", () => {
-  it("forwards worktree disabled reasons to the environment picker", () => {
-    render(
-      <ThreadEnvSlot
-        environment={{
-          value: `host:${host.id}:local`,
-          onChange: vi.fn(),
-          sources,
-          host,
-          isLocal: true,
-          worktreeDisabledReason: "Project source is not a git repository",
-        }}
-        branch={{
-          value: null,
-          currentBranch: null,
-          isNew: false,
-          options: [],
-          onChange: vi.fn(),
-        }}
-        worktree={{
-          options: [],
-          value: null,
-          onChange: vi.fn(),
-        }}
-      />,
-    );
-
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Environment" }), {
-      button: 0,
-    });
-
-    const worktreeItem = screen.getByRole("menuitem", {
-      name: /New worktree/u,
-    });
-
-    expect(worktreeItem.getAttribute("aria-disabled")).toBe("true");
-  });
-
-  it("hides the branch picker when branch controls are not applicable", () => {
-    render(
-      <ThreadEnvSlot
-        environment={{
-          value: `host:${host.id}:local`,
-          onChange: vi.fn(),
-          sources,
-          host,
-          isLocal: true,
-        }}
-        branch={{
-          value: null,
-          currentBranch: null,
-          isNew: false,
-          hidden: true,
-          options: [],
-          triggerLabel: "Unknown checkout",
-          onChange: vi.fn(),
-        }}
-        worktree={{
-          options: [],
-          value: null,
-          onChange: vi.fn(),
-        }}
-      />,
-    );
-
-    expect(screen.queryByText("Unknown checkout")).toBeNull();
-  });
 });
 
 describe("ProjectlessMachineSlot", () => {
@@ -105,9 +28,29 @@ describe("ProjectlessMachineSlot", () => {
     name: "Mac Studio",
   };
 
+  const personalWorkspaceProvider: SystemEnvironmentProvider = {
+    id: "personal-workspace",
+    displayName: "Personal workspace",
+    icon: "Folder",
+    logoUrl: null,
+    pluginId: "environment-personal-workspace",
+    acceptsEmptyInputs: true,
+    availability: null,
+    requires: {
+      projectCheckout: false,
+      gitCheckout: false,
+      gitRemote: false,
+      projectless: true,
+    },
+    inputs: null,
+  };
+
   function makeEnvironment(overrides?: {
-    value?: string;
-    onChange?: (value: string) => void;
+    selectedProviderHostId?: string;
+    onSelectProvider?: (
+      provider: SystemEnvironmentProvider,
+      hostId: string | null,
+    ) => void;
     machines?: {
       hosts: Host[];
       localDaemonHostId: string | null;
@@ -115,8 +58,8 @@ describe("ProjectlessMachineSlot", () => {
     } | null;
   }) {
     return {
-      value: overrides?.value ?? `host:${host.id}:local`,
-      onChange: overrides?.onChange ?? vi.fn(),
+      value: "provider:personal-workspace",
+      onChange: vi.fn(),
       sources: [],
       host,
       isLocal: true,
@@ -128,6 +71,9 @@ describe("ProjectlessMachineSlot", () => {
               localDaemonHostId: host.id,
               primaryHostId: host.id,
             },
+      providers: [personalWorkspaceProvider],
+      selectedProviderHostId: overrides?.selectedProviderHostId ?? host.id,
+      onSelectProvider: overrides?.onSelectProvider ?? vi.fn(),
     };
   }
 
@@ -157,29 +103,194 @@ describe("ProjectlessMachineSlot", () => {
     expect(screen.queryByRole("button", { name: "Machine" })).toBeNull();
   });
 
-  it("encodes a machine pick as that host's personal-local environment value", () => {
-    const onChange = vi.fn();
+  it("counts provider-made machines in the projectless machine chip", () => {
     render(
-      <ProjectlessMachineSlot environment={makeEnvironment({ onChange })} />,
+      <ProjectlessMachineSlot
+        environment={makeEnvironment({
+          machines: {
+            hosts: [
+              host,
+              makeHost({
+                id: "host_modal",
+                name: "Modal sandbox 3f9a",
+              }),
+            ],
+            localDaemonHostId: host.id,
+            primaryHostId: host.id,
+          },
+        })}
+      />,
     );
 
-    fireEvent.pointerDown(screen.getByRole("button", { name: "Machine" }), {
-      button: 0,
-    });
-    fireEvent.click(screen.getByRole("menuitem", { name: /Mac Studio/u }));
-
-    expect(onChange).toHaveBeenCalledWith(`host:${secondHost.id}:local`);
+    expect(screen.getByRole("button", { name: "Machine" })).toBeTruthy();
   });
 
   it("names the selected machine in the chip", () => {
     render(
       <ProjectlessMachineSlot
-        environment={makeEnvironment({ value: `host:${secondHost.id}:local` })}
+        environment={makeEnvironment({
+          selectedProviderHostId: secondHost.id,
+        })}
       />,
     );
 
     expect(
       screen.getByRole("button", { name: "Machine" }).textContent,
     ).toContain("Mac Studio");
+  });
+
+  it("routes a machine pick through the selected provider", () => {
+    const onSelectProvider = vi.fn();
+    render(
+      <ProjectlessMachineSlot
+        environment={makeEnvironment({
+          selectedProviderHostId: secondHost.id,
+          onSelectProvider,
+        })}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Machine" });
+    expect(trigger.textContent).toContain("Mac Studio");
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Local host/u }));
+
+    expect(onSelectProvider).toHaveBeenCalledWith(
+      personalWorkspaceProvider,
+      host.id,
+    );
+  });
+});
+
+describe("ProjectlessEnvSlot", () => {
+  const secondHost: Host = {
+    ...host,
+    id: "host_second",
+    name: "Mac Studio",
+  };
+
+  const personalProvider: SystemEnvironmentProvider = {
+    id: "personal-workspace",
+    displayName: "Personal workspace",
+    icon: "Folder",
+    logoUrl: null,
+    pluginId: "environment-personal-workspace",
+    acceptsEmptyInputs: true,
+    availability: null,
+    requires: {
+      projectCheckout: false,
+      gitCheckout: false,
+      gitRemote: false,
+      projectless: true,
+    },
+    inputs: null,
+  };
+
+  const sandboxProvider: SystemEnvironmentProvider = {
+    id: "modal-sandbox",
+    displayName: "Modal sandbox",
+    icon: "Cloud",
+    logoUrl: null,
+    pluginId: "environment-modal-sandbox",
+    acceptsEmptyInputs: true,
+    availability: null,
+    requires: {
+      projectCheckout: false,
+      gitCheckout: false,
+      gitRemote: false,
+      projectless: false,
+    },
+    inputs: null,
+  };
+
+  function makeEnvironment(overrides: {
+    value?: string;
+    providers?: readonly SystemEnvironmentProvider[];
+    onSelectProvider?: (
+      provider: SystemEnvironmentProvider,
+      hostId: string | null,
+    ) => void;
+  }) {
+    return {
+      value: overrides.value ?? "provider:personal-workspace",
+      onChange: vi.fn(),
+      sources: [],
+      host,
+      isLocal: true,
+      machines: {
+        hosts: [host, secondHost],
+        localDaemonHostId: host.id,
+        primaryHostId: host.id,
+      },
+      providers: overrides.providers ?? [personalProvider],
+      selectedProviderHostId: host.id,
+      onSelectProvider: overrides.onSelectProvider ?? vi.fn(),
+    };
+  }
+
+  function makeWorktree(value: string | null = null) {
+    return {
+      options: [
+        {
+          environmentId: "env_personal",
+          branchName: null,
+          name: "Scratch space",
+          path: null,
+          environmentProviderId: "personal-workspace",
+          threads: [{ id: "thr_1", title: "Earlier personal thread" }],
+        },
+      ],
+      value,
+      onChange: vi.fn(),
+      disabled: false,
+    };
+  }
+
+  it("keeps the machine slot when only one provider is available", () => {
+    render(
+      <ProjectlessEnvSlot
+        environment={makeEnvironment({ providers: [personalProvider] })}
+        worktree={makeWorktree()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Machine" })).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Environment" })).toBeNull();
+  });
+
+  it("omits project-only providers from the projectless picker", () => {
+    render(
+      <ProjectlessEnvSlot
+        environment={makeEnvironment({
+          value: "provider:personal-workspace",
+          providers: [personalProvider, sandboxProvider],
+        })}
+        worktree={makeWorktree()}
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Machine" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Environment" })).toBeNull();
+    expect(screen.queryByText("Modal sandbox")).toBeNull();
+  });
+
+  it("shows the reused environment instead of the machine slot when a thread reuses one", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProjectlessEnvSlot
+          environment={makeEnvironment({
+            value: "reuse:env_personal",
+            providers: [personalProvider],
+          })}
+          worktree={makeWorktree("env_personal")}
+        />
+      </QueryClientProvider>,
+    );
+
+    expect(screen.queryByRole("button", { name: "Machine" })).toBeNull();
+    const triggers = screen.getAllByRole("button", { name: "Environment" });
+    expect(triggers).toHaveLength(2);
+    expect(triggers[0]?.textContent).toContain("Reuse");
+    expect(triggers[1]?.textContent).toContain("Scratch space");
   });
 });

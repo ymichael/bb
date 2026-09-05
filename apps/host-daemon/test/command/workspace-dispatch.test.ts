@@ -32,7 +32,6 @@ describe("workspace command dispatch", () => {
         maxUntrackedLineStatBytes: 8 * 1024 * 1024,
         workspaceContext: {
           workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
         },
         mergeBaseBranch: "main",
       },
@@ -44,7 +43,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: {
           workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
         },
         target: { type: "all", mergeBaseBranch: "main" },
         maxDiffBytes: 2 * 1024 * 1024,
@@ -59,7 +57,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: {
           workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
         },
         message: "Commit message",
       },
@@ -103,7 +100,6 @@ describe("workspace command dispatch", () => {
         maxUntrackedLineStatBytes: 8 * 1024 * 1024,
         workspaceContext: {
           workspacePath,
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -147,7 +143,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: {
           workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -164,7 +159,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: {
           workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -179,7 +173,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-1",
         workspaceContext: {
           workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -219,7 +212,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-non-git-pr",
         workspaceContext: {
           workspacePath: "/tmp/non-git-pr-env",
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -246,7 +238,6 @@ describe("workspace command dispatch", () => {
           environmentId: "env-1",
           workspaceContext: {
             workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "managed-worktree",
           },
         },
         harness.dispatchOptions(),
@@ -267,7 +258,6 @@ describe("workspace command dispatch", () => {
           environmentId: "env-1",
           workspaceContext: {
             workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "managed-worktree",
           },
         },
         harness.dispatchOptions(),
@@ -286,7 +276,6 @@ describe("workspace command dispatch", () => {
           environmentId: "env-1",
           workspaceContext: {
             workspacePath: "/tmp/env-1",
-            workspaceProvisionType: "managed-worktree",
           },
         },
         harness.dispatchOptions(),
@@ -309,7 +298,6 @@ describe("workspace command dispatch", () => {
         maxUntrackedLineStatBytes: 8 * 1024 * 1024,
         workspaceContext: {
           workspacePath: "/tmp/env-rehydrate",
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -322,7 +310,6 @@ describe("workspace command dispatch", () => {
     expect(result.workspaceStatus.workingTree.state).toBe("clean");
     expect(harness.provisions).toEqual([
       expect.objectContaining({
-        workspaceProvisionType: "unmanaged",
         path: "/tmp/env-rehydrate",
         signal: expect.any(AbortSignal),
       }),
@@ -345,7 +332,6 @@ describe("workspace command dispatch", () => {
         maxUntrackedLineStatBytes: 8 * 1024 * 1024,
         workspaceContext: {
           workspacePath: "/tmp/non-git-env",
-          workspaceProvisionType: "unmanaged",
         },
       },
       harness.dispatchOptions(),
@@ -356,7 +342,6 @@ describe("workspace command dispatch", () => {
         environmentId: "env-non-git",
         workspaceContext: {
           workspacePath: "/tmp/non-git-env",
-          workspaceProvisionType: "unmanaged",
         },
         target: { type: "uncommitted" },
         maxDiffBytes: 2 * 1024 * 1024,

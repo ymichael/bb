@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  resolveDefaultWorktreeBaseBranch,
-  resolveManagedDefaultBaseBranchSpec,
-} from "../../src/services/projects/worktree-base-branch.js";
+import { resolveDefaultWorktreeBaseBranch } from "../../src/services/projects/worktree-base-branch.js";
 
 describe("resolveDefaultWorktreeBaseBranch", () => {
   it("keeps the local branch when origin is missing", () => {
@@ -51,25 +48,5 @@ describe("resolveDefaultWorktreeBaseBranch", () => {
         }),
       ).toBe("main");
     }
-  });
-});
-
-describe("resolveManagedDefaultBaseBranchSpec", () => {
-  it("returns a named branch when the computed default differs from local", () => {
-    expect(
-      resolveManagedDefaultBaseBranchSpec({
-        defaultBranch: "main",
-        defaultBranchRelation: "local-behind",
-        originDefaultBranch: "origin/main",
-      }),
-    ).toEqual({ kind: "named", name: "origin/main" });
-
-    expect(
-      resolveManagedDefaultBaseBranchSpec({
-        defaultBranch: "main",
-        defaultBranchRelation: "equal",
-        originDefaultBranch: "origin/main",
-      }),
-    ).toEqual({ kind: "named", name: "origin/main" });
   });
 });

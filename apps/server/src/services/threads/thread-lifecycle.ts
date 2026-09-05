@@ -1,5 +1,9 @@
 import { revokeThreadDesktopBrowserControl } from "../desktop-browsers.js";
 import {
+  providerLaunchHasPendingWork,
+  refreshProviderRetirement,
+} from "../environments/provider-orchestration.js";
+import {
   and,
   eq,
   gte,
@@ -41,11 +45,6 @@ import type {
   LoggedPendingInteractionWorkSessionDeps,
   LoggedWorkSessionDeps,
 } from "../../types.js";
-import {
-  requestEnvironmentCleanup,
-  requestEnvironmentCleanupAdvance,
-  runEnvironmentCleanupAdvance,
-} from "../environments/environment-cleanup-internal.js";
 import { cancelEnvironmentProvisioningForThreadStopInTransaction } from "../environments/environment-provisioning-cancellation.js";
 import {
   emptyCommandResultSideEffects,
@@ -99,6 +98,7 @@ import {
   forgetActiveThreadProvisionContext,
   getActiveThreadProvisionContext,
 } from "./thread-provisioning-active-context.js";
+import { cancelEnvironmentProviderLaunch } from "./thread-environment-providers.js";
 import { hasProvisioningTimelineRow } from "./thread-provisioning-context.js";
 import { isPreStartThreadStatus } from "./thread-status.js";
 import { settleDanglingBackgroundTasksForStoppedThreadInTransaction } from "./background-task-reconciliation.js";
@@ -218,6 +218,7 @@ interface RequestThreadStopForCurrentStateThread {
 }
 
 interface RequestPreStartThreadStopResult {
+  abandonedProvider: { environmentProviderId: string } | null;
   cancelHostId: string | null;
   environmentId: string | null;
   finalized: boolean;
@@ -469,9 +470,6 @@ function appendProvisioningInterruptedEventInTransaction(
     return;
   }
   const environmentId = context.state.environmentId ?? thread.environmentId;
-  if (environmentId === null) {
-    return;
-  }
   if (!hasProvisioningTimelineRow(context)) {
     return;
   }
@@ -828,12 +826,6 @@ export function settleThreadStartCommandResult(
     finalizeStoppedThreadInTransaction(args.deps, {
       threadId: currentThread.id,
     });
-    postCommitActions.push({
-      run: (deps) =>
-        runEnvironmentCleanupAdvance(deps, {
-          environmentId: args.command.environmentId,
-        }),
-    });
     return { postCommitActions };
   }
   if (
@@ -967,16 +959,7 @@ export function settleThreadStopCommandResult(
     finalizeStoppedThreadInTransaction(args.deps, {
       threadId: args.command.threadId,
     });
-    return {
-      postCommitActions: [
-        {
-          run: (deps) =>
-            runEnvironmentCleanupAdvance(deps, {
-              environmentId: args.command.environmentId,
-            }),
-        },
-      ],
-    };
+    return emptyCommandResultSideEffects();
   }
 
   finalizeStoppedThreadInTransaction(args.deps, {
@@ -994,12 +977,6 @@ export function settleThreadStopCommandResult(
             threadId: args.command.threadId,
           });
         },
-      },
-      {
-        run: (deps) =>
-          runEnvironmentCleanupAdvance(deps, {
-            environmentId: args.command.environmentId,
-          }),
       },
     ],
   };
@@ -1226,7 +1203,12 @@ function requestPreStartThreadStop(
       };
       const currentThread = getThread(tx, thread.id);
       if (!currentThread) {
-        return { cancelHostId: null, environmentId: null, finalized: true };
+        return {
+          abandonedProvider: null,
+          cancelHostId: null,
+          environmentId: null,
+          finalized: true,
+        };
       }
 
       const hasProvisioningContext =
@@ -1238,6 +1220,7 @@ function requestPreStartThreadStop(
         !hasProvisioningContext
       ) {
         return {
+          abandonedProvider: null,
           cancelHostId: null,
           environmentId: currentThread.environmentId,
           finalized: false,
@@ -1250,6 +1233,15 @@ function requestPreStartThreadStop(
           threadId: currentThread.id,
         });
       }
+      const abandonedContext = hasProvisioningContext
+        ? getActiveThreadProvisionContext(currentThread.id)
+        : null;
+      const abandonedIntent = abandonedContext?.request.environmentIntent;
+      const abandonedProvider =
+        abandonedIntent?.type === "provider" &&
+        abandonedContext?.state.environmentId === null
+          ? { environmentProviderId: abandonedIntent.environmentProviderId }
+          : null;
       if (hasProvisioningContext) {
         appendProvisioningInterruptedEventInTransaction(txDeps, currentThread);
       }
@@ -1267,6 +1259,7 @@ function requestPreStartThreadStop(
             });
       if (cancellation === "awaiting_host_cancel" && environment !== null) {
         return {
+          abandonedProvider,
           cancelHostId: environment.hostId,
           environmentId: environment.id,
           finalized: false,
@@ -1276,17 +1269,27 @@ function requestPreStartThreadStop(
       finalizeStoppedThreadInTransaction(txDeps, {
         threadId: currentThread.id,
       });
-      return { cancelHostId: null, environmentId, finalized: true };
+      return {
+        abandonedProvider,
+        cancelHostId: null,
+        environmentId,
+        finalized: true,
+      };
     },
     { behavior: "immediate" },
   );
   notificationBuffer.flushInto(deps.hub);
+  if (result.abandonedProvider !== null) {
+    cancelEnvironmentProviderLaunch(deps, {
+      ...result.abandonedProvider,
+      threadId: thread.id,
+    });
+  }
 
   if (!result.finalized && result.environmentId && result.cancelHostId) {
-    requestEnvironmentCleanup(deps, { environmentId: result.environmentId });
     startLiveHostCommand(deps, {
       command: {
-        type: "environment.provision.cancel",
+        type: "environment.attach.cancel",
         environmentId: result.environmentId,
       },
       hostId: result.cancelHostId,
@@ -1303,13 +1306,6 @@ function requestPreStartThreadStop(
       },
     });
     return;
-  }
-
-  if (result.finalized && result.environmentId !== null) {
-    requestEnvironmentCleanup(deps, { environmentId: result.environmentId });
-    requestEnvironmentCleanupAdvance(deps, {
-      environmentId: result.environmentId,
-    });
   }
 }
 
@@ -1754,27 +1750,12 @@ export function finalizeStoppedThreadInTransaction(
       },
     );
 
-    const environmentId = finalizedThread.environmentId;
+    forgetActiveThreadProvisionContext(finalizedThread.id);
+    if (providerLaunchHasPendingWork(deps.db, finalizedThread.id)) return;
     deleteThread(deps.db, deps.hub, finalizedThread.id);
-    requestEnvironmentCleanup(deps, {
-      environmentId,
-    });
+    if (finalizedThread.environmentId !== null)
+      refreshProviderRetirement(deps, finalizedThread.environmentId);
   }
-}
-
-export function finalizeStoppedThreadAndRequestCleanupAdvance(
-  deps: LoggedPendingInteractionWorkSessionDeps,
-  args: FinalizeStoppedThreadArgs,
-): void {
-  const threadBeforeFinalize = getThread(deps.db, args.threadId);
-  finalizeStoppedThread(deps, args);
-
-  const threadAfterFinalize = getThread(deps.db, args.threadId);
-  const environmentId =
-    threadAfterFinalize?.environmentId ??
-    threadBeforeFinalize?.environmentId ??
-    null;
-  requestEnvironmentCleanupAdvance(deps, { environmentId });
 }
 
 export async function reconcileDaemonReportedThreads(
@@ -1818,7 +1799,7 @@ export async function reconcileDaemonReportedThreads(
       continue;
     }
 
-    finalizeStoppedThreadAndRequestCleanupAdvance(deps, {
+    finalizeStoppedThread(deps, {
       threadId: thread.id,
     });
   }

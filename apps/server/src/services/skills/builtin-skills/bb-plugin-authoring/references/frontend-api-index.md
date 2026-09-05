@@ -14,6 +14,12 @@ Read the installed SDK declarations for the exact current signatures.
 - `experimental_NewThreadComposer`
 - `experimental_ProviderModelPicker`
 - `experimental_PermissionModePicker`
+- `experimental_BranchPicker` — the host's branch picker with its options
+  loading, for an environment provider's inputs control
+- `experimental_useBranches` — searchable local and remote branch lists with
+  host-backed refresh for a project source
+- `experimental_useCheckoutState` — checkout facts for composing a plugin's
+  own checkout branch control with `experimental_useBranches`
 - `experimental_SourceCode`
 - `experimental_Diff`
 - `useRpc`
@@ -35,6 +41,12 @@ Read the installed SDK declarations for the exact current signatures.
 
 ## Type exports
 
+- `PluginMachineProviderInputsRegistration` — registers one provider's app
+  inputs control with `app.slots.experimental_machineProviderInputs`
+- `PluginMachineProviderInputsProps` — project, persisted non-secret value,
+  and ready/blocked change callback
+- `PluginMachineProviderInputsChange`
+
 - `PluginHomepageSectionProps`
 - `PluginSettingsSectionProps`
 - `ExperimentalAppOverlayProps`
@@ -43,6 +55,15 @@ Read the installed SDK declarations for the exact current signatures.
 - `PluginNewThreadPanelProps`
 - `PluginPendingInteractionView`
 - `PluginPendingInteractionProps`
+- `ExperimentalBranchPickerProps`
+- `UseBranchesArgs`
+- `BranchesState`
+- `UseCheckoutStateArgs`
+- `CheckoutState`
+- `PluginEnvironmentProviderInputsChange`
+- `PluginEnvironmentProviderInputsProps`
+- `PluginEnvironmentProviderInputsRegistration` — the registration accepted by
+  `app.slots.experimental_environmentProviderInputs`
 - `PluginSidebarFooterActionProps`
 - `ExperimentalSidebarFooterDisclosureProps`
 - `ExperimentalSidebarNavigationShortcut`
@@ -92,7 +113,6 @@ Read the installed SDK declarations for the exact current signatures.
 - `ExperimentalSidebarFooter`
 - `ExperimentalSidebarNavigationRegistration`
 - `PluginSidebarThreadIndicator`
-- `PluginSidebarWorkspaceKind`
 - `PluginSidebarThreadActivity`
 - `PluginSidebarThread`
 - `PluginSidebarPullRequest`

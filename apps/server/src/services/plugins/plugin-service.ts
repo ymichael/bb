@@ -25,6 +25,7 @@ import {
   type ExperimentalPluginProviderEnvContext,
   type ExperimentalPluginProviderEnvHealthContext,
   type PluginRpcError,
+  type PluginRpcErrorCode,
   type PluginRpcValidationIssue,
   type StandardSchemaV1,
   type StandardSchemaV1Issue,
@@ -130,6 +131,7 @@ import {
   type RegisterInstalledArgs,
 } from "./managed-plugin-artifacts.js";
 import type { PluginHookProvider } from "./plugin-hook-registry.js";
+import type { PluginEnvironmentProviderBridge } from "./plugin-environment-provider-registry.js";
 import { createPluginRegistration } from "./plugin-registration.js";
 import { createPluginRuntime, forgetMutableRoot } from "./plugin-runtime.js";
 import { createPluginUpdates } from "./plugin-updates.js";
@@ -154,6 +156,7 @@ import type {
   PluginResolvedProviderEnv,
   PluginResolvedProviderEnvHealth,
 } from "./plugin-service-internal.js";
+import type { PluginMachineProviderBridge } from "./plugin-machine-provider-registry.js";
 export type {
   PluginAgentToolContribution,
   PluginMentionResolveResult,
@@ -183,6 +186,8 @@ export interface PluginService {
   events: PluginThreadEventEmitter;
   /** The hook chain the dispatch pipeline consults; registered in createApp. */
   hooks: PluginHookProvider;
+  environmentProviders: PluginEnvironmentProviderBridge;
+  machineProviders: PluginMachineProviderBridge;
   /**
    * Bind the in-process BB SDK to the running server. Call once the HTTP
    * listener is up, before start(): bb.sdk throws until this runs.
@@ -406,6 +411,11 @@ async function settledWithin(
   }
 }
 
+type PluginRpcHandlerErrorCode = Extract<
+  PluginRpcErrorCode,
+  "invalid_input" | "handler_error" | "invalid_output" | "non_json_result"
+>;
+
 class PluginRpcBoundaryError extends Error {
   constructor(readonly rpcError: PluginRpcError) {
     super(rpcError.message);
@@ -441,7 +451,7 @@ function normalizeRpcIssues(
 }
 
 function rpcBoundaryFailure(
-  code: PluginRpcError["code"],
+  code: PluginRpcHandlerErrorCode,
   message: string,
   issues?: PluginRpcValidationIssue[],
 ): PluginRpcBoundaryError {
@@ -516,7 +526,7 @@ function normalizeRpcJsonResult(value: unknown): JsonValue {
       if (Array.isArray(current)) {
         return current.map((item, index) => visit(item, `${path}[${index}]`));
       }
-      const prototype = Object.getPrototypeOf(current) as object | null;
+      const prototype = Object.getPrototypeOf(current);
       if (prototype !== Object.prototype && prototype !== null) {
         throw rpcBoundaryFailure(
           "non_json_result",
@@ -908,6 +918,10 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
     invokeWrapped,
     isBuiltinPluginId,
     listPluginHooks,
+    listPluginEnvironmentProviders,
+    getPluginEnvironmentProvider,
+    listPluginMachineProviders,
+    getPluginMachineProvider,
     isPackagedBuiltinEntry,
     loadAll,
     loaded,
@@ -1555,6 +1569,11 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
           thread: buildThreadDto(thread),
         }));
       },
+      emitThreadUnarchived(thread) {
+        emitThreadEvent("thread.unarchived", () => ({
+          thread: buildThreadDto(thread),
+        }));
+      },
       emitThreadDeleted(thread) {
         emitThreadEvent("thread.deleted", () => ({
           thread: buildThreadDto(thread),
@@ -1569,6 +1588,7 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
       emitMessageQueued: buildQueuedMessageEventEmitter("message.queued"),
       emitMessageDispatched:
         buildQueuedMessageEventEmitter("message.dispatched"),
+      emitMessageCancelled: buildQueuedMessageEventEmitter("message.cancelled"),
       emitTurnFailed(threadId) {
         // Built lazily inside the emitter: with no listener the failure path
         // pays one map lookup and never touches the database.
@@ -1581,6 +1601,30 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
     hooks: {
       listHooks: listPluginHooks,
       invokeHook: async (pluginId, label, run) => {
+        const outcome = await invokeWrapped(pluginId, label, run);
+        return outcome.ok
+          ? { ok: true, value: outcome.value }
+          : { ok: false, error: outcome.error };
+      },
+      decisionTimeoutMs: pluginHookTimeoutMs,
+    },
+
+    environmentProviders: {
+      listEnvironmentProviders: listPluginEnvironmentProviders,
+      getEnvironmentProvider: getPluginEnvironmentProvider,
+      invokeProvider: async (pluginId, label, run) => {
+        const outcome = await invokeWrapped(pluginId, label, run);
+        return outcome.ok
+          ? { ok: true, value: outcome.value }
+          : { ok: false, error: outcome.error };
+      },
+      decisionTimeoutMs: pluginHookTimeoutMs,
+    },
+
+    machineProviders: {
+      listMachineProviders: listPluginMachineProviders,
+      getMachineProvider: getPluginMachineProvider,
+      invokeProvider: async (pluginId, label, run) => {
         const outcome = await invokeWrapped(pluginId, label, run);
         return outcome.ok
           ? { ok: true, value: outcome.value }
@@ -2133,7 +2177,7 @@ export function createPluginService(deps: PluginServiceDeps): PluginService {
           input,
           "input",
         );
-        const result = await handler.handler(parsedInput as never);
+        const result = await handler.handler(parsedInput);
         const parsedOutput = await validateRpcValue(
           handler.outputSchema,
           result,

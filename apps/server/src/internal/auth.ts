@@ -1,4 +1,3 @@
-import { hostTypeSchema, type HostType } from "@bb/domain";
 import { z } from "zod";
 import type { AppDeps } from "../types.js";
 import { ApiError } from "../errors.js";
@@ -10,14 +9,12 @@ interface DaemonAuthContext {
 
 interface AuthenticatedDaemon {
   hostId: string;
-  hostType: HostType;
   keyId: string;
 }
 
 const authenticatedDaemonSchema = z
   .object({
     hostId: z.string().min(1),
-    hostType: hostTypeSchema,
     keyId: z.string().min(1),
   })
   .strict();
@@ -53,7 +50,6 @@ export async function verifyAuthenticatedDaemon(
 
   return {
     hostId: verified.metadata.hostId,
-    hostType: verified.metadata.hostType,
     keyId: verified.keyId,
   };
 }
@@ -81,9 +77,9 @@ export function getAuthenticatedDaemon(
 
 export function assertAuthenticatedHostMatches(
   daemon: AuthenticatedDaemon,
-  args: { hostId: string; hostType: HostType },
+  args: { hostId: string },
 ): void {
-  if (daemon.hostId !== args.hostId || daemon.hostType !== args.hostType) {
+  if (daemon.hostId !== args.hostId) {
     throw new ApiError(
       403,
       "invalid_request",

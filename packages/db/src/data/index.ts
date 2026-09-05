@@ -51,7 +51,9 @@ export {
   countProjectSources,
   getProjectSourceForProject,
   listProjectSourcesByProjectIds,
+  listProjectSourcesByHost,
   getProjectSourceByHost,
+  getDefaultProjectSource,
   updateProjectSource,
   deleteProjectSource,
 } from "./project-sources.js";
@@ -66,7 +68,6 @@ export {
   setThreadExecutionOverride,
   getThreadPendingStartContext,
   setThreadPendingStartContext,
-  hasLiveThreadAtHostPath,
   hasPendingThreadShutdownInEnvironment,
   hasRevivableArchivedThreadInEnvironment,
   listHostThreadIds,
@@ -222,10 +223,13 @@ export {
   findProjectEnvironmentByHostPath,
   listEnvironments,
   findForeignManagedEnvironmentAtHostPath,
+  findProviderEnvironmentContainingPath,
   listRetiredLoadedEnvironmentIdsOnHost,
+  recordEnvironmentCurrentBranch,
+  recordEnvironmentProviderProvenance,
   updateEnvironmentMetadata,
 } from "./environments.js";
-export type { CreateEnvironmentInput } from "./environments.js";
+export type { CreateEnvironmentInput, EnvironmentRow } from "./environments.js";
 
 export {
   upsertHost,
@@ -421,7 +425,6 @@ export {
   pruneClosedSessions,
   pruneDestroyedEnvironments,
   truncateCompletedEventItemOutputs,
-  sweepManagedEnvironments,
 } from "./sweeps.js";
 export {
   compactDatabase,
@@ -441,3 +444,6 @@ export {
   shouldCompactDatabase,
   shouldRunIncrementalVacuum,
 } from "./maintenance.js";
+export * from "./environment-launches.js";
+export * from "./machine-launches.js";
+export * from "./machines.js";

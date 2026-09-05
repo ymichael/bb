@@ -15,7 +15,6 @@ import {
   type SQL,
 } from "drizzle-orm";
 import type {
-  EnvironmentWorkspaceDisplayKind,
   ReasoningLevel,
   ThreadChangeKind,
   ThreadLifecycleEvent,
@@ -24,11 +23,9 @@ import type {
   ThreadSearchSourceKind,
   ThreadStatus,
   ThreadVisibility,
-  WorkspaceProvisionType,
 } from "@bb/domain";
 import {
   evaluateThreadLifecycleEvent,
-  resolveEnvironmentWorkspaceDisplayKind,
   threadSearchSourceKindSchema,
 } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
@@ -42,9 +39,7 @@ import {
   threads,
 } from "../schema.js";
 import { createThreadId } from "../ids.js";
-import {
-  createOrderKeyBetween,
-} from "./order-keys.js";
+import { createOrderKeyBetween } from "./order-keys.js";
 
 type ThreadWriteConnection = DbConnection | DbTransaction;
 
@@ -72,7 +67,9 @@ function countThreadsWhere(
   db: ThreadWriteConnection,
   where: ThreadWhere,
 ): number {
-  return db.select({ count: count() }).from(threads).where(where).get()?.count ?? 0;
+  return (
+    db.select({ count: count() }).from(threads).where(where).get()?.count ?? 0
+  );
 }
 
 function listThreadsWhere(
@@ -82,8 +79,13 @@ function listThreadsWhere(
   return db.select().from(threads).where(where).all();
 }
 
-function hasThreadWhere(db: ThreadWriteConnection, where: ThreadWhere): boolean {
-  return db.select({ id: threads.id }).from(threads).where(where).get() !== undefined;
+function hasThreadWhere(
+  db: ThreadWriteConnection,
+  where: ThreadWhere,
+): boolean {
+  return (
+    db.select({ id: threads.id }).from(threads).where(where).get() !== undefined
+  );
 }
 
 export interface ThreadSearchHighlightRange {
@@ -296,10 +298,10 @@ export function createThread(
           sectionId: input.sectionId ?? null,
           status: input.status ?? "starting",
           parentThreadId:
-            originKind === null ? input.parentThreadId ?? null : null,
+            originKind === null ? (input.parentThreadId ?? null) : null,
           sourceThreadId:
             input.sourceThreadId ??
-            (originKind === null ? null : input.parentThreadId ?? null),
+            (originKind === null ? null : (input.parentThreadId ?? null)),
           originKind,
           originPluginId: input.originPluginId ?? null,
           visibility,
@@ -366,6 +368,7 @@ export function listThreadMentionRowsByIds(
 
 export interface ListThreadsOptions {
   projectId?: string;
+  environmentId?: string;
   archived?: boolean;
   sectionId?: string;
   unsectioned?: boolean;
@@ -414,10 +417,7 @@ interface PinThreadMutationResult {
   thread: ThreadRow;
 }
 
-type PinnedThreadRootCandidate = Pick<
-  ThreadRow,
-  "id" | "parentThreadId"
->;
+type PinnedThreadRootCandidate = Pick<ThreadRow, "id" | "parentThreadId">;
 
 interface FilterVisiblePinnedThreadRootsArgs<
   TThread extends PinnedThreadRootCandidate,
@@ -481,9 +481,7 @@ function getFirstPinnedThread(db: DbQueryConnection): ThreadRow | null {
 
 function filterVisiblePinnedThreadRoots<
   TThread extends PinnedThreadRootCandidate,
->({
-  pinnedThreads,
-}: FilterVisiblePinnedThreadRootsArgs<TThread>): TThread[] {
+>({ pinnedThreads }: FilterVisiblePinnedThreadRootsArgs<TThread>): TThread[] {
   const pinnedThreadIds = new Set(pinnedThreads.map((thread) => thread.id));
   return pinnedThreads.filter(
     (thread) =>
@@ -513,7 +511,8 @@ function threadWithPendingInteractionBaseQuery(db: DbConnection) {
       environmentHostId: environments.hostId,
       environmentIsWorktree: environments.isWorktree,
       environmentName: environments.name,
-      environmentWorkspaceProvisionType: environments.workspaceProvisionType,
+      environmentPath: environments.path,
+      environmentProviderId: environments.environmentProviderId,
       hasPendingInteraction: sql<number>`EXISTS (SELECT 1 FROM ${pendingInteractions} WHERE ${pendingInteractions.threadId} = ${threads.id} AND ${pendingInteractions.status} = 'pending')`,
     })
     .from(threads)
@@ -551,9 +550,11 @@ function resolvePinnedThreadNeighbor(
 export interface ThreadWithPendingInteractionState extends ThreadRow {
   environmentBranchName: string | null;
   environmentHostId: string | null;
+  environmentIsWorktree: boolean | null;
   environmentName: string | null;
+  environmentPath: string | null;
+  environmentProviderId: string | null;
   hasPendingInteraction: boolean;
-  environmentWorkspaceDisplayKind: EnvironmentWorkspaceDisplayKind;
 }
 
 interface ThreadWithPendingInteractionStateRow extends ThreadRow {
@@ -561,7 +562,8 @@ interface ThreadWithPendingInteractionStateRow extends ThreadRow {
   environmentHostId: string | null;
   environmentIsWorktree: boolean | null;
   environmentName: string | null;
-  environmentWorkspaceProvisionType: WorkspaceProvisionType | null;
+  environmentPath: string | null;
+  environmentProviderId: string | null;
   hasPendingInteraction: number;
 }
 
@@ -589,7 +591,6 @@ export interface ListUnarchivedHiddenSourceThreadsArgs {
 export interface ListUnarchivedAssignedChildThreadsArgs {
   parentThreadId: string;
 }
-
 
 export interface ListNonDeletedChildThreadsArgs {
   parentThreadId: string;
@@ -626,12 +627,6 @@ export interface HasPendingThreadShutdownInEnvironmentArgs {
   environmentId: string;
 }
 
-const NON_TERMINAL_THREAD_STATUSES: readonly ThreadStatus[] = [
-  "starting",
-  "idle",
-  "active",
-];
-
 interface StatusTransition {
   currentStatus: ThreadStatus;
   newStatus: ThreadStatus;
@@ -647,14 +642,15 @@ function statusTransitionNeedsAttention(args: StatusTransition): boolean {
     return false;
   }
 
-  return (
-    args.currentStatus === "active" || args.currentStatus === "starting"
-  );
+  return args.currentStatus === "active" || args.currentStatus === "starting";
 }
 
 function buildListThreadsFilters(options: ListThreadsOptions) {
   return [
     options.projectId ? eq(threads.projectId, options.projectId) : undefined,
+    options.environmentId
+      ? eq(threads.environmentId, options.environmentId)
+      : undefined,
     options.sectionId ? eq(threads.sectionId, options.sectionId) : undefined,
     options.unsectioned ? isNull(threads.sectionId) : undefined,
     nonDeletedThreads(),
@@ -665,9 +661,7 @@ function buildListThreadsFilters(options: ListThreadsOptions) {
     options.sourceThreadId
       ? eq(threads.sourceThreadId, options.sourceThreadId)
       : undefined,
-    options.originKind
-      ? eq(threads.originKind, options.originKind)
-      : undefined,
+    options.originKind ? eq(threads.originKind, options.originKind) : undefined,
     options.originPluginId
       ? eq(threads.originPluginId, options.originPluginId)
       : undefined,
@@ -711,7 +705,9 @@ function buildActiveProjectThreadOrderBy() {
 function buildPinnedThreadOrderBy() {
   return [
     asc(sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN 0 ELSE 1 END`),
-    asc(sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`),
+    asc(
+      sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN ${threads.pinSortKey} END`,
+    ),
     asc(sql`CASE WHEN ${threads.pinnedAt} IS NOT NULL THEN ${threads.id} END`),
   ];
 }
@@ -727,11 +723,12 @@ function toThreadWithPendingInteractionState(
   row: ThreadWithPendingInteractionStateRow,
 ): ThreadWithPendingInteractionState {
   const {
-    environmentIsWorktree,
-    environmentWorkspaceProvisionType,
     environmentBranchName,
     environmentHostId,
+    environmentIsWorktree,
     environmentName,
+    environmentPath,
+    environmentProviderId,
     hasPendingInteraction,
     ...thread
   } = row;
@@ -739,13 +736,10 @@ function toThreadWithPendingInteractionState(
     ...thread,
     environmentBranchName,
     environmentHostId,
+    environmentIsWorktree,
     environmentName,
-    environmentWorkspaceDisplayKind: resolveEnvironmentWorkspaceDisplayKind({
-      environment: {
-        isWorktree: environmentIsWorktree,
-        workspaceProvisionType: environmentWorkspaceProvisionType,
-      },
-    }),
+    environmentPath,
+    environmentProviderId,
     hasPendingInteraction: hasPendingInteraction > 0,
   };
 }
@@ -826,7 +820,9 @@ function findHighlightRanges(args: {
   }
 
   return mergeHighlightRanges(
-    ranges.sort((left, right) => left.start - right.start || left.end - right.end),
+    ranges.sort(
+      (left, right) => left.start - right.start || left.end - right.end,
+    ),
   );
 }
 
@@ -1103,7 +1099,8 @@ export function searchThreadsWithPendingInteractionState(
 ): ThreadSearchResults {
   const tokens = listThreadSearchQueryTokens(args.query);
   const tokenMatchQueries = listThreadSearchTokenMatchQueries(tokens);
-  const anyTokenMatchQuery = buildThreadSearchAnyTokenMatchQuery(tokenMatchQueries);
+  const anyTokenMatchQuery =
+    buildThreadSearchAnyTokenMatchQuery(tokenMatchQueries);
   if (anyTokenMatchQuery === null) {
     return {
       active: { total: 0, results: [] },
@@ -1187,7 +1184,9 @@ export function countThreads(
     options.includeHidden === true
       ? undefined
       : eq(threads.visibility, "visible"),
-    options.status !== undefined ? eq(threads.status, options.status) : undefined,
+    options.status !== undefined
+      ? eq(threads.status, options.status)
+      : undefined,
     options.providerId !== undefined
       ? eq(threads.providerId, options.providerId)
       : undefined,
@@ -1287,9 +1286,7 @@ export interface RunningThreadRow {
  * `archived_at IS NULL` is the leading equality and the status set is the
  * range that follows.
  */
-export function listRunningThreads(
-  db: DbQueryConnection,
-): RunningThreadRow[] {
+export function listRunningThreads(db: DbQueryConnection): RunningThreadRow[] {
   return db
     .select({
       id: threads.id,
@@ -1445,7 +1442,6 @@ export function listUnarchivedAssignedChildThreads(
   );
 }
 
-
 export function listUnarchivedHiddenSourceThreads(
   db: ThreadWriteConnection,
   args: ListUnarchivedHiddenSourceThreadsArgs,
@@ -1491,33 +1487,6 @@ export function listThreadEnvironmentAssignmentsOnHost(
       ),
     )
     .all();
-}
-
-export interface HasLiveThreadAtHostPathArgs {
-  hostId: string;
-  path: string;
-}
-
-export function hasLiveThreadAtHostPath(
-  db: DbConnection,
-  args: HasLiveThreadAtHostPathArgs,
-): boolean {
-  const row = db
-    .select({ id: threads.id })
-    .from(threads)
-    .innerJoin(environments, eq(threads.environmentId, environments.id))
-    .where(
-      and(
-        eq(environments.hostId, args.hostId),
-        eq(environments.path, args.path),
-        liveThreads(
-          inArray(threads.status, [...NON_TERMINAL_THREAD_STATUSES]),
-        ),
-      ),
-    )
-    .get();
-
-  return row !== undefined;
 }
 
 export function listHostThreadIds(
@@ -1777,10 +1746,7 @@ export function updateThread(
   const changes: ThreadChangeKind[] = [];
   if ("title" in input || "sectionId" in input) changes.push("title-changed");
   if ("lastReadAt" in input) changes.push("read-state-changed");
-  if (
-    "visibility" in input &&
-    input.visibility !== existing.visibility
-  ) {
+  if ("visibility" in input && input.visibility !== existing.visibility) {
     changes.push("title-changed");
   }
   if (
@@ -2067,7 +2033,9 @@ export class ThreadLifecycleEventNotAppliedError extends Error {
   readonly reason: ApplyThreadLifecycleEventNoopReason;
 
   constructor(args: ThreadLifecycleEventNotAppliedErrorArgs) {
-    super(`Thread lifecycle event not applied (${args.reason}): ${args.detail}`);
+    super(
+      `Thread lifecycle event not applied (${args.reason}): ${args.detail}`,
+    );
     this.name = "ThreadLifecycleEventNotAppliedError";
     this.detail = args.detail;
     this.reason = args.reason;

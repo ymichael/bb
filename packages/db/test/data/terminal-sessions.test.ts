@@ -179,7 +179,6 @@ function openTestSession(db: TestDb, hostId: string): TestSession {
     hostId,
     instanceId: "inst-1",
     hostName: "test-host",
-    hostType: "persistent",
     dataDir: "/tmp/test-host-data",
     protocolVersion: 1,
     heartbeatIntervalMs: 10_000,
@@ -191,7 +190,6 @@ function setup(): TerminalSessionFixture {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const session = openTestSession(db, host.id);
   const { project } = createProject(db, noopNotifier, {
@@ -199,14 +197,12 @@ function setup(): TerminalSessionFixture {
     source: { type: "local_path", hostId: host.id, path: "/tmp/project" },
   });
   const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
     projectId: project.id,
     hostId: host.id,
     path: "/tmp/workspace",
     status: "ready",
-    managed: false,
     isGitRepo: true,
-    isWorktree: false,
-    workspaceProvisionType: "unmanaged",
     branchName: "main",
     baseBranch: null,
     defaultBranch: "main",

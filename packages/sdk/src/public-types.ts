@@ -1,5 +1,6 @@
 export type {
   CallerExecutionInputSource,
+  GitBranchSelection,
   JsonValue,
   PermissionMode,
   PromptInput,
@@ -9,7 +10,6 @@ export type {
   ThreadStatus,
 } from "@bb/domain";
 export type {
-  BaseBranchSpec,
   CreateExecutionInputSources,
   EnvironmentArgs,
   ExistingThreadExecutionInputSources,

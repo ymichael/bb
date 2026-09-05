@@ -3,21 +3,20 @@ import type { AppDeps } from "../../types.js";
 
 type HostEnrollmentDeps = Pick<AppDeps, "db" | "machineAuth">;
 
-interface IssuePersistentHostEnrollKeyArgs {
+interface IssueHostEnrollKeyArgs {
   enrollSource: "loopback" | "public-multi-machine";
   hostId?: string;
 }
 
-export async function issuePersistentHostEnrollKey(
+export async function issueHostEnrollKey(
   deps: HostEnrollmentDeps,
-  args: IssuePersistentHostEnrollKeyArgs,
+  args: IssueHostEnrollKeyArgs,
 ) {
   const hostId = args.hostId ?? createHostId();
 
   const enrollKey = await deps.machineAuth.issueHostEnrollKey({
     enrollSource: args.enrollSource,
     hostId,
-    hostType: "persistent",
   });
 
   return { enrollKey, hostId };

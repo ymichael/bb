@@ -548,7 +548,7 @@ export function parseOperationMessage(
       title: provisioningTitleForStatus(operationStatus),
       status: operationStatus,
       provisioning: {
-        environmentId,
+        ...(environmentId !== null ? { environmentId } : {}),
         provisioningId,
         ...(transcript ? { transcript } : {}),
       },

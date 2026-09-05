@@ -2,7 +2,6 @@ export {
   applyEnvironmentLifecycleEvent,
   applyEnvironmentLifecycleEventInTransaction,
   EnvironmentLifecycleEventNotAppliedError,
-  listStaleDestroyingManagedEnvironments,
   recordEnvironmentCurrentBranch,
   recordProvisionedEnvironmentWorkspace,
   requireEnvironmentLifecycleEventApplied,

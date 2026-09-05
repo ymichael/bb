@@ -1,7 +1,13 @@
 import { ensurePersonalProject, listEnvironments } from "@bb/db";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
+import type { PluginEnvironmentProviderValidateContext } from "@get-bb/plugin-sdk/environment-provider";
 import { describe, expect, it } from "vitest";
 import { createThreadFromRequest } from "../../src/services/threads/thread-create.js";
+import { DEFAULT_ENVIRONMENT_PROVIDER_ID } from "../../src/services/environments/environment-provider-ids.js";
+import {
+  checkoutProviderInputsSchema,
+  installFakeEnvironmentProvider,
+} from "../helpers/environment-provider.js";
 import { waitForQueuedCommand } from "../helpers/commands.js";
 import { textInput } from "../helpers/prompt-input.js";
 import {
@@ -46,24 +52,45 @@ describe("thread creation on a path another project already uses", () => {
       });
 
       expect(thread.projectId).toBe(project.id);
-      const projectEnvironments = listEnvironments(harness.deps.db, project.id);
+      await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "thread.start" &&
+          queued.command.threadId === thread.id,
+      );
+      const projectEnvironments = listEnvironments(harness.deps.db, {
+        projectId: project.id,
+      });
       expect(projectEnvironments).toHaveLength(1);
       expect(projectEnvironments[0]?.id).not.toBe(personalEnvironment.id);
-
-      const provision = await waitForQueuedCommand(
-        harness,
-        (queued) => queued.command.type === "environment.provision",
-      );
-      expect(provision.command).toMatchObject({
-        type: "environment.provision",
-        environmentId: projectEnvironments[0]?.id,
-        path: SHARED_PATH,
-      });
+      expect(projectEnvironments[0]?.path).toBe(SHARED_PATH);
     });
   });
 
-  it("refuses a branch checkout while another project works in the directory", async () => {
+  it("runs the checkout provider's validate for a branch checkout request", async () => {
     await withTestHarness(async (harness) => {
+      const validated: PluginEnvironmentProviderValidateContext[] = [];
+      installFakeEnvironmentProvider({
+        id: DEFAULT_ENVIRONMENT_PROVIDER_ID.projectCheckout,
+        pluginId: "environment-project-checkout",
+        displayName: "Checkout",
+        requires: {
+          projectCheckout: true,
+          gitCheckout: false,
+          gitRemote: false,
+          projectless: false,
+        },
+        inputs: checkoutProviderInputsSchema,
+        validate: (context) => {
+          validated.push(context);
+          return {
+            action: "refuse",
+            message:
+              "Cannot checkout branch while another thread is using this workspace",
+          };
+        },
+        decide: () => ({ action: "wait", reason: "…" }),
+      });
       const { host } = seedHostSession(harness.deps, {
         id: "host-shared-checkout",
       });
@@ -108,7 +135,18 @@ describe("thread creation on a path another project already uses", () => {
         }),
       ).rejects.toThrow("Cannot checkout branch while another thread is using");
 
-      expect(listEnvironments(harness.deps.db, project.id)).toEqual([]);
+      expect(validated).toHaveLength(1);
+      expect(validated[0]).toMatchObject({
+        host: { id: host.id },
+        projectCheckout: { path: SHARED_PATH },
+        inputs: {
+          path: SHARED_PATH,
+          branch: { kind: "existing", name: "feature/x" },
+        },
+      });
+      expect(
+        listEnvironments(harness.deps.db, { projectId: project.id }),
+      ).toEqual([]);
     });
   });
 
@@ -126,8 +164,8 @@ describe("thread creation on a path another project already uses", () => {
         hostId: host.id,
         projectId: owner.id,
         path: worktreePath,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "git-worktree",
+        providerOwnsPath: true,
       });
 
       const { project } = seedProjectWithSource(harness.deps, {
@@ -151,7 +189,9 @@ describe("thread creation on a path another project already uses", () => {
         }),
       ).rejects.toThrow("bb-managed workspace owned by another project");
 
-      expect(listEnvironments(harness.deps.db, project.id)).toEqual([]);
+      expect(
+        listEnvironments(harness.deps.db, { projectId: project.id }),
+      ).toEqual([]);
     });
   });
 
@@ -169,8 +209,8 @@ describe("thread creation on a path another project already uses", () => {
         projectId: owner.id,
         path: null,
         status: "provisioning",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "git-worktree",
+        providerOwnsPath: true,
       });
 
       const { project } = seedProjectWithSource(harness.deps, {
@@ -197,7 +237,62 @@ describe("thread creation on a path another project already uses", () => {
         }),
       ).rejects.toThrow("bb-managed workspace owned by another project");
 
-      expect(listEnvironments(harness.deps.db, project.id)).toEqual([]);
+      expect(
+        listEnvironments(harness.deps.db, { projectId: project.id }),
+      ).toEqual([]);
+    });
+  });
+
+  it("accepts a second project's checkout request at a path the first project's checkout row holds", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-two-projects-one-checkout",
+      });
+      const { project: first } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "First Project",
+        path: SHARED_PATH,
+      });
+      const firstEnvironment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: first.id,
+        path: SHARED_PATH,
+        environmentProviderId: DEFAULT_ENVIRONMENT_PROVIDER_ID.projectCheckout,
+        providerOwnsPath: false,
+      });
+
+      const { project: second } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Second Project",
+        path: SHARED_PATH,
+      });
+
+      const thread = await createThreadFromRequest(harness.deps, {
+        environment: {
+          type: "host",
+          hostId: host.id,
+          workspace: { type: "unmanaged", path: SHARED_PATH },
+        },
+        input: textInput("Work in the shared checkout"),
+        origin: "app",
+        projectId: second.id,
+        providerId: "codex",
+        startedOnBehalfOf: null,
+      });
+
+      expect(thread.projectId).toBe(second.id);
+      await waitForQueuedCommand(
+        harness,
+        (queued) =>
+          queued.command.type === "thread.start" &&
+          queued.command.threadId === thread.id,
+      );
+      const secondEnvironments = listEnvironments(harness.deps.db, {
+        projectId: second.id,
+      });
+      expect(secondEnvironments).toHaveLength(1);
+      expect(secondEnvironments[0]?.id).not.toBe(firstEnvironment.id);
+      expect(secondEnvironments[0]?.path).toBe(SHARED_PATH);
     });
   });
 });

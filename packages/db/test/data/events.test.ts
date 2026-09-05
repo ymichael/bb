@@ -70,7 +70,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "test-project",
@@ -4654,16 +4653,15 @@ describe("events", () => {
     const db = createMigratedConnection();
     const host = upsertHost(db, noopNotifier, {
       name: "task-host",
-      type: "persistent",
     });
     const { project } = createProject(db, noopNotifier, {
       name: "task-project",
       source: { type: "local_path", hostId: host.id, path: "/tmp/test" },
     });
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
-      workspaceProvisionType: "unmanaged",
     });
     const thread = createThread(db, noopNotifier, {
       projectId: project.id,
@@ -4757,7 +4755,6 @@ describe("events", () => {
 
     const otherHost = upsertHost(db, noopNotifier, {
       name: "other-host",
-      type: "persistent",
     });
     expect(
       listOpenBackgroundTaskItemRowsForHost(db, { hostId: otherHost.id }),

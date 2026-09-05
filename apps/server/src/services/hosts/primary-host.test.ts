@@ -78,4 +78,15 @@ describe("assertUsableHostId", () => {
 
     expect(resolvePrimaryHostId(harness.deps)).toBe(primary.id);
   });
+
+  it("resolves a provider-made machine when it is configured as primary", async () => {
+    harness = await createTestAppHarness();
+    const { host: providerMachine } = seedHostSession(harness.deps, {
+      name: "sandbox",
+    });
+    seedHostSession(harness.deps, { name: "laptop" });
+    seedPrimaryHost(harness.deps, providerMachine.id);
+
+    expect(resolvePrimaryHostId(harness.deps)).toBe(providerMachine.id);
+  });
 });

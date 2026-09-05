@@ -22,6 +22,8 @@ import {
   systemErrorEventDataSchema,
   threadScope,
   turnRequestEventDataSchema,
+  type PermissionMode,
+  WORKSPACE_PROVISIONING_STEP_KEYS,
 } from "@bb/domain";
 import { randomBytes } from "node:crypto";
 import type {
@@ -141,7 +143,7 @@ interface AppendSystemErrorEventArgs {
 
 interface AppendThreadProvisioningEventArgs {
   entries: ProvisioningTranscriptEntry[];
-  environmentId: string;
+  environmentId: string | null;
   provisioningId: string;
   status: SystemThreadProvisioningStatus;
   threadId: string;
@@ -149,6 +151,7 @@ interface AppendThreadProvisioningEventArgs {
 
 interface BuildCwdBranchEntriesArgs {
   branchName: string | null;
+  headSha: string | null;
   path: string;
 }
 
@@ -712,19 +715,27 @@ export function buildCwdBranchEntries(
   const entries: ProvisioningTranscriptEntry[] = [
     {
       type: "step",
-      key: "workspace-path",
+      key: WORKSPACE_PROVISIONING_STEP_KEYS.workspacePath,
       text: `Using workspace: ${args.path}`,
       status: "completed",
       startedAt: now,
     },
   ];
   if (args.branchName) {
+    const sha = args.headSha;
     entries.push({
       type: "step",
-      key: "workspace-branch",
-      text: `Using branch: ${args.branchName}`,
+      key: WORKSPACE_PROVISIONING_STEP_KEYS.workspaceBranch,
+      text:
+        sha === null
+          ? `Using branch: ${args.branchName}`
+          : `Using branch: ${args.branchName} (${sha.slice(0, 7)})`,
       status: "completed",
       startedAt: now,
+      metadata:
+        sha === null
+          ? { branchName: args.branchName }
+          : { branchName: args.branchName, sha },
     });
   }
   return entries;

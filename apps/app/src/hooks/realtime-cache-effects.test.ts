@@ -40,6 +40,7 @@ import {
   threadTimelineTurnSummaryDetailsQueryKey,
 } from "./queries/query-keys";
 import { pluginContributionsQueryKey } from "./queries/query-keys";
+import { systemEnvironmentProvidersQueryKey } from "./queries/environment-provider-queries";
 import {
   createRealtimeCacheEffects,
   resolveThreadInvalidationDebounce,
@@ -243,6 +244,8 @@ describe("createRealtimeCacheEffects", () => {
       providerId: "codex",
     });
     queryClient.setQueryData(executionOptionsKey, {});
+    const environmentProvidersKey = systemEnvironmentProvidersQueryKey();
+    queryClient.setQueryData(environmentProvidersKey, []);
 
     effects.handleChanged({
       type: "changed",
@@ -254,6 +257,9 @@ describe("createRealtimeCacheEffects", () => {
       true,
     );
     expect(queryClient.getQueryState(commandsKey)?.isInvalidated).toBe(true);
+    expect(
+      queryClient.getQueryState(environmentProvidersKey)?.isInvalidated,
+    ).toBe(true);
     expect(queryClient.getQueryState(providersKey)?.isInvalidated).toBe(false);
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       false,

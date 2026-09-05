@@ -173,7 +173,6 @@ const hostSchema = z
   .object({
     id: z.string().min(1),
     name: z.string().min(1),
-    type: z.literal("persistent"),
     status: z.enum(["connected", "disconnected"]),
     maxPermissionMode: z.enum(["full", "auto", "accept-edits"]),
     lastSeenAt: z.number().nullable(),

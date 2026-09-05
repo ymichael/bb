@@ -17,7 +17,6 @@ import {
 } from "@/components/promptbox/follow-up-placeholder";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import type {
-  EnvironmentStatus,
   PendingInteraction,
   PromptInput,
   ThreadQueuedMessage,
@@ -65,7 +64,6 @@ import {
   type QueuedMessageInlineEditor,
 } from "@/components/promptbox/banner/QueuedMessagesList";
 import { ThreadEnvironmentSummary } from "@/components/promptbox/ThreadEnvironmentSummary";
-import type { EnvironmentWorkspaceTypeLabel } from "@/lib/environment-workspace-display";
 import type { WorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
 import { useComposerTextEffects } from "@/lib/composer-text-effects";
 import { useLatestRef } from "@/hooks/useLatestRef";
@@ -150,15 +148,12 @@ interface ThreadDetailPromptAreaProps {
   contextWindowUsage?: ThreadTimelineResponse["contextWindowUsage"];
   environmentCheckout?: WorkspaceCheckoutDisplay;
   environmentCompactLabel?: string;
-  environmentGoneStatus: Extract<
-    EnvironmentStatus,
-    "destroying" | "destroyed"
-  > | null;
+  environmentGoneStatus: "destroyed" | null;
   environmentHostId?: string;
   environmentIcon?: IconName;
   environmentLabel?: string;
-  environmentTypeLabel?: EnvironmentWorkspaceTypeLabel;
-  onCreateNewThreadInWorktree?: () => void;
+  environmentTypeLabel?: string;
+  onCreateNewThreadInEnvironment?: () => void;
   onPullRequestDraft?: () => void;
   onPullRequestMerge?: (method: PullRequestMergeMethod) => void;
   onPullRequestReady?: () => void;
@@ -351,7 +346,7 @@ export function ThreadDetailPromptArea({
   environmentIcon,
   environmentLabel,
   environmentTypeLabel,
-  onCreateNewThreadInWorktree,
+  onCreateNewThreadInEnvironment,
   onPullRequestDraft,
   onPullRequestMerge,
   onPullRequestReady,
@@ -1239,7 +1234,7 @@ export function ThreadDetailPromptArea({
 
   const environmentSummary = useMemo(
     () =>
-      environmentLabel ? (
+      thread.environmentId !== null ? (
         <ThreadEnvironmentSummary
           projectName={projectName}
           environmentLabel={environmentLabel}
@@ -1247,7 +1242,7 @@ export function ThreadDetailPromptArea({
           environmentIcon={environmentIcon}
           environmentTypeLabel={environmentTypeLabel}
           environmentCheckout={environmentCheckout}
-          onCreateNewThreadInWorktree={onCreateNewThreadInWorktree}
+          onCreateNewThreadInEnvironment={onCreateNewThreadInEnvironment}
         />
       ) : null,
     [
@@ -1256,8 +1251,9 @@ export function ThreadDetailPromptArea({
       environmentIcon,
       environmentLabel,
       environmentTypeLabel,
-      onCreateNewThreadInWorktree,
+      onCreateNewThreadInEnvironment,
       projectName,
+      thread.environmentId,
     ],
   );
   const activePromptModeCard = useMemo(

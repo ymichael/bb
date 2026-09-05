@@ -3,6 +3,8 @@ import type {
   ComposerCustomization,
   ExperimentalAppOverlayRegistration,
   PluginDiffRendererRegistration,
+  PluginEnvironmentProviderInputsRegistration,
+  PluginMachineProviderInputsRegistration,
   PluginPendingInteractionRegistration,
   PluginFileOpenerRegistration,
   PluginHomepageSectionRegistration,
@@ -51,6 +53,8 @@ export interface PluginRegistrationSet {
   commandPaletteActions?: readonly PluginCommandPaletteActionRegistration[];
   providerIcons?: readonly PluginProviderIconRegistration[];
   timelineRenderers?: readonly PluginTimelineRendererRegistration[];
+  environmentProviderInputs?: readonly PluginEnvironmentProviderInputsRegistration[];
+  machineProviderInputs?: readonly PluginMachineProviderInputsRegistration[];
 }
 
 interface PluginSlotBase {
@@ -98,6 +102,10 @@ interface PluginProviderIconSlot
   extends PluginProviderIconRegistration, PluginSlotBase {}
 export interface PluginTimelineRendererSlot
   extends PluginTimelineRendererRegistration, PluginSlotBase {}
+export interface PluginEnvironmentProviderInputsSlot
+  extends PluginEnvironmentProviderInputsRegistration, PluginSlotBase {}
+export interface PluginMachineProviderInputsSlot
+  extends PluginMachineProviderInputsRegistration, PluginSlotBase {}
 
 export interface PluginSlotSnapshot {
   homepageSections: readonly PluginHomepageSectionSlot[];
@@ -120,6 +128,8 @@ export interface PluginSlotSnapshot {
   commandPaletteActions: readonly PluginCommandPaletteActionSlot[];
   providerIcons: readonly PluginProviderIconSlot[];
   timelineRenderers: readonly PluginTimelineRendererSlot[];
+  environmentProviderInputs: readonly PluginEnvironmentProviderInputsSlot[];
+  machineProviderInputs: readonly PluginMachineProviderInputsSlot[];
 }
 
 export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
@@ -143,6 +153,8 @@ export const EMPTY_PLUGIN_SLOT_SNAPSHOT: PluginSlotSnapshot = {
   commandPaletteActions: [],
   providerIcons: [],
   timelineRenderers: [],
+  environmentProviderInputs: [],
+  machineProviderInputs: [],
 };
 
 const registrationsByPluginId = new Map<string, PluginRegistrationSet>();
@@ -173,6 +185,8 @@ const SLOT_KINDS: readonly SlotKind[] = [
   "commandPaletteActions",
   "providerIcons",
   "timelineRenderers",
+  "environmentProviderInputs",
+  "machineProviderInputs",
 ];
 
 type FlattenedPluginSlots = {
@@ -227,6 +241,8 @@ function flattenRegistrations(
     commandPaletteActions: stamp(set.commandPaletteActions),
     providerIcons: stamp(set.providerIcons),
     timelineRenderers: stamp(set.timelineRenderers),
+    environmentProviderInputs: stamp(set.environmentProviderInputs),
+    machineProviderInputs: stamp(set.machineProviderInputs),
   };
 }
 

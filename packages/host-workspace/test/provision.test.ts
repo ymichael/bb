@@ -1,16 +1,10 @@
-import { rmSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import {
-  DEFAULT_ENV_SETUP_SCRIPT_NAME,
-  type ProvisioningTranscriptEntry,
-} from "@bb/domain";
-import { createDeferredPromise } from "@bb/test-helpers";
+import { DEFAULT_ENV_SETUP_SCRIPT_NAME } from "@bb/domain";
 import { provisionWorkspace } from "../src/index.js";
 import { listBranches, runGit } from "../src/git.js";
-import { withCheckoutMutationLock } from "../src/checkout-mutation-lock.js";
 
 const tempDirs: string[] = [];
 
@@ -52,12 +46,10 @@ describe("provisionWorkspace", () => {
       const repoPath = await initRepo();
 
       const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
         path: repoPath,
       });
 
       expect(ws.path).toBe(repoPath);
-      expect(ws.managed).toBe(false);
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(false);
       expect(await ws.getCurrentBranch()).toBe("main");
@@ -67,193 +59,11 @@ describe("provisionWorkspace", () => {
       const dirPath = await makeTempDir("bb-provision-nongit-");
 
       const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
         path: dirPath,
       });
 
-      expect(ws.managed).toBe(false);
       expect(ws.isGitRepo).toBe(false);
       expect(ws.isWorktree).toBe(false);
-    });
-
-    it("switches unmanaged git repos to an existing checkout branch", async () => {
-      const repoPath = await initRepo();
-      await runGit(["branch", "feature-existing"], { cwd: repoPath });
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-        checkout: { kind: "existing", name: "feature-existing" },
-      });
-
-      expect(ws.isGitRepo).toBe(true);
-      expect(await ws.getCurrentBranch()).toBe("feature-existing");
-    });
-
-    it("creates unmanaged checkout branches when requested", async () => {
-      const repoPath = await initRepo();
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-        checkout: { kind: "new", name: "feature-new", baseBranch: "main" },
-      });
-
-      expect(ws.isGitRepo).toBe(true);
-      expect(await ws.getCurrentBranch()).toBe("feature-new");
-      expect(await listBranches(ws.path)).toContain("feature-new");
-    });
-
-    it("creates unmanaged checkout branches from the requested base branch", async () => {
-      const repoPath = await initRepo();
-      await runGit(["switch", "-c", "release"], { cwd: repoPath });
-      await fs.writeFile(path.join(repoPath, "release.txt"), "release\n");
-      await runGit(["add", "release.txt"], { cwd: repoPath });
-      await runGit(["commit", "-m", "Release base"], { cwd: repoPath });
-      await runGit(["switch", "main"], { cwd: repoPath });
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-        checkout: {
-          kind: "new",
-          name: "feature-from-release",
-          baseBranch: "release",
-        },
-      });
-
-      expect(ws.isGitRepo).toBe(true);
-      expect(await ws.getCurrentBranch()).toBe("feature-from-release");
-      expect(
-        (await runGit(["merge-base", "release", "HEAD"], { cwd: repoPath }))
-          .stdout,
-      ).toBe(
-        (await runGit(["rev-parse", "release"], { cwd: repoPath })).stdout,
-      );
-    });
-
-    it("no-ops unmanaged checkout when already on the target branch even if dirty", async () => {
-      const repoPath = await initRepo();
-      await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-        checkout: { kind: "existing", name: "main" },
-      });
-
-      expect(ws.isGitRepo).toBe(true);
-      expect(await ws.getCurrentBranch()).toBe("main");
-      expect(
-        (await runGit(["status", "--porcelain=v1"], { cwd: repoPath })).stdout,
-      ).toContain("dirty.txt");
-    });
-
-    it("rejects unmanaged checkout branch changes when the repo is dirty", async () => {
-      const repoPath = await initRepo();
-      await runGit(["branch", "feature-dirty"], { cwd: repoPath });
-      await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: repoPath,
-          checkout: { kind: "existing", name: "feature-dirty" },
-        }),
-      ).rejects.toHaveProperty("code", "checkout_dirty");
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("main\n");
-    });
-
-    it("rejects unmanaged new branch checkout when the repo is dirty", async () => {
-      const repoPath = await initRepo();
-      await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: repoPath,
-          checkout: {
-            kind: "new",
-            name: "feature-new-dirty",
-            baseBranch: "main",
-          },
-        }),
-      ).rejects.toHaveProperty("code", "checkout_dirty");
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("main\n");
-    });
-
-    it("rejects unmanaged checkout branch changes with unresolved conflicts", async () => {
-      const repoPath = await initRepo();
-      await runGit(["switch", "-c", "feature-conflict"], { cwd: repoPath });
-      await fs.writeFile(path.join(repoPath, "README.md"), "feature\n", "utf8");
-      await runGit(["commit", "-am", "Feature change"], { cwd: repoPath });
-      await runGit(["switch", "main"], { cwd: repoPath });
-      await fs.writeFile(path.join(repoPath, "README.md"), "main\n", "utf8");
-      await runGit(["commit", "-am", "Main change"], { cwd: repoPath });
-      const merge = await runGit(["merge", "feature-conflict"], {
-        cwd: repoPath,
-        allowFailure: true,
-      });
-
-      expect(merge.exitCode).not.toBe(0);
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: repoPath,
-          checkout: { kind: "existing", name: "feature-conflict" },
-        }),
-      ).rejects.toHaveProperty("code", "checkout_conflicts");
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("main\n");
-    });
-
-    it("rejects unmanaged checkout branch changes from detached HEAD", async () => {
-      const repoPath = await initRepo();
-      await runGit(["branch", "feature-detached"], { cwd: repoPath });
-      await runGit(["checkout", "--detach", "HEAD"], { cwd: repoPath });
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: repoPath,
-          checkout: { kind: "existing", name: "feature-detached" },
-        }),
-      ).rejects.toHaveProperty("code", "checkout_detached");
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("");
-    });
-
-    it("rejects unmanaged checkout for missing existing branches", async () => {
-      const repoPath = await initRepo();
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: repoPath,
-          checkout: { kind: "existing", name: "missing-branch" },
-        }),
-      ).rejects.toHaveProperty("code", "checkout_missing_branch");
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("main\n");
-    });
-
-    it("rejects unmanaged checkouts for non-git directories", async () => {
-      const dirPath = await makeTempDir("bb-provision-nongit-checkout-");
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: dirPath,
-          checkout: { kind: "existing", name: "feature-existing" },
-        }),
-      ).rejects.toThrow(/Cannot checkout branch on non-git workspace/u);
     });
 
     it("detects a worktree as isWorktree=true", async () => {
@@ -265,7 +75,6 @@ describe("provisionWorkspace", () => {
       });
 
       const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
         path: wtPath,
       });
 
@@ -281,7 +90,6 @@ describe("provisionWorkspace", () => {
         cwd: repoPath,
       });
       const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
         path: wtPath,
       });
       const gitDir = (
@@ -305,272 +113,9 @@ describe("provisionWorkspace", () => {
     it("throws for non-existent path", async () => {
       await expect(
         provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
           path: "/tmp/does-not-exist-bb",
         }),
       ).rejects.toThrow(/does not exist/u);
-    });
-
-    it("destroy() is a no-op for unmanaged workspaces", async () => {
-      const repoPath = await initRepo();
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-      });
-
-      await ws.destroy({ timeoutMs: 900000 });
-
-      await expect(fs.stat(repoPath)).resolves.toBeDefined();
-    });
-
-    it("serializes concurrent unmanaged checkout provisioning for the same path", async () => {
-      const repoPath = await initRepo();
-      await runGit(["branch", "feature-a"], { cwd: repoPath });
-      await runGit(["branch", "feature-b"], { cwd: repoPath });
-
-      const lockEntered = createDeferredPromise<void>();
-      const releaseLock = createDeferredPromise<void>();
-      const heldLock = withCheckoutMutationLock(repoPath, async () => {
-        lockEntered.resolve();
-        await releaseLock.promise;
-      });
-      await lockEntered.promise;
-
-      const firstCheckoutWaiting = createDeferredPromise<void>();
-      const secondCheckoutWaiting = createDeferredPromise<void>();
-      let firstCompleted = false;
-      let secondCompleted = false;
-      let lockReleased = false;
-      let checkoutStartedBeforeRelease = false;
-      const checkoutStartedBranches: string[] = [];
-      const firstProvision = provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-        checkout: { kind: "existing", name: "feature-a" },
-        onProgress: (entry) => {
-          if (entry.key === "git-checkout-started") {
-            checkoutStartedBranches.push("feature-a");
-            if (!lockReleased) {
-              checkoutStartedBeforeRelease = true;
-            }
-          }
-          if (entry.key === "git-checkout-waiting") {
-            firstCheckoutWaiting.resolve();
-          }
-        },
-      }).then(() => {
-        firstCompleted = true;
-      });
-      const secondProvision = provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
-        path: repoPath,
-        checkout: { kind: "existing", name: "feature-b" },
-        onProgress: (entry) => {
-          if (entry.key === "git-checkout-started") {
-            checkoutStartedBranches.push("feature-b");
-            if (!lockReleased) {
-              checkoutStartedBeforeRelease = true;
-            }
-          }
-          if (entry.key === "git-checkout-waiting") {
-            secondCheckoutWaiting.resolve();
-          }
-        },
-      }).then(() => {
-        secondCompleted = true;
-      });
-
-      await Promise.all([
-        firstCheckoutWaiting.promise,
-        secondCheckoutWaiting.promise,
-      ]);
-
-      expect(firstCompleted).toBe(false);
-      expect(secondCompleted).toBe(false);
-      expect(checkoutStartedBeforeRelease).toBe(false);
-      expect(checkoutStartedBranches).toEqual([]);
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("main\n");
-
-      lockReleased = true;
-      releaseLock.resolve();
-      await Promise.all([heldLock, firstProvision, secondProvision]);
-
-      expect(firstCompleted).toBe(true);
-      expect(secondCompleted).toBe(true);
-      expect(checkoutStartedBeforeRelease).toBe(false);
-      expect(checkoutStartedBranches).toEqual(["feature-a", "feature-b"]);
-      expect(
-        (await runGit(["branch", "--show-current"], { cwd: repoPath })).stdout,
-      ).toBe("feature-b\n");
-    });
-
-    it("marks checkout waiting failed when the git repo disappears while waiting", async () => {
-      const repoPath = await initRepo();
-      const entries: ProvisioningTranscriptEntry[] = [];
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "unmanaged",
-          path: repoPath,
-          checkout: { kind: "existing", name: "main" },
-          onProgress: (entry) => {
-            entries.push(entry);
-            if (
-              entry.key === "git-checkout-waiting" &&
-              entry.status === "started"
-            ) {
-              rmSync(path.join(repoPath, ".git"), {
-                recursive: true,
-                force: true,
-              });
-            }
-          },
-        }),
-      ).rejects.toThrow(/Cannot checkout branch on non-git workspace/u);
-
-      expect(entries).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            key: "git-checkout-waiting",
-            status: "started",
-          }),
-          expect.objectContaining({
-            key: "git-checkout-waiting",
-            status: "failed",
-          }),
-          expect.objectContaining({
-            key: "git-checkout-failed",
-            status: "failed",
-          }),
-        ]),
-      );
-    });
-  });
-
-  describe("managed-worktree", () => {
-    it("provisions a worktree and returns HostWorkspace", async () => {
-      const repoPath = await initRepo();
-      const parentDir = await makeTempDir("bb-provision-mwt-parent-");
-      const targetPath = path.join(parentDir, "env");
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "managed-worktree",
-        sourcePath: repoPath,
-        targetPath,
-        branchName: "bb/env-test",
-        baseBranch: "main",
-        timeoutMs: 900000,
-      });
-
-      expect(ws.path).toBe(targetPath);
-      expect(ws.managed).toBe(true);
-      expect(ws.isGitRepo).toBe(true);
-      expect(ws.isWorktree).toBe(true);
-      expect(await ws.getCurrentBranch()).toBe("bb/env-test");
-    });
-
-    it("resolves external git metadata roots for workspace-write sandboxes", async () => {
-      const repoPath = await initRepo();
-      const parentDir = await makeTempDir("bb-provision-mwt-roots-");
-      const targetPath = path.join(parentDir, "env");
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "managed-worktree",
-        sourcePath: repoPath,
-        targetPath,
-        branchName: "bb/env-roots",
-        baseBranch: "main",
-        timeoutMs: 900000,
-      });
-      const gitDir = (
-        await runGit(["rev-parse", "--absolute-git-dir"], { cwd: ws.path })
-      ).stdout.trim();
-      const commonGitDir = path.resolve(
-        ws.path,
-        (
-          await runGit(["rev-parse", "--git-common-dir"], { cwd: ws.path })
-        ).stdout.trim(),
-      );
-
-      await expect(ws.getAdditionalWorkspaceWriteRoots()).resolves.toEqual([
-        path.resolve(gitDir),
-        path.join(commonGitDir, "objects"),
-        path.join(commonGitDir, "refs"),
-        path.join(commonGitDir, "logs"),
-      ]);
-    });
-
-    it("destroy() removes the worktree", async () => {
-      const repoPath = await initRepo();
-      const parentDir = await makeTempDir("bb-provision-mwt-destroy-");
-      const envDir = path.join(parentDir, "env");
-      const targetPath = path.join(envDir, "bb");
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "managed-worktree",
-        sourcePath: repoPath,
-        targetPath,
-        branchName: "bb/env-destroy",
-        baseBranch: "main",
-        timeoutMs: 900000,
-      });
-
-      await ws.destroy({ timeoutMs: 900000 });
-
-      await expect(fs.stat(targetPath)).rejects.toThrow();
-      await expect(fs.stat(envDir)).rejects.toThrow();
-      const worktrees = await runGit(["worktree", "list", "--porcelain"], {
-        cwd: repoPath,
-      });
-      expect(worktrees.stdout).not.toContain(targetPath);
-    });
-
-    it("runs the supported setup script after provisioning", async () => {
-      const repoPath = await initRepo({
-        setupScript: "echo worktree-setup-ran > setup-marker.txt\n",
-      });
-      const parentDir = await makeTempDir("bb-provision-mwt-script-");
-      const targetPath = path.join(parentDir, "env");
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "managed-worktree",
-        sourcePath: repoPath,
-        targetPath,
-        branchName: "bb/env-script",
-        baseBranch: "main",
-        timeoutMs: 900000,
-      });
-
-      const marker = await fs.readFile(
-        path.join(ws.path, "setup-marker.txt"),
-        "utf8",
-      );
-      expect(marker.trim()).toBe("worktree-setup-ran");
-    });
-
-    it("rolls back on setup script failure", async () => {
-      const repoPath = await initRepo({
-        setupScript: "echo failing >&2\nexit 1\n",
-      });
-      const parentDir = await makeTempDir("bb-provision-mwt-fail-");
-      const envDir = path.join(parentDir, "env");
-      const targetPath = path.join(envDir, "bb");
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "managed-worktree",
-          sourcePath: repoPath,
-          targetPath,
-          branchName: "bb/env-fail",
-          baseBranch: "main",
-          timeoutMs: 900000,
-        }),
-      ).rejects.toThrow(/Setup script failed/u);
-
-      await expect(fs.stat(targetPath)).rejects.toThrow();
-      await expect(fs.stat(envDir)).rejects.toThrow();
     });
   });
 
@@ -578,7 +123,6 @@ describe("provisionWorkspace", () => {
     it("delegates git operations to the underlying Workspace", async () => {
       const repoPath = await initRepo();
       const ws = await provisionWorkspace({
-        workspaceProvisionType: "unmanaged",
         path: repoPath,
       });
 
@@ -602,149 +146,6 @@ describe("provisionWorkspace", () => {
 
       const diff = await ws.getDiff();
       expect(typeof diff.diff).toBe("string");
-    });
-  });
-
-  describe("personal", () => {
-    it("creates and destroys a non-git managed workspace", async () => {
-      const parentDir = await makeTempDir("bb-personal-parent-");
-      const environmentId = "env_personal";
-      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
-      const targetPath = path.join(personalWorkspaceRoot, environmentId);
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "personal",
-        environmentId,
-        personalWorkspaceRoot,
-        targetPath,
-      });
-
-      expect(ws.path).toBe(targetPath);
-      expect(ws.managed).toBe(true);
-      expect(ws.isGitRepo).toBe(false);
-      expect(ws.isWorktree).toBe(false);
-      expect((await fs.stat(targetPath)).isDirectory()).toBe(true);
-
-      await ws.destroy({ timeoutMs: 900000 });
-      await expect(fs.stat(targetPath)).rejects.toThrow();
-    });
-
-    it("rediscovers git metadata in an existing personal workspace", async () => {
-      const parentDir = await makeTempDir("bb-personal-git-parent-");
-      const environmentId = "env_personal_git";
-      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
-      const targetPath = path.join(personalWorkspaceRoot, environmentId);
-      const initial = await provisionWorkspace({
-        workspaceProvisionType: "personal",
-        environmentId,
-        personalWorkspaceRoot,
-        targetPath,
-      });
-      expect(initial.isGitRepo).toBe(false);
-      await runGit(["init", "-b", "main"], { cwd: targetPath });
-
-      const refreshed = await provisionWorkspace({
-        workspaceProvisionType: "personal",
-        environmentId,
-        personalWorkspaceRoot,
-        targetPath,
-      });
-
-      expect(refreshed.isGitRepo).toBe(true);
-      expect(refreshed.isWorktree).toBe(false);
-      expect(await refreshed.getCurrentBranch()).toBe("main");
-    });
-
-    it("does not accept external git metadata in a personal workspace", async () => {
-      const parentDir = await makeTempDir("bb-personal-external-git-parent-");
-      const environmentId = "env_personal_external_git";
-      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
-      const targetPath = path.join(personalWorkspaceRoot, environmentId);
-      const externalGitDir = path.join(parentDir, "external-git-dir");
-      await provisionWorkspace({
-        workspaceProvisionType: "personal",
-        environmentId,
-        personalWorkspaceRoot,
-        targetPath,
-      });
-      await runGit(
-        ["init", "-b", "main", "--separate-git-dir", externalGitDir],
-        { cwd: targetPath },
-      );
-
-      const refreshed = await provisionWorkspace({
-        workspaceProvisionType: "personal",
-        environmentId,
-        personalWorkspaceRoot,
-        targetPath,
-      });
-
-      expect(refreshed.isGitRepo).toBe(false);
-      expect(refreshed.isWorktree).toBe(false);
-    });
-
-    it("rejects personal target paths outside the personal workspace root", async () => {
-      const parentDir = await makeTempDir("bb-personal-parent-");
-      const environmentId = "env_personal";
-      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "personal",
-          environmentId,
-          personalWorkspaceRoot,
-          targetPath: path.join(parentDir, "sibling", environmentId),
-        }),
-      ).rejects.toThrow("Personal workspace target path must match");
-    });
-
-    it("rejects personal target paths that do not match the environment id", async () => {
-      const parentDir = await makeTempDir("bb-personal-parent-");
-      const personalWorkspaceRoot = path.join(parentDir, "personal-workspaces");
-
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "personal",
-          environmentId: "env_personal",
-          personalWorkspaceRoot,
-          targetPath: path.join(personalWorkspaceRoot, "env_other"),
-        }),
-      ).rejects.toThrow("Personal workspace target path must match");
-    });
-  });
-
-  describe("reconnect-managed-worktree", () => {
-    it("reconnects to an existing worktree with managed=true", async () => {
-      const repoPath = await initRepo();
-      const parentDir = await makeTempDir("bb-reconnect-wt-parent-");
-      const envDir = path.join(parentDir, "env");
-      const wtPath = path.join(envDir, "bb");
-      await runGit(["worktree", "add", "-B", "feature", wtPath], {
-        cwd: repoPath,
-      });
-
-      const ws = await provisionWorkspace({
-        workspaceProvisionType: "reconnect-managed-worktree",
-        path: wtPath,
-      });
-
-      expect(ws.path).toBe(wtPath);
-      expect(ws.managed).toBe(true);
-      expect(ws.isGitRepo).toBe(true);
-      expect(ws.isWorktree).toBe(true);
-
-      await ws.destroy({ timeoutMs: 900000 });
-      await expect(fs.stat(wtPath)).rejects.toThrow();
-      await expect(fs.stat(envDir)).rejects.toThrow();
-    });
-
-    it("throws path_not_found for non-existent path", async () => {
-      await expect(
-        provisionWorkspace({
-          workspaceProvisionType: "reconnect-managed-worktree",
-          path: "/tmp/does-not-exist-reconnect-wt",
-        }),
-      ).rejects.toThrow("path does not exist");
     });
   });
 });

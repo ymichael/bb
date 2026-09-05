@@ -243,6 +243,11 @@ export const systemThreadInterruptedEventDataSchema = z.object({
   cause: z.literal("host-connection-lost").optional(),
 });
 
+export const WORKSPACE_PROVISIONING_STEP_KEYS = {
+  workspacePath: "workspace-path",
+  workspaceBranch: "workspace-branch",
+} as const;
+
 export const provisioningTranscriptEntrySchema = z.object({
   type: z.enum(["step", "output"]),
   key: z.string(),
@@ -271,7 +276,7 @@ export type SystemThreadProvisioningStatus = z.infer<
 export const systemThreadProvisioningEventDataSchema = z.object({
   provisioningId: z.string(),
   status: systemThreadProvisioningStatusSchema,
-  environmentId: z.string(),
+  environmentId: z.string().nullable(),
   entries: z.array(provisioningTranscriptEntrySchema),
 });
 

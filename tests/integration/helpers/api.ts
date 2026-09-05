@@ -61,6 +61,7 @@ export interface CreateHostThreadOptions {
   title?: string;
   workspace:
     | { type: "managed-worktree" }
+    | { type: "personal" }
     | { path: string | null; type: "unmanaged" };
 }
 
@@ -131,7 +132,7 @@ function defaultModelForProvider(providerId: string): string {
 function toWorkspaceArgs(
   workspace: CreateHostThreadOptions["workspace"],
 ): WorkspaceArgs {
-  if (workspace.type === "unmanaged") {
+  if (workspace.type === "unmanaged" || workspace.type === "personal") {
     return workspace;
   }
   return { ...workspace, baseBranch: { kind: "default" } };

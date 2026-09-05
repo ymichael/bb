@@ -194,8 +194,8 @@ const rootThread = makeThread({
   titleFallback: "Stabilize Pnpm Dev Environment",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: BRANCH_NAMES.default,
+  environmentProviderId: "git-worktree",
   queuedWork: "none",
-  environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const sharedWorktreeThreadA = makeThread({
   id: "thr_shared_wt_a",
@@ -204,8 +204,8 @@ const sharedWorktreeThreadA = makeThread({
   environmentId: "env_shared_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
+  environmentProviderId: "git-worktree",
   queuedWork: "none",
-  environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const sharedWorktreeThreadB = makeThread({
   id: "thr_shared_wt_b",
@@ -214,8 +214,8 @@ const sharedWorktreeThreadB = makeThread({
   environmentId: "env_shared_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
+  environmentProviderId: "git-worktree",
   queuedWork: "none",
-  environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const parentThread = makeThread({
   id: "thr_parent",
@@ -276,8 +276,8 @@ const deepWorktreeA = makeThread({
   environmentId: "env_deep_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/sidebar-parent-child-nesting",
+  environmentProviderId: "git-worktree",
   queuedWork: "none",
-  environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const deepWorktreeB = makeThread({
   id: "thr_deep_worktree_b",
@@ -287,8 +287,8 @@ const deepWorktreeB = makeThread({
   environmentId: "env_deep_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/sidebar-parent-child-nesting",
+  environmentProviderId: "git-worktree",
   queuedWork: "none",
-  environmentWorkspaceDisplayKind: "managed-worktree",
   hasPendingInteraction: true,
 });
 
@@ -680,8 +680,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     environmentId: "env_full_a_codex_train",
     environmentHostId: "host_local",
     environmentBranchName: "bb/ready-app-train-thr_s6fn8fuv9w",
+    environmentProviderId: "git-worktree",
     queuedWork: "none",
-    environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
     id: "thr_full_a_worktree_env_group_2",
@@ -692,8 +692,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     environmentId: "env_full_a_codex_train",
     environmentHostId: "host_local",
     environmentBranchName: "bb/ready-app-train-thr_s6fn8fuv9w",
+    environmentProviderId: "git-worktree",
     queuedWork: "none",
-    environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
     id: "thr_full_a_standalone_1",
@@ -702,8 +702,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     titleFallback: "Stabilize Pnpm Dev Environment",
     environmentHostId: "host_local",
     environmentBranchName: "main",
+    environmentProviderId: "git-worktree",
     queuedWork: "none",
-    environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
     id: "thr_full_a_standalone_2",
@@ -721,8 +721,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     environmentId: "env_full_a_sidebar_rail",
     environmentHostId: "host_local",
     environmentBranchName: "bb/fix-diff-panel-issues-thr_u8cnp5fnea",
+    environmentProviderId: "git-worktree",
     queuedWork: "none",
-    environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
     id: "thr_full_a_env_group_2",
@@ -732,8 +732,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     environmentId: "env_full_a_sidebar_rail",
     environmentHostId: "host_local",
     environmentBranchName: "bb/fix-diff-panel-issues-thr_u8cnp5fnea",
+    environmentProviderId: "git-worktree",
     queuedWork: "none",
-    environmentWorkspaceDisplayKind: "managed-worktree",
   }),
 ];
 

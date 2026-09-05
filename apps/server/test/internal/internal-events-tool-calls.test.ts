@@ -1116,8 +1116,7 @@ describe("internal event and tool-call routes", () => {
         hostId: host.id,
         projectId: project.id,
         path: "/tmp/existing-managed-worktree",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "git-worktree",
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -1159,7 +1158,9 @@ describe("internal event and tool-call routes", () => {
       expect(getThread(harness.db, thread.id)?.environmentId).toBe(
         targetEnvironment.id,
       );
-      expect(listEnvironments(harness.db, project.id)).toHaveLength(2);
+      expect(
+        listEnvironments(harness.db, { projectId: project.id }),
+      ).toHaveLength(2);
       const storedEvents = harness.db
         .select()
         .from(events)
@@ -1215,19 +1216,18 @@ describe("internal event and tool-call routes", () => {
       const provisionCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision" &&
-          command.workspaceProvisionType === "unmanaged" &&
+          command.type === "environment.attach" &&
           command.path === "/tmp/new-unmanaged-worktree",
       );
-      if (provisionCommand.command.type !== "environment.provision") {
-        throw new Error("Expected environment.provision command");
+      if (provisionCommand.command.type !== "environment.attach") {
+        throw new Error("Expected environment.attach command");
       }
       expect(provisionCommand.command.initiator).toBeNull();
 
       await reportQueuedCommandSuccess(harness, provisionCommand, {
         path: "/tmp/new-unmanaged-worktree",
         isGitRepo: true,
-        isWorktree: true,
+        isWorktree: false,
         branchName: "feature/new-worktree",
         defaultBranch: "main",
         transcript: [],
@@ -1246,14 +1246,15 @@ describe("internal event and tool-call routes", () => {
           },
         ],
       });
-      const targetEnvironment = listEnvironments(harness.db, project.id).find(
+      const targetEnvironment = listEnvironments(harness.db, {
+        projectId: project.id,
+      }).find(
         (environment) => environment.path === "/tmp/new-unmanaged-worktree",
       );
       expect(targetEnvironment).toMatchObject({
         hostId: host.id,
         projectId: project.id,
         status: "ready",
-        workspaceProvisionType: "unmanaged",
       });
       expect(getThread(harness.db, thread.id)?.environmentId).toBe(
         targetEnvironment?.id,
@@ -1265,7 +1266,6 @@ describe("internal event and tool-call routes", () => {
       ).toMatchObject({
         branchName: "feature/new-worktree",
         isGitRepo: true,
-        isWorktree: true,
       });
       const storedEvents = harness.db
         .select()
@@ -1334,9 +1334,7 @@ describe("internal event and tool-call routes", () => {
       const provisionCommand = await waitForQueuedCommand(
         harness,
         ({ command }) =>
-          command.type === "environment.provision" &&
-          command.workspaceProvisionType === "unmanaged" &&
-          command.path === sharedPath,
+          command.type === "environment.attach" && command.path === sharedPath,
       );
       await reportQueuedCommandSuccess(harness, provisionCommand, {
         path: sharedPath,
@@ -1375,8 +1373,8 @@ describe("internal event and tool-call routes", () => {
         hostId: host.id,
         projectId: owner.id,
         path: worktreePath,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "git-worktree",
+        providerOwnsPath: true,
       });
 
       const { project } = seedProjectWithSource(harness.deps, {
@@ -1427,7 +1425,9 @@ describe("internal event and tool-call routes", () => {
       expect(getThread(harness.db, thread.id)?.environmentId).toBe(
         currentEnvironment.id,
       );
-      expect(listEnvironments(harness.db, project.id)).toHaveLength(1);
+      expect(
+        listEnvironments(harness.db, { projectId: project.id }),
+      ).toHaveLength(1);
     });
   });
 
@@ -1467,7 +1467,9 @@ describe("internal event and tool-call routes", () => {
       expect(getThread(harness.db, thread.id)?.environmentId).toBe(
         environment.id,
       );
-      expect(listEnvironments(harness.db, project.id)).toHaveLength(1);
+      expect(
+        listEnvironments(harness.db, { projectId: project.id }),
+      ).toHaveLength(1);
     });
   });
 

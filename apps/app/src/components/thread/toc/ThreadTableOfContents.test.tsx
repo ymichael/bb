@@ -246,7 +246,6 @@ function threadListEntry(
     environmentHostId: "host_toc",
     environmentName: "ToC environment",
     environmentBranchName: "main",
-    environmentWorkspaceDisplayKind: "managed-worktree",
     ...thread,
   });
 }

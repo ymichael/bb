@@ -3,7 +3,6 @@ import { z } from "zod";
 export const workspaceResolutionFailureCodeSchema = z.enum([
   "path_not_found",
   "not_git_repo",
-  "not_worktree",
   "workspace_type_mismatch",
   "permission_denied",
   "unknown_environment",

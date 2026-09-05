@@ -5,7 +5,7 @@ import type {
   WorkspaceResolutionFailureCode,
 } from "@bb/host-daemon-contract";
 import { workspaceResolutionFailureCodeSchema } from "@bb/host-daemon-contract";
-import { getPersonalWorkspaceRoot, WorkspaceError } from "@bb/host-workspace";
+import { WorkspaceError } from "@bb/host-workspace";
 import type { RuntimeEntry, RuntimeManager } from "./runtime-manager.js";
 import {
   CommandDispatchError,
@@ -27,7 +27,6 @@ interface ResolveWorkspaceForCommandArgs {
   environmentId: string;
   injectedSkillSources?: readonly HostDaemonInjectedSkillSource[];
   requireGit?: boolean;
-  requireManagedWorktree?: boolean;
   runtimeManager: RuntimeManager;
   targetThreadId?: string;
   workspaceContext: WorkspaceContext;
@@ -128,12 +127,6 @@ export async function resolveWorkspaceForCommand(
       const workspace = await args.runtimeManager.refreshEnvironmentWorkspace({
         environmentId: args.environmentId,
         provision: reconnectProvisionArgsFromWorkspaceContext({
-          environmentId: args.environmentId,
-          ...(args.dataDir
-            ? {
-                personalWorkspaceRoot: getPersonalWorkspaceRoot(args.dataDir),
-              }
-            : {}),
           workspaceContext: args.workspaceContext,
         }),
         workspacePath: args.workspaceContext.workspacePath,
@@ -148,20 +141,6 @@ export async function resolveWorkspaceForCommand(
           },
         };
       }
-    }
-    if (
-      args.requireManagedWorktree === true &&
-      args.workspaceContext.workspaceProvisionType === "managed-worktree" &&
-      !entry.workspace.isWorktree
-    ) {
-      return {
-        ok: false,
-        failure: {
-          code: "not_worktree",
-          message: `Path is not a git worktree: ${entry.workspace.path}`,
-          workspacePath: entry.workspace.path,
-        },
-      };
     }
     return { ok: true, entry };
   } catch (error) {

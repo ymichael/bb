@@ -104,7 +104,7 @@ export interface ThreadPromptArchivedSection {
 }
 
 export interface ThreadPromptEnvironmentGoneSection {
-  status: Extract<EnvironmentStatus, "destroying" | "destroyed">;
+  status: Extract<EnvironmentStatus, "destroyed">;
 }
 
 const THREAD_BANNER_ACTIVE_CHILD_RUNTIME_STATUSES: ReadonlySet<ThreadRuntimeDisplayStatus> =
@@ -153,10 +153,6 @@ const ENVIRONMENT_GONE_STATUS_COPY: Record<
   ThreadPromptEnvironmentGoneSection["status"],
   { ariaLabel: string; label: string }
 > = {
-  destroying: {
-    ariaLabel: "This environment is being archived.",
-    label: "Archiving environment...",
-  },
   destroyed: {
     ariaLabel: "This environment has been archived.",
     label: "Environment archived",

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { permissionModeSchema } from "@bb/domain";
+import { jsonValueSchema, permissionModeSchema } from "@bb/domain";
 import {
   pathsExistRequestSchema,
   providerCliInstallEventSchema,
@@ -49,6 +49,16 @@ export type CreateHostJoinCodeRequest = z.infer<
   typeof createHostJoinCodeRequestSchema
 >;
 
+export const createMachineRequestSchema = z
+  .object({
+    machineProviderId: z.string().min(1),
+    projectId: z.string().min(1).nullable(),
+    inputs: jsonValueSchema.nullable(),
+    key: z.string().min(1).optional(),
+  })
+  .strict();
+export type CreateMachineRequest = z.infer<typeof createMachineRequestSchema>;
+
 export const createHostJoinCodeResponseSchema = z.object({
   joinCode: z.string().min(1),
   hostId: z.string().min(1),
@@ -74,9 +84,12 @@ export type UpdateHostPermissionCeilingRequest = z.infer<
   typeof updateHostPermissionCeilingRequestSchema
 >;
 
-export const hostRetryUpdateResponseSchema = z
+export const hostActionResponseSchema = z
   .object({ ok: z.literal(true) })
   .strict();
+export type HostActionResponse = z.infer<typeof hostActionResponseSchema>;
+
+export const hostRetryUpdateResponseSchema = hostActionResponseSchema;
 export type HostRetryUpdateResponse = z.infer<
   typeof hostRetryUpdateResponseSchema
 >;

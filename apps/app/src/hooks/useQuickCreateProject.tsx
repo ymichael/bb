@@ -9,7 +9,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { deriveProjectNameFromPath, type Host } from "@bb/domain";
 import type { HostPlatform } from "@bb/host-daemon-contract";
 import { useCreateProject } from "@/hooks/mutations/project-mutations";
-import { useHosts } from "@/hooks/queries/host-queries";
+import { selectHosts, useHosts } from "@/hooks/queries/host-queries";
 import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
@@ -44,12 +44,11 @@ interface QuickCreateProjectController {
 
 const quickCreateProjectContext =
   createContext<QuickCreateProjectController | null>(null);
-const EMPTY_HOSTS: readonly Host[] = [];
 
 export function useQuickCreateProject(): QuickCreateProjectController {
   const { mutate, isPending } = useCreateProject();
   const hostsQuery = useHosts();
-  const hosts = hostsQuery.data ?? EMPTY_HOSTS;
+  const hosts = useMemo(() => selectHosts(hostsQuery.data), [hostsQuery.data]);
   const navigate = useNavigate();
   const location = useLocation();
   const setRootComposeProjectId = useSetRootComposeProjectId();

@@ -74,6 +74,11 @@ export const PLUGIN_CATALOG_CATEGORIES = [
       "Add, choose, configure, route, or coordinate who runs a thread.",
   },
   {
+    id: "environments",
+    displayName: "Environments",
+    description: "Create and manage the places where threads run.",
+  },
+  {
     id: "token-usage-and-limits",
     displayName: "Token Usage & Limits",
     description:

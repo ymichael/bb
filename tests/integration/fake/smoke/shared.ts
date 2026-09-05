@@ -8,7 +8,6 @@ import {
   type ReadyThreadFixture,
 } from "../../helpers/fixtures.js";
 import type { IntegrationHarness } from "../../helpers/harness.js";
-import { waitForEnvironmentStatus } from "../../helpers/assertions.js";
 import { scaleTimeoutMs } from "../../helpers/time.js";
 
 export const DEFAULT_TIMEOUT_MS = scaleTimeoutMs(10_000);
@@ -47,17 +46,4 @@ export async function expectThreadMissing(
     param: { id: threadId },
   });
   expect(response.status).toBe(404);
-}
-
-export async function expectEnvironmentDestroyed(
-  harness: IntegrationHarness,
-  environmentId: string,
-): Promise<void> {
-  const environment = await waitForEnvironmentStatus(
-    harness.api,
-    environmentId,
-    "destroyed",
-    DEFAULT_TIMEOUT_MS,
-  );
-  expect(environment.status).toBe("destroyed");
 }

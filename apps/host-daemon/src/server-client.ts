@@ -165,7 +165,6 @@ interface OpenSessionArgs {
   connectMachineId?: string;
   hostId: string;
   hostName: string;
-  hostType: HostDaemonSessionOpenRequest["hostType"];
   dataDir: string;
   instanceId: string;
   localApiPort: number | null;
@@ -439,7 +438,6 @@ export function createServerClient(
         hostId: args.hostId,
         instanceId: args.instanceId,
         hostName: args.hostName,
-        hostType: args.hostType,
         ...(args.connectMachineId !== undefined
           ? { connectMachineId: args.connectMachineId }
           : {}),

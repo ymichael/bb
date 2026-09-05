@@ -11,7 +11,10 @@ import type { Host } from "@bb/domain";
 import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { RETRY_ACTION_ICON } from "@bb/domain/update-state";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
-import type { SystemConfigResponse } from "@bb/server-contract";
+import type {
+  SystemConfigResponse,
+  SystemMachineProvider,
+} from "@bb/server-contract";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { sdk } from "@/lib/sdk";
@@ -24,7 +27,11 @@ vi.mock("@/lib/sdk", () => ({
     hosts: {
       delete: vi.fn(),
       list: vi.fn(),
+      listProviders: vi.fn(),
+      resume: vi.fn(),
+      retryCleanup: vi.fn(),
       retryUpdate: vi.fn(),
+      suspend: vi.fn(),
       update: vi.fn(),
     },
     system: { config: vi.fn() },
@@ -63,6 +70,27 @@ const offlineHost = host({
   status: "disconnected",
   lastSeenAt: NOW - 2 * 60 * 60 * 1000,
 });
+const modalProvider: SystemMachineProvider = {
+  id: "modal-sandbox",
+  displayName: "Modal sandbox",
+  icon: "./modal-logo.svg",
+  logoUrl: "/api/v1/system/providers/machine%3Amodal-sandbox/logo?h=hash",
+  pluginId: "environment-modal-sandbox",
+  requires: { gitRemote: true },
+  inputs: null,
+  acceptsEmptyInputs: true,
+  supportsSuspend: true,
+  environmentRow: {
+    displayName: "Modal sandbox",
+    environmentProviderId: "project-checkout",
+  },
+  policy: {
+    idleSuspendMs: 60_000,
+    retire: { after: "last-thread", graceMs: 60_000 },
+    removeRetryMs: 60_000,
+  },
+  availability: null,
+};
 
 function systemConfig(): SystemConfigResponse {
   return makeSystemConfig({
@@ -119,6 +147,7 @@ async function openHostMenu(hostName: string): Promise<void> {
 beforeEach(() => {
   hostDaemon.localDaemonHostId = "host_primary";
   hostDaemon.platform = "darwin";
+  vi.mocked(sdk.hosts.listProviders).mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -128,6 +157,107 @@ afterEach(() => {
 });
 
 describe("MachinesSettingsSection", () => {
+  it("keeps provider-made hosts visible and marks them with the provider", async () => {
+    vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([modalProvider]);
+    vi.mocked(sdk.hosts.list).mockResolvedValue([
+      primaryHost,
+      host({
+        id: "host_modal",
+        name: "Modal sandbox 3f9a",
+        machineProviderId: modalProvider.id,
+      }),
+    ]);
+    stubSidebarBootstrapFetch();
+
+    renderSection();
+
+    const name = await screen.findByText("Modal sandbox 3f9a");
+    expect(name.parentElement?.textContent).toContain("Modal sandbox");
+    expect(screen.queryByText("Active")).toBeNull();
+    expect(
+      name.parentElement
+        ?.querySelector("[data-provider-logo]")
+        ?.getAttribute("data-provider-logo"),
+    ).toBe(modalProvider.logoUrl);
+  });
+
+  it("renders a provider-made machine without branding when its provider omits an icon", async () => {
+    vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
+      {
+        ...modalProvider,
+        id: "ssh-machine",
+        displayName: "SSH machine",
+        icon: null,
+        logoUrl: null,
+      },
+    ]);
+    vi.mocked(sdk.hosts.list).mockResolvedValue([
+      primaryHost,
+      host({
+        id: "host_ssh",
+        name: "localhost-bb",
+        machineProviderId: "ssh-machine",
+      }),
+    ]);
+    stubSidebarBootstrapFetch();
+
+    renderSection();
+
+    const name = await screen.findByText("localhost-bb");
+    expect(name.parentElement?.textContent).not.toContain("SSH machine");
+    expect(
+      name.parentElement?.querySelector("[data-provider-logo]"),
+    ).toBeNull();
+    expect(name.parentElement?.querySelector('[data-icon="Zap"]')).toBeNull();
+  });
+
+  it("shows suspend for a capable provider", async () => {
+    vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([modalProvider]);
+    vi.mocked(sdk.hosts.list).mockResolvedValue([
+      host({
+        id: "host_modal",
+        name: "Modal active",
+        machineProviderId: modalProvider.id,
+      }),
+    ]);
+    stubSidebarBootstrapFetch();
+    renderSection();
+
+    await openHostMenu("Modal active");
+    expect(
+      await screen.findByRole("menuitem", { name: "Suspend" }),
+    ).toBeDefined();
+  });
+
+  it("shows retry cleanup only after teardown fails", async () => {
+    vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
+    vi.mocked(sdk.hosts.list).mockResolvedValue([
+      host({
+        id: "host_failed",
+        name: "Cleanup target",
+        machineProviderId: modalProvider.id,
+        lifecycle: {
+          phase: "retiring",
+          suspendedAt: null,
+          retireAt: NOW,
+          progress: null,
+          teardown: { status: "failed", attempt: 1, message: "failed" },
+        },
+      }),
+    ]);
+    stubSidebarBootstrapFetch();
+    renderSection();
+
+    expect(await screen.findByText("Cleanup failed")).toBeDefined();
+    await openHostMenu("Cleanup target");
+    expect(
+      await screen.findByRole("menuitem", { name: "Retry cleanup" }),
+    ).toBeDefined();
+  });
+
   it("renders machine status, project, and permission metadata as visible text", async () => {
     vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
     vi.mocked(sdk.hosts.list).mockResolvedValue([primaryHost, offlineHost]);

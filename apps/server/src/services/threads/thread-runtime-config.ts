@@ -9,7 +9,6 @@ import type {
   ThreadExecutionOptions,
   ThreadExecutionSource,
   ThreadTurnInitiator,
-  WorkspaceProvisionType,
   EnvironmentStatus,
 } from "@bb/domain";
 import type {
@@ -43,6 +42,7 @@ import {
   readDataDirAgentInstructions,
   readWorkspaceAgentInstructions,
 } from "./workspace-agent-instructions.js";
+import { resolveDeprecatedWorkspaceProvisionType } from "../environments/environment-response.js";
 
 const STANDARD_AGENT_INSTRUCTIONS = renderTemplate(
   "standardAgentAppendInstructions",
@@ -58,7 +58,6 @@ export interface ThreadRuntimeCommandEnvironment {
   id: string;
   path: string | null;
   status: EnvironmentStatus;
-  workspaceProvisionType: WorkspaceProvisionType;
 }
 
 interface ResolveExecutionOptionsArgs {
@@ -91,7 +90,6 @@ export interface ResolvedThreadRuntimeCommandConfig {
   providerId: string;
   threadStoragePath: string;
   workspacePath: string;
-  workspaceProvisionType: WorkspaceProvisionType;
 }
 
 function requireWorkspacePath(
@@ -170,7 +168,6 @@ export async function resolveThreadRuntimeCommandConfig(
     throw new ApiError(404, "host_not_found", "Host not found");
   }
 
-  const { workspaceProvisionType } = args.environment;
   const [projectSkillSources, sharedSkills, workspaceAgentInstructions] =
     await Promise.all([
       resolveWorkspaceProjectSkills(deps, {
@@ -209,8 +206,10 @@ export async function resolveThreadRuntimeCommandConfig(
         id: environment.id,
         name: environment.name,
         path: environment.path,
-        workspaceProvisionType: environment.workspaceProvisionType,
         branchName: environment.branchName,
+        workspaceProvisionType: resolveDeprecatedWorkspaceProvisionType(
+          environment.environmentProviderId,
+        ),
       },
       host: { id: host.id, name: host.name },
       provider: {
@@ -324,6 +323,5 @@ export async function resolveThreadRuntimeCommandConfig(
     providerId: args.thread.providerId,
     threadStoragePath,
     workspacePath,
-    workspaceProvisionType,
   };
 }

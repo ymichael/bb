@@ -1,5 +1,5 @@
 import { delimiter } from "node:path";
-import { defaultFeatureFlags, hostTypeSchema, type HostType } from "@bb/domain";
+import { defaultFeatureFlags } from "@bb/domain";
 import { DEFAULTS } from "./defaults.js";
 import { defineEnvVar, type EnvVarParseArgs } from "./env.js";
 import {
@@ -137,20 +137,6 @@ function parseInferenceFallbackModelValue(args: EnvVarParseArgs): string {
 
 function parseTranscriptionModelValue(args: EnvVarParseArgs): string {
   return validateTranscriptionModel(args.value);
-}
-
-function parseHostTypeValue(args: EnvVarParseArgs): HostType | undefined {
-  const trimmedValue = args.value.trim();
-  if (trimmedValue.length === 0) {
-    return undefined;
-  }
-
-  const parsedHostType = hostTypeSchema.safeParse(trimmedValue);
-  if (!parsedHostType.success) {
-    throw new Error(`Invalid ${args.name} "${trimmedValue}"`);
-  }
-
-  return parsedHostType.data;
 }
 
 export const BB_LOG_LEVEL_ENV = defineEnvVar<string>({
@@ -354,12 +340,6 @@ export const BB_HOST_NAME_ENV = defineEnvVar<string | undefined>({
     "Preferred host name to report instead of detecting the local hostname",
   name: "BB_HOST_NAME",
   parse: parseOptionalTrimmedStringEnvValue,
-});
-
-export const BB_HOST_TYPE_ENV = defineEnvVar<HostType | undefined>({
-  description: "Host type override for daemon bootstrap",
-  name: "BB_HOST_TYPE",
-  parse: parseHostTypeValue,
 });
 
 export const DEFAULT_BB_APP_VERSION = DEFAULTS.appVersion;

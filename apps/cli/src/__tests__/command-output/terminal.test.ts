@@ -40,7 +40,6 @@ function makeHost(overrides: Record<string, unknown> = {}) {
   return {
     id: "host-1",
     name: "laptop",
-    type: "persistent",
     status: "connected",
     lastSeenAt: 1,
     createdAt: 1,

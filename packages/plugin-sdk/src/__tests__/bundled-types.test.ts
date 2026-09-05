@@ -75,6 +75,7 @@ describe("bundled plugin SDK declarations", () => {
       "bb-plugin-sdk-testing.d.ts",
       "bb-plugin-sdk-testing-app.d.ts",
       "bb-plugin-sdk-testing-host.d.ts",
+      "bb-plugin-sdk-environment-provider.d.ts",
     ];
     const declarations = await Promise.all(
       fileNames.map((fileName) =>
@@ -102,6 +103,9 @@ describe("bundled plugin SDK declarations", () => {
       "interface RenderedSlotLifecycleControls",
     );
     expect(declarations[5]).toContain("interface ExperimentalHostEntryHarness");
+    expect(declarations[6]).toContain(
+      "interface PluginEnvironmentProviderDefinition",
+    );
   });
 
   it("names the canonical event vocabulary in the provider-bridge testing kit", async () => {

@@ -42,6 +42,7 @@ const PLUGIN_CATEGORY_ACCENT_TOKENS: Record<string, string> = {
   "memory-and-context": "--success",
   security: "--warning",
   "agents-and-providers": "--success",
+  environments: "--attention",
   "token-usage-and-limits": "--warning",
   notifications: "--warning",
   "code-and-reviews": "--pr-merged",

@@ -64,7 +64,6 @@ describe("createServerClient", () => {
     const result = client.openSession({
       hostId: "host-1",
       hostName: "Host",
-      hostType: "persistent",
       dataDir: "/tmp/bb",
       instanceId: "instance-1",
       localApiPort: null,
@@ -110,7 +109,6 @@ describe("createServerClient", () => {
       await client.openSession({
         hostId: "host-1",
         hostName: "Host",
-        hostType: "persistent",
         dataDir: "/tmp/bb",
         instanceId: "instance-1",
         localApiPort: 38_888,

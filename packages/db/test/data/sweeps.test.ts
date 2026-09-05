@@ -12,15 +12,12 @@ import {
   DESTROYED_ENVIRONMENT_TTL_MS,
   pruneClosedSessions,
   pruneDestroyedEnvironments,
-  sweepManagedEnvironments,
   truncateCompletedEventItemOutputs,
 } from "../../src/data/sweeps.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createProject } from "../../src/data/projects.js";
 import {
   createThread,
-  archiveThread,
-  markThreadDeleted,
 } from "../../src/data/threads.js";
 import {
   createEnvironment,
@@ -39,7 +36,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "test-project",
@@ -425,7 +421,6 @@ describe("pruneClosedSessions", () => {
       hostId: args.hostId,
       instanceId: args.instanceId,
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -464,7 +459,6 @@ describe("pruneClosedSessions", () => {
       hostId: host.id,
       instanceId: "inst-active",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -503,7 +497,6 @@ describe("pruneClosedSessions", () => {
       hostId: host.id,
       instanceId: "inst-active",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -550,145 +543,15 @@ describe("pruneClosedSessions", () => {
   });
 });
 
-describe("sweepManagedEnvironments", () => {
-  it("returns retiring managed environments with zero non-archived threads", () => {
-    const { db, host, project } = setup();
-
-    const env = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/env",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "retiring",
-    });
-
-    const candidates1 = sweepManagedEnvironments(db);
-    expect(candidates1).toHaveLength(1);
-    expect(candidates1[0]!.id).toBe(env.id);
-  });
-
-  it("does not return environments with non-archived threads", () => {
-    const { db, host, project } = setup();
-
-    const env = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/env",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "retiring",
-    });
-
-    createThread(db, noopNotifier, {
-      projectId: project.id,
-      environmentId: env.id,
-      providerId: "codex",
-      status: "idle",
-    });
-
-    const candidates = sweepManagedEnvironments(db);
-    expect(candidates).toHaveLength(0);
-  });
-
-  it("returns environment after all threads are archived", () => {
-    const { db, host, project } = setup();
-
-    const env = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/env",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "retiring",
-    });
-
-    const thread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      environmentId: env.id,
-      providerId: "codex",
-      status: "idle",
-    });
-
-    expect(sweepManagedEnvironments(db)).toHaveLength(0);
-
-    archiveThread(db, noopNotifier, thread.id);
-
-    const candidates = sweepManagedEnvironments(db);
-    expect(candidates).toHaveLength(1);
-    expect(candidates[0]!.id).toBe(env.id);
-  });
-
-  it("treats soft-deleted threads as non-live when selecting cleanup candidates", () => {
-    const { db, host, project } = setup();
-
-    const env = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/env",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "retiring",
-    });
-
-    const thread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      environmentId: env.id,
-      providerId: "codex",
-      status: "idle",
-    });
-
-    markThreadDeleted(db, noopNotifier, { threadId: thread.id });
-
-    const candidates = sweepManagedEnvironments(db);
-    expect(candidates).toHaveLength(1);
-    expect(candidates[0]!.id).toBe(env.id);
-  });
-
-  it("does not return unmanaged environments", () => {
-    const { db, host, project } = setup();
-
-    createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/env",
-      managed: false,
-      workspaceProvisionType: "unmanaged",
-      status: "retiring",
-    });
-
-    const candidates = sweepManagedEnvironments(db);
-    expect(candidates).toHaveLength(0);
-  });
-
-  it("does not return destroying environments from the retiring sweep", () => {
-    const { db, host, project } = setup();
-
-    const env = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/env",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "destroying",
-    });
-
-    const candidates = sweepManagedEnvironments(db);
-    expect(candidates).toHaveLength(0);
-    expect(env.status).toBe("destroying");
-  });
-});
-
 describe("pruneDestroyedEnvironments", () => {
   it("resumes event detachment from persisted progress before notifying deletion", () => {
     const { db, host, project } = setup();
     const now = Date.now();
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/destroyed-with-event-history",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
       status: "destroyed",
     });
     db.update(environments)
@@ -794,19 +657,17 @@ describe("pruneDestroyedEnvironments", () => {
     const now = Date.now();
 
     const staleEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/stale-destroyed",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
       status: "destroyed",
     });
     const freshEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/fresh-destroyed",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
       status: "destroyed",
     });
 
@@ -841,55 +702,15 @@ describe("pruneDestroyedEnvironments", () => {
     ]);
   });
 
-  it("does not hard-delete stale destroying environments", () => {
-    const { db, host, project } = setup();
-    const now = Date.now();
-
-    const staleEnvironment = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      path: "/tmp/stale-destroying",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
-      status: "destroying",
-    });
-
-    db.update(environments)
-      .set({ updatedAt: now - 8 * 24 * 60 * 60_000 })
-      .where(eq(environments.id, staleEnvironment.id))
-      .run();
-
-    const spy: DbNotifier = {
-      notifyThread: vi.fn(),
-      notifyEnvironment: vi.fn(),
-      notifyHost: vi.fn(),
-      notifyProject: vi.fn(),
-      notifySystem: vi.fn(),
-    };
-
-    const result = pruneDestroyedEnvironments(db, spy, {
-      updatedBefore: now - DESTROYED_ENVIRONMENT_TTL_MS,
-      eventBatchSize: DEFAULT_DESTROYED_ENVIRONMENT_EVENT_DETACH_BATCH_SIZE,
-      limit: 10,
-    });
-    expect(result.deleted).toBe(0);
-    expect(
-      db.select().from(environments).where(eq(environments.id, staleEnvironment.id)).get()
-        ?.status,
-    ).toBe("destroying");
-    expect(spy.notifyEnvironment).not.toHaveBeenCalled();
-  });
-
   it("a metadata write on a destroyed environment restarts its retention clock", () => {
     const { db, host, project } = setup();
     const now = Date.now();
 
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/destroyed-then-renamed",
-      managed: true,
-      workspaceProvisionType: "managed-worktree",
       status: "destroyed",
     });
     db.update(environments)
@@ -923,11 +744,10 @@ describe("pruneDestroyedEnvironments", () => {
 
     function createDestroyedEnvironment(path: string, ageMs: number) {
       const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
         projectId: project.id,
         hostId: host.id,
         path,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
         status: "destroyed",
       });
       db.update(environments)
@@ -1025,11 +845,10 @@ describe("pruneDestroyedEnvironments", () => {
 
     function createDestroyedEnvironmentWithThread(path: string, updatedAt: number) {
       const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
         projectId: project.id,
         hostId: host.id,
         path,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
         status: "destroyed",
       });
       db.update(environments)

@@ -37,7 +37,6 @@ function setup() {
   migrate(db);
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const firstProject = createProject(db, noopNotifier, {
     name: "Project A",

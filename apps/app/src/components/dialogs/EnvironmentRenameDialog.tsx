@@ -5,7 +5,7 @@ const ENVIRONMENT_NAME_MAX_LENGTH = 80;
 
 const ENVIRONMENT_NAME_LENGTH_RULE = {
   limit: ENVIRONMENT_NAME_MAX_LENGTH,
-  message: `Worktree name must be ${ENVIRONMENT_NAME_MAX_LENGTH} characters or fewer.`,
+  message: `Environment name must be ${ENVIRONMENT_NAME_MAX_LENGTH} characters or fewer.`,
 };
 
 export interface EnvironmentRenameDialogTarget {
@@ -65,11 +65,11 @@ export function EnvironmentRenameDialogContent({
 }: EnvironmentRenameDialogContentProps) {
   return (
     <RenameDialogContent
-      entityLabel="worktree"
+      entityLabel="environment"
       initialName={target.currentName}
       pending={pending}
       errorMessage={errorMessage}
-      placeholder={target.branchName ?? "Worktree name"}
+      placeholder={target.branchName ?? "Environment name"}
       inputDetails={
         target.canClearName && target.branchName ? (
           <p className="truncate text-xs text-muted-foreground">

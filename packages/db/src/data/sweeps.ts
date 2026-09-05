@@ -1,9 +1,9 @@
 import {
-  eq,
   and,
-  sql,
-  lt,
   asc,
+  eq,
+  lt,
+  sql,
 } from "drizzle-orm";
 import { type ThreadEventItemType } from "@bb/domain";
 import type { DbConnection } from "../connection.js";
@@ -337,27 +337,6 @@ export function truncateCompletedEventItemOutputs(
   };
 }
 
-export function sweepManagedEnvironments(db: DbConnection) {
-  const rows = db
-    .select()
-    .from(environments)
-    .where(
-      and(
-        eq(environments.managed, true),
-        eq(environments.status, "retiring"),
-        sql`NOT EXISTS (
-          SELECT 1 FROM threads
-          WHERE threads.environment_id = ${environments.id}
-          AND threads.archived_at IS NULL
-          AND threads.deleted_at IS NULL
-        )`,
-      ),
-    )
-    .all();
-
-  return rows;
-}
-
 export function pruneDestroyedEnvironments(
   db: DbConnection,
   notifier: DbNotifier,
@@ -373,6 +352,7 @@ export function pruneDestroyedEnvironments(
     .where(
       and(
         eq(environments.status, "destroyed"),
+        sql`(${environments.environmentProviderId} is null or ${environments.teardownStatus} = 'removed')`,
         lt(environments.updatedAt, args.updatedBefore),
       ),
     )

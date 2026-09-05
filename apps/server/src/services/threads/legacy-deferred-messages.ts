@@ -66,7 +66,7 @@ function legacyDeferredTableExists(
 }
 
 function toSendPayload(
-  request: z.infer<typeof legacyDeferredPayloadSchema.options[0]>["request"],
+  request: z.infer<(typeof legacyDeferredPayloadSchema.options)[0]>["request"],
 ): SendMessageRequest {
   // A deferred message's moment has passed, so its old delivery mode carries
   // no intent worth preserving: `auto` steers a running turn and starts an

@@ -17,8 +17,16 @@ const hosts: Host[] = [
   {
     id: "host-primary",
     name: "workstation",
-    type: "persistent",
     status: "connected",
+    machineProviderId: null,
+    machineProviderSelection: null,
+    lifecycle: {
+      phase: "active",
+      suspendedAt: null,
+      retireAt: null,
+      progress: null,
+      teardown: null,
+    },
     maxPermissionMode: "full",
     lastSeenAt: 1_700_000_000_000,
     lastRejectedProtocolVersion: null,
@@ -28,8 +36,16 @@ const hosts: Host[] = [
   {
     id: "host-remote",
     name: "laptop",
-    type: "persistent",
     status: "disconnected",
+    machineProviderId: null,
+    machineProviderSelection: null,
+    lifecycle: {
+      phase: "active",
+      suspendedAt: null,
+      retireAt: null,
+      progress: null,
+      teardown: null,
+    },
     maxPermissionMode: "full",
     lastSeenAt: null,
     lastRejectedProtocolVersion: null,
@@ -62,7 +78,7 @@ describe("bb machine command output", () => {
 
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "",
-      "Name         ID            Status        Last seen\n-----------  ------------  ------------  ---------\nworkstation  host-primary  connected     2m ago\n-----------  ------------  ------------  ---------\nlaptop       host-remote   disconnected  never",
+      "Name         ID            Status        Provider       Last seen\n-----------  ------------  ------------  -------------  ---------\nworkstation  host-primary  connected     user-enrolled  2m ago\n-----------  ------------  ------------  -------------  ---------\nlaptop       host-remote   disconnected  user-enrolled  never",
       "",
     ]);
   });
@@ -79,6 +95,67 @@ describe("bb machine command output", () => {
     expect(retryUpdate).toHaveBeenCalledOnce();
     expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
       "Machine host-remote update retry requested",
+    ]);
+  });
+
+  it.each([
+    ["suspend", "v1.hosts.:id.suspend.$post", "suspended"],
+    ["resume", "v1.hosts.:id.resume.$post", "resumed"],
+    ["retry-cleanup", "v1.hosts.:id.retry-cleanup.$post", "cleanup retried"],
+  ] as const)(
+    "bb machine %s resolves the machine and invokes the lifecycle action",
+    async (command, route, message) => {
+      const lifecycleAction = vi.fn(async () => ({ ok: true as const }));
+      stubServerApi({
+        "v1.hosts.$get": vi.fn(async () => hosts),
+        [route]: lifecycleAction,
+      });
+
+      await runCommand(["machine", command, "laptop"], register);
+
+      expect(lifecycleAction).toHaveBeenCalledWith({
+        param: { id: "host-remote" },
+      });
+      expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+        `Machine host-remote ${message}`,
+      ]);
+    },
+  );
+
+  it("bb machine providers evaluates providers for the requested project", async () => {
+    const listProviders = vi.fn(async () => ({
+      providers: [
+        {
+          id: "modal-sandbox",
+          displayName: "Modal sandbox",
+          availability: { status: "available" },
+        },
+      ],
+    }));
+    stubServerApi({ "v1.system.machine-providers.$get": listProviders });
+
+    await runCommand(["machine", "providers", "--project", "proj-1"], register);
+
+    expect(listProviders).toHaveBeenCalledWith({
+      query: { projectId: "proj-1" },
+    });
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "modal-sandbox  Modal sandbox  available",
+    ]);
+  });
+
+  it("bb machine remove resolves and removes a provider machine", async () => {
+    const remove = vi.fn(async () => undefined);
+    stubServerApi({
+      "v1.hosts.$get": vi.fn(async () => hosts),
+      "v1.hosts.:id.$delete": remove,
+    });
+
+    await runCommand(["machine", "remove", "laptop", "--yes"], register);
+
+    expect(remove).toHaveBeenCalledWith({ param: { id: "host-remote" } });
+    expect(collectLogPayloads(vi.mocked(console.log))).toEqual([
+      "Machine host-remote removed",
     ]);
   });
 });

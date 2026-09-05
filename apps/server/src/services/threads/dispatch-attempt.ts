@@ -24,6 +24,7 @@ import type {
   ThreadCreateOrigin,
 } from "@bb/server-contract";
 import { startedOnBehalfOfSchema } from "@bb/server-contract";
+import type { PluginDispatchEnvironmentIntent } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { ApiError } from "../../errors.js";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
@@ -52,7 +53,6 @@ import { buildExecutionOptions } from "./thread-commands.js";
 import { getActiveTurnId, isManualCompactionActive } from "./thread-events.js";
 import { requireThreadCommandEnvironment } from "./thread-command-environment.js";
 import {
-  advanceThreadProvisioning,
   requestThreadProvision,
   scheduleThreadProvisioningAdvance,
 } from "./thread-provisioning.js";
@@ -75,6 +75,7 @@ import {
   type SendThreadMessageTransactionPreflight,
 } from "./thread-send.js";
 import type { TurnRequestRetryMarker } from "./thread-events.js";
+import { restoreFailedProviderLaunchRequest } from "../environments/provider-orchestration.js";
 
 /**
  * The half of a never-started thread's first turn that the message itself does
@@ -114,7 +115,45 @@ export function hostIdForEnvironmentIntent(
   if (intent.type === "reuse") {
     return getEnvironment(deps.db, intent.environmentId)?.hostId ?? null;
   }
-  return intent.hostId;
+  return intent.machine.type === "existing" ? intent.machine.hostId : null;
+}
+
+function toPluginEnvironmentIntent(
+  intent: PendingThreadStartContext["environmentIntent"],
+): PluginDispatchEnvironmentIntent {
+  switch (intent.type) {
+    case "reuse":
+      return { kind: "environment", environmentId: intent.environmentId };
+    case "provider":
+      return {
+        kind: "provider",
+        environmentProviderId: intent.environmentProviderId,
+        machine: intent.machine,
+        inputs: intent.inputs,
+      };
+  }
+}
+
+function intendedThreadIntent(
+  deps: Pick<LoggedPendingInteractionWorkSessionDeps, "db">,
+  threadId: string,
+): PendingThreadStartContext["environmentIntent"] | null {
+  return (
+    getActiveThreadProvisionContext(threadId)?.request.environmentIntent ??
+    readPendingThreadStartContext(deps, threadId)?.environmentIntent ??
+    null
+  );
+}
+
+export function intendedThreadEnvironmentIntent(
+  deps: Pick<LoggedPendingInteractionWorkSessionDeps, "db">,
+  thread: Pick<Thread, "id" | "environmentId">,
+): PluginDispatchEnvironmentIntent | null {
+  if (thread.environmentId !== null) {
+    return { kind: "environment", environmentId: thread.environmentId };
+  }
+  const intent = intendedThreadIntent(deps, thread.id);
+  return intent === null ? null : toPluginEnvironmentIntent(intent);
 }
 
 /**
@@ -130,10 +169,7 @@ export function intendedThreadHostId(
   deps: Pick<LoggedPendingInteractionWorkSessionDeps, "db">,
   threadId: string,
 ): string | null {
-  const intent =
-    getActiveThreadProvisionContext(threadId)?.request.environmentIntent ??
-    readPendingThreadStartContext(deps, threadId)?.environmentIntent ??
-    null;
+  const intent = intendedThreadIntent(deps, threadId);
   return intent === null ? null : hostIdForEnvironmentIntent(deps, intent);
 }
 
@@ -273,7 +309,21 @@ async function runDispatchAttempt(
     targetThread: thread,
   });
 
-  const firstDispatch = thread.status === "pending";
+  const failedProviderLaunch =
+    thread.status === "error" && thread.environmentId === null
+      ? await restoreFailedProviderLaunchRequest(deps, thread.id)
+      : null;
+  const firstDispatch =
+    thread.status === "pending" || failedProviderLaunch !== null;
+  const retryStartContext: PendingThreadStartContext | null =
+    failedProviderLaunch === null
+      ? null
+      : {
+          environmentIntent: failedProviderLaunch.environmentIntent,
+          fork: failedProviderLaunch.fork,
+          startedOnBehalfOf: args.startedOnBehalfOf,
+          titleProvided: failedProviderLaunch.titleProvided,
+        };
   const claimed = args.source.kind === "drain" ? args.source.claimed : null;
   const sendNow = args.source.kind === "drain" && args.source.sendNow;
   const respectManualStopPause =
@@ -420,6 +470,7 @@ async function runDispatchAttempt(
         thread.environmentId !== null
           ? null
           : intendedThreadHostId(deps, thread.id),
+      environmentIntent: intendedThreadEnvironmentIntent(deps, thread),
       input: payload.input,
       requestedExecution: {
         providerId: thread.providerId,
@@ -450,7 +501,7 @@ async function runDispatchAttempt(
                 claimed,
                 payload: resolvedPayload,
                 respectManualStopPause,
-                startContext: args.startContext ?? null,
+                startContext: args.startContext ?? retryStartContext,
                 thread,
               });
             },
@@ -483,7 +534,7 @@ async function runDispatchAttempt(
           claimed,
           payload: resolvedPayload,
           respectManualStopPause,
-          startContext: args.startContext ?? null,
+          startContext: args.startContext ?? retryStartContext,
           thread,
         });
     if (admission === null) {
@@ -727,17 +778,6 @@ async function launchAdmittedThread(
   });
   if (claimedRow !== null) {
     settleQueueRowDispatched({ row: claimedRow });
-  }
-  if (startContext.environmentIntent.type === "direct-personal") {
-    // A personal workspace needs no worktree, so provisioning it is fast and
-    // the caller is told about a failure synchronously instead of finding the
-    // thread in `error` afterwards. Every other intent is driven off this
-    // stack, because it can take as long as a clone.
-    await advanceThreadProvisioning(deps, {
-      context,
-      threadId: startingThread.id,
-    });
-    return;
   }
   scheduleThreadProvisioningAdvance(deps, context, startingThread.id);
 }

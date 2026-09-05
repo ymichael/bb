@@ -15,7 +15,7 @@ import {
 } from "@bb/shared-ui/coarse-pointer-sizing";
 import { LIST_HOVER_TRANSITION } from "@bb/shared-ui/motion";
 import { MachineStatusDot } from "@/components/machines/MachineStatusDot";
-import { selectPrimaryHost } from "@/hooks/queries/host-queries";
+import { selectHosts, selectPrimaryHost } from "@/hooks/queries/host-queries";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { formatHostUpdateStatus } from "@/lib/host-update-status";
@@ -53,20 +53,21 @@ export function MachinePickerUI({
   className,
   modal,
 }: MachinePickerUIProps) {
+  const availableHosts = useMemo(() => selectHosts(hosts), [hosts]);
   const selectedHost = useMemo(
     () =>
-      hosts.find((host) => host.id === selectedHostId) ??
-      selectPrimaryHost(hosts, primaryHostId),
-    [hosts, primaryHostId, selectedHostId],
+      availableHosts.find((host) => host.id === selectedHostId) ??
+      selectPrimaryHost(availableHosts, primaryHostId),
+    [availableHosts, primaryHostId, selectedHostId],
   );
   const orderedHosts = useMemo(
     () =>
-      [...hosts].sort(
+      [...availableHosts].sort(
         (left, right) =>
           Number(left.id !== localDaemonHostId) -
           Number(right.id !== localDaemonHostId),
       ),
-    [hosts, localDaemonHostId],
+    [availableHosts, localDaemonHostId],
   );
   const now = Date.now();
 

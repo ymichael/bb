@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import type { PromptTextMention, ThreadListEntry } from "@bb/domain";
 import {
   NewThreadPromptBoxUI,
-  type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
   type NewThreadModeConfig,
   type NewThreadProjectConfig,
@@ -13,7 +12,6 @@ import {
   HOST_IDS,
   PROJECT_IDS,
   PROJECT_NAMES,
-  STORY_BRANCH_OPTIONS,
   STORY_CLAUDE_CODE_PROVIDER_ID,
   STORY_CURSOR_PROVIDER_ID,
   STORY_PROVIDERS_BY_ID,
@@ -120,21 +118,6 @@ const storyEnvironment: NewThreadEnvironmentConfig = {
   isLocal: true,
 };
 
-const storyBranch: NewThreadBranchConfig = {
-  value: null,
-  currentBranch: "main",
-  isNew: false,
-  options: STORY_BRANCH_OPTIONS,
-  loading: false,
-  currentOptionLabel: "Current: main",
-  placeholder: "Current checkout",
-  triggerLabel: "Current (main)",
-  triggerTitle: "Current: main",
-  onChange: noop,
-  onClear: noop,
-  onCreate: noop,
-};
-
 const storyWorktree: NewThreadWorktreeConfig = {
   options: STORY_WORKTREE_OPTIONS,
   value: null,
@@ -149,7 +132,6 @@ const storyProject: NewThreadProjectConfig = {
 
 const storyModeConfig = {
   environment: storyEnvironment,
-  branch: storyBranch,
   worktree: storyWorktree,
   permission: {
     value: "auto",

@@ -23,6 +23,7 @@ import {
   turnScope,
 } from "@bb/domain";
 import type {
+  EnvironmentProviderSelection,
   EnvironmentStatus,
   PermissionMode,
   PromptInput,
@@ -35,7 +36,6 @@ import type {
   ThreadOriginKind,
   ThreadStatus,
   ThreadVisibility,
-  WorkspaceProvisionType,
 } from "@bb/domain";
 import type { AppDeps } from "../../src/types.js";
 import { registerTestHostRpcCapture } from "./commands.js";
@@ -79,7 +79,6 @@ export function seedHost(
     connectMachineId?: string;
     id?: string;
     name?: string;
-    type?: "persistent";
   } = {},
 ) {
   return upsertHost(deps.db, deps.hub, {
@@ -88,13 +87,12 @@ export function seedHost(
       : {}),
     id: args.id,
     name: args.name ?? "Test Host",
-    type: args.type ?? "persistent",
   });
 }
 
 export function seedHostSession(
   deps: Pick<AppDeps, "db" | "hub">,
-  args: { id?: string; name?: string; type?: "persistent" } = {},
+  args: { id?: string; name?: string } = {},
 ) {
   const host = seedHost(deps, args);
   const session = seedSession(deps, host.id);
@@ -113,7 +111,6 @@ export function seedSession(deps: Pick<AppDeps, "db" | "hub">, hostId: string) {
     hostId,
     instanceId: "instance-1",
     hostName: "Test Host",
-    hostType: "persistent",
     dataDir: `/tmp/bb-host-data/${hostId}`,
     protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
     heartbeatIntervalMs: 5_000,
@@ -149,10 +146,11 @@ export function seedEnvironment(
     projectId: string;
     path?: string | null;
     status?: EnvironmentStatus;
-    managed?: boolean;
-    workspaceProvisionType?: WorkspaceProvisionType;
+    environmentProviderId?: string;
+    environmentProviderInstanceKey?: string;
+    environmentProviderSelection?: EnvironmentProviderSelection;
+    providerOwnsPath?: boolean;
     isGitRepo?: boolean;
-    isWorktree?: boolean;
     branchName?: string | null;
     baseBranch?: string | null;
     defaultBranch?: string | null;
@@ -160,15 +158,24 @@ export function seedEnvironment(
   },
 ) {
   return createEnvironment(deps.db, deps.hub, {
+    providerOwnsPath: args.providerOwnsPath ?? false,
     projectId: args.projectId,
     hostId: args.hostId,
     path: args.path !== undefined ? args.path : "/tmp/test-environment",
     status: args.status ?? "ready",
-    managed: args.managed ?? false,
-    isGitRepo: args.isGitRepo ?? args.workspaceProvisionType !== "personal",
-    isWorktree:
-      args.isWorktree ?? args.workspaceProvisionType === "managed-worktree",
-    workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
+    isGitRepo: args.isGitRepo ?? true,
+    ...(args.environmentProviderId !== undefined
+      ? {
+          environmentProvider: {
+            environmentProviderId: args.environmentProviderId,
+            instanceKey: args.environmentProviderInstanceKey ?? null,
+            selection: args.environmentProviderSelection ?? {
+              machine: { type: "existing", hostId: args.hostId },
+              inputs: null,
+            },
+          },
+        }
+      : {}),
     branchName: args.branchName !== undefined ? args.branchName : "bb/test",
     baseBranch: args.baseBranch !== undefined ? args.baseBranch : null,
     defaultBranch:
@@ -245,7 +252,7 @@ export function seedQueuedMessage(
     model?: string;
     reasoningLevel?: string;
     permissionMode?: PermissionMode;
-      senderThreadId?: string | null;
+    senderThreadId?: string | null;
     serviceTier?: string;
     /** Defaults to a row with no wait: an ordinary queued message. */
     waitingOn?: QueuedMessageWaitingOn | null;

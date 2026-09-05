@@ -4,13 +4,10 @@ import {
   threadSchema,
   type GitSourceInspection,
 } from "@bb/domain";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { resolveProjectDefaultThreadEnvironment } from "../../src/services/threads/thread-default-policy.js";
 import { getActiveThreadProvisionContext } from "../../src/services/threads/thread-provisioning-active-context.js";
-import {
-  requireManagedWorktreeEnvironmentProvisionLiveCommand,
-  waitForQueuedCommand,
-} from "../helpers/commands.js";
+import type { ThreadProvisionEnvironmentIntent } from "../../src/services/threads/thread-provisioning-context.js";
 import { registerHostRpcResponder } from "../helpers/host-rpc.js";
 import { readJson } from "../helpers/json.js";
 import {
@@ -21,6 +18,7 @@ import {
   seedProjectWithSource,
 } from "../helpers/seed.js";
 import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
+import { installFakeGitWorktreeProvider } from "../helpers/environment-provider.js";
 
 interface CreateThreadBodyOverrides {
   environment: unknown;
@@ -49,48 +47,63 @@ async function postCreateThread(
   });
 }
 
-interface ProvisionPolicyFields {
-  baseBranch: string | null;
-  sourcePath: string;
-  workspaceProvisionType: "managed-worktree";
-}
-
-async function createAndCaptureProvision(
+async function createAndCaptureIntent(
   harness: TestAppHarness,
   args: { environment: unknown; projectId: string },
-): Promise<{ provision: ProvisionPolicyFields; threadId: string }> {
+): Promise<{ intent: ThreadProvisionEnvironmentIntent; threadId: string }> {
   const response = await postCreateThread(harness, args.projectId, {
     environment: args.environment,
   });
   expect(response.status).toBe(201);
   const thread = threadSchema.parse(await readJson(response));
-  const queued = await waitForQueuedCommand(
-    harness,
-    ({ command }) => command.type === "environment.provision",
-  );
-  const managed = requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
-  return {
-    provision: {
-      baseBranch: managed.command.baseBranch,
-      sourcePath: managed.command.sourcePath,
-      workspaceProvisionType: managed.command.workspaceProvisionType,
-    },
-    threadId: thread.id,
-  };
+  const intent = getActiveThreadProvisionContext(thread.id)?.request
+    .environmentIntent;
+  if (intent === undefined) {
+    throw new Error("Expected an active provisioning context");
+  }
+  return { intent, threadId: thread.id };
 }
 
 describe("project-default thread environment", () => {
-  it("resolves project-default exactly like the explicit managed-worktree default", async () => {
-    const sourcePath = "/tmp/project-default-source";
-
-    const explicit = await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
+  it("resolves project-default to the worktree provider on the source's default branch", async () => {
+    await withTestHarness(async (harness) => {
+      installFakeGitWorktreeProvider();
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-default",
+      });
       seedPrimaryHost(harness.deps, host.id);
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: sourcePath,
+        path: "/tmp/project-default-source",
       });
-      const { provision } = await createAndCaptureProvision(harness, {
+      const { intent, threadId } = await createAndCaptureIntent(harness, {
+        projectId: project.id,
+        environment: { type: "project-default" },
+      });
+      expect(intent).toEqual({
+        type: "provider",
+        environmentProviderId: "git-worktree",
+        machine: { type: "existing", hostId: host.id },
+        inputs: { branch: { kind: "named", name: "origin/main" } },
+        selectionResolved: true,
+        produced: null,
+      });
+      expect(getThread(harness.db, threadId)?.originPluginId).toBeNull();
+    });
+  });
+
+  it("passes an explicit managed-worktree default through to the worktree provider unresolved", async () => {
+    await withTestHarness(async (harness) => {
+      installFakeGitWorktreeProvider();
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-project-default-explicit",
+      });
+      seedPrimaryHost(harness.deps, host.id);
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/project-default-source",
+      });
+      const { intent } = await createAndCaptureIntent(harness, {
         projectId: project.id,
         environment: {
           type: "host",
@@ -101,34 +114,32 @@ describe("project-default thread environment", () => {
           },
         },
       });
-      return provision;
-    });
-
-    await withTestHarness(async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      seedPrimaryHost(harness.deps, host.id);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-        path: sourcePath,
+      expect(intent).toEqual({
+        type: "provider",
+        environmentProviderId: "git-worktree",
+        machine: { type: "existing", hostId: host.id },
+        inputs: { branch: { kind: "default" } },
+        selectionResolved: true,
+        produced: null,
       });
-      const { provision, threadId } = await createAndCaptureProvision(harness, {
-        projectId: project.id,
-        environment: { type: "project-default" },
-      });
-      expect(provision).toEqual(explicit);
-      expect(getThread(harness.db, threadId)?.originPluginId).toBeNull();
     });
   });
 
-  it("resolves the personal project to a personal workspace on the primary host", async () => {
+  it("resolves the personal project to the personal provider on the primary host", async () => {
     await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-personal-default",
+      });
+      seedPrimaryHost(harness.deps, host.id);
       await expect(
         resolveProjectDefaultThreadEnvironment(harness.deps, {
           projectId: PERSONAL_PROJECT_ID,
         }),
       ).resolves.toEqual({
-        type: "host",
-        workspace: { type: "personal" },
+        type: "provider",
+        environmentProviderId: "personal-workspace",
+        machine: { type: "existing", hostId: host.id },
+        inputs: null,
       });
     });
   });
@@ -140,6 +151,7 @@ describe("project-default thread environment", () => {
         checkout: { kind: "unborn" as const, branchName: "main" },
         defaultBranch: null,
         defaultBranchRelation: null,
+        isWorktree: false,
         hasUncommittedChanges: false,
         operation: { kind: "none" as const },
         originDefaultBranch: null,
@@ -154,6 +166,7 @@ describe("project-default thread environment", () => {
         },
         defaultBranch: null,
         defaultBranchRelation: null,
+        isWorktree: false,
         hasUncommittedChanges: false,
         operation: { kind: "none" as const },
         originDefaultBranch: null,
@@ -194,13 +207,24 @@ describe("project-default thread environment", () => {
         const thread = threadSchema.parse(await readJson(response));
         expect(responder.requests).toHaveLength(1);
         expect(getThread(harness.db, thread.id)?.originPluginId).toBe("tasks");
-        expect(
-          getActiveThreadProvisionContext(thread.id)?.request.environmentIntent,
-        ).toEqual({
-          type: "direct-unmanaged",
-          hostId: host.id,
-          path: sourcePath,
-        });
+        await vi.waitFor(() =>
+          expect(
+            getActiveThreadProvisionContext(thread.id)?.request
+              .environmentIntent,
+          ).toEqual({
+            type: "provider",
+            environmentProviderId: "project-checkout",
+            machine: { type: "existing", hostId: host.id },
+            inputs: { path: sourcePath },
+            selectionResolved: true,
+            produced: {
+              mergeBaseBranch: null,
+              ownsPath: true,
+              hostId: host.id,
+              path: sourcePath,
+            },
+          }),
+        );
       });
     },
   );

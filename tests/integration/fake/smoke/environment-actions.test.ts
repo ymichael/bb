@@ -14,17 +14,12 @@ import {
   sendTextMessage,
   unarchiveThread,
 } from "../../helpers/api.js";
-import {
-  waitForPathRemoval,
-  waitForThreadStatus,
-} from "../../helpers/assertions.js";
+import { waitForThreadStatus } from "../../helpers/assertions.js";
 import { withHarness } from "../../helpers/harness.js";
 import { createTestFile, runGit } from "../../helpers/seed.js";
 import {
   createProjectFixture,
   createReadyThread,
-  DEFAULT_TIMEOUT_MS,
-  expectEnvironmentDestroyed,
   expectThreadMissing,
   TURN_TIMEOUT_MS,
 } from "./shared.js";
@@ -221,27 +216,6 @@ describe.sequential("fake provider smoke environment integration", () => {
 
       const output = await getThreadOutput(harness.api, thread.id);
       expect(output).toContain("after unarchive");
-    }));
-
-  it("archives a managed worktree thread and destroys the environment", () =>
-    withHarness(async (harness) => {
-      const project = await createProjectFixture(
-        harness,
-        "Archive Cleanup Smoke",
-      );
-      const { environment, thread } = await createReadyThread(harness, {
-        projectId: project.id,
-        workspace: { type: "managed-worktree" },
-      });
-
-      const workspacePath = environment.path;
-      if (!workspacePath) {
-        throw new Error("Managed worktree path was not assigned");
-      }
-
-      await archiveThread(harness.api, thread.id);
-      await waitForPathRemoval(workspacePath, DEFAULT_TIMEOUT_MS);
-      await expectEnvironmentDestroyed(harness, environment.id);
     }));
 
   it("deletes a thread after turn history has been created", () =>

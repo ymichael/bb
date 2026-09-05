@@ -301,13 +301,11 @@ describe("background-task lifecycle reconciliation triggers", () => {
         method: "POST",
         headers: internalAuthHeaders(harness, {
           hostId: host.id,
-          hostType: host.type,
         }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-restarted",
           hostName: host.name,
-          hostType: host.type,
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-daemon-task-settle-restart",
@@ -339,13 +337,11 @@ describe("background-task lifecycle reconciliation triggers", () => {
         method: "POST",
         headers: internalAuthHeaders(harness, {
           hostId: host.id,
-          hostType: host.type,
         }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-1",
           hostName: host.name,
-          hostType: host.type,
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-daemon-task-settle-same-instance",
@@ -370,13 +366,11 @@ describe("background-task lifecycle reconciliation triggers", () => {
         method: "POST",
         headers: internalAuthHeaders(harness, {
           hostId: host.id,
-          hostType: host.type,
         }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: session.instanceId,
           hostName: host.name,
-          hostType: host.type,
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-daemon-task-live-same-instance",
@@ -405,13 +399,11 @@ describe("background-task lifecycle reconciliation triggers", () => {
         method: "POST",
         headers: internalAuthHeaders(harness, {
           hostId: host.id,
-          hostType: host.type,
         }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-restarted",
           hostName: host.name,
-          hostType: host.type,
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-daemon-task-live-restarted",
@@ -466,13 +458,11 @@ describe("active thread disconnect reconciliation triggers", () => {
         method: "POST",
         headers: internalAuthHeaders(harness, {
           hostId: host.id,
-          hostType: host.type,
         }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-1",
           hostName: host.name,
-          hostType: host.type,
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-daemon-active-same-instance",
@@ -502,13 +492,11 @@ describe("active thread disconnect reconciliation triggers", () => {
         method: "POST",
         headers: internalAuthHeaders(harness, {
           hostId: host.id,
-          hostType: host.type,
         }),
         body: JSON.stringify({
           hostId: host.id,
           instanceId: "instance-restarted",
           hostName: host.name,
-          hostType: host.type,
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-daemon-active-restarted-instance",

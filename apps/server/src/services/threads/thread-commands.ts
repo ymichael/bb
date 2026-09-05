@@ -275,7 +275,6 @@ export async function buildThreadStartCommand(
     threadId: args.thread.id,
     workspaceContext: workspaceContextFromPath({
       path: runtimeContext.workspacePath,
-      workspaceProvisionType: runtimeContext.workspaceProvisionType,
     }),
     projectId: args.projectId,
     providerId: args.providerId,
@@ -328,7 +327,6 @@ function buildPreparedTurnSubmitCommandPayload(
     resumeContext: {
       workspaceContext: workspaceContextFromPath({
         path: args.runtimeContext.workspacePath,
-        workspaceProvisionType: args.runtimeContext.workspaceProvisionType,
       }),
       projectId: args.runtimeContext.projectId,
       providerId: args.runtimeContext.providerId,
@@ -513,7 +511,6 @@ export function dispatchArchivedThreadProviderArchiveCommand(
   }
   const workspaceContext = workspaceContextFromPath({
     path: environment.path,
-    workspaceProvisionType: environment.workspaceProvisionType,
   });
 
   const bridgeLaunch = resolveBridgeLaunchForProviderId(

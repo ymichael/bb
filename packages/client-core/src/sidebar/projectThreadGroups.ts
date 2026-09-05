@@ -1,7 +1,4 @@
-import type {
-  EnvironmentWorkspaceDisplayKind,
-  ThreadListEntry,
-} from "@bb/domain";
+import type { ThreadListEntry } from "@bb/domain";
 import { compareCodepoint } from "../codepoint-compare.js";
 import {
   getCollapsedChildActivity,
@@ -29,6 +26,7 @@ type EnvironmentThreadGroupNodes = [
 
 export interface EnvironmentThreadGroup {
   environmentId: string;
+  environmentProviderId: string | null;
   nodes: EnvironmentThreadGroupNodes;
   stats: ProjectThreadNodeStats;
 }
@@ -66,7 +64,6 @@ export type ThreadComparator = ((
   compareItems?: ThreadItemComparator;
 };
 
-type WorktreeDisplayKind = "managed-worktree" | "unmanaged-worktree";
 type SidebarProjectThreadShape = Pick<
   ThreadListEntry,
   "originKind" | "visibility"
@@ -83,15 +80,9 @@ interface BuildThreadNodeArgs {
   visitedThreadIds: Set<string>;
 }
 
-interface BucketWorktreeEnvironmentGroupsResult {
+interface BucketEnvironmentThreadGroupsResult {
   environmentThreadGroups: EnvironmentThreadGroup[];
   looseNodes: ProjectThreadNode[];
-}
-
-function isWorktreeDisplayKind(
-  kind: EnvironmentWorkspaceDisplayKind,
-): kind is WorktreeDisplayKind {
-  return kind === "managed-worktree" || kind === "unmanaged-worktree";
 }
 
 export function compareByCreatedAtDescending(
@@ -192,12 +183,14 @@ function buildStatsForHiddenThreads(
 
 function buildEnvironmentThreadGroup(
   environmentId: string,
+  environmentProviderId: string | null,
   nodes: EnvironmentThreadGroupNodes,
   draftThreadIds: ReadonlySet<string>,
 ): EnvironmentThreadGroup {
   const hiddenThreads = nodes.flatMap(getNodeAndDescendantThreads);
   return {
     environmentId,
+    environmentProviderId,
     nodes,
     stats: buildStatsForHiddenThreads(hiddenThreads, draftThreadIds),
   };
@@ -224,8 +217,11 @@ function buildSortedItems(
     return nodes.map(buildThreadItem);
   }
 
-  const { environmentThreadGroups, looseNodes } =
-    bucketWorktreeEnvironmentGroups(nodes, compareThreads, draftThreadIds);
+  const { environmentThreadGroups, looseNodes } = bucketEnvironmentThreadGroups(
+    nodes,
+    compareThreads,
+    draftThreadIds,
+  );
   const items = [
     ...looseNodes.map(buildThreadItem),
     ...environmentThreadGroups.map(buildEnvironmentItem),
@@ -453,22 +449,23 @@ export function isSidebarProjectThread(
   return thread.visibility !== "hidden";
 }
 
-function bucketWorktreeEnvironmentGroups(
+function bucketEnvironmentThreadGroups(
   nodes: ProjectThreadNode[],
   compareThreads: ThreadComparator,
   draftThreadIds: ReadonlySet<string>,
-): BucketWorktreeEnvironmentGroupsResult {
+): BucketEnvironmentThreadGroupsResult {
   const nodesByEnvironmentId = new Map<string, ProjectThreadNode[]>();
+  const providerIdByEnvironmentId = new Map<string, string | null>();
   for (const node of nodes) {
-    if (node.thread.environmentId === null) continue;
-    if (!isWorktreeDisplayKind(node.thread.environmentWorkspaceDisplayKind)) {
-      continue;
-    }
-    const bucket = nodesByEnvironmentId.get(node.thread.environmentId);
+    const { environmentId, environmentIsWorktree, environmentProviderId } =
+      node.thread;
+    if (environmentId === null || environmentIsWorktree !== true) continue;
+    providerIdByEnvironmentId.set(environmentId, environmentProviderId);
+    const bucket = nodesByEnvironmentId.get(environmentId);
     if (bucket) {
       bucket.push(node);
     } else {
-      nodesByEnvironmentId.set(node.thread.environmentId, [node]);
+      nodesByEnvironmentId.set(environmentId, [node]);
     }
   }
 
@@ -476,10 +473,17 @@ function bucketWorktreeEnvironmentGroups(
   const environmentThreadGroups: EnvironmentThreadGroup[] = [];
   for (const [environmentId, bucket] of nodesByEnvironmentId) {
     if (!hasAtLeastTwoThreadNodes(bucket)) continue;
+    const environmentProviderId =
+      providerIdByEnvironmentId.get(environmentId) ?? null;
     bucket.sort((left, right) => compareThreads(left.thread, right.thread));
     groupedEnvironmentIds.add(environmentId);
     environmentThreadGroups.push(
-      buildEnvironmentThreadGroup(environmentId, bucket, draftThreadIds),
+      buildEnvironmentThreadGroup(
+        environmentId,
+        environmentProviderId,
+        bucket,
+        draftThreadIds,
+      ),
     );
   }
 

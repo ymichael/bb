@@ -20,8 +20,9 @@ reports the reload failure in its detail. `bb.pluginId` is the plugin's own id.
 
 The complete top-level factory API is `pluginId`, `log`, `settings`, `storage`,
 `http`, `rpc`, `realtime`, `background`, `cli`, `agents`, `providers`, `ui`,
-`events`, `status`, `server`, `hosts`, `experimental_aiServices`, `sdk`, and
-`onDispose`.
+`events`, `experimental_hooks`, `experimental_environments`,
+`experimental_machines`, `status`, `server`, `hosts`,
+`experimental_aiServices`, `sdk`, and `onDispose`.
 
 Keyed registrations must be unique within one factory execution: duplicate
 settings, routes, rpc methods, services, schedules, CLI registrations, tools,
@@ -192,6 +193,12 @@ export default experimental_defineHostEntry({
 
 `experimental_defineHostEntry` adds the required `experimental_apiVersion: 1`.
 Do not construct the entry object without this helper.
+
+A host entry that deletes a directory it owns should first call
+`experimental_killProcessesWithCwdUnder({ directory })` from
+`@get-bb/plugin-sdk/host`, which SIGTERMs every process whose working
+directory is at or under it and SIGKILLs what survives the grace. Removing a
+workspace out from under a running process otherwise leaves it alive.
 
 The server factory calls only its own host entry:
 

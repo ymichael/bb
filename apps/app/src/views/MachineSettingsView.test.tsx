@@ -28,8 +28,12 @@ vi.mock("@/lib/sdk", () => ({
     hosts: {
       delete: vi.fn(),
       list: vi.fn(),
+      listProviders: vi.fn(),
       providerCliStatus: vi.fn(),
+      resume: vi.fn(),
+      retryCleanup: vi.fn(),
       retryUpdate: vi.fn(),
+      suspend: vi.fn(),
       update: vi.fn(),
     },
     providers: { list: vi.fn() },
@@ -123,6 +127,7 @@ function renderView() {
 }
 
 function stubSupportingFetches(): void {
+  vi.mocked(sdk.hosts.listProviders).mockResolvedValue([]);
   vi.mocked(sdk.hosts.providerCliStatus).mockResolvedValue(
     providerCliStatusResponse(),
   );
@@ -155,6 +160,79 @@ afterEach(() => {
 });
 
 describe("MachineSettingsView", () => {
+  it("marks a provider-made host with its provider name", async () => {
+    stubSupportingFetches();
+    vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
+    vi.mocked(sdk.hosts.list).mockResolvedValue([
+      host({
+        name: "Modal sandbox 3f9a",
+        machineProviderId: "modal-sandbox",
+      }),
+    ]);
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
+      {
+        id: "modal-sandbox",
+        displayName: "Modal sandbox",
+        icon: "./modal-logo.svg",
+        logoUrl: "/api/v1/system/providers/machine%3Amodal-sandbox/logo?h=hash",
+        pluginId: "environment-modal-sandbox",
+        requires: { gitRemote: true },
+        inputs: null,
+        acceptsEmptyInputs: true,
+        supportsSuspend: true,
+        environmentRow: null,
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 1_000,
+        },
+        availability: { status: "available" },
+      },
+    ]);
+    renderView();
+
+    const badge = await screen.findByText("Modal sandbox");
+    expect(
+      badge.parentElement?.querySelector("[data-provider-logo]"),
+    ).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Suspend" })).toBeDefined();
+  });
+
+  it("hides lifecycle controls when the provider does not support them", async () => {
+    stubSupportingFetches();
+    vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
+    vi.mocked(sdk.hosts.list).mockResolvedValue([
+      host({ machineProviderId: "ssh-machine" }),
+    ]);
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
+      {
+        id: "ssh-machine",
+        displayName: "SSH machine",
+        icon: null,
+        logoUrl: null,
+        pluginId: "environment-ssh-machine",
+        requires: { gitRemote: false },
+        inputs: null,
+        acceptsEmptyInputs: true,
+        supportsSuspend: false,
+        environmentRow: null,
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 1_000,
+        },
+        availability: { status: "available" },
+      },
+    ]);
+    renderView();
+
+    await screen.findByRole("heading", { name: /dev-vm/u });
+    expect(screen.queryByText("SSH machine")).toBeNull();
+    expect(screen.queryByText("Active")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Suspend" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+  });
+
   it("renders the machine's permission limit as a checked radio with descriptions", async () => {
     vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
     vi.mocked(sdk.hosts.list).mockResolvedValue([

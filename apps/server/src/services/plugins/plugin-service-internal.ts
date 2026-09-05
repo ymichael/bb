@@ -211,6 +211,7 @@ export interface PluginThreadEventEmitter {
   emitThreadIdle(thread: Thread): void;
   emitThreadFailed(thread: Thread): void;
   emitThreadArchived(thread: Thread): void;
+  emitThreadUnarchived(thread: Thread): void;
   emitThreadDeleted(thread: Thread): void;
   emitInteractionPending(thread: Thread, interaction: PendingInteraction): void;
   /**
@@ -220,6 +221,7 @@ export interface PluginThreadEventEmitter {
    */
   emitMessageQueued(entry: ThreadQueuedMessage): void;
   emitMessageDispatched(entry: ThreadQueuedMessage): void;
+  emitMessageCancelled(entry: ThreadQueuedMessage): void;
   /**
    * A turn on this thread failed and the thread has already landed in `error`.
    * Takes the id alone: the payload is read from the failed turn's own records,

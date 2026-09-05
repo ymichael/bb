@@ -95,6 +95,7 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
     FollowUpPromptBox: ({
       attachments,
       composer,
+      environmentSummary,
       execution,
       executionReadOnly,
       pendingInteraction,
@@ -118,6 +119,7 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
         submitTitle?: string;
         submitMode: { kind: string; reason?: string };
       } | null;
+      environmentSummary?: ReactNode;
       execution: {
         footerAction?: {
           label: string;
@@ -142,7 +144,7 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
       }[];
     }) => (
       <div data-testid="follow-up-prompt-box">
-        {}
+        {environmentSummary}
         <div data-testid="prompt-stack">
           {pluginComposerHost ? (
             <ComposerBannersSlot
@@ -284,7 +286,9 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
 });
 
 vi.mock("@/components/promptbox/ThreadEnvironmentSummary", () => ({
-  ThreadEnvironmentSummary: () => <div />,
+  ThreadEnvironmentSummary: () => (
+    <div data-testid="thread-environment-summary" />
+  ),
 }));
 
 vi.mock(
@@ -774,6 +778,22 @@ afterEach(() => {
     .forEach((element) => element.remove());
   resetPluginSlotStoreForTest();
   vi.clearAllMocks();
+});
+
+describe("environment follow-up summary", () => {
+  it("renders for a thread with an environment even when it has no environment label", () => {
+    renderPromptArea({ thread: makeThread({ environmentId: "env_1" }) });
+
+    expect(screen.getByTestId("thread-environment-summary")).toBeTruthy();
+  });
+
+  it("shows no environment row for an errored thread with no environment", () => {
+    renderPromptArea({
+      thread: makeThread({ environmentId: null, status: "error" }),
+    });
+
+    expect(screen.queryByTestId("thread-environment-summary")).toBeNull();
+  });
 });
 
 describe("ThreadDetailPromptArea", () => {

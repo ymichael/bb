@@ -78,8 +78,11 @@ export function threadListEntry(
     environmentHostId: DEMO_HOST_ID,
     environmentName: null,
     environmentBranchName: "main",
-    queuedWork: "none",
+    environmentPath: null,
+    environmentProviderId: null,
+    environmentIsWorktree: null,
     environmentWorkspaceDisplayKind: "other",
+    queuedWork: "none",
   };
 }
 
@@ -94,11 +97,19 @@ export function threadResponse(
     environmentHostId: _environmentHostId,
     environmentName: _environmentName,
     environmentBranchName: _environmentBranchName,
+    environmentPath: _environmentPath,
+    environmentProviderId: _environmentProviderId,
+    environmentIsWorktree: _environmentIsWorktree,
     environmentWorkspaceDisplayKind: _environmentWorkspaceDisplayKind,
     queuedWork: _queuedWork,
     ...thread
   } = threadListEntry(view, now);
-  return { ...thread, activeBackgroundAgentCount: 0, canSpawnChild: true, queuedMessageCount: 0 };
+  return {
+    ...thread,
+    activeBackgroundAgentCount: 0,
+    canSpawnChild: true,
+    queuedMessageCount: 0,
+  };
 }
 
 const PROJECT_DEFAULT_EXECUTION_OPTIONS = {
@@ -153,8 +164,16 @@ export function hosts(now: number): Host[] {
     {
       id: DEMO_HOST_ID,
       name: "demo",
-      type: "persistent",
       status: "connected",
+      machineProviderId: null,
+      machineProviderSelection: null,
+      lifecycle: {
+        phase: "active",
+        suspendedAt: null,
+        retireAt: null,
+        progress: null,
+        teardown: null,
+      },
       maxPermissionMode: "full",
       lastSeenAt: now,
       lastRejectedProtocolVersion: null,

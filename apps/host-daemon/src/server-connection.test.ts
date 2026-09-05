@@ -170,7 +170,6 @@ function createConnectionFixture(args: ConnectionFixtureArgs = {}) {
     hostId: "host-server-connection-test",
     hostKey: "host-key-server-connection-test",
     hostName: "Server Connection Test Host",
-    hostType: "persistent",
     instanceId: "instance-server-connection-test",
     localApiPort: 38_887,
     logger,

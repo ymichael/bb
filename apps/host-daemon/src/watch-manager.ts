@@ -1,6 +1,5 @@
 import type { DiscoveredWorkspaceProperties } from "@bb/domain";
 import {
-  getPersonalWorkspaceRoot,
   provisionWorkspace,
   type HostWorkspace,
   type ProvisionWorkspaceArgs,
@@ -98,9 +97,7 @@ function sameWorkspaceTarget(
   return (
     current.environmentId === next.environmentId &&
     current.workspaceContext.workspacePath ===
-      next.workspaceContext.workspacePath &&
-    current.workspaceContext.workspaceProvisionType ===
-      next.workspaceContext.workspaceProvisionType
+      next.workspaceContext.workspacePath
   );
 }
 
@@ -233,14 +230,6 @@ export class WatchManager {
     try {
       const workspace = await this.provisionWorkspace(
         reconnectProvisionArgsFromWorkspaceContext({
-          environmentId: target.environmentId,
-          ...(this.options.dataDir
-            ? {
-                personalWorkspaceRoot: getPersonalWorkspaceRoot(
-                  this.options.dataDir,
-                ),
-              }
-            : {}),
           workspaceContext: target.workspaceContext,
         }),
       );
@@ -435,14 +424,6 @@ export class WatchManager {
       return;
     }
     const provision = reconnectProvisionArgsFromWorkspaceContext({
-      environmentId: entry.target.environmentId,
-      ...(this.options.dataDir
-        ? {
-            personalWorkspaceRoot: getPersonalWorkspaceRoot(
-              this.options.dataDir,
-            ),
-          }
-        : {}),
       workspaceContext: entry.target.workspaceContext,
     });
     const workspace = await this.refreshWorkspace({

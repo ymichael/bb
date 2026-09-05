@@ -1,4 +1,5 @@
 import {
+  createEnvironment,
   ensurePersonalProject,
   getEnvironment,
   getThread,
@@ -787,19 +788,27 @@ describe("thread creation child-thread boundary validation", () => {
     );
   });
 
-  it("revives a retiring personal workspace when preloading a side chat", async () => {
+  it("shares a preloaded personal workspace with its side chat", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-personal-side-chat-retiring",
+        id: "host-personal-side-chat",
       });
       seedPrimaryHost(harness.deps, host.id);
       ensurePersonalProject(harness.db);
-      const environment = seedEnvironment(harness.deps, {
+      const environment = createEnvironment(harness.db, harness.hub, {
+        providerOwnsPath: false,
         hostId: host.id,
         projectId: PERSONAL_PROJECT_ID,
-        path: "/tmp/personal-side-chat-retiring",
-        status: "retiring",
-        workspaceProvisionType: "personal",
+        path: "/tmp/personal-side-chat",
+        status: "ready",
+        environmentProvider: {
+          environmentProviderId: "personal-workspace",
+          instanceKey: null,
+          selection: {
+            machine: { type: "existing", hostId: host.id },
+            inputs: null,
+          },
+        },
       });
       const sourceThread = seedThread(harness.deps, {
         projectId: PERSONAL_PROJECT_ID,
@@ -827,12 +836,6 @@ describe("thread creation child-thread boundary validation", () => {
       });
 
       expect(getEnvironment(harness.db, environment.id)?.status).toBe("ready");
-      expect(getThread(harness.db, sideChat.id)).toMatchObject({
-        environmentId: environment.id,
-        originKind: "fork",
-        sourceThreadId: sourceThread.id,
-      });
-
       const queuedStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -841,6 +844,13 @@ describe("thread creation child-thread boundary validation", () => {
       if (queuedStart.command.type !== "thread.start") {
         throw new Error("Expected a thread.start command");
       }
+      const child = getThread(harness.db, sideChat.id);
+      expect(child).toMatchObject({
+        originKind: "fork",
+        sourceThreadId: sourceThread.id,
+      });
+      expect(child?.environmentId).not.toBeNull();
+      expect(child?.environmentId).toBe(environment.id);
       expect(queuedStart.command.input).toEqual([]);
       expect(queuedStart.command.fork).toEqual({
         sourceProviderThreadId: "provider-personal-side-chat-source",
@@ -858,7 +868,6 @@ describe("thread creation child-thread boundary validation", () => {
         hostId: host.id,
         path: "/tmp/personal-fork-source",
         projectId: PERSONAL_PROJECT_ID,
-        workspaceProvisionType: "unmanaged",
       });
       const sourceThread = seedThread(harness.deps, {
         environmentId: sourceEnvironment.id,
@@ -912,13 +921,11 @@ describe("thread creation child-thread boundary validation", () => {
         hostId: host.id,
         path: "/tmp/personal-fork-source",
         projectId: PERSONAL_PROJECT_ID,
-        workspaceProvisionType: "unmanaged",
       });
       const otherEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
         path: "/tmp/personal-fork-other",
         projectId: PERSONAL_PROJECT_ID,
-        workspaceProvisionType: "unmanaged",
       });
       const sourceThread = seedThread(harness.deps, {
         environmentId: sourceEnvironment.id,

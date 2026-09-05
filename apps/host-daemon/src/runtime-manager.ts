@@ -9,12 +9,10 @@ import {
   type ReapedIdleProviderSession,
 } from "@bb/agent-runtime";
 import type { Logger } from "@bb/logger";
-import { killProcessesWithCwdUnder } from "@bb/process-utils";
 import type {
   PendingInteractionCreate,
   PendingInteractionResolution,
   ThreadEvent,
-  WorkspaceProvisionType,
 } from "@bb/domain";
 import { threadScope, turnScope } from "@bb/domain";
 import type {
@@ -31,7 +29,6 @@ import type {
 import {
   provisionWorkspace,
   WorkspaceError,
-  type DestroyWorkspaceArgs,
   type HostWorkspace,
   type ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
@@ -68,12 +65,6 @@ interface CreateEntryArgs extends Omit<
 > {
   provisionSignal: AbortSignal;
   skillConfig: RuntimeSkillConfig | null;
-}
-
-interface ApplyExistingEnvironmentProvisionArgs {
-  entry: RuntimeEntry;
-  provision: ProvisionWorkspaceArgs | undefined;
-  signal: AbortSignal;
 }
 
 interface EnsureCompatibleEntryArgs {
@@ -149,10 +140,8 @@ interface InjectedSkillsChangedNotification {
 export interface EnsureEnvironmentArgs {
   environmentId: string;
   injectedSkillSources?: readonly HostDaemonInjectedSkillSource[];
-  personalWorkspaceRoot?: string;
   targetThreadId?: string;
   workspacePath?: string;
-  workspaceProvisionType?: WorkspaceProvisionType;
   provision?: ProvisionWorkspaceArgs;
 }
 
@@ -236,11 +225,6 @@ interface PendingEnvironmentProvision {
 interface PendingProviderMaintenanceRuntime {
   generation: number;
   promise: Promise<AgentRuntime>;
-}
-
-interface RunCancellableEnvironmentProvisionArgs {
-  environmentId: string;
-  work: (signal: AbortSignal) => Promise<void>;
 }
 
 function shellEnvEquals(
@@ -896,15 +880,6 @@ export class RuntimeManager {
     const skillConfig = await this.resolveRuntimeSkillConfig(args);
     const existing = this.entries.get(args.environmentId);
     if (existing) {
-      await this.runCancellableEnvironmentProvision({
-        environmentId: args.environmentId,
-        work: (signal) =>
-          this.applyExistingEnvironmentProvision({
-            entry: existing,
-            provision: args.provision,
-            signal,
-          }),
-      });
       const compatible = await this.ensureCompatibleEntry({
         entry: existing,
         skillConfig,
@@ -1023,27 +998,6 @@ export class RuntimeManager {
     return { aborted: true };
   }
 
-  private async runCancellableEnvironmentProvision(
-    args: RunCancellableEnvironmentProvisionArgs,
-  ): Promise<void> {
-    const existing = this.pendingEnvironmentProvisions.get(args.environmentId);
-    if (existing) {
-      await existing.done;
-      return;
-    }
-
-    const pending = this.createPendingEnvironmentProvision(args.environmentId);
-    const done = Promise.resolve().then(() =>
-      args.work(pending.abortController.signal),
-    );
-    pending.done = done;
-    try {
-      return await done;
-    } finally {
-      this.clearPendingEnvironmentProvision(args.environmentId, pending);
-    }
-  }
-
   private createPendingEnvironmentProvision(
     environmentId: string,
   ): PendingEnvironmentProvision {
@@ -1064,83 +1018,9 @@ export class RuntimeManager {
     }
   }
 
-  private async applyExistingEnvironmentProvision(
-    args: ApplyExistingEnvironmentProvisionArgs,
-  ): Promise<void> {
-    if (
-      args.provision?.workspaceProvisionType !== "unmanaged" ||
-      !args.provision.checkout
-    ) {
-      return;
-    }
-    if (args.provision.path !== args.entry.path) {
-      throw new Error(
-        `Cannot reprovision existing environment ${args.entry.environmentId} at a different path`,
-      );
-    }
-
-    await this.provisionHostWorkspace({
-      ...args.provision,
-      signal: args.signal,
-    });
-    this.options.onWorkspaceStatusChanged?.({
-      environmentId: args.entry.environmentId,
-      changeKinds: ["work-status-changed", "git-refs-changed"],
-    });
-  }
-
-  async destroyEnvironment(
+  private async shutDownEntry(
     environmentId: string,
-    args: DestroyWorkspaceArgs,
-  ): Promise<void> {
-    const existing = this.entries.get(environmentId);
-    const pending = this.pendingEntries.get(environmentId);
-    const entry = existing ?? (pending ? await pending : undefined);
-
-    if (!entry) {
-      return;
-    }
-
-    this.entries.delete(environmentId);
-    await this.stopWatchingStatus(entry);
-    await entry.runtime.shutdown();
-    await this.killManagedWorkspaceProcesses(entry);
-    await entry.workspace.destroy(args);
-    await this.cleanupUnusedInjectedSkillStagingDirs([]);
-  }
-
-  private async killManagedWorkspaceProcesses(
-    entry: RuntimeEntry,
-  ): Promise<void> {
-    if (!entry.workspace.managed) {
-      return;
-    }
-    try {
-      const killed = await killProcessesWithCwdUnder({
-        directory: entry.workspace.path,
-      });
-      if (killed.length > 0) {
-        this.options.logger?.warn(
-          {
-            environmentId: entry.environmentId,
-            workspacePath: entry.workspace.path,
-            pids: killed.map((process) => process.pid),
-          },
-          "Killed processes still running in a destroyed environment",
-        );
-      }
-    } catch (error) {
-      this.options.logger?.warn(
-        {
-          environmentId: entry.environmentId,
-          reason: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to reap processes in a destroyed environment",
-      );
-    }
-  }
-
-  async forgetEnvironment(environmentId: string): Promise<void> {
+  ): Promise<RuntimeEntry | undefined> {
     const existing = this.entries.get(environmentId);
     const pending = this.pendingEntries.get(environmentId);
     let entry = existing;
@@ -1153,12 +1033,20 @@ export class RuntimeManager {
     }
 
     if (!entry) {
-      return;
+      return undefined;
     }
 
     this.entries.delete(environmentId);
     await this.stopWatchingStatus(entry);
     await entry.runtime.shutdown();
+    return entry;
+  }
+
+  async forgetEnvironment(environmentId: string): Promise<void> {
+    const entry = await this.shutDownEntry(environmentId);
+    if (!entry) {
+      return;
+    }
     await this.cleanupUnusedInjectedSkillStagingDirs([]);
   }
 
@@ -1313,14 +1201,7 @@ export class RuntimeManager {
     const provision =
       args.provision ??
       (args.workspacePath
-        ? reconnectProvisionArgs({
-            environmentId: args.environmentId,
-            ...(args.personalWorkspaceRoot !== undefined
-              ? { personalWorkspaceRoot: args.personalWorkspaceRoot }
-              : {}),
-            workspacePath: args.workspacePath,
-            workspaceProvisionType: args.workspaceProvisionType ?? "unmanaged",
-          })
+        ? reconnectProvisionArgs({ workspacePath: args.workspacePath })
         : null);
 
     if (!provision) {

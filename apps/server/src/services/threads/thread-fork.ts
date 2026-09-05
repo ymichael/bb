@@ -1,5 +1,6 @@
 import { getEnvironment, getThread } from "@bb/db";
-import type { Environment, PromptInput, Thread } from "@bb/domain";
+import type { EnvironmentRow } from "@bb/db";
+import type { PromptInput, Thread } from "@bb/domain";
 import type { ForkThreadRequest } from "@bb/server-contract";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { ApiError } from "../../errors.js";
@@ -43,7 +44,7 @@ function requireForkCapableProvider(
 function requireSourceEnvironment(
   deps: Pick<ThreadForkDeps, "db">,
   sourceThread: Thread,
-): Environment {
+): EnvironmentRow {
   const environment =
     sourceThread.environmentId === null
       ? null

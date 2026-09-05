@@ -599,51 +599,6 @@ export function Overview() {
         </SidebarStage>
       </StoryRow>
       <StoryRow
-        label="env: managed worktree"
-        hint="leading worktree icon appears before the thread title"
-      >
-        <SidebarStage>
-          <StoryThreadRow
-            projectId="proj_demo"
-            crossProjectId={null}
-            thread={makeThread({
-              queuedWork: "none",
-              environmentWorkspaceDisplayKind: "managed-worktree",
-            })}
-            isActive={false}
-            options={defaultOption}
-          />
-        </SidebarStage>
-      </StoryRow>
-      <StoryRow label="env: unmanaged worktree">
-        <SidebarStage>
-          <StoryThreadRow
-            projectId="proj_demo"
-            crossProjectId={null}
-            thread={makeThread({
-              queuedWork: "none",
-              environmentWorkspaceDisplayKind: "unmanaged-worktree",
-            })}
-            isActive={false}
-            options={defaultOption}
-          />
-        </SidebarStage>
-      </StoryRow>
-      <StoryRow label="env: unmanaged worktree">
-        <SidebarStage>
-          <StoryThreadRow
-            projectId="proj_demo"
-            crossProjectId={null}
-            thread={makeThread({
-              queuedWork: "none",
-              environmentWorkspaceDisplayKind: "unmanaged-worktree",
-            })}
-            isActive={false}
-            options={defaultOption}
-          />
-        </SidebarStage>
-      </StoryRow>
-      <StoryRow
         label="parent, no children"
         hint="no disclosure chevron when there are no children"
       >

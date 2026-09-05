@@ -11,7 +11,6 @@ import { INFERENCE_POLICY } from "../ai/inference.js";
 
 interface ThreadMetadataInferenceArgs {
   environmentId: string | null;
-  generateBranchName: boolean;
   input: PromptInput[];
   provisioningId: string;
   threadId: string;
@@ -19,64 +18,28 @@ interface ThreadMetadataInferenceArgs {
 }
 
 interface ThreadMetadataInferenceResult {
-  branchSlug: string | null;
   titleApplied: boolean;
   title: string | null;
 }
 
-interface MetadataTextArgs {
-  generateBranchName: boolean;
+interface MetadataCompletedEntryArgs {
   outcome: ThreadMetadataGenerationOutcome;
-}
-
-interface MetadataRequirements {
-  generateBranchName: boolean;
-}
-
-interface MetadataCompletedEntryArgs extends MetadataTextArgs {
   startedAt: number;
-}
-
-function metadataStartedText(args: MetadataRequirements): string {
-  return args.generateBranchName
-    ? "Generating title and branch name"
-    : "Generating title";
-}
-
-function metadataCompletedText(args: MetadataTextArgs): string {
-  const hasTitle = Boolean(args.outcome.metadata?.title);
-  const hasBranchName =
-    args.generateBranchName && Boolean(args.outcome.metadata?.branchSlug);
-
-  if (hasTitle && hasBranchName) {
-    return "Generated title and branch name";
-  }
-  if (hasTitle) {
-    return "Generated title";
-  }
-  if (hasBranchName) {
-    return "Generated branch name";
-  }
-  if (args.generateBranchName) {
-    return "Using fallback branch name";
-  }
-  return "No title generated";
 }
 
 function metadataCompletedEntry(
   args: MetadataCompletedEntryArgs,
 ): ProvisioningTranscriptEntry {
+  const titleGenerated = Boolean(args.outcome.metadata?.title);
   return {
     type: "step",
     key: "metadata-completed",
-    text: metadataCompletedText(args),
+    text: titleGenerated ? "Generated title" : "No title generated",
     status: "completed",
     startedAt: args.startedAt,
     metadata: {
       durationMs: args.outcome.durationMs,
-      branchNameGenerated:
-        args.generateBranchName && Boolean(args.outcome.metadata?.branchSlug),
-      titleGenerated: Boolean(args.outcome.metadata?.title),
+      titleGenerated,
       ...(args.outcome.reason ? { reason: args.outcome.reason } : {}),
     },
   };
@@ -88,20 +51,17 @@ export async function inferThreadMetadata(
 ): Promise<ThreadMetadataInferenceResult> {
   const startedAt = Date.now();
   const provisioningId = args.provisioningId;
-  const transcriptEnvironmentId = args.writeTranscript
-    ? args.environmentId
-    : null;
-  if (transcriptEnvironmentId) {
+  if (args.writeTranscript) {
     appendThreadProvisioningEvent(deps, {
       threadId: args.threadId,
-      environmentId: transcriptEnvironmentId,
+      environmentId: args.environmentId,
       provisioningId,
       status: "active",
       entries: [
         {
           type: "step",
           key: "metadata-started",
-          text: metadataStartedText(args),
+          text: "Generating title",
           status: "started",
           startedAt,
         },
@@ -116,18 +76,14 @@ export async function inferThreadMetadata(
     timeoutMs: INFERENCE_POLICY.threadMetadata.timeoutMs,
   });
 
-  if (transcriptEnvironmentId) {
+  if (args.writeTranscript) {
     appendThreadProvisioningEvent(deps, {
       threadId: args.threadId,
-      environmentId: transcriptEnvironmentId,
+      environmentId: args.environmentId,
       provisioningId,
       status: "active",
       entries: [
-        metadataCompletedEntry({
-          generateBranchName: args.generateBranchName,
-          outcome,
-          startedAt,
-        }),
+        metadataCompletedEntry({ outcome, startedAt }),
       ],
     });
   }
@@ -151,9 +107,6 @@ export async function inferThreadMetadata(
   }
 
   return {
-    branchSlug: args.generateBranchName
-      ? (outcome.metadata?.branchSlug ?? null)
-      : null,
     title: outcome.metadata?.title ?? null,
     titleApplied,
   };

@@ -68,8 +68,22 @@ Read the installed declarations for exact current signatures.
 - `MessageDispatchHookContext`
 - `MessageDispatchHookDecision`
 - `PluginDispatchAttemptKind`
+- `PluginDispatchEnvironmentIntent`
 - `PluginDispatchExecution`
 - `PluginDispatchExecutionSources`
+- `PluginEnvironments` — `bb.experimental_environments`: `register` +
+  `recheck` (see backend-events.md, environment providers)
+- `PluginMachines` — `bb.experimental_machines.register` (see
+  backend-events.md, machine providers)
+- `PluginMachineProviderDeclaration`
+- `PluginMachineProviderRequirements` — optional `gitRemote`
+- `PluginMachineValidateDecision`
+- `PluginEnvironmentProviderDeclaration`
+- `PluginEnvironmentProviderRequirements` — `requires`, e.g.
+  `{ gitCheckout: true }`; also `projectCheckout`, `gitRemote` and `projectless`.
+  Anything else comes through the declaration's `inputs` validator
+- `PluginEnvironmentValidateDecision` — `{ action: "accept" }` or
+  `{ action: "refuse", message }`, the message being the caller's error
 - `PluginDispatchInput`
 - `PluginHookHandler`
 - `PluginHookName`
@@ -214,7 +228,6 @@ Read the installed declarations for exact current signatures.
 - `PluginSidebarThreadPullRequestState`
 - `PluginSidebarThreadSplit`
 - `PluginSidebarThreadsState`
-- `PluginSidebarWorkspaceKind`
 - `PluginSourceCodeRendererProps`
 - `PluginSourceCodeRendererRegistration`
 - `PluginStatusApi`
@@ -248,6 +261,50 @@ Read the installed declarations for exact current signatures.
 - `ThreadChatProps`
 - `UrlLinkProps`
 
+## `@get-bb/plugin-sdk/environment-provider`
+
+- `PluginEnvironmentProviderAvailabilityContext` and
+  `PluginEnvironmentProviderAvailability` — context and result for a
+  declaration's optional `availability` method
+- `PluginEnvironmentProviderDefinition` — idempotent long-running `create`
+  and `remove`, plus optional `validate`, `availability`, `inputs` and policy
+- `PluginEnvironmentProviderInputsSchema` — the `inputs` type parameter:
+  a Standard Schema v1 validator (a zod schema is one), or `undefined` for
+  `inputs: null` in `create`
+- `PluginEnvironmentProviderPolicy` — `retireGraceMs`, `removeRetryMs`,
+  `transientRetryMs`, `transientRetryLimit`, `pathKeys`, `createTimeoutMs`
+- `PluginEnvironmentProviderValidateContext` — the `validate` context
+  typed from `requires` and `inputs`, like the create context
+- `PluginEnvironmentProviderCreateContext` — a replacement create's
+  `previous.resource` is the provider's private JSON handle
+- `PluginEnvironmentProviderCreateResult` — `created` names the path and may
+  carry the private, 16 KiB-capped JSON `resource`; the selected machine owns
+  the host identity
+- `PluginEnvironmentProviderProgress` — durable `step` and `log` updates
+- `PluginEnvironmentProviderRemoveContext` — includes the private
+  `resource` returned by the launch that made the environment
+- `PluginEnvironmentProviderRemoveResult`
+
+## `@get-bb/plugin-sdk/machine-provider`
+
+- `PluginMachineProviderDefinition` — id, display, optional icon, inputs, availability,
+  validation, optional picker sugar, policy, create, optional paired
+  suspend/resume, and remove
+- `PluginMachineProviderInputsSchema`
+- `PluginMachineProviderPolicy` — idle suspension, retirement, and removal retry
+- `PluginMachineProviderEnvironmentRow`
+- `PluginMachineProviderAvailabilityContext`
+- `PluginMachineProviderAvailability`
+- `PluginMachineProviderValidateContext`
+- `PluginMachineProviderCreateContext`
+- `PluginMachineProviderCreateResult`
+- `PluginMachineProviderLifecycleContext`
+- `PluginMachineProviderSuspendContext` — suspend context with a durable
+  `checkpoint` resource callback
+- `PluginMachineProviderProgress`
+- `PluginMachineProviderResourceResult`
+- `PluginMachineProviderRemoveResult`
+
 ## `@get-bb/plugin-sdk/ai-services`
 
 - `experimental_aiInferenceCompleteInputSchema`
@@ -267,11 +324,17 @@ Read the installed declarations for exact current signatures.
 
 - `experimental_defineHostEntry`
 - `experimental_filterResolvedNativeRoots`
+- `experimental_killProcessGroup` — signal a child and its process group
+- `experimental_killProcessesWithCwdUnder` — reap processes whose cwd is under a
+  workspace a provider is tearing down, before removing the directory
 - `experimental_nativeRootsHostContract`
 - `experimental_nativeRootsResolveInputSchema`
 - `experimental_nativeRootsResolveOutputSchema`
 - `experimental_resolveClaudePluginRoots`
 - `experimental_resolveVendorPluginRoots`
+- `experimental_sanitizeInheritedChildProcessEnv`
+- `experimental_spawnPortableOutputProcess`
+- `experimental_supportsProcessGroups`
 - `ExperimentalClaudePluginRoots`
 - `ExperimentalClaudePluginRootsArgs`
 - `ExperimentalDroppedNativeRoot`
@@ -293,6 +356,7 @@ Read the installed declarations for exact current signatures.
 - `ExperimentalNativeRootsResolveAnswer`
 - `ExperimentalNativeRootsResolveInput`
 - `ExperimentalNativeRootsResolveOutput`
+- `ExperimentalSanitizeInheritedChildProcessEnvArgs`
 - `ExperimentalVendorPlugin`
 - `ExperimentalVendorPluginRoots`
 - `ExperimentalVendorPluginRootsArgs`
@@ -318,6 +382,7 @@ Read the installed declarations for exact current signatures.
 - `FakeLogLevel`
 - `FakeMentionProviderRecord`
 - `FakePluginBehaviorDrivers`
+- `ExperimentalFakeHostRpcCall`
 - `FakePluginHarness`
 - `FakePluginHost`
 - `FakePluginInspectionState`

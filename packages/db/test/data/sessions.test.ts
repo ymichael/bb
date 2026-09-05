@@ -17,7 +17,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   return { db, host };
 }
@@ -30,7 +29,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -52,7 +50,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -79,7 +76,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -103,7 +99,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -114,7 +109,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-2",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -140,14 +134,12 @@ describe("sessions", () => {
     const { db, host } = setup();
     const otherHost = upsertHost(db, noopNotifier, {
       name: "test-host-2",
-      type: "persistent",
     });
 
     const firstSession = openSession(db, {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -157,7 +149,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-2",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -167,7 +158,6 @@ describe("sessions", () => {
       hostId: otherHost.id,
       instanceId: "inst-3",
       hostName: "test-host-2",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data-2",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -177,7 +167,6 @@ describe("sessions", () => {
       hostId: otherHost.id,
       instanceId: "inst-4",
       hostName: "test-host-2",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data-2",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -214,7 +203,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -224,7 +212,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-2",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -264,7 +251,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,
@@ -281,7 +267,6 @@ describe("sessions", () => {
       hostId: host.id,
       instanceId: "inst-1",
       hostName: "test-host",
-      hostType: "persistent",
       dataDir: "/tmp/test-host-data",
       protocolVersion: 1,
       heartbeatIntervalMs: 10_000,

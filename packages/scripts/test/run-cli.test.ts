@@ -15,14 +15,17 @@ afterEach(() => {
 });
 
 describe("run-cli", () => {
-  it("runs the built CLI in development mode", () => {
+  it("runs the source CLI in development mode without a watched build", () => {
     vi.stubEnv("NODE_ENV", "development");
 
     const execution = resolveCliExecution(["thread", "list"]);
 
     expect(execution.command).toBe(process.execPath);
     expect(execution.args).toEqual([
-      "apps/cli/dist/index.js",
+      "--conditions=source",
+      "--import",
+      "tsx",
+      "apps/cli/src/index.ts",
       "thread",
       "list",
     ]);
@@ -30,6 +33,14 @@ describe("run-cli", () => {
     expect(execution.env.BB_HOST_DAEMON_PORT).toBe(
       String(expectedDevPorts(repoRoot).hostDaemonPort),
     );
+  });
+
+  it("keeps bb:dev independent of cli:prepare", async () => {
+    const packageJson = await import("../../../package.json", {
+      with: { type: "json" },
+    });
+
+    expect(packageJson.default.scripts["bb:dev"]).not.toContain("cli:prepare");
   });
 
   it("runs the built CLI in production mode", () => {

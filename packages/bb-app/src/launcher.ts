@@ -294,7 +294,6 @@ interface LauncherCliOptions {
   help: boolean;
   hostDaemonPort?: string;
   hostId?: string;
-  hostType?: string;
   joinCode?: string;
   json?: boolean;
   serverBindHost?: string;
@@ -727,7 +726,6 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
       "enroll-key": { type: "string" },
       "host-daemon-port": { type: "string" },
       "host-id": { type: "string" },
-      "host-type": { type: "string" },
       "join-code": { type: "string" },
       "server-bind-host": { type: "string" },
       "server-port": { type: "string" },
@@ -748,7 +746,6 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
   const enrollKey = readStringOption(parsed.values["enroll-key"]);
   const hostDaemonPort = readStringOption(parsed.values["host-daemon-port"]);
   const hostId = readStringOption(parsed.values["host-id"]);
-  const hostType = readStringOption(parsed.values["host-type"]);
   const joinCode = readStringOption(parsed.values["join-code"]);
   const serverBindHost = readStringOption(parsed.values["server-bind-host"]);
   const serverPort = readStringOption(parsed.values["server-port"]);
@@ -767,9 +764,6 @@ export function parseLauncherArgs(args: string[]): ParsedLauncherArgs {
   }
   if (hostId !== undefined) {
     options.hostId = hostId;
-  }
-  if (hostType !== undefined) {
-    options.hostType = hostType;
   }
   if (joinCode !== undefined) {
     options.joinCode = joinCode;
@@ -888,9 +882,6 @@ function createEnvFromOptions(
   }
   if (args.options.hostId !== undefined) {
     env.BB_HOST_ID = args.options.hostId;
-  }
-  if (args.options.hostType !== undefined) {
-    env.BB_HOST_TYPE = args.options.hostType;
   }
   if (args.options.joinCode !== undefined) {
     env.BB_HOST_ENROLL_KEY = args.options.joinCode;
@@ -2979,7 +2970,7 @@ export async function runBbHostDaemon(
     process.stdout.write(`bb-host-daemon
 
 Usage:
-  bb-host-daemon [--server-url <url>] [--host-daemon-port <port>] [--host-id <id>] [--host-type <type>] [--enroll-key <key>] [--auto-update]
+  bb-host-daemon [--server-url <url>] [--host-daemon-port <port>] [--host-id <id>] [--enroll-key <key>] [--auto-update]
   bb-host-daemon join --server-url <url> [--host-daemon-port <port>] [--join-code <code> --host-id <id>] [--auto-update]
 `);
     return;
@@ -3025,7 +3016,7 @@ Usage:
   bb-app config refresh
   bb-app env set <key> <value>
   bb-app client ssh-target set <server-origin> <ssh-target> [--host-id <id>]
-  bb-app host-daemon [--server-url <url>] [--host-daemon-port <port>] [--host-id <id>] [--host-type <type>] [--enroll-key <key>] [--auto-update]
+  bb-app host-daemon [--server-url <url>] [--host-daemon-port <port>] [--host-id <id>] [--enroll-key <key>] [--auto-update]
   bb-app host-daemon join --server-url <url> [--host-daemon-port <port>] [--join-code <code> --host-id <id>] [--auto-update]
 
 CLI:

@@ -82,6 +82,7 @@ export const baseProps: ThreadMetadataContentProps = {
   isLoadingParentThreads: false,
   isParentThreadsError: false,
   environment: makeEnvironment(),
+  environmentProvisioningFailure: false,
   environmentDisplayHost: localEnvironmentDisplayHost,
   workspaceStatus: makeWorkspaceStatus(),
   workspaceStatusError: null,

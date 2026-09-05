@@ -342,7 +342,6 @@ export class ServerConnection {
         hostId: this.options.hostId,
         instanceId: this.options.instanceId,
         hostName: this.options.hostName,
-        hostType: this.options.hostType,
         connectMachineId: this.options.connectMachineId,
         dataDir: this.options.dataDir,
         localApiPort: this.options.localApiPort,

@@ -22,7 +22,7 @@ describe("bb thread spawn command output", () => {
     return vi.spyOn(process.stderr, "write").mockImplementation(() => true);
   }
 
-  it("bb thread spawn omits provider and model when the user relies on project defaults", async () => {
+  it("bb thread spawn sends project-default when the user relies on project defaults", async () => {
     vi.stubEnv("BB_PROJECT_ID", "proj-1");
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-1",
@@ -47,13 +47,10 @@ describe("bb thread spawn command output", () => {
         originKind: null,
         projectId: "proj-1",
         input: [{ type: "text", text: "hello", mentions: [] }],
-        environment: {
-          type: "host",
-          hostId: "host-test-001",
-          workspace: { type: "unmanaged", path: null },
-        },
+        environment: { type: "project-default" },
       },
     });
+    expect(resolveLocalHostIdMock).not.toHaveBeenCalled();
   });
 
   it("bb thread spawn forwards host-readable paths without reading them on the CLI machine", async () => {
@@ -175,7 +172,7 @@ describe("bb thread spawn command output", () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it("bb thread spawn uses the personal workspace when the personal project is explicit", async () => {
+  it("bb thread spawn lets the server resolve defaults for the personal project", async () => {
     const thread: domain.Thread = fixtures.makeThread({
       id: "thread-personal",
       projectId: domain.PERSONAL_PROJECT_ID,
@@ -207,10 +204,7 @@ describe("bb thread spawn command output", () => {
         originKind: null,
         projectId: domain.PERSONAL_PROJECT_ID,
         input: [{ type: "text", text: "hello", mentions: [] }],
-        environment: {
-          type: "host",
-          workspace: { type: "personal" },
-        },
+        environment: { type: "project-default" },
       },
     });
     expect(collectLogLines(vi.mocked(console.log))).toContain("  Project:  -");
@@ -263,11 +257,7 @@ describe("bb thread spawn command output", () => {
         permissionMode: "auto",
         serviceTier: "fast",
         input: [{ type: "text", text: "hello", mentions: [] }],
-        environment: {
-          type: "host",
-          hostId: "host-test-001",
-          workspace: { type: "unmanaged", path: null },
-        },
+        environment: { type: "project-default" },
       },
     });
   });
@@ -345,6 +335,8 @@ describe("bb thread spawn command output", () => {
     expect(helpOutput).toContain("--visibility <visibility>");
     expect(helpOutput).toContain("Exact Git ref");
     expect(helpOutput).toContain("origin/<branch> for a remote ref");
+    expect(helpOutput).toContain("bb environment providers");
+    expect(helpOutput).not.toContain("bb curl");
     expect(helpOutput).toMatch(/Permission mode: accept-edits, auto, or full/);
   });
 
@@ -498,11 +490,7 @@ describe("bb thread spawn command output", () => {
         model: "gpt-5",
         input: [{ type: "text", text: "hello", mentions: [] }],
         parentThreadId: "thread-parent",
-        environment: {
-          type: "host",
-          hostId: "host-test-001",
-          workspace: { type: "unmanaged", path: null },
-        },
+        environment: { type: "project-default" },
       },
     });
   });
@@ -547,11 +535,7 @@ describe("bb thread spawn command output", () => {
         providerId: "codex",
         model: "gpt-5",
         input: [{ type: "text", text: "hello", mentions: [] }],
-        environment: {
-          type: "host",
-          hostId: "host-test-001",
-          workspace: { type: "unmanaged", path: null },
-        },
+        environment: { type: "project-default" },
       },
     });
   });
@@ -901,7 +885,6 @@ describe("bb thread spawn command output", () => {
         {
           id: "host-remote",
           name: "builder",
-          type: "persistent",
           status: "connected",
           lastSeenAt: 1,
           createdAt: 1,
@@ -950,7 +933,6 @@ describe("bb thread spawn command output", () => {
         {
           id: "host-remote",
           name: "builder",
-          type: "persistent",
           status: "connected",
           lastSeenAt: 1,
           createdAt: 1,
@@ -1000,7 +982,6 @@ describe("bb thread spawn command output", () => {
         {
           id: "host-remote",
           name: "builder",
-          type: "persistent",
           status: "connected",
           lastSeenAt: 1,
           createdAt: 1,
@@ -1068,5 +1049,327 @@ describe("bb thread spawn command output", () => {
       "Error: Cannot combine --machine or --host with an existing environment ID; that environment already selects its machine.",
     );
     expect(post).not.toHaveBeenCalled();
+  });
+
+  describe("--environment-provider", () => {
+    const providers = [
+      {
+        id: "git-worktree",
+        displayName: "Worktree",
+        icon: null,
+        pluginId: "environment-git-worktree",
+        acceptsEmptyInputs: false,
+        availability: null,
+        requires: {
+          projectCheckout: true,
+          gitCheckout: true,
+          gitRemote: false,
+          projectless: false,
+        },
+        inputs: {
+          type: "object",
+          properties: { branch: { type: "object" } },
+          required: ["branch"],
+        },
+      },
+      {
+        id: "plain",
+        displayName: "Plain",
+        icon: null,
+        pluginId: "plain",
+        acceptsEmptyInputs: true,
+        availability: null,
+        requires: {
+          projectCheckout: false,
+          gitCheckout: false,
+          gitRemote: false,
+          projectless: false,
+        },
+        inputs: null,
+      },
+      {
+        id: "optional",
+        displayName: "Optional inputs",
+        icon: null,
+        pluginId: "optional",
+        acceptsEmptyInputs: true,
+        availability: null,
+        requires: {
+          projectCheckout: false,
+          gitCheckout: false,
+          gitRemote: false,
+          projectless: false,
+        },
+        inputs: {
+          type: "object",
+          properties: { region: { type: "string" } },
+        },
+      },
+    ];
+
+    function stubProviders(post: Parameters<typeof stubServerApi>[0][string]) {
+      stubServerApi({
+        "v1.threads.$post": post,
+        "v1.system.environment-providers.$get": vi.fn(async () => ({
+          providers,
+        })),
+      });
+    }
+
+    it("sends parsed --environment-inputs with the default machine for a host provider", async () => {
+      const post = vi.fn(async () =>
+        fixtures.makeThread({
+          id: "thread-provider",
+          projectId: "proj-1",
+          providerId: "codex",
+        }),
+      );
+      stubProviders(post);
+
+      await runCommand(
+        [
+          "thread",
+          "spawn",
+          "--project",
+          "proj-1",
+          "--prompt",
+          "hello",
+          "--environment-provider",
+          "git-worktree",
+          "--environment-inputs",
+          '{"branch":{"kind":"named","name":"release"}}',
+        ],
+        register,
+      );
+
+      expect(post).toHaveBeenCalledWith({
+        json: expect.objectContaining({
+          environment: {
+            type: "provider",
+            environmentProviderId: "git-worktree",
+            machine: { type: "existing", hostId: "host-test-001" },
+            inputs: { branch: { kind: "named", name: "release" } },
+          },
+        }),
+      });
+    });
+
+    it("sends null inputs with the default machine for a provider without inputs", async () => {
+      const post = vi.fn(async () =>
+        fixtures.makeThread({
+          id: "thread-provider",
+          projectId: "proj-1",
+          providerId: "codex",
+        }),
+      );
+      stubProviders(post);
+
+      await runCommand(
+        [
+          "thread",
+          "spawn",
+          "--project",
+          "proj-1",
+          "--prompt",
+          "hello",
+          "--environment-provider",
+          "plain",
+        ],
+        register,
+      );
+
+      expect(post).toHaveBeenCalledWith({
+        json: expect.objectContaining({
+          environment: {
+            type: "provider",
+            environmentProviderId: "plain",
+            machine: { type: "existing", hostId: "host-test-001" },
+            inputs: null,
+          },
+        }),
+      });
+    });
+
+    it("sends empty inputs when the server says the schema accepts them", async () => {
+      const post = vi.fn(async () =>
+        fixtures.makeThread({
+          id: "thread-provider",
+          projectId: "proj-1",
+          providerId: "codex",
+        }),
+      );
+      stubProviders(post);
+
+      await runCommand(
+        [
+          "thread",
+          "spawn",
+          "--project",
+          "proj-1",
+          "--prompt",
+          "hello",
+          "--environment-provider",
+          "optional",
+        ],
+        register,
+      );
+
+      expect(post).toHaveBeenCalledWith({
+        json: expect.objectContaining({
+          environment: {
+            type: "provider",
+            environmentProviderId: "optional",
+            machine: { type: "existing", hostId: "host-test-001" },
+            inputs: {},
+          },
+        }),
+      });
+    });
+
+    it.each<[label: string, args: string[], error: string]>([
+      [
+        "a provider with inputs and none given",
+        ["--environment-provider", "git-worktree"],
+        "Error: The 'git-worktree' environment provider needs --environment-inputs <json>; `bb environment providers --json` shows its schema.",
+      ],
+      [
+        "inputs given to a provider without any",
+        ["--environment-provider", "plain", "--environment-inputs", "{}"],
+        "Error: The 'plain' environment provider takes no --environment-inputs.",
+      ],
+      [
+        "--base-branch with a provider",
+        ["--environment-provider", "git-worktree", "--base-branch", "main"],
+        "Error: --base-branch requires --new-environment worktree; an --environment-provider takes its branch through --environment-inputs.",
+      ],
+      [
+        "inputs that are not JSON",
+        [
+          "--environment-provider",
+          "git-worktree",
+          "--environment-inputs",
+          "{nope",
+        ],
+        "Error: --environment-inputs must be valid JSON.",
+      ],
+      [
+        "inputs without a provider",
+        ["--environment-inputs", "{}"],
+        "Error: --environment-inputs requires --environment-provider <id>.",
+      ],
+    ])("refuses %s", async (_label, args, error) => {
+      const post = vi.fn();
+      stubProviders(post);
+
+      await expect(
+        runCommand(
+          [
+            "thread",
+            "spawn",
+            "--project",
+            "proj-1",
+            "--prompt",
+            "hello",
+            ...args,
+          ],
+          register,
+        ),
+      ).rejects.toThrow("process.exit:1");
+
+      expect(console.error).toHaveBeenCalledWith(error);
+      expect(post).not.toHaveBeenCalled();
+    });
+  });
+
+  it("creates a provider machine and its picker-sugar environment", async () => {
+    const post = vi.fn(async () =>
+      fixtures.makeThread({
+        id: "thread-new-machine",
+        projectId: "proj-1",
+        providerId: "codex",
+      }),
+    );
+    stubServerApi({
+      "v1.threads.$post": post,
+      "v1.system.machine-providers.$get": vi.fn(async () => ({
+        providers: [
+          {
+            id: "ssh-target",
+            displayName: "SSH target",
+            icon: null,
+            logoUrl: null,
+            pluginId: "ssh-target",
+            requires: { gitRemote: false },
+            inputs: {
+              type: "object",
+              properties: { target: { type: "string" } },
+              required: ["target"],
+            },
+            acceptsEmptyInputs: false,
+            environmentRow: {
+              displayName: "SSH target",
+              environmentProviderId: "project-checkout",
+            },
+            policy: {
+              idleSuspendMs: null,
+              retire: { after: "never" },
+              removeRetryMs: 30_000,
+            },
+            availability: null,
+          },
+        ],
+      })),
+      "v1.system.environment-providers.$get": vi.fn(async () => ({
+        providers: [
+          {
+            id: "project-checkout",
+            displayName: "Project checkout",
+            icon: null,
+            logoUrl: null,
+            pluginId: "environment-project-checkout",
+            acceptsEmptyInputs: true,
+            availability: null,
+            requires: {
+              projectCheckout: true,
+              gitCheckout: true,
+              gitRemote: false,
+              projectless: false,
+            },
+            inputs: null,
+          },
+        ],
+      })),
+    });
+
+    await runCommand(
+      [
+        "thread",
+        "spawn",
+        "--project",
+        "proj-1",
+        "--prompt",
+        "hello",
+        "--new-machine",
+        "ssh-target",
+        "--machine-inputs",
+        '{"target":"buildbox"}',
+      ],
+      register,
+    );
+
+    expect(post).toHaveBeenCalledWith({
+      json: expect.objectContaining({
+        environment: {
+          type: "provider",
+          environmentProviderId: "project-checkout",
+          machine: {
+            type: "new",
+            machineProviderId: "ssh-target",
+            inputs: { target: "buildbox" },
+          },
+          inputs: null,
+        },
+      }),
+    });
   });
 });

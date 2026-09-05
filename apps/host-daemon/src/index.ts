@@ -61,7 +61,6 @@ async function runHostDaemonEntrypoint(): Promise<void> {
     enrollKey: hostDaemonEntrypointConfig.BB_HOST_ENROLL_KEY,
     hostId: hostDaemonEntrypointConfig.BB_HOST_ID,
     hostName: hostDaemonEntrypointConfig.BB_HOST_NAME,
-    hostType: hostDaemonEntrypointConfig.BB_HOST_TYPE,
   });
   await daemon.waitUntilStopped();
 }

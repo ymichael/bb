@@ -7,8 +7,8 @@ editingNotes: Keep the user-facing noun machine; internal APIs and types use Hos
 ---
 Machine commands
 
-A machine is a host daemon that can run thread environments. Add remote
-machines under Settings → Machines.
+A machine is a host daemon that can run thread environments. Add remote or
+plugin-provisioned machines under Settings → Machines.
 
 The server listens on loopback by default. Remote execution machines need the
 account-gated bb connect route or a private Tailscale Serve URL; generate their
@@ -33,6 +33,8 @@ unless you pass `--auto-update` explicitly.
   bb machine list                         List machines with ID, connection
                                           status, and relative last-seen time
     --json                                Print the raw host list
+  bb machine providers [--project <id>]   List installed machine providers
+    --json                                Include inputs schemas and policy
   bb machine show <id-or-name>            Show machine details
   bb machine join-code                    Create a machine pairing code
   bb machine rename <id-or-name> <name>   Rename a machine
@@ -74,12 +76,18 @@ Machine selectors accept either an exact machine ID or an unambiguous machine
 name. `--host` is an alias for `--machine`.
 
   bb thread spawn --project <id> --machine <id-or-name> --prompt "..."
+  bb thread spawn --project <id> --new-machine <provider-id> --prompt "..."
+    --machine-inputs <json>
   bb project create --name "..." --root <path> --machine <id-or-name>
   bb project source add <projectId> --machine <id-or-name> --path <path>
 
 For thread spawning, machine targeting works with an unmanaged workspace path,
 a new managed worktree, or the personal workspace. Do not combine it with an
 existing environment ID: the reused environment already selects its machine.
+`--new-machine` creates through a machine provider and uses its advertised
+environment row. Machine inputs are persisted and readable by plugins; never
+put secrets there. Store credentials in plugin settings and pass only
+non-secret configuration or references.
 
 For project creation and sources, `--root`/`--path` refers to a path on the
 selected connected machine. Omit the selector to keep the existing local CLI

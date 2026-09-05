@@ -1,6 +1,8 @@
 import { z } from "zod";
+import { DEFAULT_ENVIRONMENT_PROVIDER_ID } from "../environments/environment-provider-ids.js";
 import {
   createEnvironment,
+  type EnvironmentRow,
   createEventId,
   findProjectEnvironmentByHostPath,
   getEnvironment,
@@ -8,18 +10,18 @@ import {
   updateThread,
 } from "@bb/db";
 import { turnScope } from "@bb/domain";
-import type {
-  DynamicTool,
-  Environment,
-  Thread,
-  ToolCallResponse,
-} from "@bb/domain";
+import type { DynamicTool, Thread, ToolCallResponse } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import { runLiveHostCommand } from "../hosts/live-command.js";
 import { appendThreadEventInTransaction } from "./thread-events.js";
 import { buildEnvironmentProvisionCommand } from "./thread-create-helpers.js";
+import { getEnvironmentProvider } from "../plugins/plugin-environment-provider-registry.js";
+import {
+  checkoutProviderInputs,
+  validateProviderSelection,
+} from "./thread-environment-placement.js";
 import { findHostDataDir } from "../lib/entity-lookup.js";
-import { unmanagedAttachRefusal } from "./workspace-path-claims.js";
+import { foreignProviderOwnedPathRefusal } from "./workspace-path-claims.js";
 
 export const UPDATE_ENVIRONMENT_DIRECTORY_TOOL_NAME =
   "update_environment_directory";
@@ -58,13 +60,13 @@ export const UPDATE_ENVIRONMENT_DIRECTORY_TOOL: DynamicTool = {
 };
 
 interface HandleUpdateEnvironmentDirectoryToolCallArgs {
-  currentEnvironment: Environment;
+  currentEnvironment: EnvironmentRow;
   input: unknown;
   thread: Thread;
   turnId: string;
 }
 
-type ReadyEnvironment = Environment & { path: string; status: "ready" };
+type ReadyEnvironment = EnvironmentRow & { path: string; status: "ready" };
 
 type AttachEnvironmentResult =
   | { kind: "attached"; changed: boolean }
@@ -121,7 +123,7 @@ function threadWritableFailure(thread: Thread): string | null {
 }
 
 function resolveReadyEnvironment(
-  environment: Environment,
+  environment: EnvironmentRow,
 ): ReadyEnvironment | { failure: string } {
   if (environment.status !== "ready") {
     return {
@@ -147,7 +149,7 @@ function successMessage(path: string): string {
 function attachReadyEnvironment(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {
-    currentEnvironment: Environment;
+    currentEnvironment: EnvironmentRow;
     createdEnvironment: boolean;
     targetEnvironment: ReadyEnvironment;
     thread: Thread;
@@ -196,8 +198,6 @@ function attachReadyEnvironment(
             previousPath: args.currentEnvironment.path,
             nextEnvironmentId: args.targetEnvironment.id,
             nextPath: args.targetEnvironment.path,
-            workspaceProvisionType:
-              args.targetEnvironment.workspaceProvisionType,
           },
         },
       });
@@ -218,7 +218,7 @@ function attachReadyEnvironment(
 async function provisionUnmanagedEnvironmentForPath(
   deps: AppDeps,
   args: {
-    currentEnvironment: Environment;
+    currentEnvironment: EnvironmentRow;
     path: string;
     thread: Thread;
   },
@@ -226,12 +226,21 @@ async function provisionUnmanagedEnvironmentForPath(
   const environment = createEnvironment(deps.db, deps.hub, {
     projectId: args.thread.projectId,
     hostId: args.currentEnvironment.hostId,
-    workspaceProvisionType: "unmanaged",
-    managed: false,
+    providerOwnsPath: false,
     status: "provisioning",
+    environmentProvider: {
+      environmentProviderId: DEFAULT_ENVIRONMENT_PROVIDER_ID.projectCheckout,
+      instanceKey: null,
+      selection: {
+        machine: {
+          type: "existing",
+          hostId: args.currentEnvironment.hostId,
+        },
+        inputs: checkoutProviderInputs(args.path, undefined),
+      },
+    },
   });
   const command = buildEnvironmentProvisionCommand({
-    workspaceProvisionType: "unmanaged",
     environmentId: environment.id,
     hostId: args.currentEnvironment.hostId,
     initiator: null,
@@ -290,15 +299,30 @@ export async function handleUpdateEnvironmentDirectoryToolCall(
     );
   }
 
-  const refusal = unmanagedAttachRefusal(deps.db, {
-    checksOutBranch: false,
+  const refusal = foreignProviderOwnedPathRefusal(deps.db, {
     dataDir: findHostDataDir(deps, args.currentEnvironment.hostId),
     hostId: args.currentEnvironment.hostId,
     path: normalizedPath,
     projectId: args.thread.projectId,
   });
-  if (refusal) {
-    return toolCallFailure(`${refusal.message}. Use a different directory.`);
+  if (refusal !== null) {
+    return toolCallFailure(`${refusal}. Use a different directory.`);
+  }
+  const checkoutProvider = getEnvironmentProvider(
+    DEFAULT_ENVIRONMENT_PROVIDER_ID.projectCheckout,
+  );
+  if (checkoutProvider !== undefined) {
+    try {
+      await validateProviderSelection(deps, checkoutProvider, {
+        hostId: args.currentEnvironment.hostId,
+        inputs: { path: normalizedPath },
+        projectId: args.thread.projectId,
+      });
+    } catch (error) {
+      return toolCallFailure(
+        `${error instanceof Error ? error.message : String(error)}. Use a different directory.`,
+      );
+    }
   }
 
   const existingEnvironment = findProjectEnvironmentByHostPath(

@@ -32,7 +32,15 @@ import {
 } from "@bb/client-core";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 import { formatRelativeTime } from "@/lib/relative-time";
-import { getEnvironmentWorkspaceDisplayIconName } from "@/lib/environment-workspace-display";
+import {
+  findEnvironmentDisplayProvider,
+  getEnvironmentDisplayIconName,
+} from "@/lib/environment-workspace-display";
+import { useSystemEnvironmentProviders } from "@/hooks/queries/environment-provider-queries";
+import {
+  resolveEnvironmentDisplayName,
+  type EnvironmentDisplayProviderLookup,
+} from "@bb/core-ui";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 import { ProviderIconMark } from "@/components/settings/ProviderIconMark";
 import { cn } from "@bb/shared-ui/lib/utils";
@@ -63,17 +71,40 @@ interface MobileRecentThreadRowProps {
   row: MobileRecentThreadRow;
 }
 
+function repeatsProjectName(
+  workspaceName: string,
+  projectName: string | null,
+): boolean {
+  return (
+    projectName !== null &&
+    (workspaceName === projectName ||
+      workspaceName.startsWith(`${projectName} `))
+  );
+}
+
 function getMobileRecentThreadMetadata({
+  environmentProviderLookup,
   projectName,
   thread,
 }: {
+  environmentProviderLookup: EnvironmentDisplayProviderLookup;
   projectName: string | null;
   thread: ThreadListEntry;
 }): string {
-  const workspaceName = thread.environmentBranchName ?? thread.environmentName;
+  const workspaceName = resolveEnvironmentDisplayName(
+    {
+      name: thread.environmentName,
+      branchName: thread.environmentBranchName,
+      path: thread.environmentPath,
+      environmentProviderId: thread.environmentProviderId,
+    },
+    environmentProviderLookup,
+  );
   return [
     projectName,
-    workspaceName,
+    workspaceName !== null && repeatsProjectName(workspaceName, projectName)
+      ? null
+      : workspaceName,
     formatRelativeTime({
       timestamp: thread.latestAttentionAt,
       now: Date.now(),
@@ -212,6 +243,7 @@ function MobileRecentThreadRow({
     hasChildren,
     isCollapsed,
   } = row;
+  const { providers: environmentProviders } = useSystemEnvironmentProviders();
   const threadTitle = getThreadDisplayTitle(thread);
   const isUnreadDone = isUnreadDoneThread(thread);
   const isUnreadError = isUnreadDone && thread.status === "error";
@@ -259,9 +291,17 @@ function MobileRecentThreadRow({
     : indicatorState;
   const indicatorKind = resolveThreadListIndicator(trailingIndicatorState);
   const indicatorLabel = getThreadListIndicatorLabel(indicatorKind);
-  const metadataText = getMobileRecentThreadMetadata({ projectName, thread });
-  const workspaceIconName = getEnvironmentWorkspaceDisplayIconName(
-    thread.environmentWorkspaceDisplayKind,
+  const environmentProviderLookup = findEnvironmentDisplayProvider(
+    environmentProviders,
+    thread.environmentProviderId,
+  );
+  const metadataText = getMobileRecentThreadMetadata({
+    environmentProviderLookup,
+    projectName,
+    thread,
+  });
+  const workspaceIconName = getEnvironmentDisplayIconName(
+    environmentProviderLookup,
   );
   const providerIcon = getProviderIconInfo(thread.providerId, provider);
   const ProviderMark = providerIcon?.icon;

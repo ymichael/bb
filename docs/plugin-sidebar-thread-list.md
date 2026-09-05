@@ -172,7 +172,6 @@ interface PluginSidebarThread {
     id: string;
     name: string | null;
     branchName: string | null;
-    workspaceDisplayKind: PluginSidebarWorkspaceKind;
   } | null;
 
   /** Epoch milliseconds. */

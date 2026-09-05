@@ -89,6 +89,10 @@ describe("scanTree (pure)", () => {
 
   it("excludes provider plugins, tests, and fixtures", () => {
     write("plugins/provider-codex/server.ts", 'register("codex");\n'); // provider plugin
+    write(
+      "plugins/environment-modal-sandbox/server.ts",
+      'const providerId = "codex";\n',
+    );
     write("packages/core/a.test.ts", 'expect("codex").toBe("codex");\n'); // test
     write("packages/core/__fixtures__/f.ts", 'const id = "codex";\n'); // fixture
     expect(scanTree(dir).total).toBe(0);
@@ -103,7 +107,10 @@ describe("scanTree (pure)", () => {
       'const dialects = { "cursor-agent": "cursor" };\n',
     );
     expect(scanTree(dir).total).toBe(0);
-    write("packages/provider-bridge-protocol/src/a.ts", 'const id = "acp-cursor";\n');
+    write(
+      "packages/provider-bridge-protocol/src/a.ts",
+      'const id = "acp-cursor";\n',
+    );
     expect(scanTree(dir).total).toBe(1);
   });
 
@@ -125,7 +132,10 @@ describe("scanTree (pure)", () => {
   });
 
   it("excludes the test-only helpers package", () => {
-    write("packages/test-helpers/src/models.ts", 'const m = { codex: ["gpt"] , "claude-code": [] };\n');
+    write(
+      "packages/test-helpers/src/models.ts",
+      'const m = { codex: ["gpt"] , "claude-code": [] };\n',
+    );
     expect(scanTree(dir).total).toBe(0);
   });
 });
@@ -170,7 +180,14 @@ describe("checkAllowlist (pure)", () => {
   it("rejects an entry that omits the reason, the owner, or when it dies", () => {
     const problems = checkAllowlist(
       { files: { "packages/core/a.ts": 1 } },
-      { "packages/core/a.ts": { count: 1, reason: "x", owner: "", diesAt: undefined } },
+      {
+        "packages/core/a.ts": {
+          count: 1,
+          reason: "x",
+          owner: "",
+          diesAt: undefined,
+        },
+      },
     );
     expect(problems.map((p) => p.trim())).toEqual([
       "! packages/core/a.ts: allowlist entry has no owner",
@@ -187,7 +204,12 @@ describe("ratchet CLI refusal paths (fixture root)", () => {
       allowlist,
     });
   }
-  const entry = (count) => ({ count, reason: "fixture", owner: "test", diesAt: "never" });
+  const entry = (count) => ({
+    count,
+    reason: "fixture",
+    owner: "test",
+    diesAt: "never",
+  });
 
   it("refuses --write when the live total rises above the committed baseline", () => {
     write("packages/core/a.ts", 'const id = "codex";\n');
@@ -196,7 +218,10 @@ describe("ratchet CLI refusal paths (fixture root)", () => {
     expect(r.code, r.out).toBe(1);
     expect(r.out).toMatch(/Refusing to raise the baseline \(0 → 1\)/);
     // The override is the documented escape hatch.
-    expect(run(["--write"], { BB_RATCHET_ROOT: dir, BB_RATCHET_ALLOW_INCREASE: "1" }).code).toBe(0);
+    expect(
+      run(["--write"], { BB_RATCHET_ROOT: dir, BB_RATCHET_ALLOW_INCREASE: "1" })
+        .code,
+    ).toBe(0);
   });
 
   it("fails the exact-match check when a new core file carries a reference", () => {
@@ -214,7 +239,11 @@ describe("ratchet CLI refusal paths (fixture root)", () => {
 
   it("fails --base when a file's count rose vs the base ref, even with a regenerated baseline", () => {
     const git = (...args) =>
-      execFileSync("git", args, { cwd: dir, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+      execFileSync("git", args, {
+        cwd: dir,
+        encoding: "utf8",
+        stdio: ["ignore", "pipe", "pipe"],
+      });
     git("init", "-q");
     git("config", "user.email", "ratchet@test");
     git("config", "user.name", "ratchet");
@@ -240,7 +269,10 @@ describe("ratchet CLI refusal paths (fixture root)", () => {
 
   it("fails when a counted file has no allowlist entry", () => {
     write("packages/core/a.ts", 'const id = "codex";\n');
-    write("scripts/provider-literal-baseline.json", baseline({ "packages/core/a.ts": 1 }));
+    write(
+      "scripts/provider-literal-baseline.json",
+      baseline({ "packages/core/a.ts": 1 }),
+    );
     const r = run([], { BB_RATCHET_ROOT: dir });
     expect(r.code, r.out).toBe(1);
     expect(r.out).toMatch(/outside the allowlist/);

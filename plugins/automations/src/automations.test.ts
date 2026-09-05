@@ -808,7 +808,6 @@ describe("automation data access", () => {
             {
               id: "host_test",
               name: "host",
-              type: "persistent",
               status: "disconnected",
               lastSeenAt: null,
               createdAt: 1,

@@ -29,7 +29,7 @@ describe("packaged CLI plugin build", () => {
     );
   });
 
-  it("includes a newly generated SDK app export when the facade package is not resolvable", async () => {
+  it("includes generated SDK app exports when the facade package is not resolvable", async () => {
     const tempRoot = await mkdtemp(join(cliRoot, ".packaged-plugin-build-"));
     tempDirs.push(tempRoot);
     const cliEntry = join(tempRoot, "cli.js");
@@ -74,8 +74,12 @@ describe("packaged CLI plugin build", () => {
     await writeFile(
       join(pluginRoot, "app.ts"),
       [
-        'import { definePluginApp, useComposerView } from "@get-bb/plugin-sdk/app";',
+        'import { definePluginApp, experimental_useBranches, experimental_useCheckoutState, useComposerView } from "@get-bb/plugin-sdk/app";',
         "function ComposerProbe() {",
+        '  const branches = experimental_useBranches({ hostId: "host_fixture", projectId: "proj_fixture" });',
+        '  const checkout = experimental_useCheckoutState({ hostId: "host_fixture", projectId: "proj_fixture" });',
+        "  void branches;",
+        "  void checkout;",
         "  return useComposerView().layout;",
         "}",
         "export default definePluginApp((app) => {",
@@ -114,6 +118,8 @@ describe("packaged CLI plugin build", () => {
       join(pluginRoot, "dist", "app.js"),
       "utf8",
     );
+    expect(appBundle).toContain("experimental_useBranches");
+    expect(appBundle).toContain("experimental_useCheckoutState");
     expect(appBundle).toContain("useComposerView");
     expect(appBundle).toContain("homepageSection");
   }, 30_000);

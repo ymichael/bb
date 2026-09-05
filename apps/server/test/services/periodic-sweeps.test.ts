@@ -242,13 +242,13 @@ describe("runPeriodicSweeps", () => {
           hostId: host.id,
           projectId: project.id,
           path,
-          managed: true,
           status: "destroyed",
-          workspaceProvisionType: "managed-worktree",
+          environmentProviderId: "personal-workspace",
+          isGitRepo: false,
         });
         harness.db
           .update(environments)
-          .set({ updatedAt: expiredAt })
+          .set({ updatedAt: expiredAt, teardownStatus: "removed" })
           .where(eq(environments.id, environment.id))
           .run();
       }
@@ -295,9 +295,7 @@ describe("runPeriodicSweeps", () => {
         hostId: host.id,
         projectId: project.id,
         path: "/tmp/destroyed-with-large-history",
-        managed: true,
         status: "destroyed",
-        workspaceProvisionType: "managed-worktree",
       });
       const thread = seedThread(harness.deps, {
         environmentId: environment.id,
@@ -365,9 +363,9 @@ describe("runPeriodicSweeps", () => {
         hostId: host.id,
         projectId: project.id,
         path: "/tmp/destroyed-attributed",
-        managed: true,
         status: "destroyed",
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "personal-workspace",
+        isGitRepo: false,
       });
       harness.db
         .update(environments)

@@ -26,6 +26,9 @@ const mockUpdateEnvironment = vi.hoisted(() => ({
   mutate: vi.fn(),
   reset: vi.fn(),
 }));
+const mockArchiveEnvironmentThreads = vi.hoisted(() => ({
+  mutateAsync: vi.fn(async () => ({ ok: true, archivedThreadIds: [] })),
+}));
 const mockDraftThreadIds = vi.hoisted(() => ({
   current: new Set<string>(),
 }));
@@ -37,7 +40,7 @@ vi.mock("@/hooks/useLocalPathPicker", () => ({
 vi.mock("@/hooks/mutations/environment-mutations", () => ({
   useArchiveEnvironmentThreads: () => ({
     isPending: false,
-    mutate: vi.fn(),
+    mutateAsync: mockArchiveEnvironmentThreads.mutateAsync,
     variables: undefined,
   }),
   useUpdateEnvironment: () => ({
@@ -49,8 +52,8 @@ vi.mock("@/hooks/mutations/environment-mutations", () => ({
   }),
 }));
 
-vi.mock("@/hooks/useCreateThreadInWorktree", () => ({
-  useCreateThreadInWorktree: () => vi.fn(),
+vi.mock("@/hooks/useCreateThreadInEnvironment", () => ({
+  useCreateThreadInEnvironment: () => vi.fn(),
 }));
 
 vi.mock("@/hooks/usePromptDraftStorage", () => ({
@@ -97,22 +100,24 @@ function renderProjectRow(
   const onToggleEnvironmentCollapsed = vi.fn();
   const result = render(
     <TooltipProvider>
-      <MemoryRouter>
-        <ProjectRow
-          project={makeProjectResponse()}
-          threadListState={threadListState}
-          isActive={isActive}
-          isCollapsed={isCollapsed}
-          compareThreads={() => 0}
-          progressiveDisclosureEnabled
-          collapsedThreadIds={new Set()}
-          collapsedEnvironmentIds={collapsedEnvironmentIds}
-          isLocalPathInvalid={false}
-          onToggleProjectCollapsed={onToggleProjectCollapsed}
-          onToggleThreadCollapsed={vi.fn()}
-          onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
-        />
-      </MemoryRouter>
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <ProjectRow
+            project={makeProjectResponse()}
+            threadListState={threadListState}
+            isActive={isActive}
+            isCollapsed={isCollapsed}
+            compareThreads={() => 0}
+            progressiveDisclosureEnabled
+            collapsedThreadIds={new Set()}
+            collapsedEnvironmentIds={collapsedEnvironmentIds}
+            isLocalPathInvalid={false}
+            onToggleProjectCollapsed={onToggleProjectCollapsed}
+            onToggleThreadCollapsed={vi.fn()}
+            onToggleEnvironmentCollapsed={onToggleEnvironmentCollapsed}
+          />
+        </MemoryRouter>
+      </QueryClientProvider>
     </TooltipProvider>,
   );
   return { ...result, onToggleEnvironmentCollapsed, onToggleProjectCollapsed };
@@ -178,8 +183,9 @@ describe("ProjectRow interactions", () => {
             environmentId: "env_test",
             environmentName: "Feature workspace",
             environmentBranchName: "feat/menu-close",
+            environmentProviderId: "git-worktree",
+            environmentIsWorktree: true,
             queuedWork: "none",
-            environmentWorkspaceDisplayKind: "managed-worktree",
             activity: {
               activeWorkflowCount: 1,
               activeBackgroundAgentCount: 0,
@@ -197,8 +203,9 @@ describe("ProjectRow interactions", () => {
             environmentId: "env_test",
             environmentName: "Feature workspace",
             environmentBranchName: "feat/menu-close",
+            environmentProviderId: "git-worktree",
+            environmentIsWorktree: true,
             queuedWork: "none",
-            environmentWorkspaceDisplayKind: "managed-worktree",
           }),
         ],
       },
@@ -227,7 +234,8 @@ describe("ProjectRow interactions", () => {
             environmentId: "env_draft",
             environmentName: "Draft workspace",
             queuedWork: "none",
-            environmentWorkspaceDisplayKind: "managed-worktree",
+            environmentProviderId: "git-worktree",
+            environmentIsWorktree: true,
             activity: {
               activeWorkflowCount: 0,
               activeBackgroundAgentCount: 0,
@@ -241,7 +249,8 @@ describe("ProjectRow interactions", () => {
             environmentId: "env_draft",
             environmentName: "Draft workspace",
             queuedWork: "none",
-            environmentWorkspaceDisplayKind: "managed-worktree",
+            environmentProviderId: "git-worktree",
+            environmentIsWorktree: true,
           }),
         ],
       },
@@ -456,7 +465,7 @@ describe("ProjectRow interactions", () => {
     expect(document.querySelector('[data-icon="Edit"]')).toBeNull();
   });
 
-  it("closes the worktree actions menu after selecting rename", async () => {
+  it("closes the environment actions menu after selecting rename", async () => {
     renderProjectRow(vi.fn(), {
       status: "ready",
       threads: [
@@ -465,36 +474,111 @@ describe("ProjectRow interactions", () => {
           environmentId: "env_test",
           environmentName: "Feature workspace",
           environmentBranchName: "feat/menu-close",
+          environmentProviderId: "git-worktree",
+          environmentIsWorktree: true,
           queuedWork: "none",
-          environmentWorkspaceDisplayKind: "managed-worktree",
         }),
         makeThread({
           id: "thr_worktree_b",
           environmentId: "env_test",
           environmentName: "Feature workspace",
           environmentBranchName: "feat/menu-close",
+          environmentProviderId: "git-worktree",
+          environmentIsWorktree: true,
           queuedWork: "none",
-          environmentWorkspaceDisplayKind: "managed-worktree",
         }),
       ],
     });
 
     fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Worktree actions" }),
+      screen.getByRole("button", { name: "Environment actions" }),
       { button: 0 },
     );
     fireEvent.click(
-      await screen.findByRole("menuitem", { name: "Rename worktree" }),
+      await screen.findByRole("menuitem", { name: "Rename environment" }),
     );
 
     expect(
-      await screen.findByRole("dialog", { name: "Rename worktree" }),
+      await screen.findByRole("dialog", { name: "Rename environment" }),
     ).not.toBeNull();
     expect(screen.getByText("feat/menu-close")).not.toBeNull();
     await waitFor(() => {
       expect(
-        screen.queryByRole("menuitem", { name: "Rename worktree" }),
+        screen.queryByRole("menuitem", { name: "Rename environment" }),
       ).toBeNull();
     });
+  });
+
+  it("leaves threads sharing the project checkout ungrouped", () => {
+    renderProjectRow(vi.fn(), {
+      status: "ready",
+      threads: [
+        makeThread({
+          id: "thr_checkout_a",
+          environmentId: "env_checkout",
+          environmentBranchName: "main",
+          environmentProviderId: null,
+          queuedWork: "none",
+        }),
+        makeThread({
+          id: "thr_checkout_b",
+          environmentId: "env_checkout",
+          environmentBranchName: "main",
+          environmentProviderId: null,
+          queuedWork: "none",
+        }),
+      ],
+    });
+
+    expect(
+      screen.queryByRole("button", { name: "Collapse main threads" }),
+    ).toBeNull();
+  });
+
+  it("archives and renames an environment group from any provider", async () => {
+    mockArchiveEnvironmentThreads.mutateAsync.mockClear();
+    renderProjectRow(vi.fn(), {
+      status: "ready",
+      threads: [
+        makeThread({
+          id: "thr_plain_a",
+          environmentId: "env_plain",
+          environmentBranchName: "main",
+          environmentProviderId: "personal-workspace",
+          environmentIsWorktree: true,
+          queuedWork: "none",
+        }),
+        makeThread({
+          id: "thr_plain_b",
+          environmentId: "env_plain",
+          environmentBranchName: "main",
+          environmentProviderId: "personal-workspace",
+          environmentIsWorktree: true,
+          queuedWork: "none",
+        }),
+      ],
+    });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Environment actions" }),
+      { button: 0 },
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Archive environment" }),
+    );
+    expect(mockArchiveEnvironmentThreads.mutateAsync).toHaveBeenCalledWith({
+      id: "env_plain",
+    });
+
+    fireEvent.pointerDown(
+      screen.getByRole("button", { name: "Environment actions" }),
+      { button: 0 },
+    );
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Rename environment" }),
+    );
+    expect(
+      await screen.findByRole("dialog", { name: "Rename environment" }),
+    ).not.toBeNull();
   });
 });

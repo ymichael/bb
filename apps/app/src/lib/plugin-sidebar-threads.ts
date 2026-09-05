@@ -71,6 +71,7 @@ export function toPluginSidebarThread(
             id: entry.environmentId,
             name: entry.environmentName,
             branchName: entry.environmentBranchName,
+            providerId: entry.environmentProviderId,
             workspaceDisplayKind: entry.environmentWorkspaceDisplayKind,
           },
     host:

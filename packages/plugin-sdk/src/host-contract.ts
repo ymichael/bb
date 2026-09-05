@@ -19,6 +19,13 @@ export type ExperimentalHostSignals = Readonly<
 export interface ExperimentalHostCallOptions {
   readonly hostId: string;
   readonly signal?: AbortSignal;
+  /**
+   * How long the call may run before it fails, in milliseconds. Defaults to
+   * 30 seconds; capped at 30 minutes. Work that legitimately runs longer —
+   * a setup script, a clone — should either set this or be split into a
+   * job the host entry runs in the background and reports on.
+   */
+  readonly timeoutMs?: number;
 }
 
 export interface ExperimentalHostClient<

@@ -26,6 +26,7 @@ import {
   testLogger,
   type TestAppHarness,
 } from "../../helpers/test-app.js";
+import { installFakeGitWorktreeProvider } from "../../helpers/environment-provider.js";
 
 const BASE = "http://127.0.0.1:3334";
 
@@ -170,6 +171,7 @@ describe("hero plugin: agent-enrichment", () => {
 describe("hero plugin: slack-bot", () => {
   it("webhook → spawn → thread.idle → chat.postMessage, end to end", async () => {
     const server = await startTestServer({ appVersion: APP_VERSION });
+    installFakeGitWorktreeProvider();
     const realFetch = globalThis.fetch;
     const slackCalls: Array<{ url: string; body: Record<string, unknown> }> =
       [];

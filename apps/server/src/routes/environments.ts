@@ -1,8 +1,13 @@
+import { parseOptionalInteger } from "../services/lib/validation.js";
 import path from "node:path";
-import { updateEnvironmentMetadata } from "@bb/db";
 import {
-  resolveEnvironmentWorkspaceDisplayKind,
-  type Environment,
+  countLiveThreadsInEnvironment,
+  listEnvironments,
+  updateEnvironmentMetadata,
+} from "@bb/db";
+import {
+  environmentStatusValues,
+  type EnvironmentStatus,
   type ThreadPullRequest,
 } from "@bb/domain";
 import {
@@ -23,6 +28,8 @@ import {
   WORKSPACE_DIFF_MAX_FILE_LIST_BYTES,
 } from "../constants.js";
 import { ApiError } from "../errors.js";
+import { requestEnvironmentRemoval } from "../services/environments/provider-orchestration.js";
+import { toEnvironmentResponse } from "../services/environments/environment-response.js";
 import {
   requireEnvironment,
   requireReadyEnvironment,
@@ -51,6 +58,9 @@ import {
   rawDiffFileStatToEntry,
   selectInitialPatchPaths,
 } from "./diff-tiering.js";
+
+const LISTED_ENVIRONMENT_STATUSES: readonly EnvironmentStatus[] =
+  environmentStatusValues.filter((status) => status !== "destroyed");
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
 
@@ -124,10 +134,6 @@ function workspaceStatusCacheKey(
   mergeBaseBranch: string | undefined,
 ): string {
   return `${workspaceReadCacheKey(target)} ${mergeBaseBranch ?? ""}`;
-}
-
-function isWorktreeEnvironment(environment: Environment): boolean {
-  return resolveEnvironmentWorkspaceDisplayKind({ environment }) !== "other";
 }
 
 async function getPullRequestForWorkspaceTarget(
@@ -234,13 +240,70 @@ function resolveGitDiffWorkspaceTarget(deps: AppDeps, environmentId: string) {
 }
 
 export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
-  const { get, patch, post } = typedRoutes<PublicApiSchema>(app, {
+  const { del, get, patch, post } = typedRoutes<PublicApiSchema>(app, {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
   const routes = publicApiRoutes.environments;
 
+  get(routes.list, (context, query) => {
+    const limit = parseOptionalInteger(query?.limit, "limit");
+    if (limit !== undefined && limit <= 0) {
+      throw new ApiError(400, "invalid_request", "limit must be positive");
+    }
+    const offset = parseOptionalInteger(query?.offset, "offset");
+    if (offset !== undefined && offset < 0) {
+      throw new ApiError(400, "invalid_request", "offset must be non-negative");
+    }
+    return context.json(
+      listEnvironments(deps.db, {
+        ...(query?.projectId ? { projectId: query.projectId } : {}),
+        ...(query?.hostId ? { hostId: query.hostId } : {}),
+        ...(query?.environmentProviderId
+          ? { environmentProviderId: query.environmentProviderId }
+          : {}),
+        ...(query?.instanceKey ? { instanceKey: query.instanceKey } : {}),
+        ...(query?.path ? { path: query.path } : {}),
+        ...(limit === undefined ? {} : { limit }),
+        ...(offset === undefined ? {} : { offset }),
+        statuses: query?.status ? [query.status] : LISTED_ENVIRONMENT_STATUSES,
+      }).map(toEnvironmentResponse),
+    );
+  });
+
+  del(routes.delete, (context) => {
+    const environment = requireEnvironment(deps.db, context.req.param("id"));
+    if (
+      countLiveThreadsInEnvironment(deps.db, {
+        environmentId: environment.id,
+      }) > 0
+    ) {
+      throw new ApiError(
+        409,
+        "invalid_request",
+        "Environment still has live threads",
+      );
+    }
+    if (environment.status !== "destroyed") {
+      if (!requestEnvironmentRemoval(deps, environment.id)) {
+        throw new ApiError(
+          409,
+          "invalid_request",
+          `Environment cannot be deleted while ${environment.status}`,
+        );
+      }
+      deps.terminalSessions.closeDestroyedEnvironmentTerminals({
+        environmentId: environment.id,
+      });
+    }
+    return context.json({ ok: true } as const);
+  });
+
   get(routes.get, (context) =>
-    context.json(requireEnvironment(deps.db, context.req.param("id"))),
+    context.json(
+      toEnvironmentResponse(
+        requireEnvironment(deps.db, context.req.param("id")),
+      ),
+    ),
   );
 
   patch(routes.update, (context, payload) => {
@@ -254,19 +317,11 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
     if (!updated) {
       throw new ApiError(404, "environment_not_found", "Environment not found");
     }
-    return context.json(updated);
+    return context.json(toEnvironmentResponse(updated));
   });
 
   post(routes.archiveThreads, (context) => {
     const environment = requireEnvironment(deps.db, context.req.param("id"));
-    if (!isWorktreeEnvironment(environment)) {
-      throw new ApiError(
-        409,
-        "invalid_request",
-        "Only worktree environments can be archived as a group",
-      );
-    }
-
     const archivedThreadIds = archiveEnvironmentThreads(deps, { environment });
     return context.json({
       ok: true,

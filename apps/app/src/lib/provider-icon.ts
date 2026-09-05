@@ -116,8 +116,10 @@ function getPluginAwareProviderIcon(
     className,
   }) => {
     "use no memo";
-    const pluginIcon = useSyncExternalStore(subscribePluginSlots, () =>
-      getRegisteredPluginProviderIcon(providerId),
+    const pluginIcon = useSyncExternalStore(
+      subscribePluginSlots,
+      () => getRegisteredPluginProviderIcon(providerId),
+      () => undefined,
     );
     const ResolvedIcon = pluginIcon ?? staticIcon;
     return ResolvedIcon === undefined
