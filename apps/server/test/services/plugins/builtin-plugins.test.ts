@@ -210,6 +210,7 @@ describe("builtin plugin reconciliation", () => {
     const optionalNames = OFFICIAL_PLUGINS.map((plugin) => plugin.name);
     expect(optionalNames).toEqual([
       "browser-automation",
+      "environment-modal-sandbox",
       "github",
       "docs",
       "memory",
@@ -235,6 +236,8 @@ describe("builtin plugin reconciliation", () => {
       ["keep-awake", "Coffee"],
       ["monaco-editor", "Code"],
       ["pdf-preview", "FileText"],
+      ["environment-project-checkout", "Laptop"],
+      ["environment-personal-workspace", "UserRound"],
       ["provider-acp", "./icons/acp.svg"],
       ["plugin-api-docs", "./icons/ai-generative.svg"],
       ["provider-claude-code", "./icons/claude-code.svg"],
@@ -247,6 +250,7 @@ describe("builtin plugin reconciliation", () => {
       ["secrets", "Lock"],
       ["side-chat", "SideChat"],
       ["workflows", "Workflow"],
+      ["environment-git-worktree", "GitBranch"],
     ]);
 
     expect(BUILTIN_PLUGINS).toHaveLength(expectedIcons.size);
