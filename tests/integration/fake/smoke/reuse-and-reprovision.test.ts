@@ -11,7 +11,10 @@ import {
   getThreadOutput,
   sendTextMessage,
 } from "../../helpers/api.js";
-import { waitForThreadStatus } from "../../helpers/assertions.js";
+import {
+  waitForEnvironmentStatus,
+  waitForThreadStatus,
+} from "../../helpers/assertions.js";
 import { createReadyReuseThread } from "../../helpers/fixtures.js";
 import { withHarness } from "../../helpers/harness.js";
 import {
@@ -61,14 +64,9 @@ describe.sequential("fake provider smoke reuse integration", () => {
         "error",
         TURN_TIMEOUT_MS,
       );
-      const environmentId = erroredThread.environmentId;
-      if (!environmentId) {
-        throw new Error("Provisioning thread was missing an environment");
-      }
+      expect(erroredThread.environmentId).toBeNull();
 
-      const environment = await getEnvironment(harness.api, environmentId);
       const events = await getThreadEvents(harness.api, thread.id);
-      expect(environment.status).toBe("error");
       expect(
         events.some(
           (event) =>
@@ -158,11 +156,11 @@ describe.sequential("fake provider smoke reuse integration", () => {
       ).toEqual([]);
     }));
 
-  it("rejects reprovision attempts for unmanaged environments", () =>
+  it("re-attaches a checkout whose row lost its path when the thread is sent to", () =>
     withHarness(async (harness) => {
       const project = await createProjectFixture(
         harness,
-        "Unmanaged Reprovision Rejected",
+        "Checkout Reattach After Error",
       );
       const { environment, thread } = await createReadyThread(harness, {
         projectId: project.id,
@@ -186,18 +184,30 @@ describe.sequential("fake provider smoke reuse integration", () => {
         param: { id: thread.id },
         json: {
           input: [
-            { type: "text", text: "try unmanaged reprovision", mentions: [] },
+            { type: "text", text: "try checkout reattach", mentions: [] },
           ],
           mode: "auto",
         },
       });
-      expect(response.status).toBe(409);
-      await expect(response.json()).resolves.toMatchObject({
-        code: "environment_not_ready",
-        details: {
-          environmentStatus: "error",
-          hasPath: false,
-        },
-      });
+      expect(response.status).toBe(200);
+      const readyThread = await waitForThreadStatus(
+        harness.api,
+        thread.id,
+        "idle",
+        TURN_TIMEOUT_MS,
+      );
+      const environmentId = readyThread.environmentId;
+      if (environmentId === null) {
+        throw new Error("Thread lost its environment after the re-attach");
+      }
+      expect(environmentId).not.toBe(environment.id);
+      const reattached = await waitForEnvironmentStatus(
+        harness.api,
+        environmentId,
+        "ready",
+        TURN_TIMEOUT_MS,
+      );
+      expect(reattached.path).toBe(harness.repoDir);
+      expect(reattached.environmentProviderId).toBe("project-checkout");
     }));
 });

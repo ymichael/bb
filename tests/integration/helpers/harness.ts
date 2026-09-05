@@ -1,3 +1,4 @@
+import { sweepProviderLifecycles } from "../../../apps/server/src/services/environments/provider-orchestration.js";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -76,6 +77,7 @@ const testLogger: ServerLogger = {
 };
 
 export interface RunningTestServer {
+  sweepEnvironments(): Promise<void>;
   baseUrl: string;
   close(): Promise<void>;
   config: ServerRuntimeConfig;
@@ -105,10 +107,13 @@ export interface IntegrationHarness {
   threadStorageRootPath: string;
 }
 
-export interface CreateHarnessOptions {
+export const PROJECT_CHECKOUT_BUILTIN_PLUGIN = "environment-project-checkout";
+
+interface CreateHarnessOptions {
   serverPort?: number;
   bindHost?: "127.0.0.1" | "0.0.0.0";
   staticDir?: string;
+  builtinPlugins?: readonly string[];
 }
 
 export type WithHarnessCallback<T> = (
@@ -230,7 +235,6 @@ async function startIntegrationServer(
     sharedSkillRoots: { user: [], project: [] },
     transcriptionModel: "test/mock-transcription",
     isDevelopment: false,
-    managedEnvironmentRetireGraceMs: 0,
   };
   const terminalSessions = new TerminalSessionLifecycle({
     attachTimeoutMs: 50,
@@ -279,28 +283,29 @@ async function startIntegrationServer(
     config,
     logger: testLogger,
   });
-  const { app, injectWebSocket } = createApp(
-    {
-      appVersion,
-      bbAppManagedConfig,
-      providerRegistry,
-      providerNativeRoots: createProviderNativeRootsCache(),
-      pluginHostArtifacts,
-      aiServices,
-      config,
-      db,
-      hub,
-      lifecycleDedupers,
-      logger: testLogger,
-      machineAuth,
-      pendingInteractions,
-      sharedPorts,
-      skillTreeRegistry,
-      telemetry,
-      terminalSessions,
-      watchInterests,
-      workspaceReadCaches,
-    },
+  const serverDeps = {
+    appVersion,
+    bbAppManagedConfig,
+    providerRegistry,
+    providerNativeRoots: createProviderNativeRootsCache(),
+    pluginHostArtifacts,
+    aiServices,
+    config,
+    db,
+    hub,
+    lifecycleDedupers,
+    logger: testLogger,
+    machineAuth,
+    pendingInteractions,
+    sharedPorts,
+    skillTreeRegistry,
+    telemetry,
+    terminalSessions,
+    watchInterests,
+    workspaceReadCaches,
+  };
+  const { app, injectWebSocket, pluginService } = createApp(
+    serverDeps,
     options.staticDir === undefined
       ? undefined
       : { staticDir: options.staticDir },
@@ -327,7 +332,24 @@ async function startIntegrationServer(
   config.serverPort = port;
   const baseUrl = `http://${TEST_SERVER_HOST}:${port}`;
 
+  pluginService.bindSdk({ baseUrl });
+  const builtinPlugins = new Set([
+    PROJECT_CHECKOUT_BUILTIN_PLUGIN,
+    ...(options.builtinPlugins ?? []),
+  ]);
+  for (const name of builtinPlugins) {
+    const entry = await pluginService.install(`builtin:${name}`, {
+      kind: "root",
+    });
+    if (entry.status !== "running") {
+      throw new Error(
+        `builtin plugin ${name} did not start: ${entry.statusDetail ?? entry.status}`,
+      );
+    }
+  }
+
   return {
+    sweepEnvironments: () => sweepProviderLifecycles(serverDeps),
     baseUrl,
     config,
     db,
@@ -360,7 +382,6 @@ async function startHarnessDaemon(
     const identity = await loadHostIdentity({ dataDir });
     const hostKey = await server.machineAuth.issueDaemonHostKey({
       hostId: identity.hostId,
-      hostType: "persistent",
     });
     await persistHostId({ dataDir, hostId: identity.hostId });
     const daemonApp = await createHostDaemonApp({
@@ -368,7 +389,6 @@ async function startHarnessDaemon(
       hostKey,
       hostId: identity.hostId,
       hostName: identity.hostName,
-      hostType: "persistent",
       instanceId: randomUUID(),
       localApiConfig: null,
       logger: testLogger,
