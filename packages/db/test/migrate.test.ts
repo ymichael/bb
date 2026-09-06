@@ -5648,6 +5648,92 @@ describe("environment providers migration", () => {
     }
   });
 
+  it("hands path-less error rows to the provider for every legacy workspace kind", () => {
+    const db = createMigratedConnection();
+
+    try {
+      seedPreProviderEnvironments(db);
+      db.$client.exec(`
+        INSERT INTO environments (
+          id, project_id, host_id, path, managed, base_branch,
+          retire_requested_at, destroy_attempt_id, workspace_provision_type,
+          status, created_at, updated_at
+        ) VALUES
+          ('env_pathless_managed', 'proj_ep', 'host_ep', NULL, 1, NULL,
+           NULL, NULL, 'managed-worktree', 'error', 1000, 1000),
+          ('env_pathless_personal', 'proj_ep', 'host_ep', NULL, 1, NULL,
+           NULL, NULL, 'personal', 'error', 1000, 1000),
+          ('env_pathless_unmanaged', 'proj_ep', 'host_ep', NULL, 0, NULL,
+           NULL, NULL, 'unmanaged', 'error', 1000, 1000);
+      `);
+
+      migrate(db);
+
+      expect(
+        db.$client
+          .prepare<
+            [],
+            {
+              environmentProviderId: string | null;
+              environmentProviderSelection: string | null;
+              id: string;
+              isWorktree: number;
+              path: string | null;
+              providerOwnsPath: number;
+              status: string;
+            }
+          >(
+            `
+              SELECT id,
+                     path,
+                     status,
+                     environment_provider_id AS environmentProviderId,
+                     environment_provider_selection AS environmentProviderSelection,
+                     is_worktree AS isWorktree,
+                     provider_owns_path AS providerOwnsPath
+              FROM environments
+              WHERE id LIKE 'env_pathless_%'
+              ORDER BY id
+            `,
+          )
+          .all(),
+      ).toEqual([
+        {
+          id: "env_pathless_managed",
+          path: null,
+          status: "error",
+          environmentProviderId: "git-worktree",
+          environmentProviderSelection:
+            '{"machine":{"type":"existing","hostId":"host_ep"},"inputs":{"branch":{"kind":"default"}}}',
+          isWorktree: 1,
+          providerOwnsPath: 1,
+        },
+        {
+          id: "env_pathless_personal",
+          path: null,
+          status: "error",
+          environmentProviderId: "personal-workspace",
+          environmentProviderSelection:
+            '{"machine":{"type":"existing","hostId":"host_ep"},"inputs":null}',
+          isWorktree: 0,
+          providerOwnsPath: 1,
+        },
+        {
+          id: "env_pathless_unmanaged",
+          path: null,
+          status: "error",
+          environmentProviderId: "project-checkout",
+          environmentProviderSelection:
+            '{"machine":{"type":"existing","hostId":"host_ep"},"inputs":{}}',
+          isWorktree: 0,
+          providerOwnsPath: 0,
+        },
+      ]);
+    } finally {
+      closeConnection(db);
+    }
+  });
+
   it("backfills the worktree and path-ownership row facts by provider", () => {
     const db = createMigratedConnection();
 

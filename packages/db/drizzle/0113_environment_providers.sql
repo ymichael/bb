@@ -90,11 +90,17 @@ WHERE `workspace_provision_type` = 'personal';
 UPDATE `environments`
 SET
   `environment_provider_id` = 'project-checkout',
-  `environment_provider_selection` = json_object(
-    'machine', json_object('type', 'existing', 'hostId', `host_id`),
-    'inputs', json_object('path', `path`)
-  )
-WHERE `workspace_provision_type` = 'unmanaged' AND `path` IS NOT NULL;
+  `environment_provider_selection` = CASE
+    WHEN `path` IS NULL THEN json_object(
+      'machine', json_object('type', 'existing', 'hostId', `host_id`),
+      'inputs', json_object()
+    )
+    ELSE json_object(
+      'machine', json_object('type', 'existing', 'hostId', `host_id`),
+      'inputs', json_object('path', `path`)
+    )
+  END
+WHERE `workspace_provision_type` = 'unmanaged';
 --> statement-breakpoint
 UPDATE `hosts`
 SET
