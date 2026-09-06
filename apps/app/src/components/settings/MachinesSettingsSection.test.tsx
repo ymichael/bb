@@ -187,26 +187,34 @@ describe("MachinesSettingsSection", () => {
     vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
       {
         ...modalProvider,
-        id: "ssh-machine",
-        displayName: "SSH machine",
+        id: "test-machine",
+        displayName: "Test machine",
         icon: null,
         logoUrl: null,
+        pluginId: "test-machine-provider",
+        supportsSuspend: false,
+        environmentRow: null,
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 60_000,
+        },
       },
     ]);
     vi.mocked(sdk.hosts.list).mockResolvedValue([
       primaryHost,
       host({
-        id: "host_ssh",
-        name: "localhost-bb",
-        machineProviderId: "ssh-machine",
+        id: "host_test",
+        name: "test-machine-host",
+        machineProviderId: "test-machine",
       }),
     ]);
     stubSidebarBootstrapFetch();
 
     renderSection();
 
-    const name = await screen.findByText("localhost-bb");
-    expect(name.parentElement?.textContent).not.toContain("SSH machine");
+    const name = await screen.findByText("test-machine-host");
+    expect(name.parentElement?.textContent).not.toContain("Test machine");
     expect(
       name.parentElement?.querySelector("[data-provider-logo]"),
     ).toBeNull();

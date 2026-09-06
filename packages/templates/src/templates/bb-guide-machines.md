@@ -39,9 +39,12 @@ unless you pass `--auto-update` explicitly.
   bb machine join-code                    Create a machine pairing code
   bb machine rename <id-or-name> <name>   Rename a machine
   bb machine retry-update <id-or-name>    Retry a pending daemon update now
+  bb machine suspend <id-or-name>         Suspend a provider-managed machine
+  bb machine resume <id-or-name>          Resume a suspended machine
+  bb machine retry-cleanup <id-or-name>   Retry failed teardown now
   bb machine remove <id-or-name> [--yes]  Revoke and remove a machine
   bb machine provider-cli status <machine>
-  bb machine provider-cli install <machine> <claudeCode|codex|cursor>
+  bb machine provider-cli install <machine> <provider-id>
     --action <install|update>
 
 Each machine has a permission limit: the highest permission mode any thread on
@@ -53,6 +56,10 @@ and rename/remove. There is no CLI or SDK command to set it, and a paired
 machine cannot set it for any machine, so a sandbox machine can stay at Full
 Access while your laptop stays lower. `bb machine list --json` and `bb machine
 show` report the current limit.
+
+Suspend and resume are available only when the machine provider implements
+both operations. Retry cleanup is accepted only for a retiring machine whose
+provider teardown failed.
 
 Updates commands
 

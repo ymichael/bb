@@ -237,7 +237,7 @@ describe("builtin plugin reconciliation", () => {
       ["monaco-editor", "Code"],
       ["pdf-preview", "FileText"],
       ["environment-project-checkout", "Laptop"],
-      ["environment-personal-workspace", "UserRound"],
+      ["environment-personal-workspace", "Folder"],
       ["provider-acp", "./icons/acp.svg"],
       ["plugin-api-docs", "./icons/ai-generative.svg"],
       ["provider-claude-code", "./icons/claude-code.svg"],
@@ -250,7 +250,7 @@ describe("builtin plugin reconciliation", () => {
       ["secrets", "Lock"],
       ["side-chat", "SideChat"],
       ["workflows", "Workflow"],
-      ["environment-git-worktree", "GitBranch"],
+      ["environment-git-worktree", "FolderGit"],
     ]);
 
     expect(BUILTIN_PLUGINS).toHaveLength(expectedIcons.size);

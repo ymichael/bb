@@ -572,8 +572,8 @@ enrolled machine.
 **Audit before stabilizing.** Verify create-key ownership and retry timing,
 crash recovery when enrolment completed before create returned, cancellation
 cleanup, resource privacy, removal serialization, and lifecycle progress
-presentation. Confirm the requirement vocabulary is sufficient for SSH and
-future VM providers, the picker-sugar coupling to one environment provider,
+presentation. Confirm the requirement vocabulary is sufficient for future
+remote and VM providers, the picker-sugar coupling to one environment provider,
 and whether policies need per-machine overrides before dropping the prefix.
 
 ## `@get-bb/plugin-sdk/machine-provider`

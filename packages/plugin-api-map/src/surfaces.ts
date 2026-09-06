@@ -821,7 +821,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "PluginMachineProviderResourceResult",
           "PluginMachineProviderRemoveResult",
         ],
-        firstParty: ["Modal sandbox", "SSH machine"],
+        firstParty: ["Modal sandbox"],
         experimental: true,
       },
       {
@@ -905,7 +905,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Provider retry",
           "Push notifications",
           "Secrets",
-          "SSH machine",
           "Side chat",
           "Tasks",
           "Workflows",

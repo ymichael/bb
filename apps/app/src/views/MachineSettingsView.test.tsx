@@ -202,15 +202,15 @@ describe("MachineSettingsView", () => {
     stubSupportingFetches();
     vi.mocked(sdk.system.config).mockResolvedValue(systemConfig());
     vi.mocked(sdk.hosts.list).mockResolvedValue([
-      host({ machineProviderId: "ssh-machine" }),
+      host({ machineProviderId: "test-machine" }),
     ]);
     vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
       {
-        id: "ssh-machine",
-        displayName: "SSH machine",
+        id: "test-machine",
+        displayName: "Test machine",
         icon: null,
         logoUrl: null,
-        pluginId: "environment-ssh-machine",
+        pluginId: "test-machine-provider",
         requires: { gitRemote: false },
         inputs: null,
         acceptsEmptyInputs: true,
@@ -227,7 +227,7 @@ describe("MachineSettingsView", () => {
     renderView();
 
     await screen.findByRole("heading", { name: /dev-vm/u });
-    expect(screen.queryByText("SSH machine")).toBeNull();
+    expect(screen.queryByText("Test machine")).toBeNull();
     expect(screen.queryByText("Active")).toBeNull();
     expect(screen.queryByRole("button", { name: "Suspend" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();

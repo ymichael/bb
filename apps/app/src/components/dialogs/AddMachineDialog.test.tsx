@@ -96,11 +96,11 @@ describe("AddMachineDialog", () => {
     vi.mocked(sdk.hosts.list).mockResolvedValue([existingHost]);
     vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
       {
-        id: "ssh-machine",
-        displayName: "SSH machine",
+        id: "test-machine",
+        displayName: "Test machine",
         icon: null,
         logoUrl: null,
-        pluginId: "environment-ssh-machine",
+        pluginId: "test-machine-provider",
         requires: { gitRemote: false },
         inputs: null,
         acceptsEmptyInputs: true,
@@ -126,7 +126,7 @@ describe("AddMachineDialog", () => {
       { wrapper },
     );
 
-    const row = await screen.findByRole("button", { name: /SSH machine/u });
+    const row = await screen.findByRole("button", { name: /Test machine/u });
     expect(row.querySelector("[data-provider-logo]")).toBeNull();
     expect(row.querySelector('[data-icon="Zap"]')).toBeNull();
   });

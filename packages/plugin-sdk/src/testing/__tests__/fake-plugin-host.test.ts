@@ -2054,8 +2054,8 @@ describe("environment targets", () => {
   it("accepts a machine provider without suspend and resume when idle suspension is disabled", () => {
     const { bb, harness } = createFakePluginHost();
     bb.experimental_machines.register({
-      id: "ssh-target",
-      displayName: "SSH target",
+      id: "test-machine",
+      displayName: "Test machine",
       policy: {
         idleSuspendMs: null,
         retire: { after: "never" },
@@ -2063,13 +2063,13 @@ describe("environment targets", () => {
       },
       create: async () => ({
         status: "created",
-        hostId: "host-ssh",
+        hostId: "host-test-machine",
         resource: { target: "staging" },
       }),
       remove: async () => ({ status: "removed" }),
     });
     expect(
-      harness.registrations.machineProviders.get("ssh-target"),
+      harness.registrations.machineProviders.get("test-machine"),
     ).toMatchObject({
       icon: null,
       suspend: null,

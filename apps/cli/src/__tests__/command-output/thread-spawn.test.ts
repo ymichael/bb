@@ -1294,11 +1294,11 @@ describe("bb thread spawn command output", () => {
       "v1.system.machine-providers.$get": vi.fn(async () => ({
         providers: [
           {
-            id: "ssh-target",
-            displayName: "SSH target",
+            id: "test-machine",
+            displayName: "Test machine",
             icon: null,
             logoUrl: null,
-            pluginId: "ssh-target",
+            pluginId: "test-machine-provider",
             requires: { gitRemote: false },
             inputs: {
               type: "object",
@@ -1307,7 +1307,7 @@ describe("bb thread spawn command output", () => {
             },
             acceptsEmptyInputs: false,
             environmentRow: {
-              displayName: "SSH target",
+              displayName: "Test machine",
               environmentProviderId: "project-checkout",
             },
             policy: {
@@ -1350,7 +1350,7 @@ describe("bb thread spawn command output", () => {
         "--prompt",
         "hello",
         "--new-machine",
-        "ssh-target",
+        "test-machine",
         "--machine-inputs",
         '{"target":"buildbox"}',
       ],
@@ -1364,7 +1364,7 @@ describe("bb thread spawn command output", () => {
           environmentProviderId: "project-checkout",
           machine: {
             type: "new",
-            machineProviderId: "ssh-target",
+            machineProviderId: "test-machine",
             inputs: { target: "buildbox" },
           },
           inputs: null,

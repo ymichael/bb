@@ -263,8 +263,8 @@ glyph, plugin-relative SVG, declared icon, or React icon-slot presentation.
 
 ```ts
 bb.experimental_machines.register({
-  id: "ssh-target",
-  displayName: "SSH target",
+  id: "custom-machine",
+  displayName: "Custom machine",
   icon: "Server",
   inputs: z.object({ target: z.string() }),
   policy: {

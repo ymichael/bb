@@ -121,7 +121,7 @@ providerId }`) and `Original`, the host's declarative base for the body —
 - `experimental_providerIcon` → the React component bb draws as one agent,
   environment, or machine provider's icon. Registration:
   `{ providerId, icon }`, where `providerId` is the provider's id (`"codex"`,
-  `"git-worktree"`, `"ssh-machine"`) — not the plugin id — and
+  `"git-worktree"`, `"custom-machine"`) — not the plugin id — and
   `icon` is a component receiving only `className` (host sizing plus the
   provider color class). Use it for a theme-aware mark: a file logo
   (`bb.branding.icon`, or a path-shaped provider declaration `icon`) is drawn
