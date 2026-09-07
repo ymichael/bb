@@ -16,7 +16,10 @@ env:
 # the dev-client launcher) and sitting on a screen that survives losing the
 # profile (home), so: launch, reset, launch again → first run → add server.
 - runFlow: ../subflows/launch-app.yaml
-- openLink: "bb://e2e/reset"
+- runFlow:
+    file: ../subflows/open-bb-link.yaml
+    env:
+      LINK: "bb://e2e/reset"
 - extendedWaitUntil:
     visible: ".*Connect to a bb server.*"
     timeout: 60000
@@ -129,7 +132,10 @@ env:
 - takeScreenshot: p7-plugins-dev-browse
 # Leave the simulator at first run again for the harness flows.
 - runFlow: ../subflows/launch-app.yaml
-- openLink: "bb://e2e/reset"
+- runFlow:
+    file: ../subflows/open-bb-link.yaml
+    env:
+      LINK: "bb://e2e/reset"
 - extendedWaitUntil:
     visible: ".*Connect to a bb server.*"
     timeout: 60000

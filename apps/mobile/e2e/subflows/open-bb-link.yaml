@@ -1,0 +1,10 @@
+appId: app.getbb.mobile
+---
+- openLink: "${LINK}"
+- runFlow:
+    when:
+      platform: iOS
+      visible: "Open in.*bb.*"
+    commands:
+      - tapOn: "Open"
+- assertNotVisible: "Open in.*bb.*"

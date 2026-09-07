@@ -12,14 +12,20 @@ env:
 - runFlow: ../subflows/pair-direct-server.yaml
 
 # A scheme link into a page surface.
-- openLink: "bb://threads"
+- runFlow:
+    file: ../subflows/open-bb-link.yaml
+    env:
+      LINK: "bb://threads"
 - extendedWaitUntil:
     visible:
       id: "shell-webview"
     timeout: 30000
 
 # A scheme link carrying a page path lands on that page.
-- openLink: "bb://"
+- runFlow:
+    file: ../subflows/open-bb-link.yaml
+    env:
+      LINK: "bb://"
 - extendedWaitUntil:
     visible:
       id: "shell-webview"
@@ -45,7 +51,10 @@ env:
 
 # Connect enrolment holds the Keychain credential, so it can never move into
 # the page. It stays native even while the shell is on.
-- openLink: "bb://connect"
+- runFlow:
+    file: ../subflows/open-bb-link.yaml
+    env:
+      LINK: "bb://connect"
 - extendedWaitUntil:
     visible:
       id: "connect-screen"

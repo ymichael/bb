@@ -67,6 +67,20 @@ for flow in "${FLOWS[@]}"; do
     # A failed flow can leave the app on any screen; the next flow cold-starts
     # it, but keep a screenshot of where this one ended.
     xcrun simctl io "$UDID" screenshot "$out/final-screen.png" >/dev/null 2>&1 || true
+    cleanup="$out/cleanup"
+    mkdir -p "$cleanup"
+    if maestro --device "$UDID" test \
+        ${LAUNCH_ENV[@]+"${LAUNCH_ENV[@]}"} \
+        --format junit --output "$cleanup/junit.xml" \
+        --test-output-dir "$cleanup" \
+        ${MAESTRO_FLAGS:-} \
+        "subflows/clear-open-confirmation.yaml" 2>&1 | tee "$cleanup/maestro.log"; then
+      echo "RESET after $flow"
+    else
+      echo "Failed to clear native state after $flow; stopping before the next flow" >&2
+      echo "::endgroup::"
+      break
+    fi
   fi
   echo "::endgroup::"
 done

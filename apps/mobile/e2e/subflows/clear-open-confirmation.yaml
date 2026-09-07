@@ -1,0 +1,10 @@
+appId: app.getbb.mobile
+---
+- runFlow:
+    when:
+      platform: iOS
+      visible: "Open in.*bb.*"
+    commands:
+      - tapOn: "Cancel"
+- stopApp
+- assertNotVisible: "Open in.*bb.*"
