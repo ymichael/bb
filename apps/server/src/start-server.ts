@@ -6,7 +6,7 @@ import type { ServerConfig } from "@bb/config/server";
 import { isLoopbackHostname } from "@bb/config/loopback";
 import { toOptionalString } from "@bb/config/strings";
 import { createLogger } from "@bb/logger";
-import { getAppSettings } from "@bb/db";
+import { getAppSettings, startSqliteReadWorker } from "@bb/db";
 import { initDb } from "./db.js";
 import { createApp } from "./server.js";
 import { PendingInteractionLifecycle } from "./services/interactions/pending-interactions.js";
@@ -56,6 +56,25 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     dataDir: serverConfig.BB_DATA_DIR,
     logger,
   });
+  if (serverConfig.databasePath !== ":memory:") {
+    try {
+      const jsFilename = fileURLToPath(
+        new URL("./sqlite-read-worker.js", import.meta.url),
+      );
+      const tsFilename = fileURLToPath(
+        new URL("./sqlite-read-worker.ts", import.meta.url),
+      );
+      startSqliteReadWorker({
+        source: serverConfig.databasePath,
+        workerFilename: existsSync(jsFilename) ? jsFilename : tsFilename,
+      });
+    } catch (error) {
+      logger.error(
+        { err: error },
+        "Failed to start sqlite read worker; heavy reads will stay on the serving thread",
+      );
+    }
+  }
   const hub = new NotificationHub();
   const watchInterests = new WatchInterestCoordinator({ db, hub });
   const sharedPorts = new HostSharedPortCoordinator({ db, hub });

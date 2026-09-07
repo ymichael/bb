@@ -12,6 +12,11 @@
       "source": "./src/internal-environment-lifecycle.ts",
       "types": "./src/internal-environment-lifecycle.ts",
       "default": "./src/internal-environment-lifecycle.ts"
+    },
+    "./sqlite-read-worker": {
+      "source": "./src/sqlite-read-worker.ts",
+      "types": "./src/sqlite-read-worker.ts",
+      "default": "./src/sqlite-read-worker.ts"
     }
   },
   "types": "./src/index.ts",

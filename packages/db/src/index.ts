@@ -1,4 +1,10 @@
 export { createConnection } from "./connection.js";
+export {
+  listThreadsWithPendingInteractionStateForProjectsOffThread,
+  listThreadsWithPendingInteractionStateOffThread,
+  startSqliteReadWorker,
+  stopSqliteReadWorker,
+} from "./sqlite-read-queue.js";
 export type {
   DbConnection,
   DbQueryConnection,
