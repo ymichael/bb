@@ -660,6 +660,7 @@ function RootComposeSurface({
     projects,
     sidebarNavigation,
     sidebarNavigationError,
+    retrySidebarNavigation,
     currentProject,
     projectSources,
     connectedHostIds,
@@ -1909,9 +1910,19 @@ function RootComposeSurface({
   if (!projects && sidebarNavigationError) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
-        <p className="py-12 text-center text-sm text-destructive">
-          Failed to load projects.
-        </p>
+        <div className="flex flex-col items-center gap-2 py-12">
+          <p className="text-center text-sm text-destructive">
+            Failed to load projects.
+          </p>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={retrySidebarNavigation}
+          >
+            Retry
+          </Button>
+        </div>
       </PageShell>
     );
   }

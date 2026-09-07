@@ -136,6 +136,7 @@ export interface NewThreadComposerState {
   projects: readonly SidebarProject[] | undefined;
   sidebarNavigation: SidebarBootstrapResponse | undefined;
   sidebarNavigationError: boolean;
+  retrySidebarNavigation: () => void;
   currentProject: SidebarProject | undefined;
   projectSources: SidebarProject["sources"];
   connectedHostIds: ReadonlySet<string>;
@@ -378,6 +379,9 @@ export function NewThreadComposer({
   const promptBoxRef = useRef<PromptBoxHandle>(null);
 
   const sidebarNavigationQuery = useSidebarNavigation();
+  const retrySidebarNavigation = useCallback(() => {
+    void sidebarNavigationQuery.refetch();
+  }, [sidebarNavigationQuery.refetch]);
   const projects = useMemo(
     () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
     [sidebarNavigationQuery.data],
@@ -1463,6 +1467,7 @@ export function NewThreadComposer({
     projects,
     sidebarNavigation: sidebarNavigationQuery.data,
     sidebarNavigationError: sidebarNavigationQuery.isError,
+    retrySidebarNavigation,
     currentProject,
     projectSources,
     connectedHostIds,

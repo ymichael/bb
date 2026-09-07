@@ -11,13 +11,23 @@ import {
   useProjectListRealtimeSubscription,
   useThreadListRealtimeSubscription,
 } from "@/hooks/useRealtimeSubscription";
-import type { QueryOptions } from "./query-helpers";
+import {
+  type QueryOptions,
+  shouldRetrySidebarBootstrapQuery,
+  sidebarBootstrapRetryDelay,
+} from "./query-helpers";
 import { sidebarNavigationQueryKey } from "./query-keys";
 import { REALTIME_OWNED_STATIC_CACHE_QUERY_POLICY } from "./query-policies";
 import {
   readCachedSidebarBootstrap,
   writeCachedSidebarBootstrap,
 } from "@/lib/sidebar-bootstrap-cache";
+
+const SIDEBAR_BOOTSTRAP_QUERY_OPTIONS = {
+  ...REALTIME_OWNED_STATIC_CACHE_QUERY_POLICY,
+  retry: shouldRetrySidebarBootstrapQuery,
+  retryDelay: sidebarBootstrapRetryDelay,
+} as const;
 
 function fetchSidebarNavigation(
   signal?: AbortSignal,
@@ -42,7 +52,7 @@ export function useSidebarNavigation(options?: QueryOptions) {
       return response;
     },
     enabled,
-    ...REALTIME_OWNED_STATIC_CACHE_QUERY_POLICY,
+    ...SIDEBAR_BOOTSTRAP_QUERY_OPTIONS,
     placeholderData: () => readCachedSidebarBootstrap() ?? undefined,
   });
 }
@@ -53,7 +63,7 @@ export function useProjectDisplayName(
   const { data } = useQuery<SidebarBootstrapResponse>({
     queryKey: sidebarNavigationQueryKey(),
     queryFn: ({ signal }) => fetchSidebarNavigation(signal),
-    ...REALTIME_OWNED_STATIC_CACHE_QUERY_POLICY,
+    ...SIDEBAR_BOOTSTRAP_QUERY_OPTIONS,
     enabled: Boolean(projectId),
   });
   if (!data || !projectId) {
@@ -81,7 +91,7 @@ export function useSidebarNavigationThreadSelection<T>(
   const result = useQuery<SidebarBootstrapResponse, Error, T>({
     queryKey: sidebarNavigationQueryKey(),
     queryFn: ({ signal }) => fetchSidebarNavigation(signal),
-    ...REALTIME_OWNED_STATIC_CACHE_QUERY_POLICY,
+    ...SIDEBAR_BOOTSTRAP_QUERY_OPTIONS,
     enabled: false,
     select: selectFromNavigation,
   });

@@ -5,6 +5,8 @@ import { BbHttpError } from "@/lib/sdk";
 export const PROMPT_HISTORY_STALE_TIME_MS = 10_000;
 const TRANSIENT_READ_RETRY_COUNT = 2;
 export const TRANSIENT_READ_RETRY_DELAY_MS = 250;
+export const SIDEBAR_BOOTSTRAP_RETRY_BASE_DELAY_MS = 250;
+export const SIDEBAR_BOOTSTRAP_RETRY_MAX_DELAY_MS = 4_000;
 
 export interface QueryOptions {
   enabled?: boolean;
@@ -78,4 +80,39 @@ export function shouldRetryTransientReadQuery(
   }
 
   return isTransientReadError(error);
+}
+
+function readHttpStatus(error: unknown): number | undefined {
+  if (error instanceof HttpError || error instanceof BbHttpError) {
+    return error.status;
+  }
+  return undefined;
+}
+
+export function isSidebarBootstrapRetryableError(error: unknown): boolean {
+  if (toRecord(error)?.name === "AbortError") {
+    return false;
+  }
+  if (isTransientReadError(error)) {
+    return true;
+  }
+  const status = readHttpStatus(error);
+  if (status === undefined) {
+    return false;
+  }
+  return status === 408 || status === 429 || status >= 500;
+}
+
+export function shouldRetrySidebarBootstrapQuery(
+  _failureCount: number,
+  error: unknown,
+): boolean {
+  return isSidebarBootstrapRetryableError(error);
+}
+
+export function sidebarBootstrapRetryDelay(attemptIndex: number): number {
+  return Math.min(
+    SIDEBAR_BOOTSTRAP_RETRY_MAX_DELAY_MS,
+    SIDEBAR_BOOTSTRAP_RETRY_BASE_DELAY_MS * 2 ** attemptIndex,
+  );
 }

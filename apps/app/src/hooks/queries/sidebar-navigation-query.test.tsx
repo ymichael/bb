@@ -181,4 +181,67 @@ describe("useSidebarNavigation", () => {
       vi.useRealTimers();
     }
   });
+
+  it("recovers from an 8s transport outage instead of leaving the query terminal", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      let calls = 0;
+      vi.mocked(request).mockImplementation(() => {
+        calls += 1;
+        if (calls <= 6) {
+          return Promise.reject(new TypeError("Failed to fetch"));
+        }
+        return Promise.resolve(BOOTSTRAP);
+      });
+      const harness = createQueryClientTestHarness();
+      const { result } = renderHook(() => useSidebarNavigation(), {
+        wrapper: harness.wrapper,
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(12_000);
+      });
+      await waitFor(() => expect(result.current.data).toEqual(BOOTSTRAP));
+      expect(result.current.isError).toBe(false);
+      expect(calls).toBeGreaterThan(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("retries a temporary 503 and does not retry a 401", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const { HttpError } = await import("@/lib/api");
+      vi.mocked(request)
+        .mockRejectedValueOnce(
+          new HttpError({ status: 503, message: "warming up" }),
+        )
+        .mockResolvedValueOnce(BOOTSTRAP);
+      const successHarness = createQueryClientTestHarness();
+      const success = renderHook(() => useSidebarNavigation(), {
+        wrapper: successHarness.wrapper,
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      await waitFor(() => expect(success.result.current.data).toEqual(BOOTSTRAP));
+      success.unmount();
+
+      vi.mocked(request).mockReset();
+      vi.mocked(request).mockRejectedValue(
+        new HttpError({ status: 401, message: "unauthorized" }),
+      );
+      const errorHarness = createQueryClientTestHarness();
+      const failed = renderHook(() => useSidebarNavigation(), {
+        wrapper: errorHarness.wrapper,
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      await waitFor(() => expect(failed.result.current.isError).toBe(true));
+      expect(vi.mocked(request)).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

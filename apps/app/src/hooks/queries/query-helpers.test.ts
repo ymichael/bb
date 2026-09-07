@@ -44,7 +44,16 @@ import {
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { HttpError } from "@/lib/api";
 import { BbHttpError } from "@/lib/sdk";
-import { isTransientReadError, requireEnabledQueryArg } from "./query-helpers";
+import {
+  isSidebarBootstrapRetryableError,
+  isTransientReadError,
+  requireEnabledQueryArg,
+  shouldRetrySidebarBootstrapQuery,
+  shouldRetryTransientReadQuery,
+  sidebarBootstrapRetryDelay,
+  SIDEBAR_BOOTSTRAP_RETRY_BASE_DELAY_MS,
+  SIDEBAR_BOOTSTRAP_RETRY_MAX_DELAY_MS,
+} from "./query-helpers";
 
 describe("requireEnabledQueryArg", () => {
   it("returns the value when present", () => {
@@ -100,6 +109,81 @@ describe("isTransientReadError", () => {
     ).toBe(false);
     expect(isTransientReadError(new Error("Unexpected parse error"))).toBe(
       false,
+    );
+  });
+});
+
+describe("sidebar bootstrap retry policy", () => {
+  it("retries transport failures, 408, 429, and 5xx, but not 401 or parse errors", () => {
+    expect(
+      isSidebarBootstrapRetryableError(new TypeError("Failed to fetch")),
+    ).toBe(true);
+    expect(
+      isSidebarBootstrapRetryableError(
+        new HttpError({ status: 503, message: "warming up" }),
+      ),
+    ).toBe(true);
+    expect(
+      isSidebarBootstrapRetryableError(
+        new HttpError({ status: 408, message: "timeout" }),
+      ),
+    ).toBe(true);
+    expect(
+      isSidebarBootstrapRetryableError(
+        new HttpError({ status: 429, message: "rate limited" }),
+      ),
+    ).toBe(true);
+    expect(
+      isSidebarBootstrapRetryableError(
+        new BbHttpError({
+          status: 502,
+          message: "bad gateway",
+          body: { error: "bad gateway" },
+          code: null,
+        }),
+      ),
+    ).toBe(true);
+    expect(
+      isSidebarBootstrapRetryableError(
+        new HttpError({ status: 401, message: "unauthorized" }),
+      ),
+    ).toBe(false);
+    expect(
+      isSidebarBootstrapRetryableError(
+        new HttpError({ status: 404, message: "not found" }),
+      ),
+    ).toBe(false);
+    expect(
+      isSidebarBootstrapRetryableError(new Error("Unexpected parse error")),
+    ).toBe(false);
+    expect(isSidebarBootstrapRetryableError({ name: "AbortError" })).toBe(
+      false,
+    );
+  });
+
+  it("keeps retrying retryable errors after the generic two-retry budget", () => {
+    const transport = new TypeError("Failed to fetch");
+    expect(shouldRetryTransientReadQuery(2, transport)).toBe(false);
+    expect(shouldRetrySidebarBootstrapQuery(2, transport)).toBe(true);
+    expect(shouldRetrySidebarBootstrapQuery(12, transport)).toBe(true);
+    expect(
+      shouldRetrySidebarBootstrapQuery(
+        0,
+        new HttpError({ status: 401, message: "unauthorized" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("backs off from 250ms to a 4s cap", () => {
+    expect(sidebarBootstrapRetryDelay(0)).toBe(
+      SIDEBAR_BOOTSTRAP_RETRY_BASE_DELAY_MS,
+    );
+    expect(sidebarBootstrapRetryDelay(1)).toBe(500);
+    expect(sidebarBootstrapRetryDelay(4)).toBe(
+      SIDEBAR_BOOTSTRAP_RETRY_MAX_DELAY_MS,
+    );
+    expect(sidebarBootstrapRetryDelay(8)).toBe(
+      SIDEBAR_BOOTSTRAP_RETRY_MAX_DELAY_MS,
     );
   });
 });
