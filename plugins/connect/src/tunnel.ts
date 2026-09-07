@@ -466,6 +466,9 @@ export class ConnectTunnel {
         onActivity: (at) => {
           this.lastRemoteActivityAt = at;
         },
+        onHeartbeatTimeout: () => {
+          scheduleReconnect("tunnel heartbeat timed out");
+        },
       });
       this.session.start();
       this.publish();
