@@ -48,6 +48,9 @@ describe("@bb/templates", () => {
 
     expect(rendered).toContain("You are working inside bb");
     expect(rendered).toContain("agentic IDE");
+    expect(rendered).toContain(
+      "session-naming action such as `name_session`",
+    );
     expect(rendered).not.toContain(
       "Ask the user a blocking question only when",
     );
