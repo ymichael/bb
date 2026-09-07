@@ -2266,33 +2266,43 @@ describe("PromptBoxInternal compact layout", () => {
     }
   });
 
-  it("keeps the editor focused through a pointer submit", async () => {
+  it("keeps the editor focused through a pointer submit", () => {
+    const restoreMatchMedia = mockPointerCoarse(true);
     const onSubmit = vi.fn();
-    render(
-      <PromptBoxInternal
-        {...createPromptBoxProps({
-          value: "Send this follow-up",
-          onSubmit,
-          compact: {
-            isCompact: true,
-            placeholder: "Ask a follow-up",
-          },
-        })}
-      />,
-    );
+    try {
+      render(
+        <PromptBoxInternal
+          {...createPromptBoxProps({
+            value: "Send this follow-up",
+            onSubmit,
+            compact: {
+              isCompact: true,
+              placeholder: "Ask a follow-up",
+            },
+          })}
+        />,
+      );
 
-    await waitForPromptFocus();
-    const editor = getPromptEditorElement();
-    const submit = screen.getByRole("button", { name: "Submit (Enter)" });
+      const editor = getPromptEditorElement();
+      act(() => editor.focus());
+      const submit = screen.getByRole("button", { name: "Submit (Enter)" });
 
-    expect(
-      fireEvent.pointerDown(submit, { button: 0, pointerType: "touch" }),
-    ).toBe(false);
-    expect(document.activeElement).toBe(editor);
+      expect(
+        fireEvent.pointerDown(submit, { button: 0, pointerType: "touch" }),
+      ).toBe(false);
+      expect(document.activeElement).toBe(editor);
 
-    fireEvent.click(submit, { detail: 1 });
-    expect(onSubmit).toHaveBeenCalledOnce();
-    expect(document.activeElement).toBe(editor);
+      expect(
+        fireEvent.pointerUp(submit, { button: 0, pointerType: "touch" }),
+      ).toBe(false);
+      expect(onSubmit).toHaveBeenCalledOnce();
+
+      fireEvent.click(submit, { detail: 1 });
+      expect(onSubmit).toHaveBeenCalledOnce();
+      expect(document.activeElement).toBe(editor);
+    } finally {
+      restoreMatchMedia();
+    }
   });
 
   it("keeps DOM focus through submit when TipTap focus state is stale", async () => {

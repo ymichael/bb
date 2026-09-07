@@ -231,6 +231,7 @@ interface PromptSubmitButtonProps {
   isCompact: boolean;
   onClick: (event: ReactMouseEvent<HTMLButtonElement>) => void;
   onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+  onPointerUp: (event: ReactPointerEvent<HTMLButtonElement>) => void;
   title: string;
 }
 
@@ -242,6 +243,7 @@ function PromptSubmitButton({
   isCompact,
   onClick,
   onPointerDown,
+  onPointerUp,
   title,
 }: PromptSubmitButtonProps) {
   const button = (
@@ -254,6 +256,7 @@ function PromptSubmitButton({
       aria-busy={isBusy}
       disabled={!canSubmit}
       onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
       onClick={onClick}
       className={className}
     >
@@ -1174,6 +1177,7 @@ export function PromptBoxInternal({
     QueuedEditorTypeaheadLayoutContext,
   );
   const blurAfterPointerSubmitRef = useRef(false);
+  const suppressTouchSubmitClickRef = useRef(false);
   const heightAnimationFromRef = useRef<number | null>(null);
   const capturePromptBoxHeight = useCallback(() => {
     const formElement = formRef.current;
@@ -2595,6 +2599,11 @@ export function PromptBoxInternal({
 
   const handleSubmitClick = useCallback(
     (event: ReactMouseEvent<HTMLButtonElement>) => {
+      if (suppressTouchSubmitClickRef.current) {
+        suppressTouchSubmitClickRef.current = false;
+        event.preventDefault();
+        return;
+      }
       blurAfterPointerSubmitRef.current =
         blurOnPointerSubmit && event.detail > 0;
     },
@@ -2622,6 +2631,23 @@ export function PromptBoxInternal({
       event.preventDefault();
     },
     [isPointerCoarse],
+  );
+
+  const handleSubmitPointerUp = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (!isPointerCoarse || event.pointerType !== "touch") return;
+      const form = event.currentTarget.form;
+      if (!form) return;
+
+      event.preventDefault();
+      suppressTouchSubmitClickRef.current = true;
+      blurAfterPointerSubmitRef.current = blurOnPointerSubmit;
+      form.requestSubmit(event.currentTarget);
+      window.setTimeout(() => {
+        suppressTouchSubmitClickRef.current = false;
+      }, 0);
+    },
+    [blurOnPointerSubmit, isPointerCoarse],
   );
 
   const [pendingCommandSubmit, setPendingCommandSubmit] = useState(false);
@@ -3284,6 +3310,7 @@ export function PromptBoxInternal({
                         isBusy={isSubmitting || isAttaching}
                         isCompact={showCompactLayout}
                         onPointerDown={handleSubmitPointerDown}
+                        onPointerUp={handleSubmitPointerUp}
                         onClick={handleSubmitClick}
                         title={effectiveSubmitTitle}
                       />
