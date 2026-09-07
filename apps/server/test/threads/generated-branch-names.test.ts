@@ -13,6 +13,7 @@ import {
   turnScope,
 } from "@bb/domain";
 import { groupHostDaemonEvents } from "@bb/host-daemon-contract";
+import { renderTemplate } from "@bb/templates";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   internalAuthHeaders,
@@ -1233,6 +1234,82 @@ describe("generated managed branch names", () => {
         `bb/canonical-generated-title-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("uses the full short prompt and caps long title-inference input", async () => {
+    mockThreadMetadata({ title: "Generated concise title" });
+    await withTestHarness(async (harness) => {
+      await expect(
+        generateThreadMetadataWithOutcome(harness.deps, {
+          input: textInput("fix"),
+          threadId: "thr_short_title",
+        }),
+      ).resolves.toMatchObject({
+        metadata: {
+          branchSlug: "generated-concise-title",
+          title: "Generated concise title",
+        },
+      });
+
+      const includedPrompt = "x".repeat(4_000);
+      const tail = "SEARCHABLE_PROMPT_TAIL";
+      const longPrompt = `${includedPrompt}${tail}`;
+      await generateThreadMetadataWithOutcome(harness.deps, {
+        input: textInput(longPrompt),
+        threadId: "thr_full_title_prompt",
+      });
+
+      expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
+      expect(piAiMocks.complete).toHaveBeenNthCalledWith(
+        1,
+        { provider: "test" },
+        expect.objectContaining({
+          messages: [
+            expect.objectContaining({
+              content: renderTemplate("generateThreadTitle", {
+                userPrompt: "fix",
+              }),
+            }),
+          ],
+          systemPrompt: "Call the `result` tool with your answer.",
+        }),
+        expect.anything(),
+      );
+      expect(piAiMocks.complete).toHaveBeenNthCalledWith(
+        2,
+        { provider: "test" },
+        expect.objectContaining({
+          messages: [
+            expect.objectContaining({
+              content: renderTemplate("generateThreadTitle", {
+                userPrompt: includedPrompt,
+              }),
+            }),
+          ],
+          systemPrompt: "Call the `result` tool with your answer.",
+        }),
+        expect.anything(),
+      );
+    });
+  });
+
+  it("sanitizes overlong titles after inference schema validation", async () => {
+    mockThreadMetadata({
+      title: "Investigate Extremely Long Generated Thread Title Output",
+    });
+    await withTestHarness(async (harness) => {
+      await expect(
+        generateThreadMetadataWithOutcome(harness.deps, {
+          input: textInput("Investigate generated thread titles"),
+          threadId: "thr_overlong_generated_title",
+        }),
+      ).resolves.toMatchObject({
+        metadata: {
+          branchSlug: "investigate-extremely-long-generated",
+          title: "Investigate Extremely Long Generated",
+        },
+      });
     });
   });
 

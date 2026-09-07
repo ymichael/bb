@@ -52,6 +52,7 @@ function getInferenceModel(
 }
 
 const RESULT_TOOL_NAME = "result";
+const RESULT_TOOL_INSTRUCTION = `Call the \`${RESULT_TOOL_NAME}\` tool with your answer.`;
 const DEFAULT_INFERENCE_TIMEOUT_MS = 30_000;
 
 export const INFERENCE_POLICY = {
@@ -314,6 +315,7 @@ export async function inferenceComplete<T extends TSchema>(
   const completionPromise = getInferenceModels().complete(
     model,
     {
+      systemPrompt: RESULT_TOOL_INSTRUCTION,
       messages: [
         {
           role: "user",

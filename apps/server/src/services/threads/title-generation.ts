@@ -9,9 +9,9 @@ import {
   inferenceCompleteWithFallback,
 } from "../ai/inference.js";
 
-const MIN_TITLE_GENERATION_WORDS = 5;
-const MAX_GENERATED_TITLE_WORDS = 5;
+const MAX_GENERATED_TITLE_LENGTH = 36;
 const MAX_BRANCH_SLUG_LENGTH = 48;
+const MAX_TITLE_INFERENCE_USER_PROMPT_LENGTH = 4_000;
 
 interface ApplyGeneratedThreadTitleArgs {
   threadId: string;
@@ -34,7 +34,6 @@ type ThreadMetadataGenerationOutcomeReason =
   | "empty-input"
   | "failed"
   | "inference-unavailable"
-  | "too-short"
   | "timeout";
 
 export interface ThreadMetadataGenerationOutcome {
@@ -64,24 +63,20 @@ export function deriveTitleFallback(input: PromptInput[]): string | null {
   return text.length <= 80 ? text : `${text.slice(0, 77)}...`;
 }
 
-export function shouldGenerateThreadTitle(input: PromptInput[]): boolean {
-  const text = cleanPromptText(input);
-  if (text.length === 0) {
-    return false;
+export function sanitizeGeneratedTitle(value: string): string | null {
+  const title = value.trim().replace(/\s+/gu, " ");
+  if (title.length === 0) {
+    return null;
+  }
+  if (title.length <= MAX_GENERATED_TITLE_LENGTH) {
+    return title;
   }
 
-  return text.split(/\s+/u).length >= MIN_TITLE_GENERATION_WORDS;
-}
-
-export function sanitizeGeneratedTitle(value: string): string | null {
-  const words = value
-    .trim()
-    .replace(/\s+/gu, " ")
-    .split(" ")
-    .filter((word) => word.length > 0);
-
-  const title = words.slice(0, MAX_GENERATED_TITLE_WORDS).join(" ");
-  return title.length > 0 ? title : null;
+  const candidate = title.slice(0, MAX_GENERATED_TITLE_LENGTH + 1);
+  const lastSpace = candidate.lastIndexOf(" ");
+  return lastSpace > 0
+    ? candidate.slice(0, lastSpace)
+    : candidate.slice(0, MAX_GENERATED_TITLE_LENGTH);
 }
 
 export function sanitizeGeneratedBranchSlug(value: string): string | null {
@@ -98,7 +93,9 @@ export function sanitizeGeneratedBranchSlug(value: string): string | null {
 }
 
 const threadMetadataSchema = Type.Object({
-  title: Type.String(),
+  title: Type.String({
+    minLength: 1,
+  }),
 });
 
 function normalizeGeneratedThreadMetadata(
@@ -125,7 +122,10 @@ export async function generateThreadMetadataWithOutcome(
   args: ThreadMetadataGenerationArgs,
 ): Promise<ThreadMetadataGenerationOutcome> {
   const startedAt = Date.now();
-  const fallback = deriveTitleFallback(args.input);
+  const userPrompt = cleanPromptText(args.input).slice(
+    0,
+    MAX_TITLE_INFERENCE_USER_PROMPT_LENGTH,
+  );
   const complete = (
     metadata: GeneratedThreadMetadata | null,
     reason?: ThreadMetadataGenerationOutcomeReason,
@@ -135,15 +135,12 @@ export async function generateThreadMetadataWithOutcome(
     ...(reason ? { reason } : {}),
   });
 
-  if (!fallback) {
+  if (!userPrompt) {
     return complete(null, "empty-input");
   }
-  if (!shouldGenerateThreadTitle(args.input)) {
-    return complete(null, "too-short");
-  }
 
-  const prompt = renderTemplate("generateThreadMetadata", {
-    cleanedPrompt: fallback,
+  const prompt = renderTemplate("generateThreadTitle", {
+    userPrompt,
   });
   const maxAttempts = Math.max(1, args.timeoutMaxAttempts ?? 1);
 
