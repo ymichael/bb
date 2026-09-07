@@ -1,7 +1,7 @@
 import { atom, useAtom, useSetAtom } from "jotai";
 import { atomWithStorage } from "jotai/utils";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import { createLocalStorageSyncStorage } from "./browser-storage";
+import { createTabScopedStorage } from "./browser-storage";
 
 const ROOT_COMPOSE_PROJECT_ID_STORAGE_KEY = "bb.root-compose.project-id";
 
@@ -12,7 +12,7 @@ function parseStoredProjectId(
   return storedValue && storedValue.length > 0 ? storedValue : initialValue;
 }
 
-const rootComposeProjectIdStorage = createLocalStorageSyncStorage<string>({
+const rootComposeProjectIdStorage = createTabScopedStorage<string>({
   parse: parseStoredProjectId,
   serialize: (value) => value,
 });

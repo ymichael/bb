@@ -397,6 +397,7 @@ describe("PluginNewThreadComposer seeding", () => {
     mocks.sidebarNavigationReplayed = false;
     mocks.extraProjects = [];
     window.localStorage.clear();
+    window.sessionStorage.clear();
     getPromptDraftAccessor({ kind: "new-thread" }).setDraft({
       text: "",
       mentions: [],
@@ -926,6 +927,47 @@ describe("PluginNewThreadComposer seeding", () => {
 
     expect(latestPromptBoxProps().project.isLoading).toBe(false);
     expect(mocks.promptHistoryQueryOptions.at(-1)?.enabled).toBe(true);
+  });
+
+  it("ignores a root project selected by another tab", async () => {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    window.localStorage.setItem("bb.root-compose.project-id", "proj_1");
+    const router = createMemoryRouter(
+      [{ path: "/", element: <RootComposeView /> }],
+      { initialEntries: ["/"] },
+    );
+    render(
+      <Provider>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
+      </Provider>,
+    );
+    await waitFor(() => {
+      expect(latestPromptBoxProps().project.value).toBe("proj_1");
+    });
+    const setItem = vi.spyOn(Storage.prototype, "setItem");
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent("storage", {
+          key: "bb.root-compose.project-id",
+          oldValue: "proj_1",
+          newValue: "proj_other_tab",
+          storageArea: window.localStorage,
+        }),
+      );
+    });
+
+    await waitFor(() => {
+      expect(setItem).not.toHaveBeenCalledWith(
+        "bb.root-compose.project-id",
+        PERSONAL_PROJECT_ID,
+      );
+    });
+    setItem.mockRestore();
   });
 
   it("keeps an unrelated draft attachment out of a RootComposeView handoff", async () => {
