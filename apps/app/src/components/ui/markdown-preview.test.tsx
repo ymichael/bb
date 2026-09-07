@@ -8,12 +8,24 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { sdk } from "@/lib/sdk";
 import { MarkdownPreview } from "./markdown-preview";
 import {
   MarkdownLocalFileContextMenuContext,
   type MarkdownLinkRouting,
 } from "./markdown-link-routing";
+
+vi.mock("@/lib/sdk", () => ({
+  sdk: {
+    hosts: {
+      pathsExist: vi.fn(),
+    },
+  },
+}));
+
+const pathsExist = vi.mocked(sdk.hosts.pathsExist);
 
 const workspaceLinkRouting = {
   localFile: {
@@ -270,23 +282,54 @@ describe("MarkdownPreview", () => {
     expect(container.textContent).toContain("<script>alert(1)</script>");
   });
 
-  it("renders inline-code Markdown file paths as local file links", () => {
+  it("links only inline-code Markdown file paths that exist", async () => {
+    pathsExist.mockImplementation(async ({ paths }) => ({
+      existence: Object.fromEntries(
+        paths.map((path) => [path, path === "/workspace/README.md"]),
+      ),
+    }));
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
     render(
-      <MarkdownPreview
-        content="Read `README.md`, `docs/guide.markdown:4`, and `src/app.ts`."
-        linkRouting={workspaceLinkRouting}
-      />,
+      <QueryClientProvider client={queryClient}>
+        <MarkdownPreview
+          content="Read `README.md`, `docs/guide.markdown:4`, and `src/app.ts`."
+          linkRouting={{
+            localFile: {
+              ...workspaceLinkRouting.localFile,
+              inlineCodeFileLinks: { hostId: "host_1" },
+            },
+          }}
+        />
+      </QueryClientProvider>,
     );
 
+    expect(screen.getByText("README.md").tagName).toBe("CODE");
+    await waitFor(() => {
+      expect(
+        screen.getByRole("link", { name: "README.md" }).getAttribute("href"),
+      ).toBe("file:///workspace/README.md");
+    });
     expect(
-      screen.getByRole("link", { name: "README.md" }).getAttribute("href"),
-    ).toBe("file:///workspace/README.md");
-    expect(
-      screen
-        .getByRole("link", { name: "docs/guide.markdown:4" })
-        .getAttribute("href"),
-    ).toBe("file:///workspace/docs/guide.markdown#L4");
+      screen.queryByRole("link", { name: "docs/guide.markdown:4" }),
+    ).toBeNull();
+    expect(screen.getByText("docs/guide.markdown:4").tagName).toBe("CODE");
     expect(screen.getByText("src/app.ts").tagName).toBe("CODE");
+    expect(
+      pathsExist.mock.calls.map(([request]) => ({
+        hostId: request.hostId,
+        paths: request.paths,
+      })),
+    ).toEqual(
+      expect.arrayContaining([
+        { hostId: "host_1", paths: ["/workspace/README.md"] },
+        {
+          hostId: "host_1",
+          paths: ["/workspace/docs/guide.markdown"],
+        },
+      ]),
+    );
   });
 
   it("shows a context menu on local file links when the context provides items", () => {

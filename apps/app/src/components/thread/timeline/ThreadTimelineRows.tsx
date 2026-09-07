@@ -155,6 +155,7 @@ export interface ThreadTimelineRowsProps {
   onSelectionAddToChat?: ThreadTimelineAddToChatHandler;
   consumerMessageActions?: readonly ThreadTimelineConsumerMessageAction[];
   includePluginMessageActions?: boolean;
+  localFileHostId?: string;
   onOpenLink?: ThreadTimelineLinkHandler;
   onOpenLocalFileLink?: ThreadTimelineLocalFileLinkHandler;
   onOpenPluginPanel?: ThreadTimelineOpenPluginPanelHandler;
@@ -181,6 +182,7 @@ interface TimelineRendererStaticContextValue {
   onForkMessage: ThreadTimelineForkMessageHandler | undefined;
   onEditMessage: ThreadTimelineEditMessageHandler | undefined;
   inlineMessageEditor: ThreadTimelineInlineMessageEditor | undefined;
+  localFileHostId: string | undefined;
   onMessageAddToChat: ThreadTimelineAddToChatHandler | undefined;
   onSendToMainMessage: ThreadTimelineSendToMainMessageHandler | undefined;
   onSelectionAddToChat: ThreadTimelineAddToChatHandler | undefined;
@@ -908,6 +910,7 @@ const ConversationRowContent = memo(function ConversationRowContent({
   const {
     canSpawnChild,
     inlineMessageEditor,
+    localFileHostId,
     onEditMessage,
     onForkMessage,
     onMessageAddToChat,
@@ -1050,6 +1053,7 @@ const ConversationRowContent = memo(function ConversationRowContent({
     <ConversationMessageContent
       attachments={row.attachments}
       id={row.id}
+      localFileHostId={localFileHostId}
       onAddToChat={onMessageAddToChat}
       onFork={onFork}
       onSendToMain={onSendToMain}
@@ -1139,6 +1143,7 @@ function TimelineExpandableBody({
   showAssistantMessageActions,
 }: TimelineExpandableBodyProps) {
   const {
+    localFileHostId,
     onOpenLink,
     onOpenLocalFileLink,
     projectId,
@@ -1212,6 +1217,7 @@ function TimelineExpandableBody({
                 <ConversationMessageContent
                   attachments={null}
                   id={row.id}
+                  localFileHostId={localFileHostId}
                   onOpenLink={onOpenLink}
                   onOpenLocalFileLink={onOpenLocalFileLink}
                   projectId={projectId}
@@ -2134,6 +2140,7 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       onForkMessage: props.onForkMessage,
       onEditMessage: props.onEditMessage,
       inlineMessageEditor: props.inlineMessageEditor,
+      localFileHostId: props.localFileHostId,
       onMessageAddToChat: props.onMessageAddToChat,
       onSendToMainMessage: props.onSendToMainMessage,
       onSelectionAddToChat: selectionAddToChatHandler,
@@ -2164,6 +2171,7 @@ function ThreadTimelineRowsForTimelineView(props: ThreadTimelineRowsProps) {
       props.onForkMessage,
       props.onEditMessage,
       props.inlineMessageEditor,
+      props.localFileHostId,
       props.onMessageAddToChat,
       props.onSendToMainMessage,
       selectionAddToChatHandler,

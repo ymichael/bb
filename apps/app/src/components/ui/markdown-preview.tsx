@@ -88,6 +88,7 @@ import {
   type MountedMessageDirective,
 } from "./markdown-message-directives.js";
 import { normalizePromptBlockquoteBoundaries } from "./markdown-prompt-blockquote-boundaries.js";
+import { useHostPathExistence } from "@/hooks/queries/host-path-queries";
 import { MarkdownMermaidDiagram } from "./markdown-mermaid-diagram.js";
 import type { PromptTextMention } from "@bb/domain";
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
@@ -239,6 +240,18 @@ interface MarkdownCodeRendererProps extends MarkdownCodeProps {
   preferredTheme: Theme;
   rewriteLocalhostLinks: boolean;
 }
+interface MarkdownInlineCodeFileLinkCandidate {
+  href: string;
+  path: string;
+}
+interface MarkdownInlineCodeFileLinkProps {
+  candidate: MarkdownInlineCodeFileLinkCandidate;
+  code: ReactElement;
+  codeText: string;
+  hostId: string;
+  linkRouting: MarkdownLinkRouting;
+  rewriteLocalhostLinks: boolean;
+}
 type MarkdownHeadingProps = ComponentPropsWithoutRef<"h1"> & ExtraProps;
 type MarkdownHrProps = ComponentPropsWithoutRef<"hr"> & ExtraProps;
 type MarkdownImageProps = ComponentPropsWithoutRef<"img"> & ExtraProps;
@@ -316,6 +329,8 @@ function areMarkdownLocalFileLinkRoutingsEqual({
   if (previous === undefined || next === undefined) return false;
   return (
     previous.onOpenLink === next.onOpenLink &&
+    previous.inlineCodeFileLinks?.hostId ===
+      next.inlineCodeFileLinks?.hostId &&
     areMarkdownAbsoluteLocalFileLinkRoutingsEqual({
       next: next.absoluteLinks,
       previous: previous.absoluteLinks,
@@ -524,13 +539,13 @@ function hasMarkdownFileExtension(path: string): boolean {
   return /\.(?:md|markdown)$/iu.test(path);
 }
 
-function resolveInlineCodeMarkdownFileHref({
+function resolveInlineCodeMarkdownFileLink({
   codeText,
   localFileRouting,
 }: {
   codeText: string;
   localFileRouting: MarkdownLocalFileLinkRouting | undefined;
-}): string | null {
+}): MarkdownInlineCodeFileLinkCandidate | null {
   if (
     localFileRouting === undefined ||
     codeText.length === 0 ||
@@ -546,7 +561,9 @@ function resolveInlineCodeMarkdownFileHref({
     href: codeText,
   });
   if (absoluteLink !== null) {
-    return hasMarkdownFileExtension(absoluteLink.path) ? codeText : null;
+    return hasMarkdownFileExtension(absoluteLink.path)
+      ? { href: codeText, path: absoluteLink.path }
+      : null;
   }
 
   if (localFileRouting.relativeLinks === undefined) {
@@ -566,7 +583,7 @@ function resolveInlineCodeMarkdownFileHref({
     href: resolvedHref,
   });
   return resolvedLink !== null && hasMarkdownFileExtension(resolvedLink.path)
-    ? resolvedHref
+    ? { href: resolvedHref, path: resolvedLink.path }
     : null;
 }
 
@@ -757,29 +774,60 @@ function MarkdownCode({
     );
   }
 
-  const markdownFileHref = resolveInlineCodeMarkdownFileHref({
-    codeText,
-    localFileRouting: linkRouting?.localFile,
-  });
-  if (markdownFileHref !== null) {
-    return (
-      <MarkdownAnchor
-        href={markdownFileHref}
-        linkRouting={linkRouting}
-        rewriteLocalhostLinks={rewriteLocalhostLinks}
-      >
-        {codeText}
-      </MarkdownAnchor>
-    );
-  }
-
-  return (
+  const code = (
     <code
       className="rounded bg-muted/70 px-1.5 py-0.5 font-mono text-xs"
       {...props}
     >
       {children}
     </code>
+  );
+  const inlineCodeFileLink = resolveInlineCodeMarkdownFileLink({
+    codeText,
+    localFileRouting: linkRouting?.localFile,
+  });
+  const hostId = linkRouting?.localFile?.inlineCodeFileLinks?.hostId;
+  if (
+    inlineCodeFileLink === null ||
+    hostId === undefined ||
+    linkRouting === undefined
+  ) {
+    return code;
+  }
+
+  return (
+    <MarkdownInlineCodeFileLink
+      candidate={inlineCodeFileLink}
+      code={code}
+      codeText={codeText}
+      hostId={hostId}
+      linkRouting={linkRouting}
+      rewriteLocalhostLinks={rewriteLocalhostLinks}
+    />
+  );
+}
+
+function MarkdownInlineCodeFileLink({
+  candidate,
+  code,
+  codeText,
+  hostId,
+  linkRouting,
+  rewriteLocalhostLinks,
+}: MarkdownInlineCodeFileLinkProps) {
+  const pathExistence = useHostPathExistence(hostId, [candidate.path]);
+  if (pathExistence[candidate.path] !== true) {
+    return code;
+  }
+
+  return (
+    <MarkdownAnchor
+      href={candidate.href}
+      linkRouting={linkRouting}
+      rewriteLocalhostLinks={rewriteLocalhostLinks}
+    >
+      {codeText}
+    </MarkdownAnchor>
   );
 }
 
