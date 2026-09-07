@@ -13,6 +13,7 @@ import type { Host, ProjectSource, PromptTextMention } from "@bb/domain";
 import type { ComposerView } from "@get-bb/plugin-sdk";
 import type { ComposerTextEffectSource } from "@/lib/composer-text-effects";
 import { ComposerBannersSlot } from "@/components/plugin/PluginComposerBanners";
+import { PROMPT_STACK_TRACK_CLASS } from "@/components/promptbox/banner/PromptStackCard";
 import {
   type PluginComposerHost,
   usePluginComposerViewModel,
@@ -355,7 +356,9 @@ const DefaultNewThreadComposer = memo(function DefaultNewThreadComposer({
       data-promptbox-shell=""
       className="w-full"
     >
-      <div className="mb-2 grid gap-2 empty:hidden">
+      <div
+        className={`mb-2 grid gap-2 empty:hidden ${PROMPT_STACK_TRACK_CLASS}`}
+      >
         <ComposerBannersSlot ownerPlacement="before">
           {modeConfig.banner}
         </ComposerBannersSlot>

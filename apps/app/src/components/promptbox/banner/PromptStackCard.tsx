@@ -15,6 +15,8 @@ const BASE_CHROME = cn(
   "border border-border bg-surface-raised-solid",
 );
 
+export const PROMPT_STACK_TRACK_CLASS = "grid-cols-[minmax(0,1fr)]";
+
 export interface PromptStackCardProps {
   children: ReactNode;
   ariaLabel?: string;

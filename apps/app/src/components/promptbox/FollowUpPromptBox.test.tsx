@@ -471,6 +471,19 @@ describe("FollowUpPromptBox", () => {
     expect(queuedMessages.previousElementSibling).toBe(pluginHeaderRoot);
   });
 
+  it("lays the banner stack on an explicit single-column track", () => {
+    const props = createFollowUpPromptBoxProps({ kind: "ready" });
+    render(
+      <FollowUpPromptBox
+        {...props}
+        stack={<div data-testid="queued-messages">Queued messages</div>}
+      />,
+    );
+
+    const stack = screen.getByTestId("queued-messages").parentElement;
+    expect(stack?.className).toContain("grid-cols-[minmax(0,1fr)]");
+  });
+
   it("does not mount plugin banners for a retained inactive composer without a real scope", () => {
     setPluginSlotRegistrations(
       "inactive-banner",
