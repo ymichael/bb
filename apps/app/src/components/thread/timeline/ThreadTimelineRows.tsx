@@ -274,6 +274,7 @@ type LazyTurnRowBodyProps = TurnRowBodyProps;
 
 interface TimelineSystemDetailBlockProps {
   detail: string;
+  prose: boolean;
   streaming: boolean;
 }
 
@@ -1116,6 +1117,7 @@ function TimelineUnreadDivider({ autoScroll }: TimelineUnreadDividerProps) {
 
 function TimelineSystemDetailBlock({
   detail,
+  prose,
   streaming,
 }: TimelineSystemDetailBlockProps) {
   return (
@@ -1125,10 +1127,26 @@ function TimelineSystemDetailBlock({
       contentKey={detail}
       className="overflow-hidden rounded-lg border border-border bg-card"
     >
-      <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-tight text-subtle-foreground opacity-70">
-        {detail}
-      </pre>
+      {prose ? (
+        <div className="whitespace-pre-wrap break-words px-4 py-3 text-sm italic leading-relaxed text-muted-foreground">
+          {detail}
+        </div>
+      ) : (
+        <pre className="whitespace-pre-wrap break-words px-4 py-3 font-mono text-xs leading-tight text-subtle-foreground opacity-70">
+          {detail}
+        </pre>
+      )}
     </TimelineDetailScroll>
+  );
+}
+
+function isCompletedReasoningRow(
+  row: Extract<ThreadTimelineViewRow, { kind: "system" }>,
+): boolean {
+  return (
+    row.systemKind === "operation" &&
+    row.operationKind === "generic" &&
+    row.id.includes(":op:reasoning:")
   );
 }
 
@@ -1241,6 +1259,7 @@ function TimelineExpandableBody({
       return row.detail ? (
         <TimelineSystemDetailBlock
           detail={row.detail}
+          prose={isCompletedReasoningRow(row)}
           streaming={row.status === "pending"}
         />
       ) : null;
