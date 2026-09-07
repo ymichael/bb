@@ -636,6 +636,15 @@ export async function createThreadFromRequest(
     requestInput.environment.environmentId === sourceThread.environmentId
       ? sourceThread.environmentId
       : undefined);
+  const environmentDefaultParent =
+    forkSourceEnvironmentId === undefined
+      ? (sourceThread ?? parentThread)
+      : null;
+  const environmentDefaultParentEnvironment =
+    environmentDefaultParent?.environmentId === null ||
+    environmentDefaultParent === null
+      ? null
+      : getEnvironment(deps.db, environmentDefaultParent.environmentId);
   if (requestInput.startedOnBehalfOf !== null) {
     const senderThread = sourceThread ?? parentThread;
     if (senderThread === null) {
@@ -700,10 +709,8 @@ export async function createThreadFromRequest(
       requestedVisibility: requestInput.visibility,
     }),
     environment: resolveCreateThreadEnvironment({
-      parentThread:
-        forkSourceEnvironmentId !== undefined
-          ? null
-          : (sourceThread ?? parentThread),
+      parentEnvironment: environmentDefaultParentEnvironment,
+      parentThread: environmentDefaultParent,
       projectId: requestInput.projectId,
       requestedEnvironment: requestInput.environment,
     }),

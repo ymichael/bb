@@ -1,4 +1,5 @@
 import type {
+  Environment,
   PermissionMode,
   ProjectExecutionDefaults,
   RecordedPermissionMode,
@@ -77,6 +78,10 @@ interface ResolveThreadExecutionPermissionModeArgs {
 }
 
 interface ResolveCreateThreadEnvironmentArgs {
+  parentEnvironment?: Pick<
+    Environment,
+    "hostId" | "id" | "isGitRepo" | "projectId" | "workspaceProvisionType"
+  > | null;
   parentThread?: ParentThread | null;
   projectId: string;
   requestedEnvironment: EnvironmentArgs;
@@ -242,6 +247,7 @@ export async function resolveProjectDefaultThreadEnvironment(
 export function resolveCreateThreadEnvironment(
   args: ResolveCreateThreadEnvironmentArgs,
 ): EnvironmentArgs {
+  const parentEnvironment = args.parentEnvironment ?? null;
   const parentThread = args.parentThread ?? null;
   const hasLiveParent = isLiveParentThread({ parentThread });
   if (
@@ -256,6 +262,23 @@ export function resolveCreateThreadEnvironment(
     return {
       type: "reuse",
       environmentId: args.parentThread.environmentId,
+    };
+  }
+
+  if (
+    hasLiveParent &&
+    isImplicitHostDefaultEnvironment(args.requestedEnvironment) &&
+    parentThread?.environmentId !== null &&
+    parentThread?.projectId === args.projectId &&
+    parentEnvironment?.id === parentThread.environmentId &&
+    parentEnvironment.projectId === args.projectId &&
+    parentEnvironment.hostId === args.requestedEnvironment.hostId &&
+    parentEnvironment.workspaceProvisionType === "unmanaged" &&
+    !parentEnvironment.isGitRepo
+  ) {
+    return {
+      type: "reuse",
+      environmentId: parentEnvironment.id,
     };
   }
 

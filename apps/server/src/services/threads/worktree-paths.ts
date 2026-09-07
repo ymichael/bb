@@ -1,7 +1,7 @@
 import path from "node:path";
 import { ApiError } from "../../errors.js";
 
-const REPO_DIR_NAME_PATTERN = /^[A-Za-z0-9._][A-Za-z0-9._-]*$/;
+const REPO_DIR_NAME_PATTERN = /^[\p{L}\p{N}._][\p{L}\p{M}\p{N}._-]*$/u;
 
 export function deriveRepoDirName(sourcePath: string): string {
   const trimmed = sourcePath.replace(/\/+$/, "");
