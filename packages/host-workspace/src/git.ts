@@ -49,6 +49,10 @@ interface FetchRemoteBranchesResult {
   status: "fetched" | "failed" | "skipped";
 }
 
+interface FetchRemoteBranchesOptions extends GitTimeoutOptions {
+  interactive: boolean;
+}
+
 interface DefaultBranchRefs {
   defaultBranch: string | undefined;
   defaultBranchRelation: DefaultBranchRelation | undefined;
@@ -1261,9 +1265,39 @@ export async function readDefaultBranchRefs(
   };
 }
 
+async function resolveSshCommand(
+  cwd: string,
+  options: GitTimeoutOptions,
+): Promise<string> {
+  const fromEnv = process.env.GIT_SSH_COMMAND;
+  if (fromEnv !== undefined && fromEnv.length > 0) {
+    return fromEnv;
+  }
+  const configured = await runGit(["config", "--get", "core.sshCommand"], {
+    cwd,
+    ...options,
+    allowFailure: true,
+  });
+  const configuredCommand = trimOutput(configured.stdout);
+  return configured.exitCode === 0 && configuredCommand.length > 0
+    ? configuredCommand
+    : "ssh";
+}
+
+async function resolveNonInteractiveGitEnv(
+  cwd: string,
+  options: GitTimeoutOptions,
+): Promise<NodeJS.ProcessEnv> {
+  const sshCommand = await resolveSshCommand(cwd, options);
+  return {
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_SSH_COMMAND: `${sshCommand} -o BatchMode=yes`,
+  };
+}
+
 export async function fetchRemoteBranches(
   cwd: string,
-  options: GitTimeoutOptions = {},
+  { interactive, ...options }: FetchRemoteBranchesOptions,
 ): Promise<FetchRemoteBranchesResult> {
   await ensureGitRepo(cwd, options);
 
@@ -1283,9 +1317,13 @@ export async function fetchRemoteBranches(
   }
 
   try {
+    const env = interactive
+      ? {}
+      : await resolveNonInteractiveGitEnv(cwd, options);
     const result = await runGit(["fetch", "--all", "--prune", "--quiet"], {
       cwd,
       ...options,
+      env,
       allowFailure: true,
     });
     return { status: result.exitCode === 0 ? "fetched" : "failed" };

@@ -80,6 +80,50 @@ async function initStaleOriginMainRepo(): Promise<StaleOriginMainRepo> {
   return { releaseRefreshPath, refreshStartedPath, repoPath };
 }
 
+interface SshRemoteRepo {
+  repoPath: string;
+  sshLogPath: string;
+}
+
+async function initSshRemoteRepo(): Promise<SshRemoteRepo> {
+  const repoPath = await initBranchRepo();
+  const sshLogPath = path.join(repoPath, "ssh-invocations.log");
+  const sshScriptPath = path.join(repoPath, "recording-ssh.sh");
+  await fs.writeFile(
+    sshScriptPath,
+    `#!/bin/sh\nprintf '%s\\n' "$@" >> ${JSON.stringify(sshLogPath)}\nprintf -- '--\\n' >> ${JSON.stringify(sshLogPath)}\nexit 255\n`,
+    { encoding: "utf8", mode: 0o755 },
+  );
+  await runGitCommand(
+    ["remote", "add", "origin", "ssh://git.invalid/repo.git"],
+    { cwd: repoPath },
+  );
+  await runGitCommand(["config", "core.sshCommand", sshScriptPath], {
+    cwd: repoPath,
+  });
+  return { repoPath, sshLogPath };
+}
+
+async function readUploadPackInvocations(
+  sshLogPath: string,
+): Promise<string[]> {
+  const log = await fs.readFile(sshLogPath, "utf8").catch(() => "");
+  return log.split("--\n").filter((entry) => entry.includes("git-upload-pack"));
+}
+
+async function waitForUploadPackInvocations(
+  sshLogPath: string,
+  count: number,
+): Promise<string[]> {
+  const deadline = Date.now() + 2_000;
+  while (Date.now() < deadline) {
+    const invocations = await readUploadPackInvocations(sshLogPath);
+    if (invocations.length >= count) return invocations;
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error(`Expected ${count} upload-pack invocations in ${sshLogPath}`);
+}
+
 async function expectResolvesWithin<T>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -224,6 +268,70 @@ describe("host.inspect_git_source dispatch", () => {
       defaultBranchRelation: "local-behind",
       originDefaultBranch: "origin/main",
     });
+  });
+
+  it("keeps a background refresh from prompting for ssh credentials", async () => {
+    const { repoPath, sshLogPath } = await initSshRemoteRepo();
+    const harness = createHarness();
+
+    await dispatchOnlineRpcCommand(
+      {
+        type: "host.inspect_git_source",
+        path: repoPath,
+        remoteRefresh: "background",
+      },
+      harness.dispatchOptions(),
+    );
+
+    const invocations = await waitForUploadPackInvocations(sshLogPath, 1);
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).toContain("-o\nBatchMode=yes\n");
+  });
+
+  it("lets a blocking refresh prompt for ssh credentials", async () => {
+    const { repoPath, sshLogPath } = await initSshRemoteRepo();
+    const harness = createHarness();
+
+    await dispatchOnlineRpcCommand(
+      {
+        type: "host.inspect_git_source",
+        path: repoPath,
+        remoteRefresh: "blocking",
+      },
+      harness.dispatchOptions(),
+    );
+
+    const invocations = await readUploadPackInvocations(sshLogPath);
+    expect(invocations).toHaveLength(1);
+    expect(invocations[0]).not.toContain("BatchMode");
+  });
+
+  it("retries interactively when a blocking refresh follows a failed background refresh", async () => {
+    const { repoPath, sshLogPath } = await initSshRemoteRepo();
+    const harness = createHarness();
+
+    await dispatchOnlineRpcCommand(
+      {
+        type: "host.inspect_git_source",
+        path: repoPath,
+        remoteRefresh: "background",
+      },
+      harness.dispatchOptions(),
+    );
+    await waitForUploadPackInvocations(sshLogPath, 1);
+    await dispatchOnlineRpcCommand(
+      {
+        type: "host.inspect_git_source",
+        path: repoPath,
+        remoteRefresh: "blocking",
+      },
+      harness.dispatchOptions(),
+    );
+
+    const invocations = await readUploadPackInvocations(sshLogPath);
+    expect(invocations).toHaveLength(2);
+    expect(invocations[0]).toContain("BatchMode=yes");
+    expect(invocations[1]).not.toContain("BatchMode");
   });
 
   it("reports detached HEAD in checkout state", async () => {
