@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -50,6 +50,12 @@ export type ProjectPathDialogSubmitHandler = (
   hostId: string | null,
 ) => Promise<void> | void;
 
+export interface ProjectPathDialogProject {
+  id: string;
+  name: string;
+  sources: readonly { hostId: string; path: string }[];
+}
+
 interface ProjectPathDialogProps {
   target: ProjectPathDialogTarget | null;
   pending?: boolean;
@@ -57,6 +63,7 @@ interface ProjectPathDialogProps {
   hostId: string | null;
   hostName: string | null;
   hosts?: readonly Host[];
+  projects?: readonly ProjectPathDialogProject[];
   onOpenChange: (open: boolean) => void;
   onSubmit: ProjectPathDialogSubmitHandler;
 }
@@ -68,6 +75,7 @@ export function ProjectPathDialog({
   hostId,
   hostName,
   hosts,
+  projects,
   onOpenChange,
   onSubmit,
 }: ProjectPathDialogProps) {
@@ -83,6 +91,7 @@ export function ProjectPathDialog({
             hostId={hostId}
             hostName={hostName}
             hosts={hosts}
+            projects={projects}
             onSubmit={onSubmit}
           />
         ) : null}
@@ -98,6 +107,7 @@ interface ProjectPathDialogContentProps {
   hostId: string | null;
   hostName: string | null;
   hosts?: readonly Host[];
+  projects?: readonly ProjectPathDialogProject[];
   onSubmit: ProjectPathDialogSubmitHandler;
 }
 
@@ -153,6 +163,7 @@ export function ProjectPathDialogContent({
   hostId,
   hostName,
   hosts,
+  projects,
   onSubmit,
 }: ProjectPathDialogContentProps) {
   const inputId = useId();
@@ -199,6 +210,20 @@ export function ProjectPathDialogContent({
   const derivedProjectName = selectedPath
     ? deriveProjectNameFromPath(selectedPath)
     : "";
+  const duplicateProject = useMemo(() => {
+    if (target.kind !== "create" || !selectedHostId || !selectedPath) {
+      return null;
+    }
+    return (
+      projects?.find((project) =>
+        project.sources.some(
+          (source) =>
+            source.hostId === selectedHostId &&
+            normalizeProjectPathInput(source.path) === selectedPath,
+        ),
+      ) ?? null
+    );
+  }, [projects, selectedHostId, selectedPath, target.kind]);
 
   useEffect(() => {
     setValidationMessage(null);
@@ -338,7 +363,8 @@ export function ProjectPathDialogContent({
           />
         )}
         {(derivedProjectName && target.kind === "create") ||
-        validationMessage ? (
+        validationMessage ||
+        duplicateProject ? (
           <div className="space-y-1">
             {target.kind === "create" && derivedProjectName ? (
               <p className="flex min-w-0 gap-1 text-sm text-muted-foreground">
@@ -351,6 +377,13 @@ export function ProjectPathDialogContent({
             {validationMessage ? (
               <p className="text-sm text-destructive">{validationMessage}</p>
             ) : null}
+            {duplicateProject ? (
+              <p className="text-sm text-destructive">
+                {`This folder is already the project "${duplicateProject.name}"${
+                  selectedHostName ? ` on ${selectedHostName}` : ""
+                }. Open that project instead of adding the folder again.`}
+              </p>
+            ) : null}
           </div>
         ) : null}
         <DialogFooter>
@@ -360,7 +393,8 @@ export function ProjectPathDialogContent({
               pending ||
               !selectedPath ||
               !selectedHostConnected ||
-              noMachineAvailable
+              noMachineAvailable ||
+              duplicateProject !== null
             }
           >
             {getDialogSubmitLabel(target.kind)}

@@ -10,6 +10,7 @@ import { deriveProjectNameFromPath, type Host } from "@bb/domain";
 import type { HostPlatform } from "@bb/host-daemon-contract";
 import { useCreateProject } from "@/hooks/mutations/project-mutations";
 import { useHosts } from "@/hooks/queries/host-queries";
+import { useSidebarNavigation } from "@/hooks/queries/sidebar-navigation-query";
 import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/route-paths";
 import { useSetRootComposeProjectId } from "@/lib/root-compose-selection";
 import type {
+  ProjectPathDialogProject,
   ProjectPathDialogSubmitHandler,
   ProjectPathDialogTarget,
 } from "@/components/dialogs/ProjectPathDialog";
@@ -38,6 +40,7 @@ interface QuickCreateProjectController {
   hostId: string | null;
   hostName: string | null;
   hosts: readonly Host[];
+  projects: readonly ProjectPathDialogProject[];
   projectPathDialog: QuickCreateProjectDialogState;
   submitProjectPath: ProjectPathDialogSubmitHandler;
 }
@@ -50,6 +53,19 @@ export function useQuickCreateProject(): QuickCreateProjectController {
   const { mutate, isPending } = useCreateProject();
   const hostsQuery = useHosts();
   const hosts = hostsQuery.data ?? EMPTY_HOSTS;
+  const sidebarNavigationQuery = useSidebarNavigation();
+  const projects = useMemo<readonly ProjectPathDialogProject[]>(
+    () =>
+      (sidebarNavigationQuery.data?.projects ?? []).map((project) => ({
+        id: project.id,
+        name: project.name,
+        sources: project.sources.map((source) => ({
+          hostId: source.hostId,
+          path: source.path,
+        })),
+      })),
+    [sidebarNavigationQuery.data],
+  );
   const navigate = useNavigate();
   const location = useLocation();
   const setRootComposeProjectId = useSetRootComposeProjectId();
@@ -88,7 +104,6 @@ export function useQuickCreateProject(): QuickCreateProjectController {
   const openCreateDialog = useCallback(() => {
     controller.openPathEntry({ kind: "create" });
   }, [controller]);
-
   return useMemo(
     () => ({
       isAvailable: controller.isAvailable,
@@ -98,10 +113,11 @@ export function useQuickCreateProject(): QuickCreateProjectController {
       hostId: controller.hostId,
       hostName: controller.hostName,
       hosts,
+      projects,
       projectPathDialog: controller.projectPathDialog,
       submitProjectPath: controller.submitProjectPath,
     }),
-    [controller, hosts, isPending, openCreateDialog],
+    [controller, hosts, isPending, openCreateDialog, projects],
   );
 }
 

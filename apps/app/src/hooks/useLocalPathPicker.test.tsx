@@ -9,6 +9,8 @@ import { useLocalPathPicker } from "./useLocalPathPicker";
 const mocks = vi.hoisted(() => ({
   hosts: undefined as Host[] | undefined,
   isLoadingHosts: false,
+  localDaemonHostId: "host_atum" as string | null,
+  localHostId: "host_atum" as string | null,
   pickFolder: vi.fn(),
   primaryHost: null as Host | null,
   supportsNativeFolderPicker: true,
@@ -16,12 +18,13 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/hooks/useHostDaemon", () => ({
   useHostDaemon: () => ({
-    localDaemonHostId: "host_atum",
-    localHostId: "host_atum",
+    localDaemonHostId: mocks.localDaemonHostId,
+    localHostId: mocks.localHostId,
     hasDaemon: true,
     supportsNativeFolderPicker: mocks.supportsNativeFolderPicker,
     platform: "linux",
-    isLocalDaemonHost: (hostId: string | null) => hostId === "host_atum",
+    isLocalDaemonHost: (hostId: string | null) =>
+      hostId !== null && hostId === mocks.localDaemonHostId,
   }),
 }));
 
@@ -52,12 +55,69 @@ beforeEach(() => {
   mocks.supportsNativeFolderPicker = true;
   mocks.hosts = [atum];
   mocks.isLoadingHosts = false;
+  mocks.localDaemonHostId = "host_atum";
+  mocks.localHostId = "host_atum";
   mocks.pickFolder.mockResolvedValue({ path: "/home/me/repo" });
 });
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+});
+
+describe("usePathPickerHost", () => {
+  it("targets this machine when its daemon is enrolled and connected", () => {
+    const thoth = host("host_thoth", "Thoth");
+    mocks.primaryHost = thoth;
+    mocks.hosts = [thoth, atum];
+
+    const { result } = renderHook(() =>
+      useLocalPathPicker({ isPending: false, submit: vi.fn() }),
+    );
+
+    expect(result.current.hostId).toBe("host_atum");
+    expect(result.current.hostName).toBe("atum");
+  });
+
+  it("falls back to the primary host when this machine is enrolled elsewhere", () => {
+    const thoth = host("host_thoth", "Thoth");
+    mocks.primaryHost = thoth;
+    mocks.hosts = [thoth];
+    mocks.localDaemonHostId = "host_elsewhere";
+    mocks.localHostId = "host_elsewhere";
+
+    const { result } = renderHook(() =>
+      useLocalPathPicker({ isPending: false, submit: vi.fn() }),
+    );
+
+    expect(result.current.hostId).toBe("host_thoth");
+  });
+
+  it("falls back to the primary host when this machine is offline on the server", () => {
+    const thoth = host("host_thoth", "Thoth");
+    mocks.primaryHost = thoth;
+    mocks.hosts = [thoth, host("host_atum", "atum", "disconnected")];
+
+    const { result } = renderHook(() =>
+      useLocalPathPicker({ isPending: false, submit: vi.fn() }),
+    );
+
+    expect(result.current.hostId).toBe("host_thoth");
+  });
+
+  it("falls back to the primary host with no local daemon", () => {
+    const thoth = host("host_thoth", "Thoth");
+    mocks.primaryHost = thoth;
+    mocks.hosts = [thoth, atum];
+    mocks.localDaemonHostId = null;
+    mocks.localHostId = null;
+
+    const { result } = renderHook(() =>
+      useLocalPathPicker({ isPending: false, submit: vi.fn() }),
+    );
+
+    expect(result.current.hostId).toBe("host_thoth");
+  });
 });
 
 describe("useLocalPathPicker", () => {

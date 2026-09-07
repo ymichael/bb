@@ -140,3 +140,75 @@ describe("ProjectPathDialog machine selection", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 });
+
+describe("ProjectPathDialog duplicate folders", () => {
+  const projects = [
+    {
+      id: "proj_givecare",
+      name: "givecare",
+      sources: [{ hostId: "host_atum", path: "/home/deploy/repos/givecare" }],
+    },
+  ];
+
+  it("names the owning project and blocks submit for a known folder", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ProjectPathDialog
+        target={{ kind: "create" }}
+        platform="linux"
+        hostId={atum.id}
+        hostName={atum.name}
+        hosts={[atum]}
+        projects={projects}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose folder on host_atum" }),
+    );
+
+    expect(
+      screen.getByText(/already the project "givecare"/u).textContent,
+    ).toContain("on atum");
+    expect(
+      screen
+        .getByRole("button", { name: "Add project" })
+        .hasAttribute("disabled"),
+    ).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "Add project" }));
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it("keeps submit enabled when another machine owns the same path", () => {
+    const onSubmit = vi.fn();
+    render(
+      <ProjectPathDialog
+        target={{ kind: "create" }}
+        platform="linux"
+        hostId={atum.id}
+        hostName={atum.name}
+        hosts={[atum, kunst]}
+        projects={projects}
+        onOpenChange={vi.fn()}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    const trigger = screen.getByRole("button", { name: "Machine" });
+    fireEvent.pointerDown(trigger, { button: 0 });
+    fireEvent.click(screen.getByRole("menuitem", { name: /Kunst/u }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Choose folder on host_kunst" }),
+    );
+
+    expect(screen.queryByText(/already the project/u)).toBeNull();
+    expect(
+      screen
+        .getByRole("button", { name: "Add project" })
+        .hasAttribute("disabled"),
+    ).toBe(false);
+  });
+});

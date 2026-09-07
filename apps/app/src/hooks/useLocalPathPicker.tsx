@@ -41,14 +41,24 @@ interface PathPickerHost {
 }
 
 export function usePathPickerHost(): PathPickerHost {
-  const { localDaemonHostId, supportsNativeFolderPicker } = useHostDaemon();
+  const { localDaemonHostId, localHostId, supportsNativeFolderPicker } =
+    useHostDaemon();
+  const hostsQuery = useHosts();
   const primaryHost = usePrimaryHost();
 
+  const connectedLocalHostId =
+    localHostId !== null &&
+    (hostsQuery.data ?? []).some(
+      (host) => host.id === localHostId && host.status === "connected",
+    )
+      ? localHostId
+      : null;
   const connectedPrimaryHostId =
     primaryHost?.status === "connected" ? primaryHost.id : null;
-  const hostId = connectedPrimaryHostId ?? localDaemonHostId;
+  const hostId =
+    connectedLocalHostId ?? connectedPrimaryHostId ?? localDaemonHostId;
   const hostName =
-    primaryHost && primaryHost.id === hostId ? primaryHost.name : null;
+    hostsQuery.data?.find((host) => host.id === hostId)?.name ?? null;
   const canUseNativeFolderPicker =
     supportsNativeFolderPicker &&
     localDaemonHostId !== null &&
