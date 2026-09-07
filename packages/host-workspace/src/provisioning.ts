@@ -928,6 +928,74 @@ export async function runTeardownScript(
   }
 }
 
+async function deleteWorktreeBranch(args: {
+  branchName: string;
+  commonDir: string;
+  cwd: string;
+  onProgress: ProgressCallback | undefined;
+  shellPath: string | undefined;
+}): Promise<void> {
+  const startedAt = Date.now();
+  emitStep({
+    onProgress: args.onProgress,
+    key: "branch-delete-started",
+    text: `Deleting branch ${args.branchName}`,
+    status: "started",
+    startedAt,
+  });
+  try {
+    const result = await withGitRefMutationLock(args.commonDir, () =>
+      runGit(
+        [
+          "--git-dir",
+          args.commonDir,
+          "branch",
+          "--delete",
+          "--force",
+          "--",
+          args.branchName,
+        ],
+        {
+          cwd: args.cwd,
+          ...(args.shellPath !== undefined
+            ? { shellPath: args.shellPath }
+            : {}),
+          allowFailure: true,
+        },
+      ),
+    );
+    emitGitOutput(args.onProgress, "branch-delete", result);
+    emitStep({
+      onProgress: args.onProgress,
+      key:
+        result.exitCode === 0
+          ? "branch-delete-completed"
+          : "branch-delete-failed",
+      text:
+        result.exitCode === 0
+          ? `Deleted branch ${args.branchName}`
+          : `Failed to delete branch ${args.branchName}`,
+      status: result.exitCode === 0 ? "completed" : "failed",
+      startedAt,
+      metadata: { durationMs: Date.now() - startedAt },
+    });
+  } catch (error) {
+    emitStep({
+      onProgress: args.onProgress,
+      key: "branch-delete-failed",
+      text: `Failed to delete branch ${args.branchName}`,
+      status: "failed",
+      startedAt,
+      metadata: { durationMs: Date.now() - startedAt },
+    });
+    emitOutput(
+      args.onProgress,
+      "branch-delete-error",
+      error instanceof Error ? error.message : String(error),
+    );
+  }
+}
+
 export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
   const force = args.force !== false;
   const workspacePath = path.resolve(args.path);
@@ -960,8 +1028,20 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
     await tryWithCheckoutMutationLock(
       workspacePath,
       () =>
-        withWorktreeMetadataLock(commonDir, () =>
-          runGit(
+        withWorktreeMetadataLock(commonDir, async () => {
+          const branchResult = await runGit(
+            ["symbolic-ref", "--short", "-q", "HEAD"],
+            {
+              cwd: workspacePath,
+              ...(args.shellPath !== undefined
+                ? { shellPath: args.shellPath }
+                : {}),
+              allowFailure: true,
+            },
+          );
+          const branchName =
+            branchResult.exitCode === 0 ? branchResult.stdout.trim() : "";
+          const removeResult = await runGit(
             [
               "--git-dir",
               commonDir,
@@ -977,8 +1057,17 @@ export async function removeWorktree(args: RemoveWorktreeArgs): Promise<void> {
                 : {}),
               allowFailure: true,
             },
-          ),
-        ),
+          );
+          if (removeResult.exitCode === 0 && branchName) {
+            await deleteWorktreeBranch({
+              branchName,
+              commonDir,
+              cwd: path.dirname(workspacePath),
+              onProgress: args.onProgress,
+              shellPath: args.shellPath,
+            });
+          }
+        }),
       undefined,
       args.shellPath === undefined ? {} : { shellPath: args.shellPath },
     );

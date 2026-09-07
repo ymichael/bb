@@ -112,6 +112,10 @@ it. If you
 want to keep work the agent did, commit and push (or open a PR) from inside
 the worktree before letting the thread go.
 
+If Git refuses to delete the branch, bb reports the failure in the destroy
+transcript and leaves the branch for manual cleanup. The worktree is still
+removed.
+
 Before bb removes the directory, it stops every process whose working
 directory is inside the worktree — the agent's provider process, its
 background jobs (dev servers, MCP servers, `nohup` jobs), and any process

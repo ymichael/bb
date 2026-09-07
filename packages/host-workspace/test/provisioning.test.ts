@@ -651,6 +651,11 @@ describe("workspace provisioning", () => {
     ).rejects.toThrow(/Setup script failed/u);
 
     await expect(fs.stat(targetPath)).rejects.toThrow();
+    const branch = await runGit(
+      ["show-ref", "--verify", "--quiet", "refs/heads/broken"],
+      { cwd: sourceRepo, allowFailure: true },
+    );
+    expect(branch.exitCode).not.toBe(0);
   });
 
   it("runs worktree setup scripts concurrently after creating worktrees", async () => {
@@ -1145,6 +1150,131 @@ describe("workspace provisioning", () => {
     expect(worktrees.stdout).not.toContain(targetPath);
   });
 
+  it("deletes the worktree branch after removal and recreates it during reprovision", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+    const parentDir = await makeTempDir("bb-remove-branch-parent-");
+    const targetPath = path.join(parentDir, "feature");
+    const branchName = "feature-delete-and-recreate";
+
+    await createWorktree({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName,
+      baseBranch: "main",
+      timeoutMs: 900000,
+    });
+    await removeWorktree({ path: targetPath, timeoutMs: 900000, force: true });
+
+    const deletedBranch = await runGit(
+      ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
+      { cwd: sourceRepo, allowFailure: true },
+    );
+    expect(deletedBranch.exitCode).not.toBe(0);
+
+    await expect(
+      createWorktree({
+        sourcePath: sourceRepo,
+        targetPath,
+        branchName,
+        baseBranch: "main",
+        timeoutMs: 900000,
+      }),
+    ).resolves.toEqual({ path: targetPath });
+    expect(await new Workspace(targetPath).currentBranch).toBe(branchName);
+  });
+
+  it("keeps the branch when the worktree has detached HEAD", async () => {
+    const sourceRepo = await initRepoWithOptionalSetup();
+    const parentDir = await makeTempDir("bb-remove-detached-parent-");
+    const targetPath = path.join(parentDir, "feature");
+    const branchName = "feature-detached";
+
+    await createWorktree({
+      sourcePath: sourceRepo,
+      targetPath,
+      branchName,
+      baseBranch: "main",
+      timeoutMs: 900000,
+    });
+    await runGit(["checkout", "--detach"], { cwd: targetPath });
+
+    await expect(
+      removeWorktree({ path: targetPath, timeoutMs: 900000, force: true }),
+    ).resolves.toBeUndefined();
+
+    const branch = await runGit(
+      ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
+      { cwd: sourceRepo, allowFailure: true },
+    );
+    expect(branch.exitCode).toBe(0);
+  });
+
+  it.runIf(process.platform !== "win32")(
+    "reports checked-out branch deletion failures and still removes the worktree",
+    async () => {
+      const sourceRepo = await initRepoWithOptionalSetup();
+      const parentDir = await makeTempDir("bb-remove-branch-failure-parent-");
+      const binPath = await makeTempDir("bb-remove-branch-failure-bin-");
+      const targetPath = path.join(parentDir, "feature");
+      const checkedOutElsewherePath = path.join(
+        await makeTempDir("bb-remove-branch-failure-checkout-"),
+        "feature",
+      );
+      const branchName = "feature-delete-failure";
+      const gitWrapperPath = path.join(binPath, "git");
+      const systemPath = process.env.PATH ?? "";
+      await fs.writeFile(
+        gitWrapperPath,
+        [
+          "#!/bin/sh",
+          "set -eu",
+          `system_path=${shellSingleQuote(systemPath)}`,
+          `checked_out_elsewhere=${shellSingleQuote(checkedOutElsewherePath)}`,
+          'if [ "$#" -ge 3 ] && [ "$1" = "--git-dir" ] && [ "$3" = "branch" ]; then',
+          '  PATH="$system_path" git --git-dir "$2" worktree add "$checked_out_elsewhere" "$7"',
+          "fi",
+          'PATH="$system_path" exec git "$@"',
+        ].join("\n") + "\n",
+        "utf8",
+      );
+      await fs.chmod(gitWrapperPath, 0o755);
+      await createWorktree({
+        sourcePath: sourceRepo,
+        targetPath,
+        branchName,
+        baseBranch: "main",
+        timeoutMs: 900000,
+      });
+      const entries: string[] = [];
+
+      await expect(
+        removeWorktree({
+          path: targetPath,
+          timeoutMs: 900000,
+          force: true,
+          shellPath: `${binPath}${path.delimiter}${systemPath}`,
+          onProgress: (entry) => entries.push(`${entry.key}:${entry.text}`),
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(entries).toContain(
+        `branch-delete-failed:Failed to delete branch ${branchName}`,
+      );
+      expect(
+        entries.some((entry) => entry.includes("used by worktree at")),
+      ).toBe(true);
+      await expect(fs.stat(targetPath)).rejects.toThrow();
+      expect(await new Workspace(checkedOutElsewherePath).currentBranch).toBe(
+        branchName,
+      );
+      const branch = await runGit(
+        ["show-ref", "--verify", "--quiet", `refs/heads/${branchName}`],
+        { cwd: sourceRepo, allowFailure: true },
+      );
+      expect(branch.exitCode).toBe(0);
+    },
+  );
+
   it("removes orphaned worktree directories after the .git file is gone", async () => {
     const sourceRepo = await initRepoWithOptionalSetup();
     const parentDir = await makeTempDir("bb-remove-orphan-gitfile-");
@@ -1190,5 +1320,15 @@ describe("workspace provisioning", () => {
     await removeWorktree({ path: targetPath, timeoutMs: 900000, force: false });
 
     await expect(fs.stat(targetPath)).rejects.toThrow();
+    const branch = await runGit(
+      [
+        "show-ref",
+        "--verify",
+        "--quiet",
+        "refs/heads/feature-metadata-failure",
+      ],
+      { cwd: sourceRepo, allowFailure: true },
+    );
+    expect(branch.exitCode).toBe(0);
   });
 });
