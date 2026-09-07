@@ -55,7 +55,7 @@ describe("ThreadEnvironmentSummary", () => {
           environmentLabel="bb/fix-environment-summary"
           environmentCompactLabel="bb/fix-environment-summary"
           environmentIcon="FolderGit"
-          environmentTypeLabel="Local worktree"
+          environmentTypeLabel="Local"
           environmentCheckout={{
             copyErrorMessage: "Failed to copy branch name",
             copyLabel: "Copy branch name",
@@ -78,7 +78,7 @@ describe("ThreadEnvironmentSummary", () => {
     expect(copyButton.querySelector('[data-icon="Copy"]')).toBeNull();
   });
 
-  it.each(["Local worktree", "Remote worktree", "Local", "Remote"] as const)(
+  it.each(["Local", "Remote"] as const)(
     "shows the %s environment type from the environment icon",
     async (environmentTypeLabel) => {
       render(
@@ -109,13 +109,13 @@ describe("ThreadEnvironmentSummary", () => {
       <TooltipProvider delayDuration={0}>
         <ThreadEnvironmentSummary
           environmentLabel="Worktree"
-          onCreateNewThreadInWorktree={vi.fn()}
+          onCreateNewThreadInEnvironment={vi.fn()}
         />
       </TooltipProvider>,
     );
 
     const createThreadButton = screen.getByRole("button", {
-      name: "Create thread in worktree",
+      name: "New thread in this environment",
     });
     expect(createThreadButton.classList).toContain("text-subtle-foreground/75");
     expect(createThreadButton.classList).toContain(
@@ -127,7 +127,7 @@ describe("ThreadEnvironmentSummary", () => {
     fireEvent.focus(createThreadButton);
 
     expect((await screen.findByRole("tooltip")).textContent).toBe(
-      "Create thread in worktree",
+      "New thread in this environment",
     );
   });
 });

@@ -140,7 +140,7 @@ const THREAD_ROW_TSX = `import { memo, useMemo } from "react";
 import { SidebarMenuButton, SidebarMenuItem } from "@/components/ui/sidebar.js";
 import { Pill } from "@bb/shared-ui/pill";
 import { cn } from "@bb/shared-ui/lib/utils";
-import { getEnvironmentWorkspaceDisplayIconName } from "@/lib/environment-workspace-display";
+import { getEnvironmentDisplayIconName } from "@/lib/environment-workspace-display";
 import type { ThreadListEntry } from "@bb/server-contract";
 
 export interface ThreadRowProps {
@@ -183,9 +183,10 @@ function ThreadRowComponent({
   const childBusyCount = parentOptions?.childBusyCount ?? 0;
   const isParentBusy =
     isParent && (threadIsBusy || childBusyCount > 0);
-  const environmentIcon = getEnvironmentWorkspaceDisplayIconName(
-    thread.environmentWorkspaceDisplayKind,
-  );
+  const environmentIcon = getEnvironmentDisplayIconName({
+    status: "loaded",
+    provider: null,
+  });
   const titleText = useMemo(
     () => thread.title?.trim() || thread.titleFallback || "Untitled thread",
     [thread.title, thread.titleFallback],

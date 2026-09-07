@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { listPublicHosts, type DbConnection } from "@bb/db";
+import { getHost, listPublicHosts, type DbConnection } from "@bb/db";
 import { HOST_ID_FILE_NAME } from "@bb/host-daemon-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
@@ -64,8 +64,13 @@ function resolveSingleConnectedPublicHostId(
 }
 
 export function resolvePrimaryHostId(deps: PrimaryHostDeps): string | null {
+  const configured = readPrimaryHostIdFromDataDir({
+    dataDir: deps.config.dataDir,
+  });
+  const configuredHost =
+    configured === null ? null : getHost(deps.db, configured);
   return (
-    readPrimaryHostIdFromDataDir({ dataDir: deps.config.dataDir }) ??
+    (configuredHost?.destroyedAt === null ? configuredHost.id : null) ??
     resolveSingleConnectedPublicHostId(deps) ??
     resolveSinglePublicHostId(deps.db)
   );

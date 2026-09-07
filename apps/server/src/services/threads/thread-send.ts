@@ -3,10 +3,9 @@ import {
   getThread,
   requireThreadLifecycleEventApplied,
 } from "@bb/db";
-import type { DbConnection, DbTransaction } from "@bb/db";
+import type { DbConnection, DbTransaction, EnvironmentRow } from "@bb/db";
 import type {
   ClientTurnRequestId,
-  Environment,
   PromptInput,
   ResolvedThreadExecutionOptions,
   Thread,
@@ -88,7 +87,7 @@ interface SendThreadMessageArgs {
    * attempt number correct without a separate tally.
    */
   retryOf?: TurnRequestRetryMarker;
-  environment: Environment;
+  environment: EnvironmentRow;
   historyReplacement?: {
     forkSourceProviderThreadId: string | null;
     onCommandSettled?: () => void | Promise<void>;
@@ -578,7 +577,6 @@ async function sendThreadMessageWithoutContextClear(
         hostId: readyEnvironment.hostId,
         path: readyEnvironment.path,
         status: readyEnvironment.status,
-        workspaceProvisionType: readyEnvironment.workspaceProvisionType,
       },
       projectId: thread.projectId,
       providerId: thread.providerId,
@@ -685,7 +683,6 @@ async function sendThreadMessageWithoutContextClear(
       hostId: readyEnvironment.hostId,
       path: readyEnvironment.path,
       status: readyEnvironment.status,
-      workspaceProvisionType: readyEnvironment.workspaceProvisionType,
     },
   });
   const command = addRequestIdToTurnSubmitCommandPayload({

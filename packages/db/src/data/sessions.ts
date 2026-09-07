@@ -1,5 +1,4 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
-import type { HostType } from "@bb/domain";
 import type { DbConnection, DbTransaction } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { hostDaemonSessions } from "../schema.js";
@@ -25,7 +24,6 @@ export interface OpenSessionInput {
   hostId: string;
   instanceId: string;
   hostName: string;
-  hostType: HostType;
   dataDir: string;
   protocolVersion: number;
   heartbeatIntervalMs: number;
@@ -63,7 +61,6 @@ export function openSession(
       hostId: input.hostId,
       instanceId: input.instanceId,
       hostName: input.hostName,
-      hostType: input.hostType,
       dataDir: input.dataDir,
       protocolVersion: input.protocolVersion,
       heartbeatIntervalMs: input.heartbeatIntervalMs,

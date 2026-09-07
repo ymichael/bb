@@ -32,7 +32,7 @@ export function BranchContext() {
     <StoryCard>
       <StoryRow
         label="branch context"
-        hint="current branch beneath the custom worktree name"
+        hint="current branch beneath the custom environment name"
       >
         <DialogStage>
           <EnvironmentRenameDialogContent
@@ -56,7 +56,7 @@ export function Overview() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <StoryCard>
-      <StoryRow label="branch placeholder" hint="unnamed worktree">
+      <StoryRow label="branch placeholder" hint="unnamed environment">
         <DialogStage>
           <EnvironmentRenameDialogContent
             target={unnamedTarget}
@@ -91,7 +91,7 @@ export function Overview() {
           <EnvironmentRenameDialogContent
             target={customNameTarget}
             pending={false}
-            errorMessage="Worktree name must be 80 characters or fewer."
+            errorMessage="Environment name must be 80 characters or fewer."
             onRename={noop}
             inputRef={inputRef}
           />

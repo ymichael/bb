@@ -14,9 +14,11 @@ import { threadStatusValues } from "@bb/domain/thread-status";
 import { threadOriginKindValues } from "@bb/domain/thread-origin-kind";
 import { threadVisibilityValues } from "@bb/domain/thread-visibility";
 import type {
+  EnvironmentProviderSelection,
+  JsonValue,
   EnvironmentStatus,
   FaviconColorPreference,
-  HostType,
+  MachineProviderSelection,
   PendingInteractionStatus,
   PermissionMode,
   PromptHistoryScope,
@@ -32,7 +34,6 @@ import type {
   ThreadEventItemType,
   ThreadEventScopeKind,
   ThreadEventType,
-  WorkspaceProvisionType,
   ProjectKind,
 } from "@bb/domain";
 
@@ -92,8 +93,23 @@ export const hosts = sqliteTable(
   {
     id: text("id").primaryKey(),
     name: text("name").notNull(),
-    type: text("type").$type<HostType>().notNull(),
     connectMachineId: text("connect_machine_id"),
+    machineProviderId: text("machine_provider_id"),
+    resource: text("resource", { mode: "json" }).$type<JsonValue>(),
+    machineProviderSelection: text("machine_provider_selection", {
+      mode: "json",
+    }).$type<MachineProviderSelection>(),
+    phase: text("phase")
+      .$type<"active" | "suspending" | "suspended" | "retiring" | "destroyed">()
+      .notNull()
+      .default("active"),
+    suspendedAt: integer("suspended_at"),
+    retireAt: integer("retire_at"),
+    teardownAttempt: integer("teardown_attempt").notNull().default(0),
+    teardownStatus: text("teardown_status").$type<
+      "running" | "failed" | "removed"
+    >(),
+    teardownMessage: text("teardown_message"),
     maxPermissionMode: text("max_permission_mode")
       .$type<PermissionMode>()
       .notNull()
@@ -443,7 +459,6 @@ export const environments = sqliteTable(
       .notNull()
       .references(() => hosts.id, { onDelete: "cascade" }),
     path: text("path"),
-    managed: integer("managed", { mode: "boolean" }).notNull().default(false),
     isGitRepo: integer("is_git_repo", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -454,11 +469,21 @@ export const environments = sqliteTable(
     baseBranch: text("base_branch"),
     defaultBranch: text("default_branch"),
     mergeBaseBranch: text("merge_base_branch"),
-    destroyAttemptId: text("destroy_attempt_id"),
-    retireRequestedAt: integer("retire_requested_at"),
-    workspaceProvisionType: text("workspace_provision_type")
-      .$type<WorkspaceProvisionType>()
-      .notNull(),
+    environmentProviderId: text("environment_provider_id"),
+    providerOwnsPath: integer("provider_owns_path", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    environmentProviderSelection: text("environment_provider_selection", {
+      mode: "json",
+    }).$type<EnvironmentProviderSelection>(),
+    environmentProviderInstanceKey: text("environment_provider_instance_key"),
+    retireAt: integer("retire_at"),
+    teardownAttempt: integer("teardown_attempt").notNull().default(0),
+    teardownStatus: text("teardown_status").$type<
+      "running" | "failed" | "removed"
+    >(),
+    teardownMessage: text("teardown_message"),
+    resource: text("resource", { mode: "json" }).$type<JsonValue>(),
     status: text("status")
       .$type<EnvironmentStatus>()
       .notNull()
@@ -475,6 +500,10 @@ export const environments = sqliteTable(
     index("environments_host_path_lookup_idx").on(table.hostId, table.path),
     index("environments_project_idx").on(table.projectId),
     index("environments_status_idx").on(table.status),
+    index("environments_provider_instance_idx").on(
+      table.environmentProviderId,
+      table.environmentProviderInstanceKey,
+    ),
   ],
 );
 
@@ -902,7 +931,6 @@ export const hostDaemonSessions = sqliteTable(
       .references(() => hosts.id, { onDelete: "cascade" }),
     instanceId: text("instance_id").notNull(),
     hostName: text("host_name").notNull(),
-    hostType: text("host_type").$type<HostType>().notNull(),
     dataDir: text("data_dir").notNull(),
     protocolVersion: integer("protocol_version").notNull(),
     heartbeatIntervalMs: integer("heartbeat_interval_ms").notNull(),
@@ -1027,4 +1055,62 @@ export const pendingInteractions = sqliteTable(
       table.createdAt,
     ),
   ],
+);
+
+export const environmentLaunches = sqliteTable(
+  "environment_launches",
+  {
+    threadId: text("thread_id").primaryKey(),
+    providerId: text("provider_id").notNull(),
+    attempt: integer("attempt").notNull(),
+    phase: text("phase")
+      .$type<"creating" | "ready" | "failed" | "cancelled">()
+      .notNull(),
+    startedAt: integer("started_at").notNull(),
+    failedAt: integer("failed_at"),
+    failure: text("failure").$type<"terminal" | "transient">(),
+    message: text("message"),
+    transientFailures: integer("transient_failures").notNull(),
+    pathKey: text("path_key").notNull(),
+    hostId: text("host_id"),
+    path: text("path"),
+    ownsPath: integer("owns_path", { mode: "boolean" }).notNull(),
+    mergeBaseBranch: text("merge_base_branch"),
+    resource: text("resource", { mode: "json" }).$type<JsonValue>(),
+    stepText: text("step_text").notNull(),
+    pendingLog: text("pending_log").notNull(),
+    replacedEnvironmentId: text("replaced_environment_id"),
+    environmentId: text("environment_id"),
+    selection: text("selection", { mode: "json" })
+      .$type<EnvironmentProviderSelection>()
+      .notNull(),
+    request: text("request", { mode: "json" }).$type<JsonValue>(),
+    cancelPending: integer("cancel_pending", { mode: "boolean" }).notNull(),
+  },
+  (table) => [index("environment_launches_phase_idx").on(table.phase)],
+);
+
+export const machineLaunches = sqliteTable(
+  "machine_launches",
+  {
+    key: text("key").primaryKey(),
+    providerId: text("provider_id").notNull(),
+    projectId: text("project_id"),
+    inputs: text("inputs", { mode: "json" }).$type<JsonValue>(),
+    attempt: integer("attempt").notNull(),
+    phase: text("phase")
+      .$type<"creating" | "ready" | "failed" | "cancelled">()
+      .notNull(),
+    startedAt: integer("started_at").notNull(),
+    failedAt: integer("failed_at"),
+    failure: text("failure").$type<"terminal" | "transient">(),
+    message: text("message"),
+    transientFailures: integer("transient_failures").notNull(),
+    hostId: text("host_id"),
+    resource: text("resource", { mode: "json" }).$type<JsonValue>(),
+    stepText: text("step_text").notNull(),
+    pendingLog: text("pending_log").notNull(),
+    cancelPending: integer("cancel_pending", { mode: "boolean" }).notNull(),
+  },
+  (table) => [index("machine_launches_phase_idx").on(table.phase)],
 );

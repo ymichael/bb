@@ -12,7 +12,7 @@ import type { Host } from "@bb/domain";
 import { makeHost as host } from "@bb/test-helpers/domain-fixtures";
 import type { InstalledPlugin } from "@bb/server-contract";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BbHttpError, sdk } from "@/lib/sdk";
 import { hostsQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
@@ -25,8 +25,10 @@ vi.mock("@/lib/sdk", async (importOriginal) => {
     ...original,
     sdk: {
       hosts: {
+        create: vi.fn(),
         createJoinCode: vi.fn(),
         list: vi.fn(),
+        listProviders: vi.fn().mockResolvedValue([]),
       },
       plugins: { callRpc: vi.fn(), list: vi.fn() },
     },
@@ -70,12 +72,139 @@ Object.defineProperty(navigator, "clipboard", {
   value: { writeText: writeTextMock },
 });
 
+beforeEach(() => {
+  vi.mocked(sdk.hosts.listProviders).mockResolvedValue([]);
+});
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
 });
 
 describe("AddMachineDialog", () => {
+  it("shows no provider logo when a machine provider omits its icon", async () => {
+    vi.mocked(sdk.hosts.createJoinCode).mockResolvedValue({
+      joinCode: "jc_test123",
+      hostId: "host_new",
+      expiresAt: Date.now() + 15 * 60 * 1000,
+    });
+    vi.mocked(sdk.plugins.callRpc).mockResolvedValue({
+      code: "mc_test456",
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      serverUrl: "https://example.getbb.app",
+    });
+    vi.mocked(sdk.hosts.list).mockResolvedValue([existingHost]);
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
+      {
+        id: "test-machine",
+        displayName: "Test machine",
+        icon: null,
+        logoUrl: null,
+        pluginId: "test-machine-provider",
+        requires: { gitRemote: false },
+        inputs: null,
+        acceptsEmptyInputs: true,
+        supportsSuspend: false,
+        environmentRow: null,
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 60_000,
+        },
+        availability: { status: "available" },
+      },
+    ]);
+    const { wrapper } = createQueryClientTestHarness();
+    render(
+      <MemoryRouter>
+        <AddMachineDialog
+          open
+          onOpenChange={vi.fn()}
+          serverUrl="http://direct.example.test:38886"
+        />
+      </MemoryRouter>,
+      { wrapper },
+    );
+
+    const row = await screen.findByRole("button", { name: /Test machine/u });
+    expect(row.querySelector("[data-provider-logo]")).toBeNull();
+    expect(row.querySelector('[data-icon="Zap"]')).toBeNull();
+  });
+
+  it("creates a standalone machine through a machine provider", async () => {
+    vi.mocked(sdk.hosts.createJoinCode).mockResolvedValue({
+      joinCode: "jc_test123",
+      hostId: "host_new",
+      expiresAt: Date.now() + 15 * 60 * 1000,
+    });
+    vi.mocked(sdk.plugins.callRpc).mockResolvedValue({
+      code: "mc_test456",
+      expiresAt: Date.now() + 10 * 60 * 1000,
+      serverUrl: "https://example.getbb.app",
+    });
+    vi.mocked(sdk.hosts.list).mockResolvedValue([existingHost]);
+    vi.mocked(sdk.hosts.listProviders).mockResolvedValue([
+      {
+        id: "modal-sandbox",
+        displayName: "Modal sandbox",
+        icon: "./modal-logo.svg",
+        logoUrl: "/api/v1/system/providers/machine%3Amodal-sandbox/logo?h=1",
+        pluginId: "environment-modal-sandbox",
+        requires: { gitRemote: false },
+        inputs: null,
+        acceptsEmptyInputs: true,
+        supportsSuspend: false,
+        environmentRow: {
+          displayName: "Modal sandbox",
+          environmentProviderId: "project-checkout",
+        },
+        policy: {
+          idleSuspendMs: 900_000,
+          retire: { after: "last-thread", graceMs: 60_000 },
+          removeRetryMs: 30_000,
+        },
+        availability: { status: "available" },
+      },
+    ]);
+    vi.mocked(sdk.hosts.create).mockResolvedValue(
+      host({
+        id: "host_modal",
+        name: "Modal sandbox 3f9a",
+        machineProviderId: "modal-sandbox",
+      }),
+    );
+    const onOpenChange = vi.fn();
+    const { wrapper } = createQueryClientTestHarness();
+    render(
+      <MemoryRouter>
+        <AddMachineDialog
+          open
+          onOpenChange={onOpenChange}
+          serverUrl="http://direct.example.test:38886"
+        />
+      </MemoryRouter>,
+      { wrapper },
+    );
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Modal sandbox/u }),
+    );
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Create Modal sandbox machine",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(sdk.hosts.create).toHaveBeenCalledWith({
+        machineProviderId: "modal-sandbox",
+        projectId: null,
+        inputs: null,
+      });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+  });
+
   it("mints a join code, shows the pairing command, and detects the new machine connecting", async () => {
     vi.mocked(sdk.hosts.createJoinCode).mockResolvedValue({
       joinCode: "jc_test123",

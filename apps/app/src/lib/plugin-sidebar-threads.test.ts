@@ -122,8 +122,9 @@ describe("toPluginSidebarThread", () => {
         environmentId: "env_1",
         environmentName: "Worktree",
         environmentBranchName: "bb/feature",
-        queuedWork: "none",
+        environmentProviderId: "git-worktree",
         environmentWorkspaceDisplayKind: "managed-worktree",
+        queuedWork: "none",
       }),
     );
     expect(mapped.isPinned).toBe(true);
@@ -132,6 +133,7 @@ describe("toPluginSidebarThread", () => {
       id: "env_1",
       name: "Worktree",
       branchName: "bb/feature",
+      providerId: "git-worktree",
       workspaceDisplayKind: "managed-worktree",
     });
   });

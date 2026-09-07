@@ -38,7 +38,7 @@ import {
   isHostPathMissing,
   useHostPathExistence,
 } from "@/hooks/queries/host-path-queries";
-import { useHosts } from "@/hooks/queries/host-queries";
+import { selectHosts, useHosts } from "@/hooks/queries/host-queries";
 import {
   useLocalPathPicker,
   type LocalPathSubmitParams,
@@ -61,7 +61,7 @@ export function ProjectSettingsView() {
     useState<ProjectMachineSetupDialogTarget | null>(null);
 
   const hostsQuery = useHosts();
-  const hosts = useMemo(() => hostsQuery.data ?? [], [hostsQuery.data]);
+  const hosts = useMemo(() => selectHosts(hostsQuery.data), [hostsQuery.data]);
 
   const deleteSource = useDeleteLocalProjectSource();
   const addLocalSource = useAddLocalProjectSource();

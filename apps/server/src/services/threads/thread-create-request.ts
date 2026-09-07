@@ -7,6 +7,7 @@ import type {
   CreateThreadEnvironmentArgs,
   CreateThreadRequest,
   EnvironmentArgs,
+  ProviderEnvironmentArgs,
   StartedOnBehalfOf,
   ThreadCreateOrigin,
 } from "@bb/server-contract";
@@ -43,7 +44,7 @@ export interface ThreadCreateServiceRequest extends Omit<
   ThreadCreateServiceRequestInput,
   "environment" | "providerId"
 > {
-  environment: EnvironmentArgs;
+  environment: EnvironmentArgs | ProviderEnvironmentArgs;
   providerId: string;
   titleFallback: string | null;
   visibility: ThreadVisibility;

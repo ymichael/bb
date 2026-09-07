@@ -49,7 +49,6 @@ function makeThreadListEntry(
     environmentHostId: "host-1",
     environmentName: "Environment",
     environmentBranchName: "main",
-    environmentWorkspaceDisplayKind: "managed-worktree",
     ...thread,
   });
 }

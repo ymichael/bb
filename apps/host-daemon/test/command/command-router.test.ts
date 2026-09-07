@@ -27,13 +27,9 @@ import {
 } from "./dispatch-helpers.js";
 import { RuntimeManager } from "../../src/runtime-manager.js";
 
-type EnvironmentDestroyCommand = Extract<
-  HostDaemonCommand,
-  { type: "environment.destroy" }
->;
 type EnvironmentProvisionCommand = Extract<
   HostDaemonCommand,
-  { type: "environment.provision" }
+  { type: "environment.attach" }
 >;
 type RouterHarness = ReturnType<typeof createHarness>;
 type TextPromptInput = Extract<PromptInput, { type: "text" }>;
@@ -121,7 +117,6 @@ function createTurnSubmitCommand(
       bridgeLaunch: DISPATCH_TEST_BRIDGE_LAUNCH,
       workspaceContext: {
         workspacePath,
-        workspaceProvisionType: "unmanaged",
       },
       projectId: "project-router",
       providerId: args.providerId ?? "fake",
@@ -144,7 +139,6 @@ function createThreadStartCommand(): ThreadStartCommand {
     threadId: "thread-router-start",
     workspaceContext: {
       workspacePath: "/tmp/env-router",
-      workspaceProvisionType: "unmanaged",
     },
     projectId: "project-router",
     providerId: "fake",
@@ -185,24 +179,11 @@ function textPromptInput(text: string): TextPromptInput {
   return { type: "text", text, mentions: [] };
 }
 
-function createEnvironmentDestroyCommand(): EnvironmentDestroyCommand {
-  return {
-    type: "environment.destroy",
-    environmentId: "env-router",
-    teardownTimeoutMs: 900000,
-    workspaceContext: {
-      workspacePath: "/tmp/env-router",
-      workspaceProvisionType: "unmanaged",
-    },
-  };
-}
-
 function createEnvironmentProvisionCommand(): EnvironmentProvisionCommand {
   return {
-    type: "environment.provision",
+    type: "environment.attach",
     environmentId: "env-router",
     initiator: null,
-    workspaceProvisionType: "unmanaged",
     path: "/tmp/env-router",
   };
 }
@@ -258,26 +239,26 @@ describe("CommandRouter", () => {
     expect(logger.warn).not.toHaveBeenCalled();
   });
 
-  it("orders turn.submit after an in-flight environment destroy", async () => {
+  it("orders turn.submit after an in-flight environment provision", async () => {
     const harness = createHarness({ workspacePath: "/tmp/env-router" });
-    await harness.manager.ensureEnvironment({
-      environmentId: "env-router",
-      workspacePath: "/tmp/env-router",
+    const provisionStarted = createDeferredPromise<void>();
+    const releaseProvision = createDeferredPromise<void>();
+    const runtimeManager = new RuntimeManager({
+      createRuntime: () => harness.runtime,
+      provisionWorkspace: async () => {
+        provisionStarted.resolve();
+        await releaseProvision.promise;
+        return harness.workspace;
+      },
     });
-    const destroyStarted = createDeferredPromise<void>();
-    const releaseDestroy = createDeferredPromise<void>();
-    harness.workspace.destroy = async () => {
-      destroyStarted.resolve();
-      await releaseDestroy.promise;
-    };
 
-    const router = createRouter(harness);
-    const destroyTask = runRouterCommand({
-      command: createEnvironmentDestroyCommand(),
-      requestId: "destroy-env-router",
+    const router = createRouter(harness, { runtimeManager });
+    const provisionTask = runRouterCommand({
+      command: createEnvironmentProvisionCommand(),
+      requestId: "provision-env-router",
       router,
     });
-    await destroyStarted.promise;
+    await provisionStarted.promise;
 
     const turnTask = runRouterCommand({
       command: createTurnSubmitCommand(),
@@ -288,9 +269,9 @@ describe("CommandRouter", () => {
 
     expect(harness.runtimeState.ranTurnText).toBeUndefined();
 
-    releaseDestroy.resolve();
-    const destroyResponse = await destroyTask;
-    expect(destroyResponse.ok).toBe(true);
+    releaseProvision.resolve();
+    const provisionResponse = await provisionTask;
+    expect(provisionResponse.ok).toBe(true);
     const turnResponse = await turnTask;
     expect(turnResponse.ok).toBe(true);
     expect(harness.runtimeState.ranTurnText).toBe("after destroy");
@@ -411,9 +392,7 @@ describe("CommandRouter", () => {
         return runtime;
       },
       provisionWorkspace: async (options) =>
-        createFakeWorkspace(
-          "path" in options ? options.path : options.targetPath,
-        ).workspace,
+        createFakeWorkspace(options.path).workspace,
     });
     await runtimeManager.ensureEnvironment({
       environmentId: "env-router-old",

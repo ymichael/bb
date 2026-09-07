@@ -1,10 +1,14 @@
 import { Command } from "commander";
 import {
+  jsonValueSchema,
   PERSONAL_PROJECT_ID,
   threadVisibilitySchema,
+  type GitBranchSelection,
+  type EnvironmentMachineSelection,
   type Thread,
+  type JsonValue,
 } from "@bb/domain";
-import type { BaseBranchSpec, EnvironmentArgs } from "@bb/server-contract";
+import type { CreateThreadEnvironmentArgs } from "@bb/server-contract";
 import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
 import {
@@ -40,6 +44,8 @@ interface ThreadSpawnCommandOptions {
   project?: string;
   environment?: string;
   newEnvironment?: string;
+  environmentProvider?: string;
+  environmentInputs?: string;
   baseBranch?: string;
   parentThread?: string;
   provider?: string;
@@ -52,6 +58,8 @@ interface ThreadSpawnCommandOptions {
   parentSelf?: boolean;
   machine?: string;
   host?: string;
+  newMachine?: string;
+  machineInputs?: string;
   file?: string[];
   image?: string[];
   section?: string;
@@ -112,11 +120,11 @@ export function buildSpawnEnvironment(args: {
   newEnvironmentKind?: string;
   hostId: string | null;
   baseBranch?: string;
-}): EnvironmentArgs {
+}): CreateThreadEnvironmentArgs {
   const environmentValue = args.environmentValue?.trim();
   const newEnvironmentKind = args.newEnvironmentKind?.trim();
   const trimmedBaseBranch = args.baseBranch?.trim();
-  const baseBranch: BaseBranchSpec = trimmedBaseBranch
+  const baseBranch: GitBranchSelection = trimmedBaseBranch
     ? { kind: "named", name: trimmedBaseBranch }
     : { kind: "default" };
 
@@ -146,18 +154,16 @@ export function buildSpawnEnvironment(args: {
     );
   }
   if (!environmentValue) {
-    if (args.defaultPersonalWorkspace) {
+    if (args.hostId !== null) {
       return {
         type: "host",
-        ...(args.hostId ? { hostId: args.hostId } : {}),
-        workspace: { type: "personal" },
+        hostId: args.hostId,
+        workspace: args.defaultPersonalWorkspace
+          ? { type: "personal" }
+          : { type: "unmanaged", path: null },
       };
     }
-    return {
-      type: "host",
-      hostId: requireHostId(args.hostId),
-      workspace: { type: "unmanaged", path: null },
-    };
+    return { type: "project-default" };
   }
   if (looksLikePath(environmentValue)) {
     return {
@@ -169,6 +175,92 @@ export function buildSpawnEnvironment(args: {
   return {
     type: "reuse",
     environmentId: environmentValue,
+  };
+}
+
+function parseEnvironmentInputs(
+  flagValue: string | undefined,
+): JsonValue | null {
+  if (flagValue === undefined) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(flagValue);
+  } catch {
+    throw new Error("--environment-inputs must be valid JSON.");
+  }
+  return jsonValueSchema.parse(parsed);
+}
+
+function parseMachineInputs(flagValue: string | undefined): JsonValue | null {
+  if (flagValue === undefined) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(flagValue);
+  } catch {
+    throw new Error("--machine-inputs must be valid JSON.");
+  }
+  return jsonValueSchema.parse(parsed);
+}
+
+async function buildProviderSpawnEnvironment(args: {
+  serverUrl: string;
+  environmentProvider: string;
+  environmentInputs: string | undefined;
+  environmentValue: string | undefined;
+  newEnvironmentKind: string | undefined;
+  baseBranch: string | undefined;
+  machineHostId: string | null;
+  machine: EnvironmentMachineSelection | null;
+  projectId: string;
+  resolveDefaultHostId: () => Promise<string | null>;
+}): Promise<CreateThreadEnvironmentArgs> {
+  if (args.environmentValue || args.newEnvironmentKind) {
+    throw new Error(
+      "Cannot combine --environment-provider with --environment or --new-environment.",
+    );
+  }
+  if (args.baseBranch?.trim()) {
+    throw new Error(
+      "--base-branch requires --new-environment worktree; an --environment-provider takes its branch through --environment-inputs.",
+    );
+  }
+  const requested = args.environmentProvider.trim();
+  const providers = await createCliBbSdk(
+    args.serverUrl,
+  ).environments.listProviders({ projectId: args.projectId });
+  const match = providers.find((provider) => provider.id === requested);
+  if (match === undefined) {
+    const available = providers.map((provider) => provider.id).join(", ");
+    throw new Error(
+      `Unknown environment provider '${requested}'.${available ? ` Available: ${available}.` : ""}`,
+    );
+  }
+  let inputs = parseEnvironmentInputs(args.environmentInputs);
+  if (match.inputs !== null && inputs === null) {
+    if (match.acceptsEmptyInputs) {
+      inputs = {};
+    } else {
+      throw new Error(
+        `The '${match.id}' environment provider needs --environment-inputs <json>; \`bb environment providers --json\` shows its schema.`,
+      );
+    }
+  }
+  if (match.inputs === null && inputs !== null) {
+    throw new Error(
+      `The '${match.id}' environment provider takes no --environment-inputs.`,
+    );
+  }
+  const machine = args.machine ?? {
+    type: "existing" as const,
+    hostId: requireHostId(
+      args.machineHostId ?? (await args.resolveDefaultHostId()),
+    ),
+  };
+  return {
+    type: "provider",
+    environmentProviderId: match.id,
+    machine,
+    inputs,
   };
 }
 
@@ -201,6 +293,14 @@ export function registerSpawnCommand(
       "Execution machine ID or unambiguous name",
     )
     .option("--host <id-or-name>", "Alias for --machine")
+    .option(
+      "--new-machine <provider-id>",
+      "Create the thread on a new machine from this machine provider",
+    )
+    .option(
+      "--machine-inputs <json>",
+      "Persisted non-secret inputs for --new-machine; store credentials in plugin settings",
+    )
     .option("--parent-thread <id>", "Parent thread ID for worker thread links")
     .option("--parent-self", "Parent the new thread to BB_THREAD_ID")
     .option("--provider <id>", PROVIDER_HELP)
@@ -233,6 +333,14 @@ export function registerSpawnCommand(
       "--visibility <visibility>",
       "Thread visibility: visible or hidden (a child inherits its parent)",
     )
+    .option(
+      "--environment-provider <id>",
+      "Run on an environment provider by id (list them with `bb environment providers`)",
+    )
+    .option(
+      "--environment-inputs <json>",
+      "JSON value for an --environment-provider that declares inputs (`bb environment providers --json` shows the schema)",
+    )
     .option("--send-at <when>", SEND_AT_HELP)
     .option("--origin-kind <kind>", "Thread origin: fork")
     .option("--source-thread <id>", "Source thread for a fork")
@@ -250,7 +358,26 @@ export function registerSpawnCommand(
           throw new Error("Missing required option --project <id>.");
         }
         const environmentValue = resolveSpawnEnvironmentValue(opts.environment);
+        if (
+          opts.environmentInputs !== undefined &&
+          !opts.environmentProvider &&
+          !opts.newMachine
+        ) {
+          throw new Error(
+            "--environment-inputs requires --environment-provider <id>.",
+          );
+        }
         const machineTarget = resolveMachineTargetOption(opts);
+        if (machineTarget && opts.newMachine) {
+          throw new Error(
+            "Cannot combine --new-machine with --machine or --host.",
+          );
+        }
+        if (opts.machineInputs !== undefined && !opts.newMachine) {
+          throw new Error(
+            "--machine-inputs requires --new-machine <provider-id>.",
+          );
+        }
         if (
           machineTarget &&
           environmentValue &&
@@ -260,14 +387,60 @@ export function registerSpawnCommand(
             "Cannot combine --machine or --host with an existing environment ID; that environment already selects its machine.",
           );
         }
-        const defaultPersonalWorkspace =
-          projectId === PERSONAL_PROJECT_ID &&
-          !environmentValue &&
-          !opts.newEnvironment;
+        const machineProvider = opts.newMachine
+          ? (
+              await createCliBbSdk(getUrl()).hosts.listProviders({ projectId })
+            ).find((provider) => provider.id === opts.newMachine?.trim())
+          : undefined;
+        if (opts.newMachine && machineProvider === undefined) {
+          throw new Error(
+            `Unknown machine provider '${opts.newMachine.trim()}'.`,
+          );
+        }
+        let machineInputs = parseMachineInputs(opts.machineInputs);
+        if (
+          machineProvider &&
+          machineProvider.inputs !== null &&
+          machineInputs === null
+        ) {
+          if (machineProvider.acceptsEmptyInputs) machineInputs = {};
+          else {
+            throw new Error(
+              `The '${machineProvider?.id}' machine provider needs --machine-inputs <json>; \`bb machine providers --json\` shows its schema.`,
+            );
+          }
+        }
+        if (
+          machineProvider &&
+          machineProvider.inputs === null &&
+          machineInputs !== null
+        ) {
+          throw new Error(
+            `The '${machineProvider.id}' machine provider takes no --machine-inputs.`,
+          );
+        }
+        const newMachineSelection =
+          machineProvider === undefined
+            ? null
+            : {
+                type: "new" as const,
+                machineProviderId: machineProvider.id,
+                inputs: machineInputs,
+              };
+        const selectedEnvironmentProvider =
+          opts.environmentProvider ??
+          machineProvider?.environmentRow?.environmentProviderId;
+        if (machineProvider && selectedEnvironmentProvider === undefined) {
+          throw new Error(
+            `The '${machineProvider.id}' machine provider has no environment row; combine --new-machine with --environment-provider <id>.`,
+          );
+        }
         const needsHostId =
-          Boolean(opts.newEnvironment) ||
-          (!defaultPersonalWorkspace &&
-            (!environmentValue || looksLikePath(environmentValue)));
+          !opts.environmentProvider &&
+          !opts.newMachine &&
+          (Boolean(opts.newEnvironment) ||
+            (environmentValue !== undefined &&
+              looksLikePath(environmentValue)));
         const hostId = machineTarget
           ? await resolveMachineHostId({
               serverUrl: getUrl(),
@@ -276,13 +449,26 @@ export function registerSpawnCommand(
           : needsHostId
             ? await resolveLocalHostId()
             : null;
-        const environment = buildSpawnEnvironment({
-          defaultPersonalWorkspace,
-          environmentValue,
-          newEnvironmentKind: opts.newEnvironment,
-          hostId,
-          baseBranch: opts.baseBranch,
-        });
+        const environment = selectedEnvironmentProvider
+          ? await buildProviderSpawnEnvironment({
+              serverUrl: getUrl(),
+              environmentProvider: selectedEnvironmentProvider,
+              environmentInputs: opts.environmentInputs,
+              environmentValue,
+              newEnvironmentKind: opts.newEnvironment,
+              baseBranch: opts.baseBranch,
+              machineHostId: hostId,
+              machine: newMachineSelection,
+              projectId,
+              resolveDefaultHostId: resolveLocalHostId,
+            })
+          : buildSpawnEnvironment({
+              defaultPersonalWorkspace: projectId === PERSONAL_PROJECT_ID,
+              environmentValue,
+              newEnvironmentKind: opts.newEnvironment,
+              hostId,
+              baseBranch: opts.baseBranch,
+            });
         const reasoningLevel = parseReasoningLevel(opts.reasoningLevel);
         const serviceTier = parseServiceTier(opts.serviceTier);
         const permissionMode = parsePermissionMode(opts.permissionMode);

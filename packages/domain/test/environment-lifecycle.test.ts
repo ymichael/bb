@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ENVIRONMENT_LIFECYCLE,
-  ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES,
   evaluateEnvironmentLifecycleEvent,
   type EnvironmentLifecycleEvent,
   type EnvironmentLifecycleEventType,
@@ -17,31 +16,13 @@ const allEventTypes: readonly EnvironmentLifecycleEventType[] = [
   "provision.succeeded",
   "provision.failed",
   "provision.cancelled",
-  "retire.requested",
-  "retire.cancelled",
-  "destroy.started",
-  "destroy.completed",
-  "destroy.failed",
-  "destroy.lost",
-];
-
-const payloadEventTypes: readonly EnvironmentLifecycleEventType[] = [
-  "destroy.started",
-  "destroy.completed",
-  "destroy.failed",
+  "destroy.recorded",
 ];
 
 function eventOfType(
   eventType: EnvironmentLifecycleEventType,
 ): EnvironmentLifecycleEvent {
-  switch (eventType) {
-    case "destroy.started":
-    case "destroy.completed":
-    case "destroy.failed":
-      return { type: eventType, destroyAttemptId: "rpc_attempt" };
-    default:
-      return { type: eventType };
-  }
+  return { type: eventType };
 }
 
 function rowState(
@@ -49,27 +30,10 @@ function rowState(
   overrides?: Partial<Omit<EnvironmentLifecycleRowState, "status">>,
 ): EnvironmentLifecycleRowState {
   return {
-    destroyAttemptId: null,
-    managed: false,
     path: null,
     status,
     ...overrides,
   };
-}
-
-function eligibleRowState(
-  eventType: EnvironmentLifecycleEventType,
-  status: EnvironmentStatus,
-  overrides?: Partial<Omit<EnvironmentLifecycleRowState, "status">>,
-): EnvironmentLifecycleRowState {
-  const predicates = ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES[eventType];
-  return rowState(status, {
-    ...(predicates.managed ? { managed: true } : {}),
-    ...(predicates.matchingDestroyAttempt
-      ? { destroyAttemptId: "rpc_attempt" }
-      : {}),
-    ...overrides,
-  });
 }
 
 function expectedTarget(
@@ -86,18 +50,6 @@ function expectedTarget(
     : target.withoutWorkspacePath;
 }
 
-function statusWithCell(
-  eventType: EnvironmentLifecycleEventType,
-): EnvironmentStatus {
-  const status = environmentStatusValues.find(
-    (candidate) => ENVIRONMENT_LIFECYCLE[candidate][eventType] !== undefined,
-  );
-  if (!status) {
-    throw new Error(`No table cell found for event ${eventType}`);
-  }
-  return status;
-}
-
 describe("ENVIRONMENT_LIFECYCLE table", () => {
   it("covers every environment status", () => {
     expect(Object.keys(ENVIRONMENT_LIFECYCLE).sort()).toEqual(
@@ -105,77 +57,37 @@ describe("ENVIRONMENT_LIFECYCLE table", () => {
     );
   });
 
-  it("declares predicates for every event type", () => {
-    expect([...allEventTypes].sort()).toEqual(
-      Object.keys(ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES).sort(),
-    );
-  });
-
-  it("matches the designed retiring-state transitions exactly", () => {
+  it("matches the designed transitions exactly", () => {
     expect(ENVIRONMENT_LIFECYCLE).toEqual({
       provisioning: {
         "provision.succeeded": "ready",
         "provision.failed": "error",
         "provision.cancelled": {
           withWorkspacePath: "ready",
-          withoutWorkspacePath: "destroying",
+          withoutWorkspacePath: "destroyed",
         },
       },
       ready: {
         "provision.requested": "provisioning",
-        "retire.requested": "retiring",
-      },
-      retiring: {
-        "retire.cancelled": "ready",
-        "destroy.started": "destroying",
+        "destroy.recorded": "destroyed",
       },
       error: {
         "provision.requested": "provisioning",
-        "destroy.started": "destroying",
-        "destroy.completed": "destroyed",
-      },
-      destroying: {
-        "destroy.completed": "destroyed",
-        "destroy.failed": "retiring",
-        "destroy.lost": "error",
+        "destroy.recorded": "destroyed",
       },
       destroyed: {},
     });
   });
-
-  it("matches the designed predicates exactly", () => {
-    expect(ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES).toEqual({
-      "provision.requested": {},
-      "provision.succeeded": {},
-      "provision.failed": {},
-      "provision.cancelled": {},
-      "retire.requested": { managed: true },
-      "retire.cancelled": {},
-      "destroy.started": { managed: true },
-      "destroy.completed": { matchingDestroyAttempt: true },
-      "destroy.failed": { matchingDestroyAttempt: true },
-      "destroy.lost": {},
-    });
-  });
-
-  it("declares matchingDestroyAttempt only on events that carry the payload", () => {
-    for (const eventType of allEventTypes) {
-      const predicates = ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES[eventType];
-      if (predicates.matchingDestroyAttempt) {
-        expect(payloadEventTypes).toContain(eventType);
-      }
-    }
-  });
 });
 
 describe("evaluateEnvironmentLifecycleEvent", () => {
-  it("applies every table cell on an eligible row", () => {
+  it("applies every table cell", () => {
     for (const status of environmentStatusValues) {
       for (const eventType of allEventTypes) {
         if (ENVIRONMENT_LIFECYCLE[status][eventType] === undefined) {
           continue;
         }
-        const environment = eligibleRowState(eventType, status);
+        const environment = rowState(status);
         expect(
           evaluateEnvironmentLifecycleEvent({
             environment,
@@ -186,7 +98,7 @@ describe("evaluateEnvironmentLifecycleEvent", () => {
     }
   });
 
-  it("no-ops as illegal-transition for every absent cell on an eligible row", () => {
+  it("no-ops as illegal-transition for every absent cell", () => {
     for (const status of environmentStatusValues) {
       for (const eventType of allEventTypes) {
         if (ENVIRONMENT_LIFECYCLE[status][eventType] !== undefined) {
@@ -194,7 +106,7 @@ describe("evaluateEnvironmentLifecycleEvent", () => {
         }
         expect(
           evaluateEnvironmentLifecycleEvent({
-            environment: eligibleRowState(eventType, status),
+            environment: rowState(status),
             event: eventOfType(eventType),
           }),
         ).toEqual({
@@ -217,54 +129,6 @@ describe("evaluateEnvironmentLifecycleEvent", () => {
         environment: rowState("provisioning"),
         event: { type: "provision.cancelled" },
       }),
-    ).toEqual({ to: "destroying" });
-  });
-
-  it("supersedes or ignores each row signal exactly as declared", () => {
-    const signals = [
-      {
-        breakRow: { managed: false },
-        detail: "environment is not managed",
-        flag: "managed",
-      },
-      {
-        breakRow: { destroyAttemptId: "rpc_other_attempt" },
-        detail: "destroyAttemptId mismatch",
-        flag: "matchingDestroyAttempt",
-      },
-    ] as const;
-
-    for (const eventType of allEventTypes) {
-      const predicates = ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES[eventType];
-      const status = statusWithCell(eventType);
-      for (const signal of signals) {
-        const environment = eligibleRowState(eventType, status, {
-          ...signal.breakRow,
-        });
-        const evaluation = evaluateEnvironmentLifecycleEvent({
-          environment,
-          event: eventOfType(eventType),
-        });
-        if (predicates[signal.flag]) {
-          expect(evaluation).toEqual({
-            noop: "superseded",
-            detail: signal.detail,
-          });
-        } else {
-          expect(evaluation).toEqual({
-            to: expectedTarget(eventType, status, environment),
-          });
-        }
-      }
-    }
-  });
-
-  it("reports superseded before illegal-transition", () => {
-    expect(
-      evaluateEnvironmentLifecycleEvent({
-        environment: rowState("ready", { destroyAttemptId: "rpc_current" }),
-        event: { type: "destroy.failed", destroyAttemptId: "rpc_stale" },
-      }),
-    ).toEqual({ noop: "superseded", detail: "destroyAttemptId mismatch" });
+    ).toEqual({ to: "destroyed" });
   });
 });

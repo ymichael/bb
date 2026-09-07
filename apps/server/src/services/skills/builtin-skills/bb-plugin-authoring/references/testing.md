@@ -251,9 +251,9 @@ Remaining reference examples in `examples/plugins/`:
   plugin is `needs-configuration`; `bb plugin reload <id>` remains available
   for other recovery cases.
 - Descriptors without `default` produce `| undefined` values.
-- Thread events are observe-only; there are exactly six
+- Thread events are observe-only; there are exactly seven
   (`thread.created`, `thread.active`, `thread.idle`, `thread.failed`,
-  `thread.archived`, `thread.deleted`).
+  `thread.archived`, `thread.unarchived`, `thread.deleted`).
 - Service throw of NeedsConfigurationError changes plugin status; schedule
   throws only set the schedule's last_error. Name-matching means no import
   is needed for the error class.

@@ -56,6 +56,10 @@ export const experimental_ProviderModelPicker =
   runtime.experimental_ProviderModelPicker;
 export const experimental_PermissionModePicker =
   runtime.experimental_PermissionModePicker;
+export const experimental_BranchPicker = runtime.experimental_BranchPicker;
+export const experimental_useBranches = runtime.experimental_useBranches;
+export const experimental_useCheckoutState =
+  runtime.experimental_useCheckoutState;
 // Host-owned code rendering (experimental — see docs/api_to_audit.md).
 export const experimental_SourceCode = runtime.experimental_SourceCode;
 export const experimental_Diff = runtime.experimental_Diff;

@@ -1,0 +1,36 @@
+{
+  "name": "bb-plugin-environment-modal-sandbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Run resumable bb machines in Modal Sandboxes",
+  "engines": {
+    "bb": ">=0.0"
+  },
+  "bb": {
+    "name": "Modal sandbox",
+    "description": "Run resumable bb machines in Modal Sandboxes",
+    "branding": {
+      "icon": "./modal-logo.svg"
+    },
+    "server": "./server.ts"
+  },
+  "keywords": [
+    "bb-plugin"
+  ],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "bb-environment-provider-host": "workspace:*",
+    "modal": "^0.10.0",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}

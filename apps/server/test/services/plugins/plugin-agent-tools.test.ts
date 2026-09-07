@@ -464,6 +464,40 @@ describe("bb.agents.registerTool", () => {
     expect(service.findAgentTool("shared_tool")?.pluginId).toBe("collide-a");
   });
 
+  it("fails a plugin's load when its environment provider id is already registered", async () => {
+    const first = await writePlugin(workDir, {
+      name: "bb-plugin-env-a",
+      serverSource: `
+        export default function plugin(bb: any) {
+          bb.experimental_environments.register({
+            id: "shared-env",
+            displayName: "Shared",
+            create: async () => ({ status: "failed", failure: "transient", message: "waiting" }), remove: async () => ({ status: "removed" }),
+          });
+        }
+      `,
+    });
+    const second = await writePlugin(workDir, {
+      name: "bb-plugin-env-b",
+      serverSource: `
+        export default function plugin(bb: any) {
+          bb.experimental_environments.register({
+            id: "shared-env",
+            displayName: "Shared again",
+            create: async () => ({ status: "failed", failure: "transient", message: "waiting" }), remove: async () => ({ status: "removed" }),
+          });
+        }
+      `,
+    });
+    await service.installPath(first);
+    const entry = await service.installPath(second);
+
+    expect(entry.status).toBe("error");
+    expect(entry.statusDetail).toContain(
+      'environment provider "shared-env" is already registered by plugin "env-a"',
+    );
+  });
+
   it("rejects the reserved built-in tool name at registration", async () => {
     expect(RESERVED_AGENT_TOOL_NAMES).toContain(
       UPDATE_ENVIRONMENT_DIRECTORY_TOOL_NAME,

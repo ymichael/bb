@@ -4,7 +4,6 @@ import { hc } from "hono/client";
 import {
   discoveredWorkspacePropertiesSchema,
   ENVIRONMENT_CHANGE_KINDS,
-  hostTypeSchema,
   jsonValueSchema,
   pendingInteractionCreateSchema,
   pendingInteractionStatusSchema,
@@ -94,20 +93,21 @@ const hostDaemonPluginHostGenerationSchema = z
   })
   .strict();
 
-export const hostDaemonSessionOpenRequestSchema = z.object({
-  hostId: z.string().min(1),
-  instanceId: z.string().min(1),
-  hostName: z.string().min(1),
-  hostType: hostTypeSchema,
-  connectMachineId: z.string().min(1).optional(),
-  hasMachineCredential: z.boolean(),
-  platform: hostPlatformSchema,
-  dataDir: z.string().min(1),
-  localApiPort: z.number().int().min(1).max(65_535).nullable().default(null),
-  protocolVersion: z.number().int().positive(),
-  activeThreads: z.array(hostDaemonActiveThreadSchema),
-  loadedEnvironments: z.array(hostDaemonLoadedEnvironmentSchema).default([]),
-});
+export const hostDaemonSessionOpenRequestSchema = z
+  .object({
+    hostId: z.string().min(1),
+    instanceId: z.string().min(1),
+    hostName: z.string().min(1),
+    connectMachineId: z.string().min(1).optional(),
+    hasMachineCredential: z.boolean(),
+    platform: hostPlatformSchema,
+    dataDir: z.string().min(1),
+    localApiPort: z.number().int().min(1).max(65_535).nullable().default(null),
+    protocolVersion: z.number().int().positive(),
+    activeThreads: z.array(hostDaemonActiveThreadSchema),
+    loadedEnvironments: z.array(hostDaemonLoadedEnvironmentSchema).default([]),
+  })
+  .strict();
 export type HostDaemonSessionOpenRequest = z.output<
   typeof hostDaemonSessionOpenRequestSchema
 >;
@@ -116,7 +116,6 @@ export const hostDaemonEnrollRequestSchema = z
   .object({
     hostId: z.string().min(1),
     hostName: z.string().min(1),
-    hostType: hostTypeSchema,
     connectMachineId: z.string().min(1).optional(),
   })
   .strict();
@@ -450,10 +449,9 @@ const hostDaemonOnlineRpcResponseSuccessSchema = z.discriminatedUnion(
     commandRpcResponseSuccessSchemaFor("thread.archive"),
     commandRpcResponseSuccessSchemaFor("thread.unarchive"),
     commandRpcResponseSuccessSchemaFor("interactive.resolve"),
-    commandRpcResponseSuccessSchemaFor("environment.provision"),
+    commandRpcResponseSuccessSchemaFor("environment.attach"),
     commandRpcResponseSuccessSchemaFor("project.clone"),
-    commandRpcResponseSuccessSchemaFor("environment.provision.cancel"),
-    commandRpcResponseSuccessSchemaFor("environment.destroy"),
+    commandRpcResponseSuccessSchemaFor("environment.attach.cancel"),
     commandRpcResponseSuccessSchemaFor("workspace.commit"),
     commandRpcResponseSuccessSchemaFor("workspace.pull_request_action"),
   ],

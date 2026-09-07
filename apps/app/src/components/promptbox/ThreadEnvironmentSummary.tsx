@@ -5,7 +5,6 @@ import { Icon, type IconName } from "@bb/shared-ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
-import type { EnvironmentWorkspaceTypeLabel } from "@/lib/environment-workspace-display";
 import type { WorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
 
 const CHECKOUT_CHIP_BASE_CLASS_NAME =
@@ -17,9 +16,9 @@ interface ThreadEnvironmentSummaryProps {
   environmentLabel?: string;
   environmentCompactLabel?: string;
   environmentIcon?: IconName;
-  environmentTypeLabel?: EnvironmentWorkspaceTypeLabel;
+  environmentTypeLabel?: string;
   environmentCheckout?: WorkspaceCheckoutDisplay;
-  onCreateNewThreadInWorktree?: () => void;
+  onCreateNewThreadInEnvironment?: () => void;
 }
 
 export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
@@ -29,13 +28,13 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   environmentIcon,
   environmentTypeLabel,
   environmentCheckout,
-  onCreateNewThreadInWorktree,
+  onCreateNewThreadInEnvironment,
 }: ThreadEnvironmentSummaryProps) {
   if (
     !projectName &&
     !environmentLabel &&
     !environmentCheckout &&
-    !onCreateNewThreadInWorktree
+    !onCreateNewThreadInEnvironment
   ) {
     return null;
   }
@@ -122,13 +121,13 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
           <span className="truncate">{environmentCheckout.label}</span>
         </span>
       ) : null}
-      {onCreateNewThreadInWorktree ? (
+      {onCreateNewThreadInEnvironment ? (
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Create thread in worktree"
-              onClick={onCreateNewThreadInWorktree}
+              aria-label="New thread in this environment"
+              onClick={onCreateNewThreadInEnvironment}
               className={cn(
                 "-ml-1 inline-flex cursor-pointer shrink-0 items-center justify-center rounded-md px-1 py-0.5 transition-colors hover:bg-state-hover",
                 CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
@@ -137,7 +136,7 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
               <Icon name="MessageSquarePlus" className="size-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Create thread in worktree</TooltipContent>
+          <TooltipContent>New thread in this environment</TooltipContent>
         </Tooltip>
       ) : null}
     </div>

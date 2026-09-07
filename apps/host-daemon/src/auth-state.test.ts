@@ -56,14 +56,12 @@ describe("auth state", () => {
     await writeHostAuthState(dataDir, {
       hostId: "host_auth_state",
       hostKey: "bbdh_test_key",
-      hostType: "persistent",
     });
 
     const authState = await readHostAuthState(dataDir);
     expect(authState).toEqual({
       hostId: "host_auth_state",
       hostKey: "bbdh_test_key",
-      hostType: "persistent",
     });
 
     const authStatePath = path.join(dataDir, HOST_AUTH_FILE_NAME);
@@ -83,7 +81,6 @@ describe("auth state", () => {
         {
           hostId: "host_auth_state",
           hostKey: "bbdh_test_key",
-          hostType: "persistent",
           serverUrl: "https://server.example.test/",
         },
         null,
@@ -95,7 +92,6 @@ describe("auth state", () => {
     await expect(readHostAuthState(dataDir)).resolves.toEqual({
       hostId: "host_auth_state",
       hostKey: "bbdh_test_key",
-      hostType: "persistent",
     });
   });
 });

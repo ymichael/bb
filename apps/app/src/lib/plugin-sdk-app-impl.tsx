@@ -1,6 +1,11 @@
 import { useCallback, useMemo } from "react";
 import type { MarkdownProps, PluginSdkApp } from "@get-bb/plugin-sdk";
 import { PluginDiff } from "@/components/plugin/PluginDiff";
+import { PluginBranchPicker } from "@/components/plugin/PluginBranchPicker";
+import {
+  usePluginBranches,
+  usePluginCheckoutState,
+} from "@/components/plugin/usePluginBranchPickerState";
 import { PluginNewThreadComposer } from "@/components/plugin/PluginNewThreadComposer";
 import { PluginProviderModelPicker } from "@/components/plugin/PluginProviderModelPicker";
 import { PluginPermissionModePicker } from "@/components/plugin/PluginPermissionModePicker";
@@ -59,6 +64,9 @@ export const pluginSdkAppImplementation = installDeprecatedAliases(
     experimental_NewThreadComposer: PluginNewThreadComposer,
     experimental_ProviderModelPicker: PluginProviderModelPicker,
     experimental_PermissionModePicker: PluginPermissionModePicker,
+    experimental_BranchPicker: PluginBranchPicker,
+    experimental_useBranches: usePluginBranches,
+    experimental_useCheckoutState: usePluginCheckoutState,
     experimental_SourceCode: PluginSourceCode,
     experimental_Diff: PluginDiff,
     experimental_useSidebarThreads: useSidebarThreads,

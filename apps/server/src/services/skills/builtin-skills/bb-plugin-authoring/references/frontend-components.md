@@ -97,6 +97,22 @@ routing?, allowProviderChange?, align?, disabled?, className? }`, where `routing
   capabilities. Tasks presets and Automations are the reference consumers.
   Experimental: see `docs/api_to_audit.md`.
 
+- `experimental_BranchPicker` — bb's controlled branch picker for a standard
+  branch choice. Props:
+  `{ hostId, projectId, value, onChange, label?, placeholder?, disabled? }`.
+  The host searches and refreshes local and remote branches for the selected
+  project source. Use it when the provider owns only a nullable branch name,
+  as the Worktree provider does.
+- `experimental_useBranches({ hostId, projectId, query? })` — returns
+  `{ branches, remoteBranches, isLoading, refresh }` for the same project-source
+  query as the host picker. `refresh()` performs a blocking refresh from the
+  enrolled machine. Use this when the plugin owns the menu or selection model.
+- `experimental_useCheckoutState({ hostId, projectId })` — returns
+  `{ isGit, unborn, detached, dirty, currentBranch, operation }`. Combine it
+  with `experimental_useBranches` for checkout-specific controls. The Project
+  checkout provider is the reference consumer: it owns its Current, existing,
+  and new-from-base modes and reports ready or blocked inputs through its slot.
+
 - `experimental_SourceCode` — bb's source viewer. Props:
   `{ content, path, overflow?, highlightedLines?, className? }` — `path`
   drives language detection, `overflow` is `"scroll"` (default) or `"wrap"`,
@@ -176,8 +192,9 @@ className? }` —
   CREATING a thread (the create-side counterpart to `ThreadChat`): prompt
   editor with @-mentions and expand, `+` attachments,
   provider/model/reasoning picker, voice, submit, and the row beneath with
-  project, environment, "Branch from:", and permission mode. Never
-  hand-roll a textarea + "Start thread" button. Props:
+  the project selector, the environment picker, the selected environment
+  provider's own inputs control, the reuse picker, and permission mode.
+  Never hand-roll a textarea + "Start thread" button. Props:
   `{ onSubmit, defaultProjectId?, defaultProviderId?, defaultModel?,
 defaultReasoningLevel?, defaultServiceTier?, defaultPermissionMode?,
 defaultEnvironment?, initialPrompt?, placeholder?, layout?, focusRequest?,
@@ -194,6 +211,35 @@ className?, draftKey? }` — the `default*` props are SEEDS, not controlled
 
   This component has no plugin composer-host binding. Composer customizations
   and `useComposer()` writes do not reach this composer instance.
+
+  The environment row is provider-driven. The picker lists structurally
+  eligible environment providers under each machine. Projectless-only
+  providers are absent from project pickers, and project-only providers are
+  absent from projectless pickers. Availability is resolved for that
+  project and machine: available rows work normally; setup-required rows show
+  the plugin's message and submit routes to that plugin's settings; unavailable
+  rows are disabled with the provider's message. A provider whose inputs schema
+  does not accept `{}` is also disabled until its plugin registers an inputs
+  control; an empty-accepting schema needs no slot. Choosing a row chooses that provider and, for a
+  provider, the machine; everything else that provider needs comes
+  from its plugin's own inputs control, rendered beside the picker. The reuse
+  picker beside it offers the environments this project's live threads are
+  already running in. bb contributes no branch chip of its own: the worktree
+  provider's control owns the base branch, and the checkout provider's owns
+  the directory and the branch to switch to.
+
+  A machine provider may contribute an `environmentRow`; choosing it creates a
+  new machine and then runs the row's environment provider on that machine.
+  A machine provider may omit `icon`; Add machine and the Machines page then
+  render no provider logo or provider badge, matching a manually enrolled
+  machine.
+  Machine-provider inputs use
+  `app.slots.experimental_machineProviderInputs({ machineProviderId,
+component })`. The component receives `{ projectId, value, onChange }` and
+  reports ready JSON or a blocked reason. The same control appears in the
+  picker sugar row and Settings → Machines → Add machine. Inputs are persisted
+  and readable by every plugin, so never put secrets in them; store credentials
+  in plugin settings and emit only non-secret configuration or references.
 
   Store-then-restore: the request's selection fields map to the `default*`
   seed props. The host composer creates `input` and `executionInputSources`
@@ -213,7 +259,9 @@ className?, draftKey? }` — the `default*` props are SEEDS, not controlled
 
   Projectless threads: the project picker always offers "Don't work in a
   project". That choice submits BB's personal-project id in `projectId` (not
-  `null`) and a host environment with `workspace: { type: "personal" }`.
+  `null`) and uses an eligible projectless environment provider. The provider
+  supplies its own inputs and workspace; the composer does not synthesize a
+  personal-workspace request.
   Forward both fields unchanged to `threads.spawn`. If you need metadata for
   the selected project, call `bb.sdk.projects.list({ includePersonal: true })`
   because the ordinary list omits the personal project.

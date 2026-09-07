@@ -17,7 +17,14 @@ import { createPortal } from "react-dom";
 import { PERSONAL_PROJECT_ID, type ThreadListEntry } from "@bb/domain";
 import type { ProjectResponse } from "@bb/server-contract";
 import { NavLink } from "react-router-dom";
-import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
+import { useCreateThreadInEnvironment } from "@/hooks/useCreateThreadInEnvironment";
+import { useSystemEnvironmentProviders } from "@/hooks/queries/environment-provider-queries";
+import {
+  findEnvironmentDisplayProvider,
+  getEnvironmentLabelIconName,
+  UNNAMED_ENVIRONMENT_LABEL,
+} from "@/lib/environment-workspace-display";
+import { resolveEnvironmentDisplayName } from "@bb/core-ui";
 import {
   usePromptDraftHasInput,
   usePromptDraftInputThreadIds,
@@ -388,6 +395,7 @@ interface GetThreadNodeStickyLevelArgs {
 
 interface EnvironmentThreadGroupHeaderProps {
   environmentId: string;
+  environmentProviderId: string | null;
   representativeThread: ThreadListEntry;
   rowDepth: number;
   stickyLevel?: number;
@@ -852,7 +860,7 @@ function EnvironmentThreadGroupHeaderActions({
             type="button"
             variant="ghost"
             size="icon"
-            aria-label="Worktree actions"
+            aria-label="Environment actions"
             className={cn(
               "rounded-md p-0 text-muted-foreground",
               "data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-foreground",
@@ -876,7 +884,7 @@ function EnvironmentThreadGroupHeaderActions({
             }}
           >
             <Icon name="Edit" aria-hidden="true" />
-            Rename worktree
+            Rename environment
           </DropdownMenuItem>
           <DropdownMenuItem
             disabled={archiveThreadsPending}
@@ -889,7 +897,7 @@ function EnvironmentThreadGroupHeaderActions({
             }}
           >
             <Icon name="Archive" aria-hidden="true" />
-            Archive worktree
+            Archive environment
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -899,6 +907,7 @@ function EnvironmentThreadGroupHeaderActions({
 
 function EnvironmentThreadGroupHeader({
   environmentId,
+  environmentProviderId,
   representativeThread,
   rowDepth,
   stickyLevel,
@@ -912,10 +921,22 @@ function EnvironmentThreadGroupHeader({
   onToggleCollapsed,
 }: EnvironmentThreadGroupHeaderProps) {
   const [isActionsOpen, setIsActionsOpen] = useState(false);
-  const environmentName = representativeThread.environmentName;
-  const branchName = representativeThread.environmentBranchName;
-  const displayName = environmentName || branchName || "Worktree";
-  const iconName: IconName = "FolderGit";
+  const { providers } = useSystemEnvironmentProviders();
+  const providerLookup = findEnvironmentDisplayProvider(
+    providers,
+    environmentProviderId,
+  );
+  const displayName =
+    resolveEnvironmentDisplayName(
+      {
+        name: representativeThread.environmentName,
+        branchName: representativeThread.environmentBranchName,
+        path: representativeThread.environmentPath,
+        environmentProviderId,
+      },
+      providerLookup,
+    ) ?? UNNAMED_ENVIRONMENT_LABEL;
+  const iconName = getEnvironmentLabelIconName(providerLookup);
   const showRollupGlyph =
     isCollapsed &&
     (childActivity.pending ||
@@ -1031,7 +1052,8 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
   onToggleThreadCollapsed,
   onToggleEnvironmentCollapsed,
 }: EnvironmentThreadGroupRowProps) {
-  const { environmentId, nodes, stats } = environmentThreadGroup;
+  const { environmentId, environmentProviderId, nodes, stats } =
+    environmentThreadGroup;
   const representativeNode = nodes[0];
   const representativeThread = representativeNode.thread;
   const nodeDepth = representativeNode.depth;
@@ -1048,7 +1070,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
           variant,
         })
       : undefined;
-  const createThreadInWorktree = useCreateThreadInWorktree({
+  const createThreadInEnvironment = useCreateThreadInEnvironment({
     projectId,
     environmentId,
   });
@@ -1062,8 +1084,8 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
     });
   const handleCreateNewThread = useCallback(() => {
     onProjectSelect?.();
-    createThreadInWorktree();
-  }, [createThreadInWorktree, onProjectSelect]);
+    createThreadInEnvironment();
+  }, [createThreadInEnvironment, onProjectSelect]);
   const {
     onRenameDialogOpenChange,
     onRenameEnvironment,
@@ -1092,6 +1114,7 @@ const EnvironmentThreadGroupRow = memo(function EnvironmentThreadGroupRow({
       <SidebarStickyGroup className="space-y-0.5">
         <EnvironmentThreadGroupHeader
           environmentId={environmentId}
+          environmentProviderId={environmentProviderId}
           representativeThread={representativeThread}
           rowDepth={rowDepth}
           stickyLevel={getThreadNodeStickyLevel({

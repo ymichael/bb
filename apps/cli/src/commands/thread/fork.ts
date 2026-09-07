@@ -164,18 +164,30 @@ export function registerForkCommand(
             const hostId = needsHostId
               ? await resolveForkSourceHostId(sdk, sourceThreadId)
               : null;
-            environment =
+            if (
               environmentValue === undefined &&
               opts.newEnvironment === undefined &&
               opts.baseBranch === undefined
-                ? undefined
-                : buildSpawnEnvironment({
-                    defaultPersonalWorkspace: false,
-                    environmentValue,
-                    newEnvironmentKind: opts.newEnvironment,
-                    hostId,
-                    baseBranch: opts.baseBranch,
-                  });
+            ) {
+              environment = undefined;
+            } else {
+              const builtEnvironment = buildSpawnEnvironment({
+                defaultPersonalWorkspace: false,
+                environmentValue,
+                newEnvironmentKind: opts.newEnvironment,
+                hostId,
+                baseBranch: opts.baseBranch,
+              });
+              if (
+                builtEnvironment.type === "project-default" ||
+                builtEnvironment.type === "provider"
+              ) {
+                throw new Error(
+                  "Fork environment flags resolved no environment",
+                );
+              }
+              environment = builtEnvironment;
+            }
             thread = await sdk.threads.fork({
               sourceThreadId,
               origin: "cli",

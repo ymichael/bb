@@ -7,8 +7,8 @@ editingNotes: Keep the user-facing noun machine; internal APIs and types use Hos
 ---
 Machine commands
 
-A machine is a host daemon that can run thread environments. Add remote
-machines under Settings → Machines.
+A machine is a host daemon that can run thread environments. Add remote or
+plugin-provisioned machines under Settings → Machines.
 
 The server listens on loopback by default. Remote execution machines need the
 account-gated bb connect route or a private Tailscale Serve URL; generate their
@@ -33,13 +33,18 @@ unless you pass `--auto-update` explicitly.
   bb machine list                         List machines with ID, connection
                                           status, and relative last-seen time
     --json                                Print the raw host list
+  bb machine providers [--project <id>]   List installed machine providers
+    --json                                Include inputs schemas and policy
   bb machine show <id-or-name>            Show machine details
   bb machine join-code                    Create a machine pairing code
   bb machine rename <id-or-name> <name>   Rename a machine
   bb machine retry-update <id-or-name>    Retry a pending daemon update now
+  bb machine suspend <id-or-name>         Suspend a provider-managed machine
+  bb machine resume <id-or-name>          Resume a suspended machine
+  bb machine retry-cleanup <id-or-name>   Retry failed teardown now
   bb machine remove <id-or-name> [--yes]  Revoke and remove a machine
   bb machine provider-cli status <machine>
-  bb machine provider-cli install <machine> <claudeCode|codex|cursor>
+  bb machine provider-cli install <machine> <provider-id>
     --action <install|update>
 
 Each machine has a permission limit: the highest permission mode any thread on
@@ -51,6 +56,10 @@ and rename/remove. There is no CLI or SDK command to set it, and a paired
 machine cannot set it for any machine, so a sandbox machine can stay at Full
 Access while your laptop stays lower. `bb machine list --json` and `bb machine
 show` report the current limit.
+
+Suspend and resume are available only when the machine provider implements
+both operations. Retry cleanup is accepted only for a retiring machine whose
+provider teardown failed.
 
 Updates commands
 
@@ -74,12 +83,18 @@ Machine selectors accept either an exact machine ID or an unambiguous machine
 name. `--host` is an alias for `--machine`.
 
   bb thread spawn --project <id> --machine <id-or-name> --prompt "..."
+  bb thread spawn --project <id> --new-machine <provider-id> --prompt "..."
+    --machine-inputs <json>
   bb project create --name "..." --root <path> --machine <id-or-name>
   bb project source add <projectId> --machine <id-or-name> --path <path>
 
 For thread spawning, machine targeting works with an unmanaged workspace path,
 a new managed worktree, or the personal workspace. Do not combine it with an
 existing environment ID: the reused environment already selects its machine.
+`--new-machine` creates through a machine provider and uses its advertised
+environment row. Machine inputs are persisted and readable by plugins; never
+put secrets there. Store credentials in plugin settings and pass only
+non-secret configuration or references.
 
 For project creation and sources, `--root`/`--path` refers to a path on the
 selected connected machine. Omit the selector to keep the existing local CLI

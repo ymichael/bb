@@ -36,8 +36,16 @@ function hostRecord(
   return {
     id,
     name: id,
-    type: "persistent",
     status,
+    machineProviderId: null,
+    machineProviderSelection: null,
+    lifecycle: {
+      phase: "active",
+      suspendedAt: null,
+      retireAt: null,
+      progress: null,
+      teardown: null,
+    },
     maxPermissionMode: "full",
     lastSeenAt: null,
     lastRejectedProtocolVersion: null,

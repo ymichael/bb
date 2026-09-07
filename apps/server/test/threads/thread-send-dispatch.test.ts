@@ -8,10 +8,10 @@ import {
   setQueuedThreadMessageFailureReason,
   setQueuedThreadMessageGroupBoundary,
 } from "@bb/db";
+import type { EnvironmentRow } from "@bb/db";
 import {
   changedMessageSchema,
   turnScope,
-  type Environment,
   type Thread,
   type ThreadChangedMessage,
 } from "@bb/domain";
@@ -51,7 +51,7 @@ import {
 import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
 
 interface IdleThreadFixture {
-  environment: Environment;
+  environment: EnvironmentRow;
   sessionId: string;
   thread: Thread;
 }

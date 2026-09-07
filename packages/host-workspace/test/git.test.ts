@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   detectGitRepo,
   detectGitRepoKind,
+  detectLinkedWorktree,
   getCheckoutRef,
   getWorkspaceGitOperation,
   parseNameStatusEntries,
@@ -226,6 +227,17 @@ describe("detectGitRepoKind", () => {
     );
     await expect(detectGitRepoKind(worktreePath)).resolves.toBe("work-tree");
     await expect(detectGitRepoKind(plainDir)).resolves.toBe("none");
+  });
+
+  it("tells a linked worktree apart from an ordinary checkout", async () => {
+    const { worktreePath } = await initBareWorktreeLayout();
+    const ordinaryCheckout = await initReadGitBlobRepo();
+    const plainDir = await fs.mkdtemp(path.join(os.tmpdir(), "bb-plain-wt-"));
+    tempDirs.push(plainDir);
+
+    await expect(detectLinkedWorktree(worktreePath)).resolves.toBe(true);
+    await expect(detectLinkedWorktree(ordinaryCheckout)).resolves.toBe(false);
+    await expect(detectLinkedWorktree(plainDir)).resolves.toBe(false);
   });
 
   it("keeps detectGitRepo scoped to work trees so bare roots get no checkout UI", async () => {

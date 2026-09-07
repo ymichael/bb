@@ -48,7 +48,7 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
       expect(environment.status).toBe("ready");
       expect(environment.path).toBe(harness.repoDir);
       expect(environment.isGitRepo).toBe(true);
-      expect(environment.isWorktree).toBe(false);
+      expect(environment.environmentProviderId).toBe("project-checkout");
       expect(host.id).toBe(harness.hostId);
 
       const hosts = await getHosts(harness.api);
@@ -57,34 +57,37 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
     }));
 
   it("creates a managed worktree and registers it as a git worktree", () =>
-    withHarness(async (harness) => {
-      const project = await createProjectFixture(
-        harness,
-        "Managed Worktree Smoke",
-      );
-      const { environment } = await createReadyThread(harness, {
-        projectId: project.id,
-        workspace: { type: "managed-worktree" },
-      });
+    withHarness(
+      { builtinPlugins: ["environment-git-worktree"] },
+      async (harness) => {
+        const project = await createProjectFixture(
+          harness,
+          "Managed Worktree Smoke",
+        );
+        const { environment } = await createReadyThread(harness, {
+          projectId: project.id,
+          workspace: { type: "managed-worktree" },
+        });
 
-      expect(environment.isWorktree).toBe(true);
-      expect(environment.branchName).toBeTruthy();
-      expect(environment.path).toBeTruthy();
+        expect(environment.environmentProviderId).toBe("git-worktree");
+        expect(environment.branchName).toBeTruthy();
+        expect(environment.path).toBeTruthy();
 
-      const workspacePath = environment.path;
-      if (!workspacePath) {
-        throw new Error("Managed worktree path was not assigned");
-      }
+        const workspacePath = environment.path;
+        if (!workspacePath) {
+          throw new Error("Managed worktree path was not assigned");
+        }
 
-      await fs.access(workspacePath);
-      const resolvedWorktreePath = await fs.realpath(workspacePath);
-      const worktreeList = await runGit({
-        args: ["worktree", "list", "--porcelain"],
-        cwd: harness.repoDir,
-      });
+        await fs.access(workspacePath);
+        const resolvedWorktreePath = await fs.realpath(workspacePath);
+        const worktreeList = await runGit({
+          args: ["worktree", "list", "--porcelain"],
+          cwd: harness.repoDir,
+        });
 
-      expect(worktreeList).toContain(`worktree ${resolvedWorktreePath}`);
-    }));
+        expect(worktreeList).toContain(`worktree ${resolvedWorktreePath}`);
+      },
+    ));
 
   it("starts parent and child threads with the shared runtime config", async () => {
     const record = await recordScriptedEchoRequests();

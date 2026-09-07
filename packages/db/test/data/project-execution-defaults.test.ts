@@ -12,7 +12,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "defaults-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "defaults-project",

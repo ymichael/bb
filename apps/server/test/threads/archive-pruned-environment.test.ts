@@ -29,8 +29,8 @@ function seedThreadWithPrunedEnvironment(
   const environment = seedEnvironment(deps, {
     hostId: host.id,
     projectId: project.id,
-    managed: true,
-    workspaceProvisionType: "managed-worktree",
+    environmentProviderId: "personal-workspace",
+    isGitRepo: false,
   });
   const thread = seedThread(deps, {
     environmentId: environment.id,
@@ -39,7 +39,11 @@ function seedThreadWithPrunedEnvironment(
   });
   deps.db
     .update(environments)
-    .set({ status: "destroyed", updatedAt: Date.now() - EIGHT_DAYS_MS })
+    .set({
+      status: "destroyed",
+      teardownStatus: "removed",
+      updatedAt: Date.now() - EIGHT_DAYS_MS,
+    })
     .where(eq(environments.id, environment.id))
     .run();
   expect(

@@ -100,4 +100,20 @@ describe("MachinePickerUI", () => {
       screen.getByRole("button", { name: "Machine" }).textContent,
     ).toContain("MacBook Pro");
   });
+
+  it("includes provider-made hosts in machine pickers", () => {
+    renderMachineMenu({
+      hosts: [
+        thisMachine,
+        studio,
+        makeHost({
+          id: "host_modal",
+          name: "Modal sandbox 3f9a",
+          machineProviderId: "modal-sandbox",
+        }),
+      ],
+    });
+
+    expect(screen.getByText("Modal sandbox 3f9a")).toBeTruthy();
+  });
 });

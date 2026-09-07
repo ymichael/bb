@@ -29,6 +29,7 @@ export interface ReadyHostThreadOptions {
   title?: string;
   workspace:
     | { type: "managed-worktree" }
+    | { type: "personal" }
     | { path: string | null; type: "unmanaged" };
 }
 

@@ -91,38 +91,6 @@ const descriptionCases: DescriptionCase[] = [
     },
   },
   {
-    name: "environment_not_ready retiring",
-    body: {
-      code: "environment_not_ready",
-      message: "Environment unavailable",
-      details: {
-        environmentStatus: "retiring",
-        hasPath: true,
-      },
-    },
-    expected: {
-      title: "Workspace cleaning up",
-      body: "Workspace is being cleaned up.",
-      severity: "info",
-    },
-  },
-  {
-    name: "environment_not_ready destroying",
-    body: {
-      code: "environment_not_ready",
-      message: "Environment unavailable",
-      details: {
-        environmentStatus: "destroying",
-        hasPath: true,
-      },
-    },
-    expected: {
-      title: "Workspace cleaning up",
-      body: "Workspace is being cleaned up.",
-      severity: "info",
-    },
-  },
-  {
     name: "environment_not_ready destroyed archived thread",
     body: {
       code: "environment_not_ready",
@@ -168,22 +136,6 @@ const descriptionCases: DescriptionCase[] = [
       title: "Workspace unavailable",
       body: "Workspace no longer exists.",
       severity: "warning",
-    },
-  },
-  {
-    name: "thread_environment_unavailable destroying",
-    body: {
-      code: "thread_environment_unavailable",
-      message: "Thread environment is unavailable",
-      details: {
-        environmentStatus: "destroying",
-        reason: "destroying",
-      },
-    },
-    expected: {
-      title: "Workspace cleaning up",
-      body: "Workspace is being cleaned up.",
-      severity: "info",
     },
   },
   {

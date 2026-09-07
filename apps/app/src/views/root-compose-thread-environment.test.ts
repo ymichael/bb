@@ -1,156 +1,118 @@
 import { describe, expect, it } from "vitest";
-import { PERSONAL_PROJECT_ID } from "@bb/domain";
-import {
-  resolveRootComposeThreadEnvironment,
-  type RootComposeSelectedBranch,
-} from "./root-compose-thread-environment";
+import type { SystemEnvironmentProvider } from "@bb/server-contract";
+import { resolveRootComposeThreadEnvironment } from "./root-compose-thread-environment";
 
 const projectId = "proj_123";
-const hostWorktreeEnvironmentValue = "host:host_123:worktree";
-const hostLocalEnvironmentValue = "host:host_123:local";
 
-function selectedBranch(name: string): RootComposeSelectedBranch {
-  return { name, isNew: false };
-}
+const environmentProviders: SystemEnvironmentProvider[] = [
+  {
+    id: "branchy",
+    displayName: "New branch workspace",
+    icon: "GitBranch",
+    logoUrl: null,
+    pluginId: "branchy",
+    acceptsEmptyInputs: false,
+    availability: null,
+    requires: {
+      projectCheckout: true,
+      gitCheckout: true,
+      gitRemote: false,
+      projectless: false,
+    },
+    inputs: {
+      type: "object",
+      properties: { branch: { type: "object" } },
+      required: ["branch"],
+    },
+  },
+  {
+    id: "hosted",
+    displayName: "Machine sandbox",
+    icon: "Server",
+    logoUrl: null,
+    pluginId: "hosted",
+    acceptsEmptyInputs: true,
+    availability: null,
+    requires: {
+      projectCheckout: false,
+      gitCheckout: false,
+      gitRemote: false,
+      projectless: false,
+    },
+    inputs: null,
+  },
+];
 
 describe("resolveRootComposeThreadEnvironment", () => {
-  it("omits unmanaged branch checkout when no branch is selected", () => {
+  it("carries a provider's inputs verbatim with the picked machine", () => {
     expect(
       resolveRootComposeThreadEnvironment({
-        defaultBranch: null,
-        defaultWorktreeBaseBranch: null,
-        environmentValue: hostLocalEnvironmentValue,
+        environmentValue: "provider:branchy",
         projectId,
-        selectedBranch: null,
+        environmentProviders,
+        providerHostId: "host_123",
+        providerInputs: { branch: { kind: "named", name: "release" } },
       }),
     ).toEqual({
-      type: "host",
-      hostId: "host_123",
-      workspace: {
-        type: "unmanaged",
-        path: null,
-      },
+      type: "provider",
+      environmentProviderId: "branchy",
+      machine: { type: "existing", hostId: "host_123" },
+      inputs: { branch: { kind: "named", name: "release" } },
     });
   });
 
-  it("sends explicit existing branch checkout for host local", () => {
+  it("resolves nothing for a provider with inputs until a value exists", () => {
     expect(
       resolveRootComposeThreadEnvironment({
-        defaultBranch: null,
-        defaultWorktreeBaseBranch: null,
-        environmentValue: hostLocalEnvironmentValue,
+        environmentValue: "provider:branchy",
         projectId,
-        selectedBranch: selectedBranch("develop"),
+        environmentProviders,
+        providerHostId: "host_123",
+        providerInputs: null,
       }),
-    ).toMatchObject({
-      workspace: {
-        type: "unmanaged",
-        branch: {
-          kind: "existing",
-          name: "develop",
-        },
-      },
-    });
+    ).toBeNull();
   });
 
-  it("sends explicit new branch checkout for host local", () => {
+  it("resolves nothing for a host provider without a machine", () => {
     expect(
       resolveRootComposeThreadEnvironment({
-        defaultBranch: null,
-        defaultWorktreeBaseBranch: null,
-        environmentValue: hostLocalEnvironmentValue,
+        environmentValue: "provider:hosted",
         projectId,
-        selectedBranch: { name: "develop", isNew: true },
+        environmentProviders,
+        providerHostId: null,
       }),
-    ).toMatchObject({
-      workspace: {
-        type: "unmanaged",
-        branch: { kind: "new", baseBranch: "develop" },
-      },
-    });
+    ).toBeNull();
   });
 
-  it("submits the resolved local default displayed by the selector", () => {
+  it("sends null inputs for a provider that declares none, even when a stale value lingers", () => {
     expect(
       resolveRootComposeThreadEnvironment({
-        defaultBranch: "main",
-        defaultWorktreeBaseBranch: "main",
-        environmentValue: hostWorktreeEnvironmentValue,
+        environmentValue: "provider:hosted",
         projectId,
-        selectedBranch: null,
-      }),
-    ).toMatchObject({
-      workspace: {
-        type: "managed-worktree",
-        baseBranch: { kind: "named", name: "main" },
-      },
-    });
-  });
-
-  it("submits the resolved remote default displayed by the selector", () => {
-    expect(
-      resolveRootComposeThreadEnvironment({
-        defaultBranch: "main",
-        defaultWorktreeBaseBranch: "origin/main",
-        environmentValue: hostWorktreeEnvironmentValue,
-        projectId,
-        selectedBranch: null,
-      }),
-    ).toMatchObject({
-      workspace: {
-        type: "managed-worktree",
-        baseBranch: { kind: "named", name: "origin/main" },
-      },
-    });
-  });
-
-  it("falls back to default while branch metadata is unavailable", () => {
-    expect(
-      resolveRootComposeThreadEnvironment({
-        defaultBranch: undefined,
-        defaultWorktreeBaseBranch: undefined,
-        environmentValue: hostWorktreeEnvironmentValue,
-        projectId,
-        selectedBranch: null,
-      }),
-    ).toMatchObject({
-      workspace: {
-        type: "managed-worktree",
-        baseBranch: { kind: "default" },
-      },
-    });
-  });
-
-  it("sends a named base branch when the selected branch matches the env's current", () => {
-    expect(
-      resolveRootComposeThreadEnvironment({
-        defaultBranch: "main",
-        defaultWorktreeBaseBranch: "origin/main",
-        environmentValue: hostWorktreeEnvironmentValue,
-        projectId,
-        selectedBranch: selectedBranch("develop"),
-      }),
-    ).toMatchObject({
-      workspace: {
-        type: "managed-worktree",
-        baseBranch: { kind: "named", name: "develop" },
-      },
-    });
-  });
-
-  it("uses personal workspaces for the personal project", () => {
-    expect(
-      resolveRootComposeThreadEnvironment({
-        defaultBranch: null,
-        defaultWorktreeBaseBranch: null,
-        environmentValue: hostLocalEnvironmentValue,
-        projectId: PERSONAL_PROJECT_ID,
-        selectedBranch: selectedBranch("develop"),
+        environmentProviders,
+        providerHostId: "host_123",
+        providerInputs: { image: "stale" },
       }),
     ).toEqual({
-      type: "host",
-      hostId: "host_123",
-      workspace: { type: "personal" },
+      type: "provider",
+      environmentProviderId: "hosted",
+      machine: { type: "existing", hostId: "host_123" },
+      inputs: null,
     });
+  });
+
+  it("resolves a reuse value to its environment and nothing before one is picked", () => {
+    expect(
+      resolveRootComposeThreadEnvironment({
+        environmentValue: "reuse:env_1",
+        projectId,
+      }),
+    ).toEqual({ type: "reuse", environmentId: "env_1" });
+    expect(
+      resolveRootComposeThreadEnvironment({
+        environmentValue: "reuse",
+        projectId,
+      }),
+    ).toBeNull();
   });
 });

@@ -26,7 +26,6 @@ interface ThreadMetadataGenerationArgs {
 }
 
 interface GeneratedThreadMetadata {
-  branchSlug?: string;
   title?: string;
 }
 
@@ -109,15 +108,11 @@ function normalizeGeneratedThreadMetadata(
   }
 
   const title = parsed.title ? sanitizeGeneratedTitle(parsed.title) : null;
-  const branchSlug = title ? sanitizeGeneratedBranchSlug(title) : null;
-  if (!title && !branchSlug) {
+  if (!title) {
     return null;
   }
 
-  return {
-    ...(branchSlug ? { branchSlug } : {}),
-    ...(title ? { title } : {}),
-  };
+  return { title };
 }
 
 export async function generateThreadMetadataWithOutcome(

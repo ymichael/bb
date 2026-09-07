@@ -24,6 +24,7 @@ export {
 };
 export type * from "@bb/sdk/node";
 export type {
+  GitBranchSelection,
   JsonValue,
   PermissionMode,
   PromptInput,
@@ -33,7 +34,6 @@ export type {
   ThreadStatus,
 } from "@bb/sdk/node";
 export type {
-  BaseBranchSpec,
   CreateExecutionInputSources,
   EnvironmentArgs,
   ExistingThreadExecutionInputSources,

@@ -185,6 +185,34 @@ describe("surface cross-references", () => {
 });
 
 describe("surface card copy", () => {
+  it("lists every environment orchestration symbol and lifecycle event", () => {
+    const environmentProviders = SURFACES_BY_ID.get("environment-providers");
+    expect(environmentProviders?.apiSymbols).toEqual(
+      expect.arrayContaining([
+        "PluginEnvironmentProviderCreateContext",
+        "PluginEnvironmentProviderProgress",
+        "PluginEnvironmentProviderRemoveContext",
+        "experimental_useBranches",
+        "experimental_useCheckoutState",
+      ]),
+    );
+    expect(environmentProviders?.firstParty).toContain("Project checkout");
+
+    const eventCopy = SURFACES_BY_ID.get("thread-events")?.bullets.join(" ");
+    expect(eventCopy).toContain("unarchived");
+    expect(eventCopy).toContain("cancelled before dispatch");
+  });
+
+  it("documents durable machine suspension checkpoints", () => {
+    const machineProviders = SURFACES_BY_ID.get("machine-providers");
+    expect(machineProviders?.apiSymbols).toContain(
+      "PluginMachineProviderSuspendContext",
+    );
+    expect(machineProviders?.bullets.join(" ")).toContain(
+      "Checkpoint a recoverable private resource during suspend",
+    );
+  });
+
   it("follows the lead-then-bullets template", () => {
     for (const group of SURFACE_GROUPS) {
       for (const surface of group.surfaces) {

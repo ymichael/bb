@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
@@ -145,7 +146,7 @@ const serverUrl = option("--server-url");
 const statusServerUrl = ${JSON.stringify(args.statusServerUrl)} ?? serverUrl;
 fs.writeFileSync(
   path.join(dataDir, "auth.json"),
-  JSON.stringify({ hostId, hostKey: "secret", hostType: "persistent" }) + "\\n",
+  JSON.stringify({ hostId, hostKey: "secret" }) + "\\n",
 );
 const configPath = path.join(dataDir, "config.json");
 if (!fs.existsSync(configPath)) {
@@ -346,6 +347,9 @@ describe("machine install script", () => {
       "--server-url",
       "https://machine.getbb.app",
     ]);
+    expect(
+      JSON.parse(readFileSync(join(fixture.dataDir, "auth.json"), "utf8")),
+    ).toEqual({ hostId: "host-test", hostKey: "secret" });
     const daemonPid = Number(
       readFileSync(join(fixture.dataDir, "install-daemon.pid"), "utf8"),
     );
@@ -832,18 +836,18 @@ fi
       "service " +
         join(
           fixture.homeDir,
-          "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app.plist",
+          "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app-host-test.plist",
         ),
     );
     const plist = readFileSync(
       join(
         fixture.homeDir,
-        "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app.plist",
+        "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app-host-test.plist",
       ),
       "utf8",
     );
     expect(plist).toContain(
-      "<string>app.getbb.host-daemon.machine-getbb-app</string>",
+      "<string>app.getbb.host-daemon.machine-getbb-app-host-test</string>",
     );
     expect(plist).toContain("<key>RunAtLoad</key><true/>");
     expect(plist).toContain("<key>KeepAlive</key><true/>");
@@ -862,7 +866,7 @@ fi
     );
     const serviceFile = join(
       fixture.homeDir,
-      "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app.plist",
+      "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app-host-test.plist",
     );
     const domain = `gui/${process.getuid?.()}`;
     expect(readFileSync(join(fixture.dataDir, "launchctl.log"), "utf8")).toBe(
@@ -871,6 +875,54 @@ fi
     expect(
       readFileSync(join(fixture.dataDir, "launchctl-starts.log"), "utf8"),
     ).toBe("start\nstart\n");
+  });
+
+  it("replaces a matching legacy macOS launch agent with exactly one host service", () => {
+    const fixture = createFixture();
+    writeJoinedState(fixture);
+    writeServerInstallTools(fixture, 200);
+    writeExecutable(join(fixture.binDir, "uname"), "#!/bin/sh\necho Darwin\n");
+    const serviceDir = join(fixture.homeDir, "Library/LaunchAgents");
+    mkdirSync(serviceDir, { recursive: true });
+    const legacyServiceFile = join(
+      serviceDir,
+      "app.getbb.host-daemon.machine-getbb-app.plist",
+    );
+    writeFileSync(join(fixture.dataDir, "host-daemon-port"), "45123\n");
+    writeFileSync(
+      legacyServiceFile,
+      `<plist><dict>
+<key>ProgramArguments</key><array><string>host-daemon</string><string>--host-daemon-port</string><string>45123</string></array>
+<key>EnvironmentVariables</key><dict><key>BB_DATA_DIR</key><string>${fixture.dataDir}</string></dict>
+</dict></plist>
+`,
+    );
+    writeExecutable(
+      join(fixture.binDir, "launchctl"),
+      `#!/bin/sh
+printf '%s\n' "$*" >>"${join(fixture.dataDir, "launchctl.log")}"
+if [ "$1" = bootstrap ]; then
+  BB_DATA_DIR="${fixture.dataDir}" "${join(fixture.dataDir, "npm/bin/bb-app")}" host-daemon --host-daemon-port 45123 --server-url https://machine.getbb.app >/dev/null 2>&1 &
+  echo $! >"${join(fixture.dataDir, "service-daemon.pid")}"
+fi
+`,
+    );
+
+    const result = runScript(JOIN_ARGS, fixture);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(legacyServiceFile)).toBe(false);
+    expect(
+      readdirSync(serviceDir).filter((file) => file.endsWith(".plist")),
+    ).toEqual(["app.getbb.host-daemon.machine-getbb-app-host-test.plist"]);
+    const serviceFile = join(
+      serviceDir,
+      "app.getbb.host-daemon.machine-getbb-app-host-test.plist",
+    );
+    const domain = `gui/${process.getuid?.()}`;
+    expect(readFileSync(join(fixture.dataDir, "launchctl.log"), "utf8")).toBe(
+      `bootout ${domain} ${legacyServiceFile}\nbootout ${domain} ${serviceFile}\nbootstrap ${domain} ${serviceFile}\n`,
+    );
   });
 
   it("reports launchctl bootstrap failures", () => {
@@ -893,7 +945,7 @@ fi
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(
-      "Could not register the bb host-daemon launch agent app.getbb.host-daemon.machine-getbb-app.",
+      "Could not register the bb host-daemon launch agent app.getbb.host-daemon.machine-getbb-app-host-test.",
     );
     expect(result.stderr).toContain("launchctl: fixture bootstrap failure");
   });
@@ -934,7 +986,7 @@ printf '%s\n' "$*" >>"${join(fixture.dataDir, "launchctl.log")}"
       join(fixture.binDir, "systemctl"),
       `#!/bin/sh
 printf '%s\n' "$*" >>"${join(fixture.dataDir, "systemctl.log")}"
-if [ "$*" = "--user restart bb-host-daemon-machine-getbb-app.service" ]; then
+if [ "$*" = "--user restart bb-host-daemon-machine-getbb-app-host-test.service" ]; then
   port=$(sed -n '1p' "${join(fixture.dataDir, "host-daemon-port")}")
   BB_DATA_DIR="${fixture.dataDir}" "${join(fixture.dataDir, "npm/bin/bb-app")}" host-daemon --host-daemon-port "$port" --server-url https://machine.getbb.app >/dev/null 2>&1 &
   echo $! >"${join(fixture.dataDir, "service-daemon.pid")}"
@@ -962,7 +1014,7 @@ fi
     const unit = readFileSync(
       join(
         fixture.homeDir,
-        ".config/systemd/user/bb-host-daemon-machine-getbb-app.service",
+        ".config/systemd/user/bb-host-daemon-machine-getbb-app-host-test.service",
       ),
       "utf8",
     );
@@ -977,7 +1029,49 @@ fi
       `Environment="BB_APP_NPM_PREFIX=${realpathSync(fixture.dataDir)}/npm"`,
     );
     expect(readFileSync(join(fixture.dataDir, "systemctl.log"), "utf8")).toBe(
-      "--user daemon-reload\n--user enable bb-host-daemon-machine-getbb-app.service\n--user restart bb-host-daemon-machine-getbb-app.service\n",
+      "--user daemon-reload\n--user enable bb-host-daemon-machine-getbb-app-host-test.service\n--user restart bb-host-daemon-machine-getbb-app-host-test.service\n",
+    );
+  });
+
+  it("replaces a matching legacy systemd unit with exactly one host service", () => {
+    const fixture = createFixture();
+    writeJoinedState(fixture);
+    writeServerInstallTools(fixture, 200);
+    writeExecutable(join(fixture.binDir, "uname"), "#!/bin/sh\necho Linux\n");
+    const serviceDir = join(fixture.homeDir, ".config/systemd/user");
+    mkdirSync(serviceDir, { recursive: true });
+    const legacyServiceFile = join(
+      serviceDir,
+      "bb-host-daemon-machine-getbb-app.service",
+    );
+    writeFileSync(join(fixture.dataDir, "host-daemon-port"), "45123\n");
+    writeFileSync(
+      legacyServiceFile,
+      `[Service]
+ExecStart="node" "bb-app" host-daemon --auto-update --host-daemon-port "45123" --server-url "https://machine.getbb.app"
+Environment="BB_DATA_DIR=${fixture.dataDir}"
+`,
+    );
+    writeExecutable(
+      join(fixture.binDir, "systemctl"),
+      `#!/bin/sh
+printf '%s\n' "$*" >>"${join(fixture.dataDir, "systemctl.log")}"
+if [ "$*" = "--user restart bb-host-daemon-machine-getbb-app-host-test.service" ]; then
+  BB_DATA_DIR="${fixture.dataDir}" "${join(fixture.dataDir, "npm/bin/bb-app")}" host-daemon --host-daemon-port 45123 --server-url https://machine.getbb.app >/dev/null 2>&1 &
+  echo $! >"${join(fixture.dataDir, "service-daemon.pid")}"
+fi
+`,
+    );
+
+    const result = runScript(JOIN_ARGS, fixture);
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(existsSync(legacyServiceFile)).toBe(false);
+    expect(
+      readdirSync(serviceDir).filter((file) => file.endsWith(".service")),
+    ).toEqual(["bb-host-daemon-machine-getbb-app-host-test.service"]);
+    expect(readFileSync(join(fixture.dataDir, "systemctl.log"), "utf8")).toBe(
+      "--user disable --now bb-host-daemon-machine-getbb-app.service\n--user daemon-reload\n--user enable bb-host-daemon-machine-getbb-app-host-test.service\n--user restart bb-host-daemon-machine-getbb-app-host-test.service\n",
     );
   });
 });

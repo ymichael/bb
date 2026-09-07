@@ -266,13 +266,15 @@ One hook today. `"message.dispatch"` is THE admission checkpoint: it runs
 before every message reaches a provider — a thread's first message, a
 follow-up, a steer, a drained queue row, a retry of a failed turn — and it runs
 identically for all of them. The handler receives a typed context (project,
-environment/host, prompt blocks plus a plain-text view, the resolved execution
-tuple with per-field provenance, origin/parent provenance, the target thread,
-whether the attempt would `start-turn` or `join-turn`, and the queued row when
-the attempt is a re-attempt) and answers `proceed`, `wait` (queue the message as
-a row with a reason and an optional `sendAt`), or `reject` (a synchronous 409
-carrying the plugin's message). A handler cannot rewrite the dispatch it is
-deciding about: there is no amendment arm.
+environment/host, `environmentIntent` as a
+`PluginDispatchEnvironmentIntent | null`, prompt blocks plus a plain-text view,
+the resolved execution tuple with per-field provenance, origin/parent
+provenance, the target thread, whether the attempt would `start-turn` or
+`join-turn`, and the queued row when the attempt is a re-attempt) and answers
+`proceed`, `wait` (queue the message as a row with a reason and an optional
+`sendAt`), or `reject` (a synchronous 409 carrying the plugin's message). A
+handler cannot rewrite the dispatch it is deciding about: there is no amendment
+arm.
 
 Handlers run as a deterministic chain in plugin install order, `reject`
 short-circuits, `wait` decisions collect across a full pass, and the FIRST
@@ -359,9 +361,9 @@ and plugin interaction details. Confirm that the full interaction DTO remains
 the correct payload instead of an id that requires a fresh SDK read. Decide
 whether this event needs matching resolved, cancelled, or interrupted events.
 
-## `message.queued` / `message.dispatched` / `turn.failed` (`bb.events.on`)
+## `message.queued` / `message.dispatched` / `message.cancelled` / `turn.failed` (`bb.events.on`)
 
-**What it does.** Three announcements on the observe-only `bb.events.on`
+**What it does.** Four announcements on the observe-only `bb.events.on`
 registry.
 
 `message.queued` and `message.dispatched` each carry the `ThreadQueuedMessage`
@@ -390,12 +392,218 @@ today, and filtering on `entry.waitingOn` is the documented pattern) or whether
 a plugin should only see the rows whose wait it owns. Decide too whether
 `message.queued` firing on every rewritten wait is what a listener wants, or
 whether a separate `message.updated` belongs alongside it — the timeline event
-already distinguishes the two. There is no cancellation event: a plugin that
-needs a teardown signal has none today, so decide whether one belongs here
-before this is stable. For `turn.failed`, confirm the payload answers every
+already distinguishes the two. `message.cancelled` fires when a queued row is
+deleted before it dispatched (the queued card's Delete, `bb thread queue`);
+rows that vanish with their thread fire the thread event instead. Confirm
+that split is the teardown signal a plugin holding resources for a waiting
+message needs before this is stable. For `turn.failed`, confirm the payload answers every
 question a retry policy asks without replaying the event log, and note that
 attempt caps are entirely the plugin's: core enforces no ceiling on retry chains
 beyond one live retry row per original request.
+
+## `bb.experimental_environments` (`register`, `recheck`)
+
+**What it does.** Lets a plugin register a named place where threads can run.
+Provider ids are flat across plugins, and the first live registration wins.
+
+A declaration has four eligibility facts in `requires` (`projectCheckout`,
+`gitCheckout`, `gitRemote`, `projectless`), all defaulted to
+false at registration. Optional `inputs` uses Standard Schema v1; core parses it
+at thread creation and persists the parsed JSON value. Optional `validate`
+runs after core eligibility checks and can accept or refuse before a thread is
+created.
+
+Core invokes `create` and `remove` and records results directly. Policy drives
+retries, cancellation and retirement; providers return resource-operation
+results. Created directories include explicit ownsPath. The core lifecycle
+table owns attempt identity and private resources. recheck schedules another
+ask.
+
+Provider selections are accepted by the SDK, CLI, app, and automations. The
+built-in checkout, worktree, and personal workspace behaviors are first-party
+plugins; legacy workspace request shapes are compatibility sugar resolved to
+those providers at the server boundary.
+
+**Audit before stabilizing.**
+
+1. **Requirement vocabulary.** `requires` has four booleans, each a fact core
+   evaluates before the thread exists (an availability rule plus a context
+   field); everything else a provider wants from the request goes through
+   `inputs`. Decide whether the next fact fits that shape — and whether
+   `gitCheckout` should carry more than "a git repository with commits" —
+   before it is frozen.
+   1a. **Inputs at the boundary.** The schema is plugin code core runs inside the
+   request: a slow or throwing schema costs the request, not the thread, and
+   the JSON Schema conversion happens once at registration and may fail load.
+   Decide whether core should bound the parse, and whether the row should
+   store the raw request value alongside the parsed one so a schema change
+   can re-parse it.
+2. **Single-provider invocation.** Confirm asking the one named provider (vs.
+   the `message.dispatch` chain) stays the right model once several
+   provider plugins ship, and that the "not registered" wait + backoff is
+   the right degradation for an uninstalled plugin.
+3. **Undeclared facts: `suggestedBranchName` and `projectCheckout`.** Core
+   hands every create a branch name built from the thread's title and the
+   `managedBranchPrefix` setting, whether or not the provider makes a branch,
+   and hands every provider the project's checkout on its machine,
+   whether or not it reads it. Decide whether both belong on the context for
+   everyone or behind a declaration flag — and, for `projectCheckout`,
+   whether a path is the whole of what a provider needs to know about a
+   checkout it did not make.
+4. **Durable operations.** Core replaces the former decision contract with
+   `create`/`remove` operations. Audit cancellation races, provider
+   reload during work, and restart checkpoints against the environment-provider
+   contract below. Core generates the instance key from the launch path key;
+   it transfers resources directly, without adoption queries.
+5. **Compatibility fields.** Retain deprecated managed, isWorktree,
+   workspaceProvisionType and display-kind fields for the agreed cycle.
+   Ownership is provider-neutral; managed derives from ownsPath, while
+   isWorktree comes from git inspection. EnvironmentStatus does not restore
+   retiring/destroying; lifecycle is a separate read-only view.
+
+## `@get-bb/plugin-sdk/environment-provider`
+
+**What it does.** Exports the resource-operation contract for
+`bb.experimental_environments.register`. The SDK controller is removed.
+Core persists launch attempts, progress, cancellation, direct resource
+attachment, retirement deadlines and teardown state in SQLite. Providers supply
+idempotent long-running create and remove calls plus policy. Values retain their
+experimental\_ prefix; public types follow the existing declaration convention.
+The optional `availability(context)` method answers whether the
+provider is available, needs setup, or is unavailable for a project and
+machine. Its context contains project, host, projectCheckout, and gitRemote;
+its named types intentionally have no experimental prefix.
+
+**Audit before stabilizing.** Verify monotonic attempts and path-key recovery
+across cancellation/restart; per-environment
+removal serialization; retry caps and timing defaults; resource privacy and the
+16 KiB boundary; create-timeout aborts; and the read-only lifecycle projection.
+The pathKey gives create and remove stable resource identity. Confirm these
+extensions before stabilizing. Rebuilds
+receive previous.environment and previous.resource, null after completed
+removal. The six policy defaults are 5 minutes/60 seconds/30 seconds/3/
+per-thread/null; nullable retirement and create timeout disable those policies.
+EnvironmentStatus remains provisioning/ready/error/destroyed;
+retiring and teardown are lifecycle phases, not restored statuses.
+Audit availability message ownership, cache invalidation on settings and
+recheck, the interaction between the `requires` floor and provider decisions,
+and whether the current decision timeout is appropriate before stabilizing it.
+
+## `app.slots.experimental_environmentProviderInputs`, `experimental_BranchPicker`, `experimental_useBranches` and `experimental_useCheckoutState` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** The picker-side half of environment providers. The slot
+registers the control the New Thread environment picker renders beside this
+plugin's selected provider (`{ environmentProviderId, component }`; props
+`{ projectId, hostId, value, onChange }` over the selection's `inputs` JSON
+value — `hostId` is the picked machine; `onChange({ status: "ready", value })` supplies valid inputs and
+`onChange({ status: "blocked", reason })` blocks submit with the plugin's reason).
+It is mounted only for a provider that declared `inputs`. A provider whose
+schema accepts empty input can be submitted without a registered slot; any
+other provider with `inputs` remains disabled until its plugin registers the
+control and the control produces a value. Core renders no control for provider
+inputs of its own; the server parses whatever the control produced with the
+provider's schema at create time, so the control only has to emit a value the
+schema accepts. Inputs are persisted and readable by every plugin, so they
+must contain no secrets; credentials belong in plugin settings and inputs
+carry non-secret references. `experimental_BranchPicker` is the host's branch
+picker with its branch-options loading (`{ hostId, projectId, value, onChange,
+label?, placeholder?, disabled }` — `label` is text before the branch, omitted
+means the branch alone; `placeholder` replaces the muted default base shown
+while nothing is picked), exported so a provider that runs on an enrolled
+machine can render bb's own branch control inside its inputs control — the
+worktree plugin's `app.tsx` does exactly that, emitting `{ branch: { kind:
+"named", name } }` for a pick, `{ branch: { kind: "default" } }` for a
+cleared pick and on mount — the same additive-versioning exception as
+`experimental_ProviderModelPicker`. `experimental_useBranches({ hostId,
+projectId, query? })` returns the matching local and remote branch lists,
+loading state, and a `refresh()` operation that performs a blocking remote
+refresh. `experimental_BranchPicker` is built on this hook.
+`experimental_useCheckoutState({ hostId, projectId })` exposes the checkout's
+git, unborn, detached, dirty, current-branch, and operation facts. The checkout
+plugin combines the two hooks into its own chip, menu, search, and branch list,
+and owns the existing/new selection, labels, blocker copy, and emitted inputs.
+
+**Audit before stabilizing.**
+
+1. **Slot placement.** The control renders where the branch picker sits
+   today. Confirm that stays the right place for providers with larger
+   configuration (a dialog escape hatch?) before freezing.
+2. **Validity channel.** Confirm ready/blocked remains sufficient and decide
+   whether the picker should run the published JSON Schema client-side before
+   submit.
+3. **Branch API breadth.** Confirm the picker props and branch-hook result stay
+   sufficient for providers. The host owns branch loading, search, and remote
+   refresh, while checkout selection models and mutation behavior stay with
+   the plugin.
+4. **Missing slot.** A provider whose schema requires non-empty input and whose
+   app entry registers no slot cannot be picked from the app (the CLI can still
+   send `--environment-inputs`). Decide whether load should refuse that pairing.
+5. **Mount-time default.** A control that wants the row submittable at once
+   has to report ready from an effect on mount, as the worktree does.
+   Decide whether the registration should instead declare a default value.
+
+## `bb.experimental_machines` (`register`)
+
+**What it does.** Lets a plugin create and own execution machines. A machine
+provider declares its id, display name, optional icon, optional git-remote requirement,
+optional Standard Schema inputs, availability, validation, optional picker
+sugar row, lifecycle policy, and idempotent create/remove operations. Create is
+keyed durably and may enrol a project checkout, but standalone machine creation
+passes a nullable project and does not require a checkout. The returned JSON
+resource is private to the provider and capped at 16 KiB.
+
+Core persists launch attempts and machine lifecycle state on hosts. It suspends
+an idle machine only when the provider declares both suspend and resume; a
+provider without that pair must set `idleSuspendMs: null`. Sending work resumes
+a suspended machine. Suspend can persist a recoverable resource before
+destructive cleanup with `checkpoint`. The experimental namespace carries the
+stability signal; supporting public types and declaration members stay
+unprefixed. A last-thread policy
+retires after its grace period and removes every environment through its own
+provider before removing the machine; a never policy retires only on explicit
+user removal. Inputs are
+persisted in `hosts.machine_provider_selection` and readable by every plugin.
+They must never contain secrets: credentials belong in plugin settings and
+inputs carry non-secret references such as a target name.
+When `icon` is omitted, Machines and Add machine show no provider logo or
+provider badge, so the machine has the same presentation as a manually
+enrolled machine.
+
+**Audit before stabilizing.** Verify create-key ownership and retry timing,
+crash recovery when enrolment completed before create returned, cancellation
+cleanup, resource privacy, removal serialization, and lifecycle progress
+presentation. Confirm the requirement vocabulary is sufficient for future
+remote and VM providers, the picker-sugar coupling to one environment provider,
+and whether policies need per-machine overrides before dropping the prefix.
+
+## `@get-bb/plugin-sdk/machine-provider`
+
+**What it does.** Exports the typed contexts and results used by
+`bb.experimental_machines.register`: availability and validation, idempotent
+create with project/gitRemote/inputs/key/attempt/report/signal, optional paired
+suspend/resume, remove, environment-row sugar, and retirement policy.
+
+**Audit before stabilizing.** Audit the same lifecycle, retry, privacy, and
+composition questions as `bb.experimental_machines`, whether an omitted icon
+should continue to suppress provider branding, plus whether suspend and
+resume need distinct result unions beyond an updated private resource. Audit
+the `PluginMachineProviderSuspendContext.checkpoint` durability and whether
+other lifecycle operations need the same checkpoint.
+
+## `app.slots.experimental_machineProviderInputs` (`@get-bb/plugin-sdk/app`)
+
+**What it does.** Registers the app control for one machine provider's inputs
+with `{ machineProviderId, component }`. The component receives
+`{ projectId, value, onChange }` and reports ready JSON or a blocked reason.
+It is used by the picker sugar row and Add machine flow. The resulting value is
+persisted and readable by every plugin, so it must contain no secrets;
+credentials belong in plugin settings and the value should carry only
+non-secret configuration or credential references.
+
+**Audit before stabilizing.** Confirm the shared control suits both composer
+and standalone machine creation, ready/blocked is sufficient, schema validation
+belongs only at the server boundary, and missing-control behavior matches
+environment provider inputs.
 
 ## `bb.branding.experimental_icons` (manifest) and namespaced presentation glyphs
 
@@ -948,7 +1156,7 @@ malformed runtime targets remain inert in both the app and SDK test runtime.
 7. Confirm `PluginFileOpenerSource.experimental_hostId` can become a stable
    required `hostId` field without breaking older opener implementations.
 
-## Host plugin foundation (`bb.hosts.experimental_client`, `ExperimentalHostClient.experimental_onWorkerExit`, `ExperimentalHostClient.experimental_onSignal`, `ExperimentalHostRpcContext.experimental_retainWorker`, `experimental_defineHostEntry`, and `experimental_createHostEntryHarness`)
+## Host plugin foundation (`bb.hosts.experimental_client`, `ExperimentalHostClient.experimental_onWorkerExit`, `ExperimentalHostClient.experimental_onSignal`, `ExperimentalHostRpcContext.experimental_retainWorker`, `experimental_defineHostEntry`, `experimental_killProcessesWithCwdUnder`, and `experimental_createHostEntryHarness`)
 
 **Kept experimental (2026-08-22).** signals and watches have no consumer (decide whether to delete them or keep them experimental separately from calls), none of the lifetime/limit numbers has been measured against a plugin other than keep-awake, and the artifact-contract names (`experimental_apiVersion`, `experimental_signals`, the injected context members) are read by the daemon from installed artifacts, so renaming them needs a dual-name window plus a protocol bump.
 
@@ -973,6 +1181,21 @@ child process, desired-state reconciliation, and
 unexpected-exit recovery without feature-specific core hooks.
 
 **Audit before stabilizing.**
+
+0a. **Process reap.** `experimental_killProcessesWithCwdUnder({ directory,
+   graceMs? })` from `@get-bb/plugin-sdk/host` is the same helper bb's own
+daemon used to reap a managed workspace before removing it: SIGTERM to
+every process whose working directory is at or under the path, SIGKILL
+after the grace, returning what it signalled. Published for the worktree
+and environment-personal-workspace plugins, which own their teardown and call it
+before deleting the directory. Confirm the platform coverage (Linux
+`/proc`, macOS `lsof`) and whether the grace should be per call.
+
+0. **Call timeout.** `ExperimentalHostCallOptions.timeoutMs` (default 30s,
+   capped at 30 minutes) lets a plugin run a long host call — a setup
+   script, a clone — as one call instead of a job it polls. Added for the
+   worktree plugin; confirm the cap and whether the default should be
+   declared per method on the contract instead.
 
 1. **Contract shape.** Confirm Standard Schema values remain the right runtime
    boundary and decide whether method-specific typed errors are necessary.
@@ -1519,18 +1742,23 @@ while a palette switch resolves, so a consumer never paints an unthemed frame.
 
 ## `app.slots.experimental_providerIcon` (`@get-bb/plugin-sdk/app`)
 
-**Kept experimental (2026-08-22).** zero consumers — every provider bb ships declares an SVG asset and `ProviderInfo.icon.glyph` / `logoUrl` cover both declared forms without a frontend bundle; the open questions are id squatting and whether the slot should exist at all (deleting it is the owner's call).
+**Kept experimental (2026-08-22).** zero shipped registrations — first-party
+agent, environment, and machine providers use declared glyphs or SVG assets,
+and the provider catalogs' `glyph` / `logoUrl` icon metadata covers both forms
+without a frontend bundle; the open questions are id squatting and whether the
+slot should exist at all (deleting it is the owner's call).
 
 **What it does.** Lets a plugin frontend supply the React component bb draws
-as one agent provider's icon: `{ providerId, icon }`, where `icon` receives
-only the host's `className` (sizing; the declared `strings.iconTint` colours
-it). The component wins over the provider's served `logoUrl`, which the host
-otherwise draws as a `currentColor` mask. Registrations are replaced
-wholesale with the rest of the plugin's slot set, so disable/uninstall/failed
-reload falls back to `logoUrl`, then the declared glyph, then the generic
-glyph. No provider bb ships uses it: each declares an SVG asset and the mask
-rendering keeps it theme-aware with no frontend bundle (an icon-only bundle
-cost four JS+CSS fetches and four icon remounts at every boot).
+as one agent, environment, or machine provider's icon: `{ providerId, icon }`,
+where `icon` receives only the host's `className` (sizing; agent providers also
+have the declared `strings.iconTint`). The component wins over the provider's
+served `logoUrl`, which the host otherwise draws as a `currentColor` mask.
+Registrations are replaced wholesale with the rest of the plugin's slot set,
+so disable/uninstall/failed reload falls back to `logoUrl`, then the declared
+glyph, then the generic glyph. No provider bb ships registers the slot: each
+uses a declared glyph or SVG asset, which stays available without a frontend
+bundle (an icon-only bundle cost four JS+CSS fetches and four icon remounts at
+every boot).
 
 **Audit before stabilizing.**
 
@@ -2325,3 +2553,29 @@ too, after the host has restored the draft. Sole consumer:
 `bb.sdk.experimental_desktopBrowsers` and the exported `ExperimentalDesktopBrowsersArea`, `ExperimentalDesktopBrowserScope`, `ExperimentalDesktopBrowserLease`, `ExperimentalDesktopBrowserCreateInput`, and `ExperimentalDesktopBrowserAcquireInput` expose explicit host/window/thread discovery, isolated tab creation, expiring control leases, scoped CDP connections, capture, reveal, close, release, and disposable tab-state subscriptions. The matching core CLI is `bb browser`.
 
 Before stabilization, audit personal-profile handoff policy, per-tab mutual exclusion and child-target scope, native popup handling, debugger detachment, daemon/desktop disconnect and reconnect generations, expiry and cancellation races, bounded screenshot bytes, and cross-platform desktop startup. Connection credentials must remain private to workers on the browser host. `subscribe` polls every two seconds with one outstanding request; it is state observation, not a lossless event log. Cloud browsers and external provider registration are outside this surface.
+
+## Host process primitives (`@get-bb/plugin-sdk/host`)
+
+`experimental_spawnPortableOutputProcess`, `experimental_killProcessGroup`,
+`experimental_supportsProcessGroups`,
+`experimental_sanitizeInheritedChildProcessEnv`, and the type
+`ExperimentalSanitizeInheritedChildProcessEnvArgs`.
+
+**What it does.** Gives a host entry the child-process helpers a provider
+needs to run a user's setup or teardown script on an enrolled machine: a
+portable output-only spawn, a process-group kill, the platform check that kill
+depends on, and the sanitizer that strips bb's own variables out of the
+environment a child inherits. The worktree plugin also builds its own `git`
+runner on the spawn and the sanitizer, because git is that plugin's business
+rather than a host capability bb publishes.
+
+These are re-exports of `@bb/process-utils`, not new code. The private
+first-party environment host module consumes them for checkout and worktree.
+
+**Audit before stabilizing.**
+
+1. **Process groups on Windows.** `experimental_supportsProcessGroups`
+   returns `false` there and `experimental_killProcessGroup` degrades to
+   `child.kill`, so a plugin's script teardown leaks grandchildren on Windows.
+   Confirm whether the SDK should expose the platform check at all, or offer
+   one `stopScript` that is correct everywhere.

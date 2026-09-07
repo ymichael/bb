@@ -47,11 +47,7 @@ import { runtimeErrorLogFields, summarizeError } from "./error-utils.js";
 import { ensureThreadStorageRoot } from "./thread-storage-root.js";
 import type { AgentRuntimeOptions } from "@bb/agent-runtime";
 import { createProtocolSelfUpdater } from "./protocol-self-update.js";
-import {
-  type HostType,
-  type ToolCallRequest,
-  type ToolCallResponse,
-} from "@bb/domain";
+import { type ToolCallRequest, type ToolCallResponse } from "@bb/domain";
 import {
   disposeParcelWatcherBackend,
   type HostWatcher,
@@ -106,7 +102,6 @@ interface CreateHostDaemonAppOptions {
   serverUrl: string;
   hostKey: string;
   bridgeBundleDir?: string;
-  hostType: HostType;
   hostId: string;
   hostName: string;
   instanceId: string;
@@ -813,7 +808,6 @@ export async function createHostDaemonApp(
     hostKey: options.hostKey,
     hostId: options.hostId,
     hostName: options.hostName,
-    hostType: options.hostType,
     dataDir: options.dataDir,
     instanceId: options.instanceId,
     localApiPort: options.localApiConfig?.port ?? null,
@@ -833,11 +827,6 @@ export async function createHostDaemonApp(
     getActiveThreads: () => runtimeManager.listActiveThreads(),
     getLoadedEnvironments: () => runtimeManager.listLoadedEnvironments(),
     onHostRpcRequest: async (message) => {
-      if (message.command.type === "environment.destroy") {
-        await watchManager.removeEnvironmentWorkspaceWatch(
-          message.command.environmentId,
-        );
-      }
       const response = await router.handleOnlineRpcRequest(message);
       sendServerMessage(response);
     },

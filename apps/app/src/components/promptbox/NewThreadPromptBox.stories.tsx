@@ -3,7 +3,6 @@ import type { PermissionMode, PromptTextMention } from "@bb/domain";
 import type { SystemExecutionOptionsModelLoadError } from "@bb/server-contract";
 import {
   NewThreadPromptBoxUI,
-  type NewThreadBranchConfig,
   type NewThreadEnvironmentConfig,
   type NewThreadModeConfig,
   type NewThreadProjectConfig,
@@ -24,7 +23,6 @@ import { ModelPickerStoryQueryProvider } from "../../../.ladle/model-picker-quer
 import {
   HOST_IDS,
   PROJECT_IDS,
-  STORY_BRANCH_OPTIONS,
   STORY_CLAUDE_CODE_MORE_MODELS,
   STORY_PROJECTS,
   STORY_PROJECT_SOURCES,
@@ -57,21 +55,6 @@ const baseEnvironment: NewThreadEnvironmentConfig = {
   sources: STORY_PROJECT_SOURCES,
   host: makeHost({ id: HOST_IDS.local }),
   isLocal: true,
-};
-
-const baseBranch: NewThreadBranchConfig = {
-  value: null,
-  currentBranch: "main",
-  isNew: false,
-  options: STORY_BRANCH_OPTIONS,
-  loading: false,
-  currentOptionLabel: "Current: main",
-  placeholder: "Current checkout",
-  triggerLabel: "Current (main)",
-  triggerTitle: "Current: main",
-  onChange: noop,
-  onClear: noop,
-  onCreate: noop,
 };
 
 const baseWorktree: NewThreadWorktreeConfig = {
@@ -140,7 +123,6 @@ function useControlledValue(initial: string) {
 
 const baseModeConfig: NewThreadModeConfig = {
   environment: baseEnvironment,
-  branch: baseBranch,
   worktree: baseWorktree,
   permission: basePermission,
 };

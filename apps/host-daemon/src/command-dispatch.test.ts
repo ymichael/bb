@@ -124,7 +124,6 @@ async function unexpectedWorkspaceCall(): Promise<never> {
 function createWorkspace(workspacePath = WORKSPACE_PATH): HostWorkspace {
   return {
     path: workspacePath,
-    managed: false,
     isGitRepo: false,
     isWorktree: false,
     getDefaultBranch: unexpectedWorkspaceCall,
@@ -142,7 +141,6 @@ function createWorkspace(workspacePath = WORKSPACE_PATH): HostWorkspace {
     listFiles: unexpectedWorkspaceCall,
     commit: unexpectedWorkspaceCall,
     reset: unexpectedWorkspaceCall,
-    destroy: vi.fn(async () => undefined),
   };
 }
 
@@ -240,7 +238,6 @@ function createTurnSubmitCommand(
       bridgeLaunch: DISPATCH_TEST_BRIDGE_LAUNCH,
       workspaceContext: {
         workspacePath: WORKSPACE_PATH,
-        workspaceProvisionType: "unmanaged",
       },
       projectId: "proj_1",
       providerId: "codex",
@@ -330,7 +327,6 @@ function createInstallationGatedThreadStart(
     threadId,
     workspaceContext: {
       workspacePath: WORKSPACE_PATH,
-      workspaceProvisionType: "unmanaged",
     },
     projectId: "proj_1",
     providerId: "codex",
@@ -779,7 +775,6 @@ describe("dispatchCommand", () => {
         bridgeLaunch: DISPATCH_TEST_BRIDGE_LAUNCH,
         workspaceContext: {
           workspacePath: WORKSPACE_PATH,
-          workspaceProvisionType: "unmanaged",
         },
         projectId: "proj-1",
         providerId: "codex",
@@ -829,7 +824,7 @@ describe("dispatchCommand", () => {
     const manager = new RuntimeManager({
       createRuntime: createRuntimeSpy,
       provisionWorkspace: async (args) =>
-        createWorkspace("path" in args ? args.path : args.targetPath),
+        createWorkspace(args.path),
     });
     await manager.ensureEnvironment({
       environmentId: "env-old",
@@ -858,7 +853,6 @@ describe("dispatchCommand", () => {
         bridgeLaunch: DISPATCH_TEST_BRIDGE_LAUNCH,
         workspaceContext: {
           workspacePath: "/tmp/bb-command-dispatch-new",
-          workspaceProvisionType: "unmanaged",
         },
         projectId: "proj_1",
         providerId: "codex",
@@ -1156,7 +1150,7 @@ describe("dispatchCommand", () => {
     const manager = new RuntimeManager({
       createRuntime: createRuntimeSpy,
       provisionWorkspace: async (args) =>
-        createWorkspace("path" in args ? args.path : args.targetPath),
+        createWorkspace(args.path),
     });
     await manager.ensureEnvironment({
       environmentId: "env-old",
@@ -1207,7 +1201,7 @@ describe("dispatchCommand", () => {
     const manager = new RuntimeManager({
       createRuntime: createRuntimeSpy,
       provisionWorkspace: async (args) =>
-        createWorkspace("path" in args ? args.path : args.targetPath),
+        createWorkspace(args.path),
     });
     await manager.ensureEnvironment({
       environmentId: "env-old",
@@ -1234,7 +1228,6 @@ describe("dispatchCommand", () => {
         bridgeLaunch: DISPATCH_TEST_BRIDGE_LAUNCH,
         workspaceContext: {
           workspacePath: "/tmp/bb-goal-new",
-          workspaceProvisionType: "unmanaged",
         },
         projectId: "proj_1",
         providerId: "codex",
@@ -1317,7 +1310,6 @@ describe("dispatchCommand", () => {
       threadId: "thread-1",
       workspaceContext: {
         workspacePath: WORKSPACE_PATH,
-        workspaceProvisionType: "unmanaged",
       },
       projectId: "proj_1",
       providerId: "example-agent",
@@ -1397,7 +1389,6 @@ describe("dispatchCommand", () => {
       threadId: "thread-1",
       workspaceContext: {
         workspacePath: WORKSPACE_PATH,
-        workspaceProvisionType: "unmanaged",
       },
       projectId: "proj_1",
       providerId: "codex",
@@ -1464,7 +1455,6 @@ describe("dispatchCommand", () => {
       threadId: "thread-1",
       workspaceContext: {
         workspacePath: WORKSPACE_PATH,
-        workspaceProvisionType: "unmanaged",
       },
       projectId: "proj_1",
       providerId: "codex",
@@ -2292,7 +2282,6 @@ describe("dispatchCommand", () => {
       threadId: "thread-1",
       workspaceContext: {
         workspacePath: WORKSPACE_PATH,
-        workspaceProvisionType: "unmanaged",
       },
       projectId: "proj_1",
       providerId: "codex",
@@ -2367,7 +2356,6 @@ describe("dispatchCommand", () => {
         bridgeLaunch: DISPATCH_TEST_BRIDGE_LAUNCH,
         workspaceContext: {
           workspacePath: WORKSPACE_PATH,
-          workspaceProvisionType: "unmanaged",
         },
         projectId: "proj_1",
         providerId: "codex",

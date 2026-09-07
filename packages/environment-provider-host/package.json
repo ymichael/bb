@@ -1,0 +1,47 @@
+{
+  "name": "bb-environment-provider-host",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./git": {
+      "source": "./src/git.ts",
+      "types": "./src/git.ts",
+      "default": "./src/git.ts"
+    },
+    "./locks": {
+      "source": "./src/locks.ts",
+      "types": "./src/locks.ts",
+      "default": "./src/locks.ts"
+    },
+    "./progress": {
+      "source": "./src/progress.ts",
+      "types": "./src/progress.ts",
+      "default": "./src/progress.ts"
+    },
+    "./terminal-output": {
+      "source": "./src/terminal-output.ts",
+      "types": "./src/terminal-output.ts",
+      "default": "./src/terminal-output.ts"
+    },
+    "./transcript": {
+      "source": "./src/transcript.ts",
+      "types": "./src/transcript.ts",
+      "default": "./src/transcript.ts"
+    }
+  },
+  "scripts": {
+    "clean": "rimraf dist tsconfig.tsbuildinfo",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@bb/tsconfig": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "typescript-7": "npm:typescript@^7.0.2"
+  }
+}

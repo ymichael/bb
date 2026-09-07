@@ -8,7 +8,9 @@ describe("resolveGitDiffTabStatus", () => {
         environmentId: null,
         environmentIsGitRepo: undefined,
         environmentLoadFailed: false,
+        environmentOwnsPath: undefined,
         hasResolvedThread: false,
+        threadArchived: false,
       }),
     ).toBe("loading");
     expect(
@@ -16,7 +18,9 @@ describe("resolveGitDiffTabStatus", () => {
         environmentId: "env-1",
         environmentIsGitRepo: undefined,
         environmentLoadFailed: false,
+        environmentOwnsPath: undefined,
         hasResolvedThread: true,
+        threadArchived: false,
       }),
     ).toBe("loading");
   });
@@ -27,7 +31,9 @@ describe("resolveGitDiffTabStatus", () => {
         environmentId: null,
         environmentIsGitRepo: undefined,
         environmentLoadFailed: false,
+        environmentOwnsPath: undefined,
         hasResolvedThread: true,
+        threadArchived: false,
       }),
     ).toBe("ineligible");
     expect(
@@ -35,7 +41,9 @@ describe("resolveGitDiffTabStatus", () => {
         environmentId: "env-1",
         environmentIsGitRepo: false,
         environmentLoadFailed: false,
+        environmentOwnsPath: true,
         hasResolvedThread: true,
+        threadArchived: false,
       }),
     ).toBe("ineligible");
   });
@@ -46,8 +54,23 @@ describe("resolveGitDiffTabStatus", () => {
         environmentId: "env-1",
         environmentIsGitRepo: undefined,
         environmentLoadFailed: true,
+        environmentOwnsPath: undefined,
         hasResolvedThread: true,
+        threadArchived: false,
       }),
     ).toBe("error");
+  });
+
+  it("hides git surfaces for an archived checkout whose provider does not own its path", () => {
+    expect(
+      resolveGitDiffTabStatus({
+        environmentId: "env-checkout",
+        environmentIsGitRepo: true,
+        environmentLoadFailed: false,
+        environmentOwnsPath: false,
+        hasResolvedThread: true,
+        threadArchived: true,
+      }),
+    ).toBe("ineligible");
   });
 });

@@ -8,7 +8,9 @@ type ExpectedBbPluginApiKey =
   | "cli"
   | "events"
   | "experimental_aiServices"
+  | "experimental_environments"
   | "experimental_hooks"
+  | "experimental_machines"
   | "hosts"
   | "http"
   | "log"
@@ -50,6 +52,11 @@ const EXPECTED_BACKEND_ROOT_TYPE_EXPORTS = [
   "PluginCliRegistration",
   "PluginCliResult",
   "PluginDispatchAttemptKind",
+  "PluginEnvironmentValidateDecision",
+  "PluginEnvironmentProviderDeclaration",
+  "PluginEnvironmentProviderRequirements",
+  "PluginEnvironments",
+  "PluginDispatchEnvironmentIntent",
   "PluginDispatchExecution",
   "PluginDispatchExecutionSources",
   "PluginDispatchInput",
@@ -71,6 +78,10 @@ const EXPECTED_BACKEND_ROOT_TYPE_EXPORTS = [
   "PluginInteractionResult",
   "PluginKvStorage",
   "PluginLogger",
+  "PluginMachineProviderDeclaration",
+  "PluginMachineProviderRequirements",
+  "PluginMachineValidateDecision",
+  "PluginMachines",
   "PluginMentionItem",
   "PluginMentionProviderRegistration",
   "PluginMentionSearchContext",

@@ -43,7 +43,6 @@ function createTestRuntimeEnv({
     BB_HOST_DAEMON_PORT: "3002",
     BB_HOST_ID: undefined,
     BB_HOST_NAME: undefined,
-    BB_HOST_TYPE: undefined,
     BB_SERVER_URL: serverUrl,
     NODE_ENV: "development",
   };
@@ -174,7 +173,6 @@ describe("run-host-daemon auto join", () => {
       JSON.stringify({
         hostId: "host_existing",
         hostKey: "bbdh_existing",
-        hostType: "persistent",
         serverUrl: "http://127.0.0.1:3334",
       }),
     );
@@ -240,7 +238,6 @@ describe("run-host-daemon auto join", () => {
 
     expect(env.BB_HOST_ID).toBe(persistedHostId);
     expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_test_enroll_key");
-    expect(env.BB_HOST_TYPE).toBeUndefined();
     expect(requests).toHaveLength(2);
     expect(requests[1]?.url).toBe(
       "http://127.0.0.1:3334/internal/hosts/enroll-key",
@@ -297,7 +294,6 @@ describe("run-host-daemon auto join", () => {
 
     expect(env.BB_HOST_ID).toBe("host_generated");
     expect(env.BB_HOST_ENROLL_KEY).toBe("bbde_generated_enroll_key");
-    expect(env.BB_HOST_TYPE).toBeUndefined();
     expect(requests[1]?.body).toBe(JSON.stringify({}));
   });
 

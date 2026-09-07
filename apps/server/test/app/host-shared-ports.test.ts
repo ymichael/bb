@@ -35,7 +35,6 @@ function setup(args: { enrolled?: boolean; online?: boolean } = {}) {
   const host = upsertHost(db, noopNotifier, {
     id: "host-1",
     name: "test-host",
-    type: "persistent",
     ...(args.enrolled === false ? {} : { connectMachineId: "machine-1" }),
   });
   if (args.enrolled !== false && args.online !== false) {
@@ -43,7 +42,6 @@ function setup(args: { enrolled?: boolean; online?: boolean } = {}) {
       hostId: host.id,
       instanceId: "instance-1",
       hostName: host.name,
-      hostType: host.type,
       dataDir: "/tmp/host-data",
       protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       heartbeatIntervalMs: 30_000,
@@ -238,7 +236,6 @@ describe("HostSharedPortCoordinator", () => {
       hostId: host.id,
       instanceId: "reconnected-instance",
       hostName: host.name,
-      hostType: host.type,
       dataDir: "/tmp/host-data",
       protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       heartbeatIntervalMs: 30_000,
@@ -309,7 +306,6 @@ describe("HostSharedPortCoordinator", () => {
       hostId: offline.host.id,
       instanceId: "reconnected-instance",
       hostName: offline.host.name,
-      hostType: offline.host.type,
       dataDir: "/tmp/host-data",
       protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
       heartbeatIntervalMs: 30_000,
@@ -415,14 +411,12 @@ describe("daemon session connect shares", () => {
       upsertHost(harness.db, harness.hub, {
         id: "host-1",
         name: "Host",
-        type: "persistent",
         connectMachineId: "machine-1",
       });
       const previousSession = openSession(harness.db, {
         hostId: "host-1",
         instanceId: "previous-instance",
         hostName: "Host",
-        hostType: "persistent",
         dataDir: "/tmp/host-data",
         protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
         heartbeatIntervalMs: 30_000,
@@ -449,7 +443,6 @@ describe("daemon session connect shares", () => {
           hostId: "host-1",
           instanceId: "instance-1",
           hostName: "Host",
-          hostType: "persistent",
           hasMachineCredential: true,
           platform: "darwin",
           dataDir: "/tmp/host-data",
@@ -471,7 +464,6 @@ describe("daemon session connect shares", () => {
       upsertHost(harness.db, harness.hub, {
         id: "host-1",
         name: "Host",
-        type: "persistent",
         connectMachineId: "machine-1",
       });
       const response = await harness.app.request("/internal/session/open", {
@@ -484,7 +476,6 @@ describe("daemon session connect shares", () => {
           hostId: "host-1",
           instanceId: "instance-1",
           hostName: "Host",
-          hostType: "persistent",
           hasMachineCredential: true,
           platform: "darwin",
           dataDir: "/tmp/host-data",
@@ -539,7 +530,6 @@ describe("daemon session connect shares", () => {
       upsertHost(harness.db, harness.hub, {
         id: "host-1",
         name: "Host",
-        type: "persistent",
         connectMachineId: "machine-1",
       });
       const response = await harness.app.request("/internal/session/open", {
@@ -552,7 +542,6 @@ describe("daemon session connect shares", () => {
           hostId: "host-1",
           instanceId: "restarted-without-credential",
           hostName: "Host",
-          hostType: "persistent",
           hasMachineCredential: false,
           platform: "darwin",
           dataDir: "/tmp/host-data",

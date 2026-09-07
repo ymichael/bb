@@ -31,15 +31,19 @@ function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
     projectId: "proj_test",
     hostId: "host_test",
     path: "/workspace",
-    managed: false,
     isGitRepo: true,
     isWorktree: false,
-    workspaceProvisionType: "unmanaged",
     baseBranch: null,
     branchName: null,
     defaultBranch: null,
     mergeBaseBranch: null,
     status: "ready",
+    environmentProviderId: null,
+    environmentProviderSelection: null,
+    environmentProviderInstanceKey: null,
+    lifecycle: { phase: "active", retireAt: null, teardown: null },
+    managed: false,
+    workspaceProvisionType: null,
     createdAt: 1,
     updatedAt: 2,
     ...overrides,
@@ -102,6 +106,69 @@ function createFetchQueue(
 }
 
 describe("@bb/sdk", () => {
+  it("requests a machine join code without a host type", async () => {
+    const queue = createFetchQueue([
+      { body: { joinCode: "one", hostId: "host_1", expiresAt: 1 } },
+    ]);
+    const sdk = createBbSdk({
+      transport: createHttpTransport({
+        baseUrl: "http://bb.test",
+        fetch: queue.fetch,
+        runtime: "node",
+      }),
+    });
+
+    await sdk.hosts.createJoinCode();
+
+    expect(queue.requests).toEqual([
+      {
+        bodyText: JSON.stringify({}),
+        method: "POST",
+        url: "http://bb.test/api/v1/hosts/join-codes",
+      },
+    ]);
+  });
+
+  it("reads provider installation events through the response instance", async () => {
+    const events = [
+      {
+        type: "started",
+        provider: "codex",
+        command: "npm install --global @openai/codex",
+      },
+      {
+        type: "completed",
+        provider: "codex",
+        exitCode: 0,
+        signal: null,
+        success: true,
+      },
+    ];
+    const response = new Response(null, {
+      status: 200,
+      headers: { "content-type": "application/x-ndjson" },
+    });
+    Object.defineProperty(response, "text", {
+      value: async () =>
+        events.map((event) => JSON.stringify(event)).join("\n"),
+    });
+    const sdk = createBbSdk({
+      transport: createHttpTransport({
+        baseUrl: "http://bb.test",
+        fetch: async () => response,
+        runtime: "node",
+      }),
+    });
+
+    await expect(
+      sdk.hosts.installProviderCli({
+        hostId: "host_test",
+        provider: "codex",
+        actionKind: "install",
+      }),
+    ).resolves.toEqual(events);
+  });
+
   it("sends thread pane presentation actions through the typed transport", async () => {
     const queue = createFetchQueue([{ body: { delivered: 3 } }]);
     const sdk = createBbSdk({
@@ -603,6 +670,49 @@ describe("@bb/sdk", () => {
         bodyText: undefined,
         method: "GET",
         url: "http://bb.test/api/v1/system/usage-limits?hostId=host_remote&providerId=codex",
+      },
+    ]);
+  });
+
+  it("lists environment providers as an array for a project and machine", async () => {
+    const providers = [
+      {
+        id: "project-checkout",
+        displayName: "Project checkout",
+        icon: null,
+        logoUrl: null,
+        pluginId: "environment-project-checkout",
+        requires: {
+          projectCheckout: true,
+          gitCheckout: false,
+          gitRemote: false,
+          projectless: false,
+        },
+        inputs: null,
+        acceptsEmptyInputs: true,
+        availability: { status: "available" as const },
+      },
+    ];
+    const queue = createFetchQueue([{ body: { providers } }]);
+    const sdk = createBbSdk({
+      transport: createHttpTransport({
+        baseUrl: "http://bb.test",
+        fetch: queue.fetch,
+        runtime: "node",
+      }),
+    });
+
+    await expect(
+      sdk.environments.listProviders({
+        projectId: "proj_test",
+        hostId: "host_test",
+      }),
+    ).resolves.toEqual(providers);
+    expect(queue.requests).toEqual([
+      {
+        bodyText: undefined,
+        method: "GET",
+        url: "http://bb.test/api/v1/system/environment-providers?projectId=proj_test&hostId=host_test",
       },
     ]);
   });

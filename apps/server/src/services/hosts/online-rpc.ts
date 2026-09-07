@@ -40,6 +40,23 @@ export async function callHostOnlineRpc(
   args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
 ): Promise<HostDaemonRpcResultForCommand> {
   return callHostOnlineRpcWithRetry(deps, args, {
+    admitWork: true,
+    retryOnTransportFailure: false,
+  });
+}
+
+export function callHostOnlineRpcWithoutAdmission<
+  TCommand extends HostDaemonRpcCommand,
+>(
+  deps: WorkSessionDeps,
+  args: CallHostOnlineRpcArgs<TCommand>,
+): Promise<HostDaemonRpcResultForCommand<TCommand>>;
+export async function callHostOnlineRpcWithoutAdmission(
+  deps: WorkSessionDeps,
+  args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
+): Promise<HostDaemonRpcResultForCommand> {
+  return callHostOnlineRpcWithRetry(deps, args, {
+    admitWork: false,
     retryOnTransportFailure: false,
   });
 }
@@ -55,6 +72,7 @@ export async function callHostRetryableOnlineRpc(
   args: CallHostRetryableOnlineRpcArgs<HostDaemonRetryableOnlineRpcCommand>,
 ): Promise<HostDaemonOnlineRpcResultForCommand> {
   return callHostOnlineRpcWithRetry(deps, args, {
+    admitWork: true,
     retryOnTransportFailure: true,
   });
 }
@@ -62,29 +80,31 @@ export async function callHostRetryableOnlineRpc(
 async function callHostOnlineRpcWithRetry(
   deps: WorkSessionDeps,
   args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
-  options: { retryOnTransportFailure: false },
+  options: { admitWork: boolean; retryOnTransportFailure: false },
 ): Promise<HostDaemonRpcResultForCommand>;
 async function callHostOnlineRpcWithRetry(
   deps: WorkSessionDeps,
   args: CallHostRetryableOnlineRpcArgs<HostDaemonRetryableOnlineRpcCommand>,
-  options: { retryOnTransportFailure: true },
+  options: { admitWork: boolean; retryOnTransportFailure: true },
 ): Promise<HostDaemonOnlineRpcResultForCommand>;
 async function callHostOnlineRpcWithRetry(
   deps: WorkSessionDeps,
   args: CallHostOnlineRpcArgs<HostDaemonRpcCommand>,
-  options: { retryOnTransportFailure: boolean },
+  options: { admitWork: boolean; retryOnTransportFailure: boolean },
 ): Promise<HostDaemonRpcResultForCommand> {
-  await ensureHostSessionReadyForWork(deps, { hostId: args.hostId }).catch(
-    async (error) => {
-      if (
-        !options.retryOnTransportFailure ||
-        !isHostUnavailableApiError(error)
-      ) {
-        throw error;
-      }
-      await waitForRetryableHostRpcTransport(deps, args.hostId);
-    },
-  );
+  if (options.admitWork) {
+    await ensureHostSessionReadyForWork(deps, { hostId: args.hostId }).catch(
+      async (error) => {
+        if (
+          !options.retryOnTransportFailure ||
+          !isHostUnavailableApiError(error)
+        ) {
+          throw error;
+        }
+        await waitForRetryableHostRpcTransport(deps, args.hostId);
+      },
+    );
+  }
   const timeoutRetryDeadline =
     options.retryOnTransportFailure && args.timeoutMs > 1
       ? Date.now() + args.timeoutMs

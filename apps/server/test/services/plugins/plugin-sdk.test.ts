@@ -496,7 +496,11 @@ describe("plugin bb.sdk against a running server", () => {
       const thread = await api.sdk.threads.spawn({
         projectId: project.id,
         prompt: "spawned from a plugin",
-        environment: { type: "project-default" },
+        environment: {
+          type: "host",
+          hostId: host.id,
+          workspace: { type: "unmanaged", path: "/tmp/plugin-sdk-live-source" },
+        },
         visibility: "hidden",
       });
       expect(thread.originPluginId).toBe("spawner");

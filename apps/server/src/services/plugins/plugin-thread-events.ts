@@ -23,6 +23,10 @@ export function emitPluginThreadArchived(thread: Thread): void {
   emitter?.emitThreadArchived(thread);
 }
 
+export function emitPluginThreadUnarchived(thread: Thread): void {
+  emitter?.emitThreadUnarchived(thread);
+}
+
 export function emitPluginThreadDeleted(thread: Thread): void {
   emitter?.emitThreadDeleted(thread);
 }
@@ -42,6 +46,10 @@ export function emitPluginMessageQueued(entry: ThreadQueuedMessage): void {
 /** Called after a queued row's waits cleared and it dispatched. */
 export function emitPluginMessageDispatched(entry: ThreadQueuedMessage): void {
   emitter?.emitMessageDispatched(entry);
+}
+
+export function emitPluginMessageCancelled(entry: ThreadQueuedMessage): void {
+  emitter?.emitMessageCancelled(entry);
 }
 
 /**

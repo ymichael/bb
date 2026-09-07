@@ -16,6 +16,7 @@ import {
   createFakePluginHost,
   makeMessageDispatchHookContext,
   makePluginAgentConfigurationContext,
+  makeQueueEntry,
   makeThreadResponse,
 } from "../index.js";
 
@@ -1792,5 +1793,334 @@ describe("experimental_aiServices.register", () => {
     expect(() => bb.experimental_aiServices.register(declaration)).toThrow(
       /needs a bb\.host entry to run on: this plugin declares none/u,
     );
+  });
+});
+
+describe("environment targets", () => {
+  it("normalizes a registration and exposes it to the harness", async () => {
+    const { bb, harness } = createFakePluginHost();
+    const create = async () => ({
+      status: "failed" as const,
+      failure: "transient" as const,
+      message: "waiting",
+    });
+    const inputs = z.object({ image: z.string(), cpus: z.number().default(2) });
+    bb.experimental_environments.register({
+      id: "container",
+      displayName: "  Docker container  ",
+      requires: { gitRemote: true },
+      inputs,
+      create,
+      remove: async () => ({ status: "removed" }),
+    });
+    const target = harness.registrations.environmentProviders.get("container");
+    expect(target).toMatchObject({
+      id: "container",
+      displayName: "Docker container",
+      icon: null,
+      requires: {
+        projectCheckout: false,
+        gitCheckout: false,
+        gitRemote: true,
+        projectless: false,
+      },
+      inputsJsonSchema: {
+        type: "object",
+        properties: {
+          image: { type: "string" },
+          cpus: { type: "number", default: 2 },
+        },
+        required: ["image"],
+      },
+    });
+    expect(target?.inputs).toBe(inputs);
+    expect(target?.create).toBe(create);
+    await bb.experimental_environments.recheck();
+    expect(harness.recheckCount).toBe(1);
+  });
+
+  it("enforces environment icon ownership and rejects escaping asset paths", () => {
+    const { bb } = createFakePluginHost({
+      pluginId: "environment-test",
+      experimental_declaredIconNames: ["mark"],
+    });
+    const register = (icon: string) =>
+      bb.experimental_environments.register({
+        id: "env",
+        displayName: "Environment",
+        icon,
+        create: async () => ({
+          status: "failed",
+          failure: "transient",
+          message: "waiting",
+        }),
+        remove: async () => ({ status: "removed" }),
+      });
+    expect(() => register("environment-test/mark")).not.toThrow();
+    expect(() => register("other/mark")).toThrow("not an icon declared");
+    expect(() => register("environment-test/missing")).toThrow(
+      "not an icon declared",
+    );
+    expect(() => register("./../private.svg")).toThrow();
+    expect(() => register("/private.svg")).toThrow();
+  });
+
+  it("defaults every requirement to false", () => {
+    const { bb, harness } = createFakePluginHost();
+    bb.experimental_environments.register({
+      id: "plain",
+      displayName: "Plain",
+      create: async () => ({
+        status: "failed",
+        failure: "transient",
+        message: "waiting",
+      }),
+      remove: async () => ({ status: "removed" }),
+    });
+    expect(
+      harness.registrations.environmentProviders.get("plain"),
+    ).toMatchObject({
+      requires: {
+        projectCheckout: false,
+        gitCheckout: false,
+        gitRemote: false,
+        projectless: false,
+      },
+      inputs: null,
+      inputsJsonSchema: null,
+      availability: null,
+    });
+  });
+
+  it("refuses inputs that are not a Standard Schema validator", () => {
+    const { bb } = createFakePluginHost();
+    expect(() =>
+      bb.experimental_environments.register({
+        id: "ok",
+        displayName: "x",
+        // @ts-expect-error deliberately not a schema
+        inputs: { type: "object" },
+        create: async () => ({
+          status: "failed",
+          failure: "transient",
+          message: "waiting",
+        }),
+        remove: async () => ({ status: "removed" }),
+      }),
+    ).toThrow(/inputs that is not a Standard Schema v1 validator/);
+  });
+
+  it("refuses a bad id or a declaration without create", () => {
+    const { bb } = createFakePluginHost();
+    expect(() =>
+      bb.experimental_environments.register({
+        id: "bad id!",
+        displayName: "x",
+        create: async () => ({
+          status: "failed",
+          failure: "transient",
+          message: "waiting",
+        }),
+        remove: async () => ({ status: "removed" }),
+      }),
+    ).toThrow(/invalid environment provider id/);
+    for (const id of ["x", "Uppercase", "under_score"]) {
+      expect(() =>
+        bb.experimental_environments.register({
+          id,
+          displayName: "x",
+          create: async () => ({
+            status: "failed",
+            failure: "transient",
+            message: "waiting",
+          }),
+          remove: async () => ({ status: "removed" }),
+        }),
+      ).toThrow(/invalid environment provider id/);
+    }
+    expect(() =>
+      bb.experimental_environments.register(
+        // @ts-expect-error deliberately missing create
+        {
+          id: "ok",
+          displayName: "x",
+        },
+      ),
+    ).toThrow(/create/);
+  });
+
+  it("refuses a non-boolean requirement", () => {
+    const { bb } = createFakePluginHost();
+    expect(() =>
+      bb.experimental_environments.register({
+        id: "ok",
+        displayName: "x",
+        // @ts-expect-error deliberately not a boolean
+        requires: { gitRemote: "yes" },
+        create: async () => ({
+          status: "failed",
+          failure: "transient",
+          message: "waiting",
+        }),
+        remove: async () => ({ status: "removed" }),
+      }),
+    ).toThrow(/requires\.gitRemote that is not a boolean/);
+  });
+
+  it("refuses projectless together with a project requirement", () => {
+    const { bb } = createFakePluginHost();
+    expect(() =>
+      bb.experimental_environments.register({
+        id: "scratch",
+        displayName: "Scratch",
+        requires: { gitRemote: true, projectless: true },
+        create: async () => ({
+          status: "failed",
+          failure: "transient",
+          message: "waiting",
+        }),
+        remove: async () => ({ status: "removed" }),
+      }),
+    ).toThrow(/requires\.projectless together with a project requirement/);
+  });
+
+  it("refuses projectless together with projectCheckout", () => {
+    const { bb } = createFakePluginHost();
+    expect(() =>
+      bb.experimental_environments.register({
+        id: "scratch",
+        displayName: "Scratch",
+        requires: { projectCheckout: true, projectless: true },
+        create: async () => ({
+          status: "failed",
+          failure: "transient",
+          message: "waiting",
+        }),
+        remove: async () => ({ status: "removed" }),
+      }),
+    ).toThrow(/requires\.projectless together with a project requirement/);
+  });
+
+  it("normalizes a checkout provider that does not need git", () => {
+    const { bb, harness } = createFakePluginHost();
+    bb.experimental_environments.register({
+      id: "syncy",
+      displayName: "Syncy",
+      requires: { projectCheckout: true },
+      create: async () => ({
+        status: "failed",
+        failure: "transient",
+        message: "waiting",
+      }),
+      remove: async () => ({ status: "removed" }),
+    });
+    expect(
+      harness.registrations.environmentProviders.get("syncy"),
+    ).toMatchObject({
+      requires: {
+        projectCheckout: true,
+        gitCheckout: false,
+        gitRemote: false,
+        projectless: false,
+      },
+    });
+  });
+
+  it("normalizes a host-scoped checkout provider", () => {
+    const { bb, harness } = createFakePluginHost();
+    bb.experimental_environments.register({
+      id: "branchy",
+      displayName: "Branchy",
+      requires: { gitCheckout: true },
+      create: async () => ({
+        status: "failed",
+        failure: "transient",
+        message: "waiting",
+      }),
+      remove: async () => ({ status: "removed" }),
+    });
+    expect(
+      harness.registrations.environmentProviders.get("branchy"),
+    ).toMatchObject({
+      requires: {
+        projectCheckout: true,
+        gitCheckout: true,
+        gitRemote: false,
+        projectless: false,
+      },
+    });
+  });
+
+  it("accepts a machine provider without suspend and resume when idle suspension is disabled", () => {
+    const { bb, harness } = createFakePluginHost();
+    bb.experimental_machines.register({
+      id: "test-machine",
+      displayName: "Test machine",
+      policy: {
+        idleSuspendMs: null,
+        retire: { after: "never" },
+        removeRetryMs: 1_000,
+      },
+      create: async () => ({
+        status: "created",
+        hostId: "host-test-machine",
+        resource: { target: "staging" },
+      }),
+      remove: async () => ({ status: "removed" }),
+    });
+    expect(
+      harness.registrations.machineProviders.get("test-machine"),
+    ).toMatchObject({
+      icon: null,
+      suspend: null,
+      resume: null,
+      policy: { idleSuspendMs: null },
+    });
+  });
+
+  it("requires machine suspend and resume as a pair and disables idle suspension without them", () => {
+    const create = async () => ({
+      status: "created" as const,
+      hostId: "host-machine",
+      resource: null,
+    });
+    const remove = async () => ({ status: "removed" as const });
+    const lifecycle = async () => ({ resource: null });
+    const policy = {
+      idleSuspendMs: null,
+      retire: { after: "never" as const },
+      removeRetryMs: 1_000,
+    };
+    expect(() =>
+      createFakePluginHost().bb.experimental_machines.register({
+        id: "half-lifecycle",
+        displayName: "Half lifecycle",
+        policy,
+        create,
+        suspend: lifecycle,
+        remove,
+      }),
+    ).toThrow(/declare suspend and resume together/);
+    expect(() =>
+      createFakePluginHost().bb.experimental_machines.register({
+        id: "idle-without-lifecycle",
+        displayName: "Idle without lifecycle",
+        policy: { ...policy, idleSuspendMs: 1_000 },
+        create,
+        remove,
+      }),
+    ).toThrow(/idleSuspendMs to null without suspend and resume/);
+  });
+
+  it("delivers message.cancelled to a listener", async () => {
+    const { bb, harness } = createFakePluginHost();
+    const seen: string[] = [];
+    bb.events.on("message.cancelled", ({ entry }) => {
+      seen.push(entry.id);
+    });
+    await harness.emitThreadEvent("message.cancelled", {
+      entry: makeQueueEntry({ id: "qm_1" }),
+    });
+    expect(seen).toEqual(["qm_1"]);
   });
 });

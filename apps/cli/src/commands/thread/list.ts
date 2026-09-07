@@ -7,6 +7,7 @@ import { renderBorderlessTable } from "../../table.js";
 import { outputJson } from "../helpers.js";
 
 interface ThreadListCommandOptions {
+  environment?: string;
   project?: string;
   parentThread?: string;
   archived?: boolean;
@@ -24,6 +25,7 @@ export function registerListCommand(
     .command("list")
     .description("List threads")
     .option("--project <id>", "Filter by project ID (defaults to all projects)")
+    .option("--environment <id>", "Filter by environment ID")
     .option("--parent-thread <id>", "Filter by parent thread ID")
     .option("--section <id>", "Filter by thread section ID")
     .option("--unsectioned", "Show only threads outside sections")
@@ -41,6 +43,10 @@ export function registerListCommand(
           flagName: "--parent-thread",
           value: opts.parentThread,
         });
+        const environmentId = resolveExplicitIdFlag({
+          flagName: "--environment",
+          value: opts.environment,
+        });
         if (opts.section && opts.unsectioned) {
           throw new Error("Cannot combine --section with --unsectioned.");
         }
@@ -50,6 +56,7 @@ export function registerListCommand(
         });
         const threads = await sdk.threads.list({
           ...(projectId ? { projectId } : {}),
+          ...(environmentId ? { environmentId } : {}),
           ...(parentThreadId ? { parentThreadId } : {}),
           ...(opts.archived ? { archived: true } : {}),
           ...(sectionId ? { sectionId } : {}),

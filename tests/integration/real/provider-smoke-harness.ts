@@ -469,7 +469,11 @@ export function hasAssistantTimelineMessage(
 
 export async function createRealThread(args: CreateRealThreadArgs) {
   await assertProviderPrerequisites(args.providerId);
-  const harness = await createIntegrationHarness();
+  const harness = await createIntegrationHarness(
+    args.workspace.type === "managed-worktree"
+      ? { builtinPlugins: ["environment-git-worktree"] }
+      : {},
+  );
   const project = await createProjectFixture(harness, {
     name: `Real Provider ${args.providerId}`,
   });

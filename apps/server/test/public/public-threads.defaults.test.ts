@@ -25,6 +25,7 @@ import {
   seedThread,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
+import { installFakeGitWorktreeProvider } from "../helpers/environment-provider.js";
 import { beforeEach, describe, expect, it } from "vitest";
 
 describe("public thread default routes", () => {
@@ -106,6 +107,7 @@ describe("public thread default routes", () => {
 
   it("allows managed-worktree threads on a secondary host", async () => {
     await withTestHarness(async (harness) => {
+      const provider = installFakeGitWorktreeProvider();
       const { host: localHost } = seedHostSession(harness.deps, {
         id: "host-managed-default",
       });
@@ -155,12 +157,10 @@ describe("public thread default routes", () => {
 
       expect(response.status).toBe(201);
       const thread = threadSchema.parse(await readJson(response));
-      const environmentResponse = await harness.app.request(
-        `/api/v1/threads/${thread.id}?include=environment`,
-      );
-      await expect(readJson(environmentResponse)).resolves.toMatchObject({
-        environment: { hostId: secondaryHost.id },
-      });
+      const context = await provider.waitForProvision();
+      expect(context.thread.id).toBe(thread.id);
+      expect(context.host?.id).toBe(secondaryHost.id);
+      expect(context.inputs).toEqual({ branch: { kind: "default" } });
       expect(secondarySource.path).toBe("/tmp/secondary-managed-source");
     });
   });

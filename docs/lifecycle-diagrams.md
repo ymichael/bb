@@ -53,22 +53,14 @@ flowchart LR
     __start((start))
     provisioning["provisioning"]
     ready["ready"]
-    retiring["retiring"]
     error["error"]
-    destroying["destroying"]
     destroyed["destroyed"]
     __start --> provisioning
     provisioning -->|"provision.succeeded<br/>provision.cancelled (workspace on disk)"| ready
     provisioning -->|"provision.failed"| error
-    provisioning -->|"provision.cancelled (no workspace)"| destroying
+    provisioning -->|"provision.cancelled (no workspace)"| destroyed
     ready -->|"provision.requested"| provisioning
-    ready -->|"retire.requested ⟨managed⟩"| retiring
-    retiring -->|"retire.cancelled"| ready
-    retiring -->|"destroy.started ⟨managed⟩"| destroying
+    ready -->|"destroy.recorded"| destroyed
     error -->|"provision.requested"| provisioning
-    error -->|"destroy.started ⟨managed⟩"| destroying
-    error -->|"destroy.completed ⟨matchingDestroyAttempt⟩"| destroyed
-    destroying -->|"destroy.completed ⟨matchingDestroyAttempt⟩"| destroyed
-    destroying -->|"destroy.failed ⟨matchingDestroyAttempt⟩"| retiring
-    destroying -->|"destroy.lost"| error
+    error -->|"destroy.recorded"| destroyed
 ```

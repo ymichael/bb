@@ -157,7 +157,6 @@ describe("host enroll routes", () => {
           body: JSON.stringify({
             hostId: enrollKeyBody.hostId,
             hostName: "real-host-name",
-            hostType: "persistent",
           }),
         },
       );
@@ -186,7 +185,6 @@ describe("host enroll routes", () => {
           body: JSON.stringify({
             hostId: enrollKeyBody.hostId,
             hostName: "real-host-name",
-            hostType: "persistent",
           }),
         },
       );
@@ -211,7 +209,6 @@ describe("host enroll routes", () => {
         body: JSON.stringify({
           hostId: "host_other",
           hostName: "wrong-host",
-          hostType: "persistent",
         }),
       });
 
@@ -245,7 +242,6 @@ describe("host enroll routes", () => {
           body: JSON.stringify({
             hostId: firstEnrollKeyBody.hostId,
             hostName: "stale-enroll-key-host",
-            hostType: "persistent",
           }),
         },
       );
@@ -263,7 +259,6 @@ describe("host enroll routes", () => {
           body: JSON.stringify({
             hostId: secondEnrollKeyBody.hostId,
             hostName: "fresh-enroll-key-host",
-            hostType: "persistent",
           }),
         },
       );
@@ -310,7 +305,6 @@ describe("host enroll routes", () => {
           body: JSON.stringify({
             hostId: enrollKeyBody.hostId,
             hostName: "expired-host",
-            hostType: "persistent",
           }),
         },
       );

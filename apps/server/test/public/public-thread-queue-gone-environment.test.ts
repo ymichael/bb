@@ -60,7 +60,6 @@ async function postQueuedMessage(
 
 describe("queued message into a thread whose environment is gone (#1789)", () => {
   for (const status of [
-    "destroying",
     "destroyed",
   ] as const satisfies readonly EnvironmentStatus[]) {
     it(`rejects queue-create when the environment is ${status}`, async () => {
@@ -73,11 +72,10 @@ describe("queued message into a thread whose environment is gone (#1789)", () =>
         });
         const environment = seedEnvironment(harness.deps, {
           hostId: host.id,
-          managed: true,
-          projectId: project.id,
+              projectId: project.id,
           path: null,
           status,
-          workspaceProvisionType: "managed-worktree",
+          isGitRepo: false,
         });
         const thread = seedThread(harness.deps, {
           projectId: project.id,
@@ -203,10 +201,9 @@ describe("queued message into a thread whose environment is gone (#1789)", () =>
       });
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
-        managed: true,
-        projectId: project.id,
+          projectId: project.id,
         status: "ready",
-        workspaceProvisionType: "managed-worktree",
+        isGitRepo: false,
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -234,28 +231,13 @@ describe("queued message into a thread whose environment is gone (#1789)", () =>
       requireEnvironmentLifecycleEventApplied(
         applyEnvironmentLifecycleEvent(harness.db, harness.hub, {
           environmentId: environment.id,
-          event: { type: "retire.requested" },
-        }),
-      );
-      requireEnvironmentLifecycleEventApplied(
-        applyEnvironmentLifecycleEvent(harness.db, harness.hub, {
-          environmentId: environment.id,
-          event: { type: "destroy.started", destroyAttemptId: "rpc_sweep" },
-        }),
-      );
-      expect(getEnvironment(harness.db, environment.id)?.status).toBe(
-        "destroying",
-      );
-      expect(sweepCandidates()).toEqual([]);
-      requireEnvironmentLifecycleEventApplied(
-        applyEnvironmentLifecycleEvent(harness.db, harness.hub, {
-          environmentId: environment.id,
-          event: { type: "destroy.completed", destroyAttemptId: "rpc_sweep" },
+          event: { type: "destroy.recorded" },
         }),
       );
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(
         "destroyed",
       );
+      expect(sweepCandidates()).toEqual([]);
       const unarchiveResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/unarchive`,
         { method: "POST" },

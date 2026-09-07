@@ -11,6 +11,7 @@ import {
   createThread,
   hostDaemonSessions,
   listQueuedThreadMessages,
+  listThreadsWithPendingInteractionState,
   migrate,
   noopNotifier,
   openSession,
@@ -60,6 +61,7 @@ interface CloseTestSessionArgs {
 
 interface CreateThreadWithEnvironmentArgs {
   db: DbConnection;
+  environmentProviderId?: string;
   hostId: string;
   providerId?: string;
   status?: Thread["status"];
@@ -129,7 +131,6 @@ function setup(): SetupResult {
   const host = upsertHost(db, noopNotifier, {
     id: "host-runtime-display",
     name: "Runtime Display Host",
-    type: "persistent",
   });
   return { db, hostId: host.id, hub };
 }
@@ -149,7 +150,6 @@ function openTestSession(args: OpenTestSessionArgs) {
     hostId: args.hostId,
     instanceId: `instance-${randomUUID()}`,
     hostName: "Runtime Display Host",
-    hostType: "persistent",
     dataDir: `/tmp/${args.hostId}`,
     protocolVersion: 1,
     heartbeatIntervalMs: 5_000,
@@ -190,11 +190,22 @@ function createThreadWithEnvironment(args: CreateThreadWithEnvironmentArgs) {
     },
   });
   const environment = createEnvironment(args.db, noopNotifier, {
+    providerOwnsPath: false,
     hostId: args.hostId,
     projectId: project.id,
-    workspaceProvisionType: "unmanaged",
     path: `/tmp/${args.hostId}/environment/${suffix}`,
     status: "ready",
+    environmentProvider:
+      args.environmentProviderId === undefined
+        ? null
+        : {
+            environmentProviderId: args.environmentProviderId,
+            instanceKey: null,
+            selection: {
+              machine: { type: "existing", hostId: args.hostId },
+              inputs: null,
+            },
+          },
   });
   const thread = createThread(args.db, noopNotifier, {
     projectId: project.id,
@@ -214,9 +225,11 @@ function createThreadListEntry(
     modelOverride: null,
     reasoningLevelOverride: null,
     environmentBranchName: null,
+    environmentPath: null,
+    environmentProviderId: null,
+    environmentIsWorktree: null,
     environmentHostId: args.environmentHostId,
     environmentName: null,
-    environmentWorkspaceDisplayKind: "other",
     hasPendingInteraction: false,
     // Only a `pending` thread whose first message queued carries one, and
     // these fixtures are all threads that already started.
@@ -346,6 +359,33 @@ describe("thread runtime display", () => {
     } satisfies ThreadRuntimeState);
   });
 
+  it("carries the producing environment provider into the list entry", () => {
+    const { db, hostId, hub } = setup();
+    const provided = createThreadWithEnvironment({
+      db,
+      hostId,
+      environmentProviderId: "git-worktree",
+    });
+    const checkout = createThreadWithEnvironment({ db, hostId });
+
+    const providerIdByThreadId = new Map(
+      [provided, checkout].flatMap(({ project }) =>
+        toThreadListEntryResponses(
+          { db, hub, providerRegistry },
+          {
+            now: 1_000,
+            threads: listThreadsWithPendingInteractionState(db, {
+              projectId: project.id,
+            }),
+          },
+        ).map((entry) => [entry.id, entry.environmentProviderId]),
+      ),
+    );
+
+    expect(providerIdByThreadId.get(provided.thread.id)).toBe("git-worktree");
+    expect(providerIdByThreadId.get(checkout.thread.id)).toBeNull();
+  });
+
   it("resolves list entry runtime from daemon registration per host", () => {
     const { db, hostId, hub } = setup();
     const now = 1_000;
@@ -440,7 +480,10 @@ describe("thread runtime display", () => {
       {
         now: 1_000,
         threads: [empty.thread, waiting.thread, failed.thread].map((thread) =>
-          createThreadListEntry({ environmentHostId: hostId, thread: { ...thread, pinSortKey: null } }),
+          createThreadListEntry({
+            environmentHostId: hostId,
+            thread: { ...thread, pinSortKey: null },
+          }),
         ),
       },
     );

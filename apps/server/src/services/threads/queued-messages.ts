@@ -77,7 +77,6 @@ import { recordAcceptedPromptHistoryEntry } from "../prompt-history.js";
 import { requireThreadCommandEnvironment } from "./thread-command-environment.js";
 import { applyLoggedThreadLifecycleEventInTransaction } from "./lifecycle-outcome.js";
 import { buildThreadStatusChangeMetadata } from "./thread-runtime-display.js";
-import { applyLoggedEnvironmentLifecycleEvent } from "../environments/lifecycle-outcome.js";
 import {
   goneThreadEnvironmentDetails,
   threadEnvironmentUnavailableDetails,
@@ -154,15 +153,7 @@ async function requireReadyQueuedMessageEnvironment(
   thread: Thread,
 ) {
   const environment = await requireThreadCommandEnvironment(deps, { thread });
-  if (environment.status === "retiring") {
-    applyLoggedEnvironmentLifecycleEvent(deps, {
-      environmentId: environment.id,
-      event: { type: "retire.cancelled" },
-    });
-  }
-  return requireReadyThreadEnvironment(
-    getEnvironment(deps.db, environment.id) ?? environment,
-  );
+  return requireReadyThreadEnvironment(environment);
 }
 
 export interface CreateQueuedMessageForThreadArgs {

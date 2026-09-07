@@ -88,7 +88,6 @@ describe("createConnection", () => {
         createdAt: 1,
         id: "host-drizzle",
         name: "Drizzle Host",
-        type: "persistent",
         updatedAt: 1,
       })
       .run();

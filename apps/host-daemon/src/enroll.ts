@@ -1,13 +1,9 @@
-import {
-  hostDaemonEnrollResponseSchema,
-  type HostDaemonEnrollRequest,
-} from "@bb/host-daemon-contract";
+import { hostDaemonEnrollResponseSchema } from "@bb/host-daemon-contract";
 
 interface EnrollHostArgs {
   fetchFn?: typeof fetch;
   hostId: string;
   hostName: string;
-  hostType: HostDaemonEnrollRequest["hostType"];
   connectMachineId?: string;
   machineCredential?: string;
   serverUrl: string;
@@ -47,7 +43,6 @@ export async function enrollDaemonHost(
     body: JSON.stringify({
       hostId: args.hostId,
       hostName: args.hostName,
-      hostType: args.hostType,
       ...(args.connectMachineId !== undefined
         ? { connectMachineId: args.connectMachineId }
         : {}),

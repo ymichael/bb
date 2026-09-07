@@ -39,7 +39,6 @@ export async function writeHostAuthState(
     {
       hostId: authState.hostId,
       hostKey: authState.hostKey,
-      hostType: authState.hostType,
     },
     null,
     2,

@@ -13,8 +13,11 @@ import {
   HOST_DAEMON_PROTOCOL_VERSION,
   hostDaemonSessionOpenResponseSchema,
 } from "@bb/host-daemon-contract";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
+import type { PluginMachineProviderDeclaration } from "@get-bb/plugin-sdk";
+import { validatePluginMachineProviderDeclaration } from "@get-bb/plugin-sdk/internal/host-policy";
+import { setPluginMachineProviderBridge } from "../../src/services/plugins/plugin-machine-provider-registry.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
@@ -24,9 +27,45 @@ import {
   seedSession,
   seedThread,
 } from "../helpers/seed.js";
-import { withTestHarness } from "../helpers/test-app.js";
+import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
 
 const API = "/api/v1";
+
+function installMachineProvider(declaration: PluginMachineProviderDeclaration) {
+  const record = {
+    pluginId: "public-host-management-test",
+    provider: validatePluginMachineProviderDeclaration(declaration),
+  };
+  setPluginMachineProviderBridge({
+    listMachineProviders: () => [record],
+    getMachineProvider: (id) =>
+      id === record.provider.id ? record : undefined,
+    invokeProvider: async (_pluginId, _label, run) => {
+      try {
+        return { ok: true as const, value: await run() };
+      } catch (error) {
+        return {
+          ok: false as const,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+    },
+    decisionTimeoutMs: 10_000,
+  });
+}
+
+function adoptMachine(harness: TestAppHarness, hostId: string): void {
+  updateHost(harness.db, harness.hub, hostId, {
+    machineProviderId: "test-machine",
+    machineProviderSelection: { inputs: null },
+    phase: "active",
+    resource: { machine: "test" },
+  });
+}
+
+afterEach(() => {
+  setPluginMachineProviderBridge(undefined);
+});
 
 async function createJoinCode(
   app: Parameters<typeof requestJoinCode>[0],
@@ -49,6 +88,70 @@ function requestJoinCode(app: {
 }
 
 describe("public host management", () => {
+  it("publishes a machine provider without an icon as unbranded", async () => {
+    await withTestHarness(async (harness) => {
+      installMachineProvider({
+        id: "plain-machine",
+        displayName: "Plain machine",
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 60_000,
+        },
+        create: async () => ({
+          status: "created",
+          hostId: "host-plain",
+          resource: null,
+        }),
+        remove: async () => ({ status: "removed" }),
+      });
+
+      const response = await harness.app.request(
+        "/api/v1/system/machine-providers",
+      );
+      expect(response.status).toBe(200);
+      expect(await readJson(response)).toMatchObject({
+        providers: [
+          {
+            id: "plain-machine",
+            icon: null,
+            logoUrl: null,
+            environmentRow: null,
+          },
+        ],
+      });
+    });
+  });
+
+  it("enrolls a host from a public join code", async () => {
+    await withTestHarness(async (harness) => {
+      const issued = await createJoinCode(harness.app);
+      const response = await harness.app.request("/internal/hosts/enroll", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${issued.joinCode}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          hostId: issued.hostId,
+          hostName: "Modal abc1",
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      expect(getHost(harness.db, issued.hostId)).toMatchObject({
+        name: "Modal abc1",
+      });
+      const hostsResponse = await harness.app.request("/api/v1/hosts");
+      expect(hostsResponse.status).toBe(200);
+      expect(await readJson(hostsResponse)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ id: issued.hostId }),
+        ]),
+      );
+    });
+  });
+
   it("preserves a renamed host across a daemon reconnect", async () => {
     await withTestHarness(async (harness) => {
       const issued = await createJoinCode(harness.app);
@@ -69,7 +172,6 @@ describe("public host management", () => {
             connectMachineId: "machine-cloud-1",
             hostId: issued.hostId,
             hostName: "Build Machine",
-            hostType: "persistent",
           }),
         },
       );
@@ -79,7 +181,6 @@ describe("public host management", () => {
       expect(getHost(harness.db, issued.hostId)).toMatchObject({
         connectMachineId: "machine-cloud-1",
         name: "Build Machine",
-        type: "persistent",
       });
 
       const renameResponse = await harness.app.request(
@@ -111,7 +212,6 @@ describe("public host management", () => {
             hasMachineCredential: true,
             hostId: issued.hostId,
             hostName: "Build Machine",
-            hostType: "persistent",
             instanceId: "instance-cloud-2",
             loadedEnvironments: [],
             localApiPort: 38_888,
@@ -158,7 +258,6 @@ describe("public host management", () => {
           connectMachineId: "machine-forged",
           hostId: issued.hostId,
           hostName: "Forged Machine",
-          hostType: "persistent",
         }),
       });
       expect(response.status).toBe(403);
@@ -194,6 +293,18 @@ describe("public host management", () => {
           headers: { "x-bb-gate-auth": "machine" },
         }),
         harness.app.request(`${API}/hosts/${host.id}/retry-update`, {
+          method: "POST",
+          headers: { "x-bb-gate-auth": "machine" },
+        }),
+        harness.app.request(`${API}/hosts/${host.id}/suspend`, {
+          method: "POST",
+          headers: { "x-bb-gate-auth": "machine" },
+        }),
+        harness.app.request(`${API}/hosts/${host.id}/resume`, {
+          method: "POST",
+          headers: { "x-bb-gate-auth": "machine" },
+        }),
+        harness.app.request(`${API}/hosts/${host.id}/retry-cleanup`, {
           method: "POST",
           headers: { "x-bb-gate-auth": "machine" },
         }),
@@ -342,6 +453,114 @@ describe("public host management", () => {
     });
   });
 
+  it("routes suspend and resume through provider lifecycle orchestration", async () => {
+    await withTestHarness(async (harness) => {
+      const host = seedHost(harness.deps, { id: "host_lifecycle_routes" });
+      const operations: string[] = [];
+      installMachineProvider({
+        id: "test-machine",
+        displayName: "Test machine",
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 10,
+        },
+        create: async () => ({
+          status: "created",
+          hostId: host.id,
+          resource: { machine: "test" },
+        }),
+        suspend: async ({ resource }) => {
+          operations.push("suspend");
+          return { resource };
+        },
+        resume: async ({ resource }) => {
+          operations.push("resume");
+          return { resource };
+        },
+        remove: async () => ({ status: "removed" }),
+      });
+      adoptMachine(harness, host.id);
+
+      const suspend = await harness.app.request(
+        `${API}/hosts/${host.id}/suspend`,
+        { method: "POST" },
+      );
+      expect(suspend.status).toBe(200);
+      expect(await readJson(suspend)).toEqual({ ok: true });
+      expect(getHost(harness.db, host.id)?.phase).toBe("suspended");
+
+      const resume = await harness.app.request(
+        `${API}/hosts/${host.id}/resume`,
+        { method: "POST" },
+      );
+      expect(resume.status).toBe(200);
+      expect(await readJson(resume)).toEqual({ ok: true });
+      expect(getHost(harness.db, host.id)?.phase).toBe("active");
+      expect(operations).toEqual(["suspend", "resume"]);
+    });
+  });
+
+  it("retries cleanup only after a provider teardown failure", async () => {
+    await withTestHarness(async (harness) => {
+      const primary = seedHost(harness.deps, { id: "host_primary" });
+      seedPrimaryHost(harness.deps, primary.id);
+      const host = seedHost(harness.deps, { id: "host_retry_cleanup" });
+      let removes = 0;
+      installMachineProvider({
+        id: "test-machine",
+        displayName: "Test machine",
+        policy: {
+          idleSuspendMs: null,
+          retire: { after: "never" },
+          removeRetryMs: 60_000,
+        },
+        create: async () => ({
+          status: "created",
+          hostId: host.id,
+          resource: { machine: "test" },
+        }),
+        remove: async () => {
+          removes += 1;
+          return removes === 1
+            ? { status: "failed", message: "temporary teardown failure" }
+            : { status: "removed" };
+        },
+      });
+      adoptMachine(harness, host.id);
+
+      const beforeFailure = await harness.app.request(
+        `${API}/hosts/${host.id}/retry-cleanup`,
+        { method: "POST" },
+      );
+      expect(beforeFailure.status).toBe(409);
+      expect(await readJson(beforeFailure)).toMatchObject({
+        code: "machine_cleanup_not_failed",
+      });
+
+      const remove = await harness.app.request(`${API}/hosts/${host.id}`, {
+        method: "DELETE",
+      });
+      expect(remove.status).toBe(200);
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        phase: "retiring",
+        teardownStatus: "failed",
+      });
+
+      const retry = await harness.app.request(
+        `${API}/hosts/${host.id}/retry-cleanup`,
+        { method: "POST" },
+      );
+      expect(retry.status).toBe(200);
+      expect(await readJson(retry)).toEqual({ ok: true });
+      expect(removes).toBe(2);
+      expect(getHost(harness.db, host.id)).toMatchObject({
+        phase: "destroyed",
+        teardownStatus: "removed",
+      });
+    });
+  });
+
   it("revokes host credentials, closes its live session, tombstones it, and preserves environments", async () => {
     await withTestHarness(async (harness) => {
       const primary = seedHost(harness.deps, { id: "host_primary" });
@@ -367,12 +586,10 @@ describe("public host management", () => {
       });
       const hostKey = await harness.deps.machineAuth.issueDaemonHostKey({
         hostId: host.id,
-        hostType: "persistent",
       });
       const enrollKey = await harness.deps.machineAuth.issueHostEnrollKey({
         enrollSource: "loopback",
         hostId: host.id,
-        hostType: "persistent",
       });
 
       const response = await harness.app.request(`${API}/hosts/${host.id}`, {
@@ -413,7 +630,6 @@ describe("public host management", () => {
           body: JSON.stringify({
             hostId: host.id,
             hostName: host.name,
-            hostType: "persistent",
           }),
         },
       );

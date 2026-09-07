@@ -121,7 +121,6 @@ done
 [ -n "$join_code" ] || usage
 [ -n "$host_id" ] || usage
 [ -n "$server_url" ] || usage
-
 printf '\n  %s\n\n' "$(bold "bb machine setup")"
 active_step "Setting up this machine as $host_id for $server_url"
 
@@ -167,7 +166,9 @@ server_host=$(node -e '
   fail_step "Could not parse the server URL $server_url."
   exit 1
 }
-service_slug=$(printf '%s' "$server_host" | tr '.' '-')
+host_slug=$(printf '%s' "$host_id" | tr -c 'a-zA-Z0-9_.-' '-')
+service_slug=$(printf '%s-%s' "$server_host" "$host_slug" | tr '.' '-')
+legacy_service_slug=$(printf '%s' "$server_host" | tr '.' '-')
 
 # Each server gets its own data dir and daemon instance, so one machine can
 # serve several bb servers and a full local bb install keeps ~/.bb to itself.
@@ -699,6 +700,14 @@ if [ "$platform" = darwin ]; then
   escaped_bb_app_npm_prefix=$(xml_escape "$bb_app_npm_prefix")
   escaped_server=$(xml_escape "$server_url")
   escaped_data_dir=$(xml_escape "$data_dir")
+  legacy_service_file="$service_dir/app.getbb.host-daemon.$legacy_service_slug.plist"
+  if [ -f "$legacy_service_file" ] && \
+     grep -F -- '<string>--host-daemon-port</string>' "$legacy_service_file" >/dev/null 2>&1 && \
+     grep -F -- "<string>$host_daemon_port</string>" "$legacy_service_file" >/dev/null 2>&1 && \
+     grep -F -- "<key>BB_DATA_DIR</key><string>$escaped_data_dir</string>" "$legacy_service_file" >/dev/null 2>&1; then
+    launchctl bootout "gui/$(id -u)" "$legacy_service_file" >/dev/null 2>&1 || true
+    rm -f "$legacy_service_file"
+  fi
   cat >"$service_file" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -759,6 +768,14 @@ else
   escaped_bb_app_npm_prefix=$(systemd_escape "$bb_app_npm_prefix")
   escaped_server=$(systemd_escape "$server_url")
   escaped_data_dir=$(systemd_escape "$data_dir")
+  legacy_service_name="bb-host-daemon-$legacy_service_slug"
+  legacy_service_file="$service_dir/$legacy_service_name.service"
+  if [ -f "$legacy_service_file" ] && \
+     grep -F -- "--host-daemon-port \"$host_daemon_port\"" "$legacy_service_file" >/dev/null 2>&1 && \
+     grep -F -- "Environment=\"BB_DATA_DIR=$escaped_data_dir\"" "$legacy_service_file" >/dev/null 2>&1; then
+    systemctl --user disable --now "$legacy_service_name.service" >/dev/null 2>&1 || true
+    rm -f "$legacy_service_file"
+  fi
   cat >"$service_file" <<EOF
 [Unit]
 Description=bb host daemon for $server_host

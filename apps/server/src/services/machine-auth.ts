@@ -4,7 +4,6 @@ import { betterAuth } from "better-auth";
 import { apiKey } from "@better-auth/api-key";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { authApiKeys, authUsers, type DbConnection } from "@bb/db";
-import { hostTypeSchema, type HostType } from "@bb/domain";
 import { readOrCreateSecretFile } from "@bb/secret-storage";
 import { z } from "zod";
 import type { ServerLogger } from "../types.js";
@@ -22,13 +21,29 @@ const machineAuthSchema = {
   user: authUsers,
 };
 
-const machineCredentialMetadataSchema = z
+const currentMachineCredentialMetadataSchema = z
   .object({
     hostId: z.string().min(1),
-    hostType: hostTypeSchema,
     enrollSource: z.enum(["loopback", "public-multi-machine"]).optional(),
   })
   .strict();
+
+const legacyMachineCredentialMetadataSchema = z
+  .object({
+    hostId: z.string().min(1),
+    hostType: z.enum(["persistent", "ephemeral"]),
+    enrollSource: z.enum(["loopback", "public-multi-machine"]).optional(),
+  })
+  .strict()
+  .transform(({ hostId, enrollSource }) => ({
+    hostId,
+    ...(enrollSource === undefined ? {} : { enrollSource }),
+  }));
+
+const machineCredentialMetadataSchema = z.union([
+  currentMachineCredentialMetadataSchema,
+  legacyMachineCredentialMetadataSchema,
+]);
 
 type MachineCredentialMetadata = z.infer<
   typeof machineCredentialMetadataSchema
@@ -36,18 +51,15 @@ type MachineCredentialMetadata = z.infer<
 
 interface IssueHostEnrollKeyArgs {
   hostId: string;
-  hostType: HostType;
   enrollSource: "loopback" | "public-multi-machine";
 }
 
 interface RevokeHostAuthKeysArgs {
   hostId: string;
-  hostType: HostType;
 }
 
 interface IssueDaemonHostKeyArgs {
   hostId: string;
-  hostType: HostType;
 }
 
 interface IssueHostEnrollKeyResult {
@@ -58,7 +70,6 @@ interface IssueHostEnrollKeyResult {
 export interface EnrollHostArgs {
   allowPublicEnrollment: boolean;
   hostId: string;
-  hostType: HostType;
   token: string;
 }
 
@@ -251,7 +262,6 @@ export async function createMachineAuthService(
           eq(authApiKeys.configId, DAEMON_ENROLL_CONFIG_ID),
           eq(authApiKeys.enabled, true),
           sql`json_extract(${authApiKeys.metadata}, '$.hostId') = ${metadata.hostId}`,
-          sql`json_extract(${authApiKeys.metadata}, '$.hostType') = ${metadata.hostType}`,
         ),
       )
       .run();
@@ -274,7 +284,6 @@ export async function createMachineAuthService(
           eq(authApiKeys.enabled, true),
           ne(authApiKeys.id, preserveKeyId),
           sql`json_extract(${authApiKeys.metadata}, '$.hostId') = ${metadata.hostId}`,
-          sql`json_extract(${authApiKeys.metadata}, '$.hostType') = ${metadata.hostType}`,
         ),
       )
       .run();
@@ -295,7 +304,6 @@ export async function createMachineAuthService(
           eq(authApiKeys.configId, DAEMON_HOST_CONFIG_ID),
           eq(authApiKeys.enabled, true),
           sql`json_extract(${authApiKeys.metadata}, '$.hostId') = ${metadata.hostId}`,
-          sql`json_extract(${authApiKeys.metadata}, '$.hostType') = ${metadata.hostType}`,
         ),
       )
       .run();
@@ -325,7 +333,6 @@ export async function createMachineAuthService(
     async enrollHost({
       allowPublicEnrollment,
       hostId,
-      hostType,
       token,
     }: EnrollHostArgs): Promise<EnrollHostResult | null> {
       const verified = await verifyKey({
@@ -335,10 +342,7 @@ export async function createMachineAuthService(
       if (!verified) {
         return null;
       }
-      if (
-        verified.metadata.hostId !== hostId ||
-        verified.metadata.hostType !== hostType
-      ) {
+      if (verified.metadata.hostId !== hostId) {
         return null;
       }
       if (
@@ -350,7 +354,6 @@ export async function createMachineAuthService(
 
       const hostMetadata: MachineCredentialMetadata = {
         hostId: verified.metadata.hostId,
-        hostType: verified.metadata.hostType,
       };
 
       const hostKey = await createDaemonHostKey(hostMetadata);
@@ -365,24 +368,18 @@ export async function createMachineAuthService(
     },
     async issueDaemonHostKey({
       hostId,
-      hostType,
     }: IssueDaemonHostKeyArgs): Promise<string> {
-      const created = await createDaemonHostKey({
-        hostId,
-        hostType,
-      });
+      const created = await createDaemonHostKey({ hostId });
       return created.key;
     },
     async issueHostEnrollKey({
       enrollSource,
       hostId,
-      hostType,
     }: IssueHostEnrollKeyArgs): Promise<IssueHostEnrollKeyResult> {
       await ensureReady();
       const metadata = {
         enrollSource,
         hostId,
-        hostType,
       };
       await disableActiveEnrollKeysForHost(metadata);
 
@@ -410,9 +407,8 @@ export async function createMachineAuthService(
     },
     async revokeHostAuthKeys({
       hostId,
-      hostType,
     }: RevokeHostAuthKeysArgs): Promise<void> {
-      const metadata = { hostId, hostType };
+      const metadata = { hostId };
       await disableActiveEnrollKeysForHost(metadata);
       await disableActiveDaemonHostKeysForHost(metadata);
     },

@@ -23,6 +23,7 @@ describe("plugin catalog categories", () => {
       { id: "memory-and-context", displayName: "Memory & Context" },
       { id: "security", displayName: "Security" },
       { id: "agents-and-providers", displayName: "Agents & Providers" },
+      { id: "environments", displayName: "Environments" },
       {
         id: "token-usage-and-limits",
         displayName: "Token Usage & Limits",
@@ -39,7 +40,7 @@ describe("plugin catalog categories", () => {
       { id: "plugin-development", displayName: "Plugin Development" },
       { id: "tasks-and-workflows", displayName: "Tasks & Workflows" },
     ]);
-    expect(PLUGIN_CATALOG_CATEGORIES).toHaveLength(15);
+    expect(PLUGIN_CATALOG_CATEGORIES).toHaveLength(16);
     for (const category of PLUGIN_CATALOG_CATEGORIES) {
       expect(category.description).not.toHaveLength(0);
       expect(pluginCatalogCategory(category.id)).toBe(category);

@@ -1,4 +1,4 @@
-import { cp, mkdtemp, readFile, rm, symlink } from "node:fs/promises";
+import { cp, mkdtemp, readFile, readdir, rm, symlink } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
@@ -65,6 +65,46 @@ describe("builtin server artifacts", () => {
         `${pathToFileURL(built.jsPath).href}?test=${Date.now()}`
       );
       expect(typeof Reflect.get(Object(imported), "default")).toBe("function");
+    },
+    90_000,
+  );
+
+  it.each([
+    { pluginDir: "environment-project-checkout" },
+    { pluginDir: "environment-git-worktree" },
+    { pluginDir: "environment-personal-workspace" },
+    { pluginDir: "environment-modal-sandbox" },
+  ])(
+    "inlines the environment-provider runtime into the $pluginDir server entry",
+    async ({ pluginDir }) => {
+      const root = await mkdtemp(join(repositoryRoot, ".builtin-server-test-"));
+      tempDirs.push(root);
+      const source = join(repositoryRoot, "plugins", pluginDir);
+      const fileNames = (await readdir(source)).filter(
+        (fileName) =>
+          fileName === "package.json" ||
+          fileName.endsWith(".ts") ||
+          fileName.endsWith(".svg"),
+      );
+      for (const fileName of fileNames) {
+        await cp(join(source, fileName), join(root, fileName));
+      }
+      await symlink(
+        join(source, "node_modules"),
+        join(root, "node_modules"),
+        "dir",
+      );
+      const toolchain = await resolvePluginBuildToolchain(
+        join(repositoryRoot, "node_modules", ".unused-toolchain"),
+      );
+      const built = await buildPluginServer(root, "0.9.0-test", toolchain);
+
+      const bundle = await readFile(built.jsPath, "utf8");
+      expect(
+        bundledSdkSpecifiers(bundle).filter(
+          (specifier) => specifier !== "@get-bb/plugin-sdk",
+        ),
+      ).toEqual([]);
     },
     90_000,
   );

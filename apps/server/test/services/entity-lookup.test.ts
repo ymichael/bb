@@ -39,7 +39,6 @@ function setup(): SetupResult {
   const hostRow = upsertHost(db, noopNotifier, {
     id: "host_entity_lookup",
     name: "Entity Lookup Host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "Entity Lookup Project",
@@ -52,7 +51,6 @@ function setup(): SetupResult {
   const host = makeHost({
     id: hostRow.id,
     name: hostRow.name,
-    type: hostRow.type,
     status: "disconnected",
     maxPermissionMode: hostRow.maxPermissionMode,
     lastSeenAt: hostRow.lastSeenAt,
@@ -79,9 +77,17 @@ describe("entity lookup lifecycle errors", () => {
     const { db, host, project } = setup();
     try {
       const environment = createEnvironment(db, noopNotifier, {
+        providerOwnsPath: false,
         hostId: host.id,
         projectId: project.id,
-        workspaceProvisionType: "managed-worktree",
+        environmentProvider: {
+          environmentProviderId: "git-worktree",
+          instanceKey: null,
+          selection: {
+            machine: { type: "existing", hostId: host.id },
+            inputs: null,
+          },
+        },
         path: null,
         status: "destroyed",
       });
@@ -124,9 +130,17 @@ describe("entity lookup lifecycle errors", () => {
       });
 
       const environment = createEnvironment(db, noopNotifier, {
+        providerOwnsPath: false,
         hostId: host.id,
         projectId: project.id,
-        workspaceProvisionType: "managed-worktree",
+        environmentProvider: {
+          environmentProviderId: "git-worktree",
+          instanceKey: null,
+          selection: {
+            machine: { type: "existing", hostId: host.id },
+            inputs: null,
+          },
+        },
         path: null,
         status: "destroyed",
       });

@@ -100,6 +100,18 @@ export function listProjectSourcesByProjectIds(
     .map(toProjectSource);
 }
 
+export function listProjectSourcesByHost(
+  db: DbConnection,
+  hostId: string,
+) {
+  return db
+    .select()
+    .from(projectSources)
+    .where(eq(projectSources.hostId, hostId))
+    .all()
+    .map(toProjectSource);
+}
+
 export interface GetProjectSourceForProjectArgs {
   projectId: string;
   sourceId: string;

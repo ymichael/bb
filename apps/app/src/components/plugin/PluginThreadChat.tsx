@@ -4,6 +4,7 @@ import type {
   ThreadChatMessageAction,
   ThreadChatProps,
 } from "@get-bb/plugin-sdk";
+import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import {
   formatEnvironmentDisplay,
   type EnvironmentDisplayHostContext,
@@ -22,11 +23,15 @@ import { useThreadTimelineNavigation } from "@/components/thread/timeline/Thread
 import { PluginContext } from "@/components/plugin/plugin-context";
 import { ThreadProviderContext } from "@/components/thread/thread-provider-context";
 import { useEnvironment } from "@/hooks/queries/environment-queries";
-import { useHosts } from "@/hooks/queries/host-queries";
 import { useSystemProviderInfo } from "@/hooks/queries/system-queries";
 import { useThread } from "@/hooks/queries/thread-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
-import { getEnvironmentWorkspaceSummaryDisplay } from "@/lib/environment-workspace-display";
+import { useHosts } from "@/hooks/queries/host-queries";
+import {
+  findEnvironmentDisplayProvider,
+  getEnvironmentWorkspaceSummaryDisplay,
+} from "@/lib/environment-workspace-display";
+import { useSystemEnvironmentProviders } from "@/hooks/queries/environment-provider-queries";
 import { formatWorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
 import { BbHttpError } from "@/lib/sdk";
 import {
@@ -113,6 +118,8 @@ function PluginThreadChatBody({
     ? (hostsQuery.data?.find((host) => host.id === environment.hostId)?.name ??
       null)
     : null;
+  const hasMultipleMachines = (hostsQuery.data?.length ?? 0) > 1;
+  const { providers: environmentProviders } = useSystemEnvironmentProviders();
   const timelineNavigation = useThreadTimelineNavigation();
   const canUseHostFileNavigation =
     thread !== undefined &&
@@ -183,19 +190,29 @@ function PluginThreadChatBody({
       locality: isLocalDaemonHost(environment.hostId) ? "local" : "remote",
       identity: null,
     };
-    const display = formatEnvironmentDisplay({ environment, host });
+    const providerLookup = findEnvironmentDisplayProvider(
+      environmentProviders,
+      environment.environmentProviderId,
+    );
+    const display = formatEnvironmentDisplay({
+      environment,
+      host,
+      providerLookup,
+    });
     const summaryDisplay = getEnvironmentWorkspaceSummaryDisplay({
       display,
+      providerLookup,
       environmentName: environment.name,
-      locality: host.locality,
-      hostName: environmentHostName ?? undefined,
+      hasMultipleMachines,
+      hostName: environmentHostName,
+      isProjectless: thread?.projectId === PERSONAL_PROJECT_ID,
     });
     return (
       <ThreadEnvironmentSummary
-        environmentLabel={summaryDisplay.label}
-        environmentCompactLabel={summaryDisplay.compactLabel}
-        environmentIcon={summaryDisplay.icon}
-        environmentTypeLabel={summaryDisplay.typeLabel}
+        environmentLabel={summaryDisplay?.label}
+        environmentCompactLabel={summaryDisplay?.compactLabel}
+        environmentIcon={summaryDisplay?.icon}
+        environmentTypeLabel={summaryDisplay?.typeLabel}
         environmentCheckout={
           environment.branchName
             ? formatWorkspaceCheckoutDisplay({
@@ -209,7 +226,14 @@ function PluginThreadChatBody({
         }
       />
     );
-  }, [environment, environmentHostName, isLocalDaemonHost]);
+  }, [
+    environment,
+    environmentHostName,
+    environmentProviders,
+    hasMultipleMachines,
+    isLocalDaemonHost,
+    thread?.projectId,
+  ]);
 
   const isThreadMissing =
     threadQuery.error instanceof BbHttpError &&

@@ -86,6 +86,7 @@ describe("bb environment command output", () => {
   it("discovers every direct environment inspection command in help", async () => {
     const help = await getHelpOutput(["environment"], register);
 
+    expect(help).toContain("providers [options]");
     expect(help).toContain("status [options] <id>");
     expect(help).toContain("branches [options] <id>");
     expect(help).toContain("paths [options] <id>");
@@ -94,7 +95,178 @@ describe("bb environment command output", () => {
     expect(help).toContain("diff-file [options] <id>");
     expect(help).toContain("diff-patch [options] <id>");
     expect(help).toContain("pull-request");
+    expect(help).toMatch(
+      /List environments, including destroyed ones\s+when requested/u,
+    );
     expect(help).not.toContain("squash-merge");
+  });
+
+  it("bb environment providers lists selectable ids and required inputs", async () => {
+    stubServerApi({
+      "v1.system.environment-providers.$get": vi.fn(async () => ({
+        providers: [
+          {
+            id: "git-worktree",
+            displayName: "Worktree",
+            icon: null,
+            pluginId: "environment-git-worktree",
+            acceptsEmptyInputs: false,
+            availability: { status: "available" },
+            requires: {
+              projectCheckout: true,
+              gitCheckout: true,
+              gitRemote: false,
+              projectless: false,
+            },
+            inputs: {
+              type: "object",
+              properties: { branch: { type: "object" } },
+              required: ["branch"],
+            },
+          },
+          {
+            id: "modal-sandbox",
+            displayName: "Modal sandbox",
+            icon: null,
+            pluginId: "environment-modal-sandbox",
+            acceptsEmptyInputs: true,
+            availability: {
+              status: "setup-required",
+              message: "Add Modal credentials",
+            },
+            requires: {
+              projectCheckout: false,
+              gitCheckout: false,
+              gitRemote: true,
+              projectless: false,
+            },
+            inputs: null,
+          },
+        ],
+      })),
+    });
+
+    await runCommand(["environment", "providers"], register);
+
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "git-worktree  Worktree  projectCheckout, gitCheckout  takes --environment-inputs  available",
+      "modal-sandbox  Modal sandbox  gitRemote  setup-required: Add Modal credentials",
+    ]);
+  });
+
+  it("bb environment providers requests availability for a project and machine", async () => {
+    const getProviders = vi.fn(async () => ({ providers: [] }));
+    stubServerApi({
+      "v1.hosts.$get": vi.fn(async () => [
+        {
+          id: "host-remote",
+          name: "builder",
+          status: "connected",
+          lastSeenAt: 1,
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ]),
+      "v1.system.environment-providers.$get": getProviders,
+    });
+
+    await runCommand(
+      [
+        "environment",
+        "providers",
+        "--project",
+        "proj-1",
+        "--machine",
+        "builder",
+        "--json",
+      ],
+      register,
+    );
+
+    expect(getProviders).toHaveBeenCalledWith({
+      query: { projectId: "proj-1", hostId: "host-remote" },
+    });
+  });
+
+  it("bb environment list names the provider that produced each row", async () => {
+    const list = vi.fn(async () => [
+      fixtures.makeEnvironment({
+        id: "env-worktree",
+        projectId: "proj-1",
+        hostId: "host-local",
+        environmentProviderId: "git-worktree",
+        path: "/tmp/worktrees/env-worktree",
+      }),
+      fixtures.makeEnvironment({
+        id: "env-checkout",
+        projectId: "proj-1",
+        hostId: "host-local",
+        environmentProviderId: null,
+      }),
+    ]);
+    stubServerApi({ "v1.environments.$get": list });
+
+    await runCommand(["environment", "list"], register);
+
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "env-worktree  ready  git-worktree  /tmp/worktrees/env-worktree",
+      "env-checkout  ready  -  /tmp/environment",
+    ]);
+  });
+
+  it("bb environment list names invalid --limit as a non-negative integer", async () => {
+    const list = vi.fn(async () => []);
+    stubServerApi({ "v1.environments.$get": list });
+
+    await expect(
+      runCommand(["environment", "list", "--limit", "nope"], register),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: --limit must be a non-negative integer.",
+    );
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("bb environment list names invalid --offset as a non-negative integer", async () => {
+    const list = vi.fn(async () => []);
+    stubServerApi({ "v1.environments.$get": list });
+
+    await expect(
+      runCommand(["environment", "list", "--offset", "nope"], register),
+    ).rejects.toThrow("process.exit:1");
+
+    expect(collectLogLines(vi.mocked(console.error))).toContain(
+      "Error: --offset must be a non-negative integer.",
+    );
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("bb environment delete reports requested cleanup and its lifecycle", async () => {
+    const remove = vi.fn(async () => ({ ok: true as const }));
+    const get = vi.fn(async () =>
+      fixtures.makeEnvironment({
+        id: "env-delete",
+        projectId: "project-delete",
+        hostId: "host-delete",
+        lifecycle: {
+          phase: "teardown",
+          retireAt: null,
+          teardown: { status: "running", attempt: 1 },
+        },
+      }),
+    );
+    stubServerApi({
+      "v1.environments.:id.$delete": remove,
+      "v1.environments.:id.$get": get,
+    });
+
+    await runCommand(["environment", "delete", "env-delete"], register);
+
+    expect(collectLogLines(vi.mocked(console.log))).toEqual([
+      "Cleanup requested for environment env-delete.",
+      "Lifecycle: teardown",
+    ]);
   });
 
   it("bb environment status inspects an arbitrary environment id", async () => {

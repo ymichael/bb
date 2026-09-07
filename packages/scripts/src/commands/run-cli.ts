@@ -19,14 +19,22 @@ export function resolveCliExecution(
 ): CliExecution {
   const forwardedArgs = cliArgs[0] === "--" ? cliArgs.slice(1) : cliArgs;
   const env = { ...process.env };
+  let args = ["apps/cli/dist/index.js", ...forwardedArgs];
   if (process.env.NODE_ENV !== "production") {
     const devEnv = resolveCurrentDevProcessEnv(repoRoot, process.env);
     env.BB_SERVER_URL = process.env.BB_SERVER_URL ?? devEnv.BB_SERVER_URL;
     env.BB_HOST_DAEMON_PORT =
       process.env.BB_HOST_DAEMON_PORT ?? devEnv.BB_HOST_DAEMON_PORT;
+    args = [
+      "--conditions=source",
+      "--import",
+      "tsx",
+      "apps/cli/src/index.ts",
+      ...forwardedArgs,
+    ];
   }
   return {
-    args: ["apps/cli/dist/index.js", ...forwardedArgs],
+    args,
     command: process.execPath,
     cwd: repoRoot,
     env,

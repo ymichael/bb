@@ -121,5 +121,21 @@
   "browser-automation": {
     "category": "agents-and-providers",
     "screenshots": []
+  },
+  "environment-project-checkout": {
+    "category": "environments",
+    "screenshots": []
+  },
+  "environment-git-worktree": {
+    "category": "environments",
+    "screenshots": []
+  },
+  "environment-personal-workspace": {
+    "category": "environments",
+    "screenshots": []
+  },
+  "environment-modal-sandbox": {
+    "category": "environments",
+    "screenshots": []
   }
 }

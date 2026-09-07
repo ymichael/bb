@@ -456,7 +456,6 @@ export function createSyntheticThread(minimumEvents: number): SyntheticThread {
   migrate(db);
   const host = upsertHost(db, noopNotifier, {
     name: "synthetic-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "synthetic-project",

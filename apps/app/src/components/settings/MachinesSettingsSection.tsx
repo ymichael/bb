@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import type { Host, PermissionMode } from "@bb/domain";
+import type { SystemMachineProvider } from "@bb/server-contract";
 import { RETRY_ACTION_ICON } from "@bb/domain/update-state";
 import type { HostPlatform } from "@bb/host-daemon-contract";
 import { Button } from "@bb/shared-ui/button";
@@ -29,7 +30,9 @@ import { AddMachineDialog } from "@/components/dialogs/AddMachineDialog";
 import { ConfirmDeleteDialog } from "@/components/dialogs/ConfirmDeleteDialog";
 import { appToast } from "@/components/ui/app-toast";
 import { MachineStatusDot } from "@/components/machines/MachineStatusDot";
+import { MachinePhaseBadge } from "@/components/machines/MachinePhaseBadge";
 import { MachineRenameDialog } from "@/components/settings/MachineRenameDialog";
+import { MachineProviderIcon } from "@/components/plugin/MachineProviderIcon";
 import {
   SettingsBadge,
   SettingsRow,
@@ -39,9 +42,13 @@ import {
 import {
   useRemoveHost,
   useRenameHost,
+  useResumeHost,
+  useRetryHostCleanup,
   useRetryHostUpdate,
+  useSuspendHost,
 } from "@/hooks/mutations/host-mutations";
 import { useHosts } from "@/hooks/queries/host-queries";
+import { useSystemMachineProviders } from "@/hooks/queries/machine-provider-queries";
 import { useSidebarNavigation } from "@/hooks/queries/sidebar-navigation-query";
 import { useSystemConfig } from "@/hooks/queries/system-queries";
 import { useHostDaemon } from "@/hooks/useHostDaemon";
@@ -86,7 +93,12 @@ interface MachineRowProps {
   onRename: () => void;
   onRemove: () => void;
   onRetryUpdate: () => void;
+  onSuspend: () => void;
+  onResume: () => void;
+  onRetryCleanup: () => void;
+  lifecycleActionPending: boolean;
   retryUpdatePending: boolean;
+  machineProvider: SystemMachineProvider | null;
 }
 
 function MachineRow({
@@ -100,16 +112,22 @@ function MachineRow({
   onRename,
   onRemove,
   onRetryUpdate,
+  onSuspend,
+  onResume,
+  onRetryCleanup,
+  lifecycleActionPending,
   retryUpdatePending,
+  machineProvider,
 }: MachineRowProps) {
   const permission = PERMISSION_MODE_PRESENTATION[host.maxPermissionMode];
   const projectLabel = `${projectCount} ${projectCount === 1 ? "project" : "projects"}`;
   const connectionLabel =
-    host.status === "connected"
+    host.lifecycle.progress ??
+    (host.status === "connected"
       ? "Online"
       : host.lastSeenAt === null
         ? "Offline"
-        : `Offline · last seen ${formatRelativeTime({ timestamp: host.lastSeenAt, now })}`;
+        : `Offline · last seen ${formatRelativeTime({ timestamp: host.lastSeenAt, now })}`);
   const updateStatus = formatHostUpdateStatus(host);
   const removeItem = (
     <DropdownMenuItem
@@ -152,6 +170,18 @@ function MachineRow({
                 <SettingsBadge>this machine</SettingsBadge>
               ) : null}
               {showPrimaryBadge ? <SettingsBadge>primary</SettingsBadge> : null}
+              <MachinePhaseBadge lifecycle={host.lifecycle} />
+              {machineProvider?.icon == null ? null : (
+                <SettingsBadge>
+                  <span className="inline-flex items-center gap-1">
+                    <MachineProviderIcon
+                      provider={machineProvider}
+                      className="size-2.5"
+                    />
+                    {machineProvider.displayName}
+                  </span>
+                </SettingsBadge>
+              )}
             </div>
             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-subtle-foreground/75">
               <span className="inline-flex shrink-0 items-center gap-1.5">
@@ -211,6 +241,39 @@ function MachineRow({
                     </span>
                   </DropdownMenuItem>
                 ) : null}
+                {machineProvider?.supportsSuspend &&
+                host.lifecycle.phase === "active" ? (
+                  <DropdownMenuItem
+                    className={MACHINE_MENU_ITEM_CLASS}
+                    disabled={lifecycleActionPending}
+                    onSelect={onSuspend}
+                  >
+                    <Icon name="Pause" aria-hidden />
+                    <span className="min-w-0 truncate">Suspend</span>
+                  </DropdownMenuItem>
+                ) : null}
+                {machineProvider?.supportsSuspend &&
+                host.lifecycle.phase === "suspended" ? (
+                  <DropdownMenuItem
+                    className={MACHINE_MENU_ITEM_CLASS}
+                    disabled={lifecycleActionPending}
+                    onSelect={onResume}
+                  >
+                    <Icon name="Play" aria-hidden />
+                    <span className="min-w-0 truncate">Resume</span>
+                  </DropdownMenuItem>
+                ) : null}
+                {host.lifecycle.phase === "retiring" &&
+                host.lifecycle.teardown?.status === "failed" ? (
+                  <DropdownMenuItem
+                    className={MACHINE_MENU_ITEM_CLASS}
+                    disabled={lifecycleActionPending}
+                    onSelect={onRetryCleanup}
+                  >
+                    <Icon name="RotateCcw" aria-hidden />
+                    <span className="min-w-0 truncate">Retry cleanup</span>
+                  </DropdownMenuItem>
+                ) : null}
                 {isPrimary ? (
                   <Tooltip>
                     <TooltipTrigger asChild>{removeItem}</TooltipTrigger>
@@ -234,11 +297,15 @@ function MachineRow({
 export function MachinesSettingsSection() {
   const systemConfig = useSystemConfig();
   const hostsQuery = useHosts();
+  const { providers: machineProviders } = useSystemMachineProviders();
   const { localDaemonHostId, platform: localDaemonPlatform } = useHostDaemon();
   const sidebarNavigationQuery = useSidebarNavigation();
   const renameHost = useRenameHost();
   const removeHost = useRemoveHost();
   const retryHostUpdate = useRetryHostUpdate();
+  const suspendHost = useSuspendHost();
+  const resumeHost = useResumeHost();
+  const retryHostCleanup = useRetryHostCleanup();
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [renameTarget, setRenameTarget] = useState<Host | null>(null);
   const [removeTarget, setRemoveTarget] = useState<Host | null>(null);
@@ -260,6 +327,13 @@ export function MachinesSettingsSection() {
   const now = Date.now();
   const primaryHostPlatform = systemConfig.data?.primaryHostPlatform ?? null;
   const showMachineIdentityBadges = (hosts?.length ?? 0) > 1;
+  const machineProviderById = useMemo(
+    () =>
+      new Map(
+        (machineProviders ?? []).map((provider) => [provider.id, provider]),
+      ),
+    [machineProviders],
+  );
 
   return (
     <>
@@ -324,6 +398,34 @@ export function MachinesSettingsSection() {
                 retryUpdatePending={
                   retryHostUpdate.isPending &&
                   retryHostUpdate.variables === host.id
+                }
+                onSuspend={() =>
+                  suspendHost.mutate(host.id, {
+                    onSuccess: () => appToast.success(`${host.name} suspended`),
+                  })
+                }
+                onResume={() =>
+                  resumeHost.mutate(host.id, {
+                    onSuccess: () => appToast.success(`${host.name} resumed`),
+                  })
+                }
+                onRetryCleanup={() =>
+                  retryHostCleanup.mutate(host.id, {
+                    onSuccess: () =>
+                      appToast.success(`Cleanup retried for ${host.name}`),
+                  })
+                }
+                lifecycleActionPending={
+                  (suspendHost.isPending &&
+                    suspendHost.variables === host.id) ||
+                  (resumeHost.isPending && resumeHost.variables === host.id) ||
+                  (retryHostCleanup.isPending &&
+                    retryHostCleanup.variables === host.id)
+                }
+                machineProvider={
+                  host.machineProviderId === null
+                    ? null
+                    : (machineProviderById.get(host.machineProviderId) ?? null)
                 }
               />
             ))}

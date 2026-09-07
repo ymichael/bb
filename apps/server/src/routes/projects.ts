@@ -586,13 +586,16 @@ export function registerProjectRoutes(app: Hono, deps: AppDeps): void {
 
   del(routes.deleteSource, (context) => {
     const projectId = context.req.param("id");
-    requirePublicStandardProject(deps.db, projectId);
+    const project = requireProject(deps.db, projectId);
+    if (project.kind !== "standard") {
+      throw new ApiError(404, "project_not_found", "Project not found");
+    }
     requireProjectSource(deps, {
       projectId,
       sourceId: context.req.param("sourceId"),
     });
     const sourceCount = countProjectSources(deps.db, { projectId });
-    if (sourceCount <= 1) {
+    if (sourceCount <= 1 && project.deletedAt === null) {
       throw new ApiError(
         409,
         "invalid_request",

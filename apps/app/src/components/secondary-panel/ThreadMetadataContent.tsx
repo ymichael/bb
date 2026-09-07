@@ -1,3 +1,4 @@
+import { EnvironmentProviderIcon } from "@/components/plugin/EnvironmentProviderIcon";
 import {
   useCallback,
   useEffect,
@@ -25,7 +26,11 @@ import {
 } from "@bb/core-ui";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
-import { getEnvironmentWorkspaceLabelIconName } from "@/lib/environment-workspace-display";
+import {
+  findEnvironmentDisplayProvider,
+  getEnvironmentWorkspaceInfoDisplay,
+} from "@/lib/environment-workspace-display";
+import { useSystemEnvironmentProviders } from "@/hooks/queries/environment-provider-queries";
 import { formatWorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
 import { Button } from "@bb/shared-ui/button";
 import {
@@ -40,7 +45,7 @@ import {
   DetailRowIconLabel,
 } from "@/components/ui/detail-card.js";
 import { CHROME_SECTION_LABEL_CLASS } from "@bb/shared-ui/chrome-style-tokens";
-import { useCreateThreadInWorktree } from "@/hooks/useCreateThreadInWorktree";
+import { useCreateThreadInEnvironment } from "@/hooks/useCreateThreadInEnvironment";
 import { Icon } from "@bb/shared-ui/icon";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
 import {
@@ -232,34 +237,53 @@ export function EnvironmentRow({
   environment,
   environmentDisplayHost,
 }: EnvironmentRowProps) {
-  const createThreadInWorktree = useCreateThreadInWorktree({
+  const createThreadInEnvironment = useCreateThreadInEnvironment({
     projectId: thread.projectId,
     environmentId: environment?.id ?? "",
   });
+  const { providers } = useSystemEnvironmentProviders();
   if (!environment) return null;
+  const providerLookup = findEnvironmentDisplayProvider(
+    providers,
+    environment.environmentProviderId,
+  );
   const display = formatEnvironmentDisplay({
     environment,
     host: environmentDisplayHost,
+    providerLookup,
   });
-  const showCreateThreadButton = isProvisionedWorktreeEnvironment(environment);
+  const infoDisplay = getEnvironmentWorkspaceInfoDisplay({
+    display,
+    providerLookup,
+    environmentName: environment.name,
+    hostName: environmentDisplayHost.identity?.name ?? null,
+  });
+  const showCreateThreadButton = isReusableEnvironment(environment);
   return (
     <DetailRow
       label={
-        <DetailRowIconLabel
-          icon={getEnvironmentWorkspaceLabelIconName(
-            display.workspaceDisplayKind,
-          )}
-        >
-          Environment
-        </DetailRowIconLabel>
+        providerLookup.status === "loaded" &&
+        providerLookup.provider !== null ? (
+          <span className="flex items-center gap-1.5">
+            <EnvironmentProviderIcon
+              provider={providerLookup.provider}
+              className="size-3.5 shrink-0 text-muted-foreground"
+            />
+            <span className="min-w-0 truncate">Environment</span>
+          </span>
+        ) : (
+          <DetailRowIconLabel icon={infoDisplay.icon}>
+            Environment
+          </DetailRowIconLabel>
+        )
       }
       valueClassName="min-w-0"
     >
       <span className="flex min-w-0 items-center gap-1">
-        <span className="min-w-0 truncate" title={display.modeLabel}>
-          {display.compactModeLabel}
+        <span className="min-w-0 truncate" title={infoDisplay.label}>
+          {infoDisplay.label}
         </span>
-        {environmentDisplayHost.identity ? (
+        {infoDisplay.machineName !== null && environmentDisplayHost.identity ? (
           <span
             className="min-w-0 shrink-0 truncate text-muted-foreground"
             title={`On ${environmentDisplayHost.identity.name} (${
@@ -268,7 +292,7 @@ export function EnvironmentRow({
                 : "offline"
             })`}
           >
-            · {environmentDisplayHost.identity.name}
+            · {infoDisplay.machineName}
             {environmentDisplayHost.identity.connected ? "" : " (offline)"}
           </span>
         ) : null}
@@ -277,16 +301,41 @@ export function EnvironmentRow({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                aria-label="Create thread in worktree"
-                onClick={createThreadInWorktree}
+                aria-label="New thread in this environment"
+                onClick={createThreadInEnvironment}
                 className="inline-flex shrink-0 items-center justify-center rounded-md p-0.5 text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
               >
                 <Icon name="MessageSquarePlus" className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Create thread in worktree</TooltipContent>
+            <TooltipContent>New thread in this environment</TooltipContent>
           </Tooltip>
         ) : null}
+      </span>
+    </DetailRow>
+  );
+}
+
+export function EnvironmentProvisioningFailureRow({
+  failed,
+}: {
+  failed: boolean;
+}) {
+  if (!failed) return null;
+  return (
+    <DetailRow
+      label={
+        <DetailRowIconLabel icon="AlertTriangle">
+          Environment
+        </DetailRowIconLabel>
+      }
+      valueClassName="min-w-0"
+    >
+      <span className="flex min-w-0 items-center gap-1">
+        <span className="min-w-0 truncate">Not created</span>
+        <span className="shrink-0 text-muted-foreground">
+          · provisioning failed
+        </span>
       </span>
     </DetailRow>
   );
@@ -296,19 +345,8 @@ interface WorkspacePathRowProps {
   environment: Environment | null;
 }
 
-function isWorktreeEnvironment(environment: Environment): boolean {
-  return (
-    environment.isWorktree ||
-    environment.workspaceProvisionType === "managed-worktree"
-  );
-}
-
-function isProvisionedWorktreeEnvironment(environment: Environment): boolean {
-  return (
-    environment.status === "ready" &&
-    environment.path !== null &&
-    isWorktreeEnvironment(environment)
-  );
+function isReusableEnvironment(environment: Environment): boolean {
+  return environment.status === "ready" && environment.path !== null;
 }
 
 export function WorkspacePathRow({ environment }: WorkspacePathRowProps) {
@@ -802,6 +840,7 @@ export interface ThreadMetadataContentProps {
   isLoadingParentThreads: boolean;
   isParentThreadsError: boolean;
   environment: Environment | null;
+  environmentProvisioningFailure: boolean;
   environmentDisplayHost: EnvironmentDisplayHostContext;
   workspaceStatus: WorkspaceStatus | undefined;
   workspaceStatusError: Error | null;
@@ -829,6 +868,7 @@ export function hasAnyThreadMetadata(
     thread,
     parentThreadDisplayName,
     environment,
+    environmentProvisioningFailure,
     workspaceStatus,
     workspaceStatusError,
     workspaceUnavailable,
@@ -838,6 +878,7 @@ export function hasAnyThreadMetadata(
     | "thread"
     | "parentThreadDisplayName"
     | "environment"
+    | "environmentProvisioningFailure"
     | "workspaceStatus"
     | "workspaceStatusError"
     | "workspaceUnavailable"
@@ -861,6 +902,7 @@ export function hasAnyThreadMetadata(
   return Boolean(
     parentThreadId ||
     environment ||
+    environmentProvisioningFailure ||
     branchName ||
     pullRequest ||
     showWorkspaceStatus ||
@@ -926,6 +968,7 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
     isLoadingParentThreads,
     isParentThreadsError,
     environment,
+    environmentProvisioningFailure,
     environmentDisplayHost,
     workspaceStatus,
     workspaceStatusError,
@@ -970,6 +1013,9 @@ export function ThreadMetadataContent(props: ThreadMetadataContentProps) {
         thread={thread}
         environment={environment}
         environmentDisplayHost={environmentDisplayHost}
+      />
+      <EnvironmentProvisioningFailureRow
+        failed={environmentProvisioningFailure}
       />
       <WorkspacePathRow environment={environment} />
       <BranchRow workspaceStatus={workspaceStatus} />

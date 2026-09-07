@@ -1,4 +1,3 @@
-import type { HostType } from "@bb/domain";
 import {
   readOptionalEnvVar,
   resolveEnvLoader,
@@ -13,7 +12,6 @@ import {
   BB_HOST_DAEMON_AUTO_UPDATE_ENV,
   BB_HOST_ID_ENV,
   BB_HOST_NAME_ENV,
-  BB_HOST_TYPE_ENV,
 } from "./env-vars.js";
 import { assignIfDefined } from "./objects.js";
 
@@ -26,7 +24,6 @@ export interface HostDaemonEntrypointConfig {
   BB_HOST_DAEMON_AUTO_UPDATE?: boolean;
   BB_HOST_ID?: string;
   BB_HOST_NAME?: string;
-  BB_HOST_TYPE?: HostType;
 }
 
 type LoadHostDaemonEntrypointConfigArgs = EnvLoaderArgs;
@@ -76,11 +73,6 @@ export function loadHostDaemonEntrypointConfig(
     definition: BB_HOST_NAME_ENV,
     env: loader.env,
   });
-  const hostType = readOptionalEnvVar({
-    context: loader.context,
-    definition: BB_HOST_TYPE_ENV,
-    env: loader.env,
-  });
 
   assignIfDefined({
     key: "BB_BRIDGE_DIR",
@@ -122,11 +114,5 @@ export function loadHostDaemonEntrypointConfig(
     target: config,
     value: hostName,
   });
-  assignIfDefined({
-    key: "BB_HOST_TYPE",
-    target: config,
-    value: hostType,
-  });
-
   return config;
 }

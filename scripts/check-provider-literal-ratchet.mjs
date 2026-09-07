@@ -74,6 +74,7 @@ const EXCLUDED_SEGMENTS = new Set([
  */
 const EXCLUDED_PREFIXES = [
   join("plugins", "provider-"),
+  join("plugins", "environment-"),
   // Account Pool proxies one named provider's traffic; it is provider-side
   // code like plugins/provider-*, not core.
   join("plugins", "account-pool"),
@@ -179,7 +180,9 @@ export function checkAllowlist(scan, allowlist) {
   }
   for (const rel of Object.keys(entries)) {
     if (!(rel in scan.files)) {
-      problems.push(`  − ${rel}: allowlisted but has no reference left — remove the entry`);
+      problems.push(
+        `  − ${rel}: allowlisted but has no reference left — remove the entry`,
+      );
     }
   }
   return problems;
@@ -230,7 +233,8 @@ function baselineFromGit(root, ref) {
 // --- CLI ---------------------------------------------------------------------
 function main() {
   const ROOT =
-    process.env.BB_RATCHET_ROOT ?? fileURLToPath(new URL("..", import.meta.url));
+    process.env.BB_RATCHET_ROOT ??
+    fileURLToPath(new URL("..", import.meta.url));
   const BASELINE_PATH = join(ROOT, "scripts", "provider-literal-baseline.json");
   const argv = process.argv.slice(2);
   const flags = new Set(argv.filter((a) => a.startsWith("--")));

@@ -733,12 +733,16 @@ describe("useThreadCreationOptions", () => {
         useThreadCreationOptions({
           scope: "new-thread",
           preferenceProjectId: PROJECT_ID,
+          resolveProviderRouting: (value) =>
+            value === "provider:project-checkout"
+              ? { hostId: "project-host" }
+              : {},
           initialProviderId: "initial-provider",
           initialModel: "initial-model",
           initialServiceTier: "fast",
           initialReasoningLevel: "medium",
           initialPermissionMode: "full",
-          initialEnvironmentSelectionValue: "host:initial-host:local",
+          initialEnvironmentSelectionValue: "provider:git-worktree",
         }),
       { wrapper },
     );
@@ -771,7 +775,7 @@ describe("useThreadCreationOptions", () => {
       expect(result.current.reasoningLevel).toBe("high");
       expect(result.current.permissionMode).toBe("accept-edits");
       expect(result.current.environmentSelectionValue).toBe(
-        "host:project-host:local",
+        "provider:project-checkout",
       );
       expect(result.current.executionOptionsRouting).toEqual({
         hostId: "project-host",
@@ -833,7 +837,6 @@ describe("useThreadCreationOptions", () => {
       {
         id: "capped-host",
         name: "capped",
-        type: "persistent",
         status: "connected",
         maxPermissionMode: "accept-edits",
         lastSeenAt: null,
@@ -887,6 +890,27 @@ describe("useThreadCreationOptions", () => {
         getProjectScopedStorageKey("bb.promptbox.environment", PROJECT_ID),
       ),
     ).toBe("host:project-host:worktree");
+  });
+
+  it("migrates a stored legacy worktree selection to the worktree provider", () => {
+    const { wrapper } = createQueryClientTestHarness();
+    window.localStorage.setItem(
+      getProjectScopedStorageKey("bb.promptbox.environment", PROJECT_ID),
+      "host:project-host:worktree",
+    );
+
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          scope: "new-thread",
+          preferenceProjectId: PROJECT_ID,
+        }),
+      { wrapper },
+    );
+
+    expect(result.current.environmentSelectionValue).toBe(
+      "provider:git-worktree",
+    );
   });
 
   it("routes a host-scoped component-local catalog by the environment's host", async () => {
@@ -1205,7 +1229,7 @@ describe("useThreadCreationOptions", () => {
   it("latches the initial ready provider instead of resolving it again after a machine switch", async () => {
     window.localStorage.setItem(
       "bb.promptbox.environment",
-      "host:remote-host:local",
+      "provider:project-checkout",
     );
     vi.mocked(sdk.system.providerStates).mockImplementation(async (args) =>
       args?.hostId === "remote-host"
@@ -1218,6 +1242,12 @@ describe("useThreadCreationOptions", () => {
         useThreadCreationOptions({
           scope: "new-thread",
           preferReadyProviderWhenUnset: true,
+          resolveProviderRouting: (value) =>
+            value === "provider:project-checkout"
+              ? { hostId: "remote-host" }
+              : value === "provider:git-worktree"
+                ? { hostId: "second-host" }
+                : {},
         }),
       { wrapper },
     );
@@ -1238,7 +1268,7 @@ describe("useThreadCreationOptions", () => {
       .calls.length;
 
     act(() => {
-      result.current.setEnvironmentSelectionValue("host:second-host:local");
+      result.current.setEnvironmentSelectionValue("provider:git-worktree");
     });
 
     await waitFor(() => {

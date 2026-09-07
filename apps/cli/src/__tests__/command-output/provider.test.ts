@@ -44,7 +44,6 @@ describe("bb provider command output", () => {
         {
           id: "host-remote",
           name: "builder",
-          type: "persistent",
           status: "connected",
           lastSeenAt: 1,
           lastRejectedProtocolVersion: null,

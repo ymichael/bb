@@ -4,16 +4,12 @@ import {
   createEnvironment,
   createProject,
   createThread,
-  createThreadProvisioningId,
   migrate,
   noopNotifier,
   upsertHost,
 } from "@bb/db";
 import { getActiveThreadProvisionContext } from "../../src/services/threads/thread-provisioning-active-context.js";
-import {
-  requestThreadProvision,
-  requestThreadReprovision,
-} from "../../src/services/threads/thread-provisioning.js";
+import { requestThreadProvision } from "../../src/services/threads/thread-provisioning.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 import { assertPromptHistoryForTurnRequest } from "../helpers/prompt-history.js";
 import { textInput } from "../helpers/prompt-input.js";
@@ -23,16 +19,15 @@ function setup() {
   migrate(db);
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "test-project",
     source: { type: "local_path", hostId: host.id, path: "/tmp/source" },
   });
   const environment = createEnvironment(db, noopNotifier, {
+    providerOwnsPath: false,
     hostId: host.id,
     projectId: project.id,
-    workspaceProvisionType: "unmanaged",
     status: "ready",
   });
   const thread = createThread(db, noopNotifier, {
@@ -55,9 +50,17 @@ describe("thread provisioning state", () => {
       {
         thread,
         environmentIntent: {
-          type: "direct-unmanaged",
-          hostId: host.id,
-          path: "/tmp/source",
+          type: "provider",
+          environmentProviderId: "project-checkout",
+          machine: { type: "existing", hostId: host.id },
+          inputs: {},
+          selectionResolved: true,
+          produced: {
+            hostId: host.id,
+            path: "/tmp/source",
+            mergeBaseBranch: null,
+            ownsPath: false,
+          },
         },
         input,
         execution: {
@@ -83,47 +86,6 @@ describe("thread provisioning state", () => {
       db,
       threadId: thread.id,
       scope: "project",
-      input,
-    });
-  });
-
-  it("keeps reprovision progress in live context and records prompt history", () => {
-    const { db, environment, hub, thread } = setup();
-    const input = textInput("resume after reprovision");
-
-    const provisioningId = createThreadProvisioningId();
-    const context = requestThreadReprovision(
-      { db, hub },
-      {
-        thread,
-        environment,
-        provisionEventSequence: 0,
-        input,
-        execution: {
-          model: "gpt-5",
-          serviceTier: "default",
-          reasoningLevel: "medium",
-          permissionMode: "full",
-          source: "client/turn/requested",
-        },
-        initiator: "user",
-        senderThreadId: null,
-        provisioningId,
-      },
-    );
-
-    expect(context.state).toEqual({
-      environmentId: environment.id,
-      provisionEventSequence: 0,
-      provisioningId,
-      stage: "environment-provisioning",
-      workspaceReadyEventSequence: null,
-    });
-    expect(getActiveThreadProvisionContext(thread.id)).toEqual(context);
-    assertPromptHistoryForTurnRequest({
-      db,
-      threadId: thread.id,
-      scope: "thread",
       input,
     });
   });

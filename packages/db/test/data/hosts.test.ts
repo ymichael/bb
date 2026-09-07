@@ -23,12 +23,11 @@ describe("hosts", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
       name: "My Machine",
-      type: "persistent",
     });
 
     expect(host.id).toMatch(/^host_/);
     expect(host.name).toBe("My Machine");
-    expect(host.type).toBe("persistent");
+    expect(host.machineProviderId).toBeNull();
     expect(host.lastSeenAt).toBeNull();
   });
 
@@ -37,7 +36,6 @@ describe("hosts", () => {
     const host1 = upsertHost(db, noopNotifier, {
       connectMachineId: "machine-1",
       name: "My Machine",
-      type: "persistent",
     });
 
     markHostSeen(db, host1.id, 1_000);
@@ -46,7 +44,6 @@ describe("hosts", () => {
       connectMachineId: "machine-2",
       id: host1.id,
       name: "Updated Reported Name",
-      type: "persistent",
     });
 
     expect(host2.id).toBe(host1.id);
@@ -60,20 +57,17 @@ describe("hosts", () => {
     const host = upsertHost(db, noopNotifier, {
       destroyedAt: 123,
       name: "Disconnected Host",
-      type: "persistent",
     });
 
     const updated = upsertHost(db, noopNotifier, {
       id: host.id,
       name: "Disconnected Host Renamed",
-      type: "persistent",
     });
 
     expect(updated).toMatchObject({
       destroyedAt: 123,
       id: host.id,
       name: "Disconnected Host",
-      type: "persistent",
     });
   });
 
@@ -90,7 +84,6 @@ describe("hosts", () => {
     const host = upsertHost(db, notifier, {
       destroyedAt: 123,
       name: "Persistent Host",
-      type: "persistent",
     });
     notifyHost.mockClear();
 
@@ -98,7 +91,6 @@ describe("hosts", () => {
       destroyedAt: null,
       id: host.id,
       name: "Persistent Host",
-      type: "persistent",
     });
 
     expect(notifyHost).toHaveBeenCalledWith(host.id, ["host-connected"]);
@@ -116,14 +108,12 @@ describe("hosts", () => {
     };
     const host = upsertHost(db, notifier, {
       name: "Persistent Host",
-      type: "persistent",
     });
     notifyHost.mockClear();
 
     upsertHost(db, notifier, {
       id: host.id,
       name: "Persistent Host Renamed",
-      type: "persistent",
     });
 
     expect(notifyHost).not.toHaveBeenCalled();
@@ -133,7 +123,6 @@ describe("hosts", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
       name: "My Machine",
-      type: "persistent",
     });
 
     const fetched = getHost(db, host.id);
@@ -143,8 +132,8 @@ describe("hosts", () => {
 
   it("lists all hosts", () => {
     const { db } = setup();
-    upsertHost(db, noopNotifier, { name: "Host 1", type: "persistent" });
-    upsertHost(db, noopNotifier, { name: "Host 2", type: "persistent" });
+    upsertHost(db, noopNotifier, { name: "Host 1" });
+    upsertHost(db, noopNotifier, { name: "Host 2" });
 
     const all = listHosts(db);
     expect(all).toHaveLength(2);
@@ -155,17 +144,20 @@ describe("hosts", () => {
     const visibleHost = upsertHost(db, noopNotifier, {
       id: "host-visible",
       name: "Visible Host",
-      type: "persistent",
+    });
+    const ephemeralHost = upsertHost(db, noopNotifier, {
+      id: "host-ephemeral",
+      name: "Ephemeral Host",
     });
     const destroyedHost = upsertHost(db, noopNotifier, {
       id: "host-destroyed",
       name: "Destroyed Host",
-      type: "persistent",
     });
     updateHost(db, noopNotifier, destroyedHost.id, { destroyedAt: 123 });
 
     expect(listPublicHosts(db).map((host) => host.id)).toEqual([
       visibleHost.id,
+      ephemeralHost.id,
     ]);
   });
 
@@ -174,12 +166,10 @@ describe("hosts", () => {
     const visibleHost = upsertHost(db, noopNotifier, {
       id: "host-visible",
       name: "Visible Host",
-      type: "persistent",
     });
     const destroyedHost = upsertHost(db, noopNotifier, {
       id: "host-destroyed",
       name: "Destroyed Host",
-      type: "persistent",
     });
 
     updateHost(db, noopNotifier, destroyedHost.id, { destroyedAt: 123 });
@@ -197,7 +187,6 @@ describe("hosts", () => {
     const { db } = setup();
     const host = upsertHost(db, noopNotifier, {
       name: "Persistent Host",
-      type: "persistent",
     });
 
     const updated = updateHost(db, noopNotifier, host.id, {
@@ -223,7 +212,6 @@ describe("hosts", () => {
     };
     const host = upsertHost(db, notifier, {
       name: "Persistent Host",
-      type: "persistent",
     });
     notifyHost.mockClear();
 
@@ -249,7 +237,6 @@ describe("hosts", () => {
     };
     const host = upsertHost(db, notifier, {
       name: "Persistent Host",
-      type: "persistent",
     });
     notifyHost.mockClear();
 
@@ -272,7 +259,6 @@ describe("hosts", () => {
     };
     const host = upsertHost(db, notifier, {
       name: "Transient Host",
-      type: "persistent",
     });
     notifyHost.mockClear();
 

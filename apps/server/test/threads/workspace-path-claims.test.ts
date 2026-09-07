@@ -1,17 +1,16 @@
-import { archiveThread, markThreadDeleted, unarchiveThread } from "@bb/db";
+import { createEnvironment } from "@bb/db";
 import { describe, expect, it } from "vitest";
-import { unmanagedAttachRefusal } from "../../src/services/threads/workspace-path-claims.js";
+import { foreignProviderOwnedPathRefusal } from "../../src/services/threads/workspace-path-claims.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
-  seedThread,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 const HOST_DATA_DIR = "/home/agent/.bb";
 
-describe("unmanagedAttachRefusal", () => {
+describe("foreignProviderOwnedPathRefusal", () => {
   it("still refuses a foreign managed workspace when the host data dir is unknown", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, { id: "host-claims" });
@@ -23,8 +22,8 @@ describe("unmanagedAttachRefusal", () => {
         hostId: host.id,
         projectId: owner.id,
         path: "/tmp/owned-worktree",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "git-worktree",
+        providerOwnsPath: true,
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
@@ -33,14 +32,15 @@ describe("unmanagedAttachRefusal", () => {
       });
 
       expect(
-        unmanagedAttachRefusal(harness.deps.db, {
-          checksOutBranch: false,
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
           dataDir: null,
           hostId: host.id,
           path: "/tmp/owned-worktree",
           projectId: project.id,
         }),
-      ).toMatchObject({ reason: "foreign-managed" });
+      ).toBe(
+        "Workspace path is a bb-managed workspace owned by another project",
+      );
     });
   });
 
@@ -53,8 +53,7 @@ describe("unmanagedAttachRefusal", () => {
       });
 
       expect(
-        unmanagedAttachRefusal(harness.deps.db, {
-          checksOutBranch: false,
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
           dataDir: null,
           hostId: host.id,
           path: `${HOST_DATA_DIR}/worktrees/env_other/repo`,
@@ -76,13 +75,12 @@ describe("unmanagedAttachRefusal", () => {
         hostId: host.id,
         projectId: project.id,
         path: ownPath,
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "git-worktree",
+        providerOwnsPath: true,
       });
 
       expect(
-        unmanagedAttachRefusal(harness.deps.db, {
-          checksOutBranch: false,
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
           dataDir: HOST_DATA_DIR,
           hostId: host.id,
           path: ownPath,
@@ -91,104 +89,113 @@ describe("unmanagedAttachRefusal", () => {
       ).toBeNull();
     });
   });
+});
 
-  it.each([
-    { status: "starting", visibility: "visible" },
-    { status: "idle", visibility: "visible" },
-    { status: "active", visibility: "hidden" },
-  ] as const)(
-    "blocks a $visibility $status thread only for branch checkout",
-    async ({ status, visibility }) => {
-      await withTestHarness(async (harness) => {
-        const { host } = seedHostSession(harness.deps, {
-          id: `host-claims-busy-${status}`,
-        });
-        const sharedPath = `/tmp/busy-shared-${status}`;
-        const { project: busy } = seedProjectWithSource(harness.deps, {
-          hostId: host.id,
-          name: "Busy",
-          path: sharedPath,
-        });
-        const busyEnvironment = seedEnvironment(harness.deps, {
-          hostId: host.id,
-          projectId: busy.id,
-          path: sharedPath,
-        });
-        seedThread(harness.deps, {
-          projectId: busy.id,
-          environmentId: busyEnvironment.id,
-          status,
-          visibility,
-        });
-        const { project } = seedProjectWithSource(harness.deps, {
-          hostId: host.id,
-          name: "Joiner",
-          path: sharedPath,
-        });
-
-        const args = {
-          dataDir: HOST_DATA_DIR,
-          hostId: host.id,
-          path: sharedPath,
-          projectId: project.id,
-        };
-        expect(
-          unmanagedAttachRefusal(harness.deps.db, {
-            ...args,
-            checksOutBranch: false,
-          }),
-        ).toBeNull();
-        expect(
-          unmanagedAttachRefusal(harness.deps.db, {
-            ...args,
-            checksOutBranch: true,
-          }),
-        ).toMatchObject({ reason: "live-thread" });
-      });
-    },
-  );
-
-  it("releases archived and deleted claims but restores an unarchived claim", async () => {
+describe("foreignProviderOwnedPathRefusal for provider-produced environments", () => {
+  it("refuses another project attaching at or inside a provider's worktree", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
-        id: "host-claims-archived",
+        id: "host-claims-provider",
       });
-      const sharedPath = "/tmp/archived-shared";
-      const { project } = seedProjectWithSource(harness.deps, {
+      const { project: owner } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        name: "Archived",
-        path: sharedPath,
+        name: "Owner",
+        path: "/tmp/owner-source",
       });
-      const environment = seedEnvironment(harness.deps, {
+      createEnvironment(harness.db, harness.hub, {
         hostId: host.id,
-        projectId: project.id,
-        path: sharedPath,
+        projectId: owner.id,
+        path: "/plugins/environment-git-worktree/worktrees/thr_1/repo",
+        status: "ready",
+        providerOwnsPath: true,
+        environmentProvider: {
+          environmentProviderId: "git-worktree",
+          instanceKey: null,
+          selection: {
+            machine: { type: "existing", hostId: host.id },
+            inputs: null,
+          },
+        },
       });
-      const thread = seedThread(harness.deps, {
-        projectId: project.id,
-        environmentId: environment.id,
-        status: "idle",
-      });
-      const args = {
-        checksOutBranch: true,
-        dataDir: HOST_DATA_DIR,
+      const { project: other } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
-        path: sharedPath,
-        projectId: project.id,
-      };
-
-      archiveThread(harness.deps.db, harness.deps.hub, thread.id);
-      expect(unmanagedAttachRefusal(harness.deps.db, args)).toBeNull();
-
-      unarchiveThread(harness.deps.db, harness.deps.hub, thread.id);
-      expect(unmanagedAttachRefusal(harness.deps.db, args)).toMatchObject({
-        reason: "live-thread",
+        name: "Other",
+        path: "/tmp/other-source",
       });
 
-      markThreadDeleted(harness.deps.db, harness.deps.hub, {
-        threadId: thread.id,
+      for (const path of [
+        "/plugins/environment-git-worktree/worktrees/thr_1/repo",
+        "/plugins/environment-git-worktree/worktrees/thr_1/repo/packages/app",
+      ]) {
+        expect(
+          foreignProviderOwnedPathRefusal(harness.deps.db, {
+            dataDir: null,
+            hostId: host.id,
+            path,
+            projectId: other.id,
+          }),
+        ).toBe(
+          "Workspace path is a bb-managed workspace owned by another project",
+        );
+      }
+      expect(
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
+          dataDir: null,
+          hostId: host.id,
+          path: "/plugins/environment-git-worktree/worktrees/thr_1/repo",
+          projectId: owner.id,
+        }),
+      ).toBeNull();
+      expect(
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
+          dataDir: null,
+          hostId: host.id,
+          path: "/plugins/environment-git-worktree/worktrees/thr_10/repo",
+          projectId: other.id,
+        }),
+      ).toBeNull();
+    });
+  });
+
+  it("lets a second project attach to a checkout the first project only attached to", async () => {
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-claims-shared-checkout",
       });
-      expect(unmanagedAttachRefusal(harness.deps.db, args)).toBeNull();
+      const { project: first } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "First",
+        path: "/tmp/shared-checkout",
+      });
+      seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: first.id,
+        path: "/tmp/shared-checkout",
+        environmentProviderId: "project-checkout",
+        providerOwnsPath: false,
+      });
+      const { project: second } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        name: "Second",
+        path: "/tmp/second-source",
+      });
+
+      expect(
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
+          dataDir: null,
+          hostId: host.id,
+          path: "/tmp/shared-checkout",
+          projectId: second.id,
+        }),
+      ).toBeNull();
+      expect(
+        foreignProviderOwnedPathRefusal(harness.deps.db, {
+          dataDir: null,
+          hostId: host.id,
+          path: "/tmp/shared-checkout/packages/app",
+          projectId: second.id,
+        }),
+      ).toBeNull();
     });
   });
 });

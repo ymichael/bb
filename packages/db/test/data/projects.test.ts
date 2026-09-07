@@ -19,7 +19,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "projects-host",
-    type: "persistent",
   });
   return { db, host };
 }
@@ -53,7 +52,6 @@ describe("projects", () => {
     const { db, host } = setup();
     const otherHost = upsertHost(db, noopNotifier, {
       name: "other-projects-host",
-      type: "persistent",
     });
 
     const first = findOrCreateProjectByLocalPathSource(db, noopNotifier, {

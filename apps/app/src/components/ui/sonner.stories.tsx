@@ -247,7 +247,7 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     group: "Thread actions",
     label: "archive worktree group",
     source: "ProjectRow",
-    usage: ["Sidebar project row", "Archive worktree group succeeds"],
+    usage: ["Sidebar project row", "Archive environment group succeeds"],
     current: {
       tone: "success",
       title: "Archived 3 threads",

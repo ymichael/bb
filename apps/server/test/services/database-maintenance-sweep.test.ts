@@ -118,7 +118,6 @@ function createDeferredLegacyTables(db: DbConnection): void {
 function markDatabaseBusy(db: DbConnection): void {
   const host = upsertHost(db, noopNotifier, {
     name: "maintenance-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "maintenance-project",

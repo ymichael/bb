@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Host } from "@bb/domain";
 import { makeHost } from "@bb/test-helpers/domain-fixtures";
-import { selectPrimaryHost } from "./host-queries";
+import { selectHosts, selectPrimaryHost } from "./host-queries";
 
 function host(overrides: Partial<Host> & Pick<Host, "id">): Host {
   return makeHost({
@@ -32,8 +32,30 @@ describe("selectPrimaryHost", () => {
     expect(selectPrimaryHost([hosts[0]], null)?.id).toBe("host_stale");
   });
 
+  it("allows a provider-made host to be selected as primary", () => {
+    const sandbox = host({
+      id: "host_modal",
+      machineProviderId: "modal-sandbox",
+    });
+    const laptop = host({ id: "host_laptop", status: "disconnected" });
+    expect(selectPrimaryHost([sandbox], null)?.id).toBe(sandbox.id);
+    expect(selectPrimaryHost([sandbox], sandbox.id)?.id).toBe(sandbox.id);
+    expect(selectPrimaryHost([sandbox, laptop], null)?.id).toBe(sandbox.id);
+  });
+
   it("returns null for an empty or missing host list", () => {
     expect(selectPrimaryHost(undefined, "host_a")).toBeNull();
     expect(selectPrimaryHost([], null)).toBeNull();
+  });
+});
+
+describe("selectHosts", () => {
+  it("keeps user-enrolled and provider-made machines in menus", () => {
+    expect(
+      selectHosts([
+        host({ id: "host_local" }),
+        host({ id: "host_modal", machineProviderId: "modal-sandbox" }),
+      ]).map((candidate) => candidate.id),
+    ).toEqual(["host_local", "host_modal"]);
   });
 });

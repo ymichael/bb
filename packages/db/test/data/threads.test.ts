@@ -38,10 +38,7 @@ import {
   listThreadSections,
   renameThreadSection,
 } from "../../src/data/thread-sections.js";
-import {
-  createProject,
-  markProjectDeleted,
-} from "../../src/data/projects.js";
+import { createProject, markProjectDeleted } from "../../src/data/projects.js";
 import { upsertHost } from "../../src/data/hosts.js";
 import { createEnvironment } from "../../src/data/environments.js";
 import { createMigratedConnection } from "../helpers/migrated-connection.js";
@@ -50,7 +47,6 @@ function setup() {
   const db = createMigratedConnection();
   const host = upsertHost(db, noopNotifier, {
     name: "test-host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "test-project",
@@ -407,8 +403,9 @@ describe("threads", () => {
     pinThread(db, noopNotifier, { threadId: third.id });
     pinThread(db, noopNotifier, { threadId: otherProjectThread.id });
 
-    expect(listActiveVisiblePinnedThreadRoots(db).map((thread) => thread.id))
-      .toEqual([otherProjectThread.id, third.id, second.id, first.id]);
+    expect(
+      listActiveVisiblePinnedThreadRoots(db).map((thread) => thread.id),
+    ).toEqual([otherProjectThread.id, third.id, second.id, first.id]);
 
     const result = reorderPinnedThread({
       db,
@@ -419,8 +416,9 @@ describe("threads", () => {
     });
 
     expect(result.kind).toBe("reordered");
-    expect(listActiveVisiblePinnedThreadRoots(db).map((thread) => thread.id))
-      .toEqual([first.id, otherProjectThread.id, third.id, second.id]);
+    expect(
+      listActiveVisiblePinnedThreadRoots(db).map((thread) => thread.id),
+    ).toEqual([first.id, otherProjectThread.id, third.id, second.id]);
   });
 
   it("rejects pinned reorder for unpinned threads, stale neighbors, and hidden child pins", () => {
@@ -768,30 +766,29 @@ describe("threads", () => {
     ).toBe(0);
   });
 
-  it("lists thread environment workspace display kind without per-thread lookups", () => {
+  it("lists each thread's environment identity without per-thread lookups", () => {
     const { db, host, project } = setup();
     const directEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
-      workspaceProvisionType: "unmanaged",
       isGitRepo: true,
-      isWorktree: false,
       branchName: "main",
     });
     const worktreeEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       name: "Review workspace",
-      workspaceProvisionType: "managed-worktree",
-      isWorktree: true,
       branchName: "bb/worktree",
-    });
-    const personalEnvironment = createEnvironment(db, noopNotifier, {
-      projectId: project.id,
-      hostId: host.id,
-      workspaceProvisionType: "personal",
-      isGitRepo: false,
-      isWorktree: false,
+      environmentProvider: {
+        environmentProviderId: "git-worktree",
+        instanceKey: null,
+        selection: {
+          machine: { type: "existing", hostId: host.id },
+          inputs: { branch: { kind: "default" } },
+        },
+      },
     });
     const directThread = createThread(db, noopNotifier, {
       projectId: project.id,
@@ -803,23 +800,6 @@ describe("threads", () => {
       environmentId: worktreeEnvironment.id,
       providerId: "codex",
     });
-    const personalThread = createThread(db, noopNotifier, {
-      projectId: project.id,
-      environmentId: personalEnvironment.id,
-      providerId: "codex",
-    });
-
-    const displayKindsByThreadId = new Map(
-      listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(
-        (thread) => [thread.id, thread.environmentWorkspaceDisplayKind],
-      ),
-    );
-
-    expect(displayKindsByThreadId.get(directThread.id)).toBe("other");
-    expect(displayKindsByThreadId.get(worktreeThread.id)).toBe(
-      "managed-worktree",
-    );
-    expect(displayKindsByThreadId.get(personalThread.id)).toBe("other");
 
     const environmentIdentityByThreadId = new Map(
       listThreadsWithPendingInteractionState(db, { projectId: project.id }).map(
@@ -827,6 +807,7 @@ describe("threads", () => {
           thread.id,
           {
             environmentBranchName: thread.environmentBranchName,
+            environmentProviderId: thread.environmentProviderId,
             environmentHostId: thread.environmentHostId,
             environmentName: thread.environmentName,
           },
@@ -836,11 +817,13 @@ describe("threads", () => {
 
     expect(environmentIdentityByThreadId.get(directThread.id)).toEqual({
       environmentBranchName: "main",
+      environmentProviderId: null,
       environmentHostId: host.id,
       environmentName: null,
     });
     expect(environmentIdentityByThreadId.get(worktreeThread.id)).toEqual({
       environmentBranchName: "bb/worktree",
+      environmentProviderId: "git-worktree",
       environmentHostId: host.id,
       environmentName: "Review workspace",
     });
@@ -1094,9 +1077,9 @@ describe("threads", () => {
       notifySystem: vi.fn(),
     };
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
-      workspaceProvisionType: "managed-worktree",
       path: "/tmp/test-workspace",
       status: "ready",
     });
@@ -1287,10 +1270,10 @@ describe("threads", () => {
   it("counts only non-archived, non-deleted threads as live", () => {
     const { db, project, host } = setup();
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/thread-live-count",
-      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
     const liveThread = createThread(db, noopNotifier, {
@@ -1330,20 +1313,19 @@ describe("threads", () => {
     const { db, project, host } = setup();
     const otherHost = upsertHost(db, noopNotifier, {
       name: "other-host",
-      type: "persistent",
     });
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/thread-host-match",
-      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
     const otherEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: otherHost.id,
       path: "/tmp/thread-host-other",
-      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
     const matchingThread = createThread(db, noopNotifier, {
@@ -1374,20 +1356,19 @@ describe("threads", () => {
     const { db, project, host } = setup();
     const otherHost = upsertHost(db, noopNotifier, {
       name: "other-host",
-      type: "persistent",
     });
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/thread-host-match",
-      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
     const otherEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: otherHost.id,
       path: "/tmp/thread-host-other",
-      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
     const activeThread = createThread(db, noopNotifier, {
@@ -1432,17 +1413,17 @@ describe("threads", () => {
   it("lists every host thread id including archived, deleted, and destroyed-environment threads", () => {
     const { db, project, host } = setup();
     const environment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/thread-storage-targets",
-      workspaceProvisionType: "unmanaged",
       status: "ready",
     });
     const destroyedEnvironment = createEnvironment(db, noopNotifier, {
+      providerOwnsPath: false,
       projectId: project.id,
       hostId: host.id,
       path: "/tmp/destroyed-thread-storage-targets",
-      workspaceProvisionType: "managed-worktree",
       status: "destroyed",
     });
     const activeThread = createThread(db, noopNotifier, {

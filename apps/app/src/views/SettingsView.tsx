@@ -561,7 +561,7 @@ const FOLLOW_UP_BEHAVIOR_OPTIONS = [
   },
 ] as const;
 const STREAMER_MODE_SETTING_LABEL = "Streamer mode";
-const MANAGED_BRANCH_PREFIX_SETTING_LABEL = "Worktree branch prefix";
+const MANAGED_BRANCH_PREFIX_SETTING_LABEL = "New branch prefix";
 const MANAGED_BRANCH_PREFIX_EXAMPLE_SLUG = "fix-login-flow-thr_ab12cd34ef";
 
 interface ManagedBranchPrefixSettingProps {

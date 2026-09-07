@@ -78,6 +78,7 @@ describe("public project workspace routing", () => {
               },
               defaultBranch: "main",
               defaultBranchRelation: "equal",
+              isWorktree: false,
               hasUncommittedChanges: false,
               operation: { kind: "none" },
               originDefaultBranch: "origin/main",

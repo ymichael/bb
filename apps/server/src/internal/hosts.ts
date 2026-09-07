@@ -15,7 +15,7 @@ import {
   getTrustedRemoteAddress,
   type GateAuthHeaderReader,
 } from "../request-context.js";
-import { issuePersistentHostEnrollKey } from "../services/hosts/host-enrollment.js";
+import { issueHostEnrollKey } from "../services/hosts/host-enrollment.js";
 import { requireBearerToken } from "./auth.js";
 
 function assertLoopbackRequest(remoteAddress: string | undefined): void {
@@ -63,7 +63,7 @@ export function registerInternalHostRoutes(app: Hono, deps: AppDeps): void {
         );
       }
       assertLoopbackRequest(getTrustedRemoteAddress(context));
-      const issued = await issuePersistentHostEnrollKey(deps, {
+      const issued = await issueHostEnrollKey(deps, {
         enrollSource: "loopback",
         ...(payload.hostId ? { hostId: payload.hostId } : {}),
       });
@@ -91,7 +91,6 @@ export function registerInternalHostRoutes(app: Hono, deps: AppDeps): void {
       const enrollment = await deps.machineAuth.enrollHost({
         allowPublicEnrollment: true,
         hostId: payload.hostId,
-        hostType: payload.hostType,
         token,
       });
 
@@ -102,7 +101,6 @@ export function registerInternalHostRoutes(app: Hono, deps: AppDeps): void {
         ...(connectMachineId !== undefined ? { connectMachineId } : {}),
         id: enrollment.metadata.hostId,
         name: payload.hostName,
-        type: enrollment.metadata.hostType,
       });
 
       return context.json(

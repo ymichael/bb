@@ -1,8 +1,5 @@
-import {
-  type Environment,
-  type LocalPathProjectSource,
-  PERSONAL_PROJECT_ID,
-} from "@bb/domain";
+import { type LocalPathProjectSource, PERSONAL_PROJECT_ID } from "@bb/domain";
+import type { EnvironmentRow } from "@bb/db";
 import type { EnvironmentArgs } from "@bb/server-contract";
 import { ApiError } from "../../errors.js";
 import type { AppDeps } from "../../types.js";
@@ -42,7 +39,7 @@ interface ResolvedHostThreadRequestEnvironment {
 }
 
 interface ResolvedReuseThreadRequestEnvironment {
-  environment: Environment;
+  environment: EnvironmentRow;
   type: "reuse";
 }
 
@@ -79,23 +76,24 @@ function assertPersonalWorkspaceProjectCompatibility(projectId: string): void {
   }
 }
 
+function isPersonalWorkspaceEnvironment(environment: EnvironmentRow): boolean {
+  return (
+    environment.projectId === PERSONAL_PROJECT_ID &&
+    environment.environmentProviderId !== null
+  );
+}
+
 function assertReuseWorkspaceProjectCompatibility(
   projectId: string,
-  environment: Environment,
+  environment: EnvironmentRow,
   allowUnmanagedPersonalProjectReuseEnvironmentId: string | undefined,
 ): void {
   const projectIsPersonal = projectId === PERSONAL_PROJECT_ID;
-  const environmentIsPersonal =
-    environment.workspaceProvisionType === "personal";
-  const environmentIsUnmanaged =
-    environment.workspaceProvisionType === "unmanaged";
+  const environmentIsPersonal = isPersonalWorkspaceEnvironment(environment);
   if (
     projectIsPersonal &&
     !environmentIsPersonal &&
-    !(
-      environmentIsUnmanaged &&
-      allowUnmanagedPersonalProjectReuseEnvironmentId === environment.id
-    )
+    allowUnmanagedPersonalProjectReuseEnvironmentId !== environment.id
   ) {
     throw new ApiError(
       409,
@@ -157,7 +155,7 @@ function resolveHostThreadRequestEnvironment(
   };
 }
 
-function resolveReuseThreadRequestEnvironment(
+export function resolveReuseThreadRequestEnvironment(
   deps: ThreadRequestEnvironmentDeps,
   environment: ReuseThreadRequestEnvironment,
   projectId: string,

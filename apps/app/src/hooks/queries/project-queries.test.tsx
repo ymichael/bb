@@ -28,6 +28,7 @@ const INITIAL_BRANCHES = {
   defaultBranch: "main",
   defaultBranchRelation: "equal",
   defaultWorktreeBaseBranch: null,
+  isWorktree: false,
   hasUncommittedChanges: false,
   operation: { kind: "none" },
   originDefaultBranch: "origin/main",

@@ -65,6 +65,18 @@ export function requireSlotId(kind: string, value: unknown): string {
   return value;
 }
 
+export function requireEnvironmentProviderId(
+  kind: string,
+  value: unknown,
+): string {
+  if (typeof value !== "string" || !PLUGIN_SLOT_ID_PATTERN.test(value)) {
+    throw new Error(
+      `${kind}: "environmentProviderId" must match ${String(PLUGIN_SLOT_ID_PATTERN)}, got ${JSON.stringify(value)}`,
+    );
+  }
+  return value;
+}
+
 /**
  * Provider ids follow the same character rules as slot ids, but they name a
  * provider the host knows (`codex`, `acp-cursor`), not a per-plugin slot.

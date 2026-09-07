@@ -24,7 +24,6 @@ import {
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
-  waitForQueuedCommandAfter,
   type QueuedCommand,
 } from "../helpers/commands.js";
 import { textInput } from "../helpers/prompt-input.js";
@@ -35,6 +34,7 @@ import {
   seedProjectWithSource,
   seedThread,
 } from "../helpers/seed.js";
+import { installFakeEnvironmentProvider } from "../helpers/environment-provider.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
 const THREAD_START_EXECUTION = {
@@ -73,6 +73,7 @@ describe("thread provisioning recovery", () => {
         entries: buildCwdBranchEntries({
           path: "/tmp/thread-start-recovery",
           branchName: null,
+          headSha: null,
         }),
       });
 
@@ -124,7 +125,7 @@ describe("thread provisioning recovery", () => {
         seedWithoutRun: false,
       });
       const attachedContext = createEnvironmentAttachedContext(
-        createEnvironmentPendingContext(requestedContext, { branchSlug: null }),
+        createEnvironmentPendingContext(requestedContext),
         { attachedEnvironmentId: environment.id },
       );
       const workspaceReadyEventSequence = appendThreadProvisioningEvent(
@@ -137,6 +138,7 @@ describe("thread provisioning recovery", () => {
           entries: buildCwdBranchEntries({
             path: "/tmp/live-thread-start-recovery",
             branchName: null,
+            headSha: null,
           }),
         },
       );
@@ -247,7 +249,7 @@ describe("thread provisioning recovery", () => {
         seedWithoutRun: false,
       });
       const attachedContext = createEnvironmentAttachedContext(
-        createEnvironmentPendingContext(requestedContext, { branchSlug: null }),
+        createEnvironmentPendingContext(requestedContext),
         { attachedEnvironmentId: environment.id },
       );
       const workspaceReadyEventSequence = appendThreadProvisioningEvent(
@@ -260,6 +262,7 @@ describe("thread provisioning recovery", () => {
           entries: buildCwdBranchEntries({
             path: "/tmp/settled-start-before-turn",
             branchName: null,
+            headSha: null,
           }),
         },
       );
@@ -308,8 +311,8 @@ describe("thread provisioning recovery", () => {
         projectId: project.id,
         path: "/tmp/ready-retry-after-lost-provision",
         status: "ready",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "personal-workspace",
+        isGitRepo: false,
       });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
@@ -388,14 +391,33 @@ describe("thread provisioning recovery", () => {
         projectId: project.id,
         path: "/tmp/error-retry-before-late-ready",
         status: "error",
-        managed: true,
-        workspaceProvisionType: "managed-worktree",
+        environmentProviderId: "personal-workspace",
+        isGitRepo: false,
       });
       harness.db
         .update(environments)
         .set({ path: null, updatedAt: Date.now() })
         .where(eq(environments.id, environment.id))
         .run();
+      installFakeEnvironmentProvider({
+        id: "personal-workspace",
+        pluginId: "bb-plugin-environment-personal-workspace",
+        displayName: "Personal workspace",
+        requires: {
+          projectCheckout: false,
+          gitCheckout: false,
+          gitRemote: false,
+          projectless: false,
+        },
+        decide: () => ({
+          action: "ready",
+          environment: {
+            type: "host",
+            hostId: host.id,
+            path: "/tmp/error-retry-before-late-ready-rebuilt",
+          },
+        }),
+      });
       const thread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
@@ -439,38 +461,19 @@ describe("thread provisioning recovery", () => {
 
         expect(response.status).toBe(200);
         expect(getThread(harness.db, thread.id)?.status).toBe("starting");
-        expect(getEnvironment(harness.db, environment.id)?.status).toBe(
-          "provisioning",
-        );
-        const provisionCommand = await waitForQueuedCommand(
+        startCommand = await waitForQueuedCommand(
           harness,
-          ({ command }) =>
-            command.type === "environment.provision" &&
-            command.environmentId === environment.id,
-        );
-        if (
-          provisionCommand.command.type !== "environment.provision" ||
-          provisionCommand.command.workspaceProvisionType === "unmanaged"
-        ) {
-          throw new Error("Expected managed environment.provision command");
-        }
-        await reportQueuedCommandSuccess(harness, provisionCommand, {
-          path: "/tmp/error-retry-before-late-ready",
-          branchName: `bb/${thread.id}`,
-          defaultBranch: "main",
-          isGitRepo: true,
-          isWorktree: true,
-          transcript: [],
-        });
-        startCommand = await waitForQueuedCommandAfter(
-          harness,
-          provisionCommand.row.cursor,
           ({ command }) =>
             command.type === "thread.start" && command.threadId === thread.id,
         );
 
-        expect(getEnvironment(harness.db, environment.id)?.status).toBe(
-          "ready",
+        const rebuilt = getEnvironment(
+          harness.db,
+          getThread(harness.db, thread.id)?.environmentId ?? "",
+        );
+        expect(rebuilt?.status).toBe("ready");
+        expect(rebuilt?.path).toBe(
+          "/tmp/error-retry-before-late-ready-rebuilt",
         );
       } finally {
         if (startCommand !== null) {

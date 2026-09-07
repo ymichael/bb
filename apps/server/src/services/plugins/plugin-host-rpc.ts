@@ -8,7 +8,7 @@ import type {
 import type { JsonValue } from "@bb/domain";
 import { COMMAND_TIMEOUT_MS } from "../../constants.js";
 import type { WorkSessionDeps } from "../../types.js";
-import { callHostOnlineRpc } from "../hosts/online-rpc.js";
+import { callHostOnlineRpcWithoutAdmission } from "../hosts/online-rpc.js";
 import type { PluginHostArtifactSnapshot } from "./plugin-service-internal.js";
 
 const HOST_RPC_TRANSPORT_GRACE_MS = 6_000;
@@ -81,7 +81,7 @@ export async function callPluginHostRpc(
   );
   const callId = randomUUID();
   const timeoutMs = args.timeoutMs ?? COMMAND_TIMEOUT_MS;
-  const rpc = callHostOnlineRpc(deps, {
+  const rpc = callHostOnlineRpcWithoutAdmission(deps, {
     hostId: args.hostId,
     timeoutMs: timeoutMs + HOST_RPC_TRANSPORT_GRACE_MS,
     command: {
@@ -104,6 +104,7 @@ export async function callPluginHostRpc(
       ? await rpc
       : await new Promise<Awaited<typeof rpc>>((resolve, reject) => {
           let settled = false;
+          let aborted = false;
           const finish = (fn: () => void): void => {
             if (settled) return;
             settled = true;
@@ -111,7 +112,8 @@ export async function callPluginHostRpc(
             fn();
           };
           const onAbort = (): void => {
-            void callHostOnlineRpc(deps, {
+            aborted = true;
+            void callHostOnlineRpcWithoutAdmission(deps, {
               hostId: args.hostId,
               timeoutMs: HOST_RPC_TRANSPORT_GRACE_MS,
               command: {
@@ -121,13 +123,13 @@ export async function callPluginHostRpc(
                 callId,
               },
             }).catch(() => undefined);
-            finish(() => reject(abortError()));
           };
           signal.addEventListener("abort", onAbort, { once: true });
           if (signal.aborted) onAbort();
           rpc.then(
-            (value) => finish(() => resolve(value)),
-            (error) => finish(() => reject(error)),
+            (value) =>
+              finish(() => (aborted ? reject(abortError()) : resolve(value))),
+            (error) => finish(() => reject(aborted ? abortError() : error)),
           );
         });
   const output = await validateValue(method.output, result.output, "output");
@@ -141,7 +143,7 @@ export async function disposePluginHostWorkers(
   const calls = listPublicHosts(deps.db)
     .filter((host) => deps.hub.hasDaemonForHost(host.id))
     .map((host) =>
-      callHostOnlineRpc(deps, {
+      callHostOnlineRpcWithoutAdmission(deps, {
         hostId: host.id,
         timeoutMs: HOST_RPC_TRANSPORT_GRACE_MS,
         command: {

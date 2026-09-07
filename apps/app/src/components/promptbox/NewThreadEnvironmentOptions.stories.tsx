@@ -7,9 +7,8 @@ import {
   EnvironmentPickerUI,
   type EnvironmentPickerUIProps,
 } from "@/components/pickers/EnvironmentPicker";
-import { parseEnvironmentValue } from "@/components/pickers/environment-picker-value";
 import { ProjectSelector } from "@/components/pickers/ProjectSelector";
-import { WorktreePicker } from "@/components/pickers/WorktreePicker";
+import { ReuseEnvironmentPicker } from "@/components/pickers/ReuseEnvironmentPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
   HOST_IDS,
@@ -17,6 +16,7 @@ import {
   PROJECT_IDS,
   STORY_BRANCH_OPTIONS,
   STORY_PROJECTS,
+  STORY_ENVIRONMENT_PROVIDERS,
   STORY_PROJECT_SOURCES,
   STORY_WORKTREE_OPTIONS,
 } from "../../../.ladle/story-fixtures";
@@ -26,17 +26,6 @@ export default {
 };
 
 const noop = () => {};
-
-function getStoryBranchMenuKind(
-  environmentValue: string,
-): BranchPickerProps["menuKind"] {
-  const parsedEnvironment = parseEnvironmentValue(environmentValue);
-  if (parsedEnvironment?.type !== "host") {
-    return undefined;
-  }
-
-  return parsedEnvironment.mode === "worktree" ? "base" : "checkout";
-}
 
 interface EnvironmentOptionsStripProps {
   project?: { value: string | null; allowNoProject?: boolean };
@@ -56,8 +45,9 @@ function EnvironmentOptionsStrip({
   const [projectValue, setProjectValue] = useState<string | null>(
     project?.value ?? PROJECT_IDS.bb,
   );
-  const environmentValue = environment?.value ?? `host:${HOST_IDS.local}:local`;
-  const showWorktreePicker = environmentValue === "reuse";
+  const environmentValue = environment?.value ?? "provider:project-checkout";
+  const showReuseEnvironmentPicker = environmentValue === "reuse";
+  const showBranchPicker = environmentValue === "provider:git-worktree";
   return (
     <div data-promptbox-shell="" className="w-full min-w-0 max-w-[760px]">
       <div className="mt-1 flex min-w-0 max-w-full items-center gap-1 border border-transparent px-3.5">
@@ -73,41 +63,39 @@ function EnvironmentOptionsStrip({
           <>
             <EnvironmentPickerUI
               value={environmentValue}
-              onChange={noop}
               sources={STORY_PROJECT_SOURCES}
               host={makeHost({ id: HOST_IDS.local })}
               isLocal
+              providers={STORY_ENVIRONMENT_PROVIDERS}
+              selectedProviderHostId={HOST_IDS.local}
+              onSelectProvider={noop}
               muted
               modal={false}
               {...environment}
             />
-            {showWorktreePicker ? (
-              <WorktreePicker
+            {showReuseEnvironmentPicker ? (
+              <ReuseEnvironmentPicker
                 options={STORY_WORKTREE_OPTIONS}
                 value={worktreeValue}
                 onChange={noop}
                 muted
                 modal={false}
               />
-            ) : (
+            ) : showBranchPicker ? (
               <BranchPicker
                 variant="option"
                 muted
                 value={null}
                 options={STORY_BRANCH_OPTIONS}
-                currentOptionLabel="Current: main"
-                currentOptionTitle="Use the current checkout without switching branches"
-                placeholder="Current checkout"
-                triggerLabel="Current (main)"
-                triggerTitle="Current: main"
-                menuKind={getStoryBranchMenuKind(environmentValue)}
+                placeholder="Branch from: main"
+                triggerLabel="Branch from: main"
+                triggerTitle="Branch from: main"
+                menuKind="base"
                 onChange={noop}
-                onClear={noop}
-                onCreate={noop}
                 modal={false}
                 {...branch}
               />
-            )}
+            ) : null}
           </>
         )}
       </div>
@@ -120,100 +108,24 @@ export function Overview() {
     <div className="flex flex-col">
       <StoryCard labelWidth="180px">
         <StoryRow
-          label="project · current branch"
-          hint="default: a project, the current checkout"
+          label="project · checkout provider"
+          hint="default project checkout environment"
         >
           <EnvironmentOptionsStrip />
-        </StoryRow>
-        <StoryRow
-          label="project · checkout"
-          hint="explicit existing branch intent"
-        >
-          <EnvironmentOptionsStrip
-            branch={{
-              value: "release/1.2",
-              triggerLabel: "Checkout: release/1.2",
-              triggerTitle: "Checkout: release/1.2",
-            }}
-          />
-        </StoryRow>
-        <StoryRow
-          label="project · new branch"
-          hint="server-minted branch in primary checkout"
-        >
-          <EnvironmentOptionsStrip
-            branch={{
-              value: "main",
-              isCreatingNew: true,
-              triggerLabel: "New branch from: main",
-              triggerTitle: "Create a new branch from main",
-            }}
-          />
-        </StoryRow>
-        <StoryRow
-          label="project · dirty checkout"
-          hint="branch-changing choices blocked"
-        >
-          <EnvironmentOptionsStrip
-            branch={{
-              optionDisabledReason: "Dirty",
-              optionDisabledTitle: "Checkout blocked by uncommitted changes",
-              createDisabledReason: "Dirty",
-              createDisabledTitle: "Checkout blocked by uncommitted changes",
-            }}
-          />
-        </StoryRow>
-        <StoryRow
-          label="project · detached HEAD"
-          hint="current checkout shown explicitly"
-        >
-          <EnvironmentOptionsStrip
-            branch={{
-              currentOptionLabel: "Current (detached)",
-              currentOptionTitle: "Detached HEAD at a1b2c3d",
-              triggerLabel: "Current (detached)",
-              triggerTitle: "Detached HEAD at a1b2c3d",
-              optionDisabledReason: "Detached",
-              optionDisabledTitle: "Checkout blocked while HEAD is detached",
-              createDisabledReason: "Detached",
-              createDisabledTitle: "Checkout blocked while HEAD is detached",
-            }}
-          />
-        </StoryRow>
-        <StoryRow label="project · empty repo" hint="unborn branch state">
-          <EnvironmentOptionsStrip
-            branch={{
-              currentOptionLabel: "Current (empty repo)",
-              currentOptionTitle: "Repository has no commits yet",
-              triggerLabel: "Current (empty repo)",
-              triggerTitle: "Repository has no commits yet",
-              optionDisabledReason: "Empty",
-              optionDisabledTitle: "Checkout blocked before the first commit",
-              createDisabledReason: "Empty",
-              createDisabledTitle: "Checkout blocked before the first commit",
-            }}
-          />
-        </StoryRow>
-        <StoryRow label="project · loading" hint="loading checkout state">
-          <EnvironmentOptionsStrip
-            branch={{
-              loading: true,
-              triggerLabel: "Loading...",
-              triggerTitle: "Loading",
-            }}
-          />
         </StoryRow>
         <StoryRow
           label="project · worktree from default"
           hint="new worktree from default base"
         >
           <EnvironmentOptionsStrip
-            environment={{ value: `host:${HOST_IDS.local}:worktree` }}
+            environment={{
+              value: "provider:git-worktree",
+              providers: STORY_ENVIRONMENT_PROVIDERS,
+              onSelectProvider: noop,
+            }}
             branch={{
-              currentOptionLabel: "main",
               triggerLabel: "Branch from: main",
               triggerTitle: "Branch from: main",
-              onCreate: undefined,
             }}
           />
         </StoryRow>
@@ -222,13 +134,15 @@ export function Overview() {
           hint="new worktree from named base"
         >
           <EnvironmentOptionsStrip
-            environment={{ value: `host:${HOST_IDS.local}:worktree` }}
+            environment={{
+              value: "provider:git-worktree",
+              providers: STORY_ENVIRONMENT_PROVIDERS,
+              onSelectProvider: noop,
+            }}
             branch={{
-              currentOptionLabel: "main",
               value: "release/1.2",
               triggerLabel: "Branch from: release/1.2",
               triggerTitle: "Branch from: release/1.2",
-              onCreate: undefined,
             }}
           />
         </StoryRow>
@@ -254,7 +168,6 @@ export function Overview() {
           <EnvironmentOptionsStrip
             environment={{
               value: `host:${HOST_IDS.local}:local`,
-              reuseDisabled: true,
             }}
           />
         </StoryRow>

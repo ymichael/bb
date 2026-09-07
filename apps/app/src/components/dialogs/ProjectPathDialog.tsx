@@ -27,6 +27,7 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import { RemotePathBrowser } from "@/components/dialogs/RemotePathBrowser";
 import { MachineStatusDot } from "@/components/machines/MachineStatusDot";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
+import { selectHosts } from "@/hooks/queries/host-queries";
 
 export type ProjectPathDialogTarget =
   | {
@@ -157,19 +158,21 @@ export function ProjectPathDialogContent({
 }: ProjectPathDialogContentProps) {
   const inputId = useId();
   const isPointerCoarse = usePointerCoarse();
-  const machineOptions = target.kind === "create" ? hosts : undefined;
+  const machineOptions =
+    target.kind === "create" ? selectHosts(hosts) : undefined;
   const firstConnectedHostId = machineOptions?.find(
     (host) => host.status === "connected",
   )?.id;
-  const initialHostId =
-    hostId !== null &&
-    (machineOptions === undefined ||
-      machineOptions.some(
-        (host) => host.id === hostId && host.status === "connected",
-      ))
-      ? hostId
-      : (firstConnectedHostId ?? hostId);
-  const [selectedHostId, setSelectedHostId] = useState(initialHostId);
+  const [selectedHostIdState, setSelectedHostId] = useState(
+    hostId ?? firstConnectedHostId ?? null,
+  );
+  const selectedHostId =
+    machineOptions === undefined ||
+    machineOptions.some(
+      (host) => host.id === selectedHostIdState && host.status === "connected",
+    )
+      ? selectedHostIdState
+      : (firstConnectedHostId ?? null);
   const selectedHost = machineOptions?.find(
     (host) => host.id === selectedHostId,
   );
@@ -177,7 +180,8 @@ export function ProjectPathDialogContent({
   const selectedHostConnected =
     selectedHost === undefined || selectedHost.status === "connected";
   const showMachinePicker = (machineOptions?.length ?? 0) > 1;
-  const noMachineAvailable = showMachinePicker && selectedHostId === null;
+  const noMachineAvailable =
+    machineOptions !== undefined && selectedHostId === null;
   const [manualPath, setManualPath] = useState(
     target.kind === "update" ? target.currentPath : "",
   );

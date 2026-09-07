@@ -1,6 +1,6 @@
 {
   "name": "@get-bb/plugin-sdk",
-  "version": "0.4.48",
+  "version": "0.4.55",
   "homepage": "https://github.com/get-bb/bb#readme",
   "bugs": {
     "url": "https://github.com/get-bb/bb/issues"
@@ -49,6 +49,18 @@
       "types": "./bundled-types/bb-plugin-sdk-provider-bridge-acp.d.ts",
       "import": "./dist/provider-bridge-acp.js",
       "default": "./dist/provider-bridge-acp.js"
+    },
+    "./environment-provider": {
+      "source": "./src/environment-provider.ts",
+      "types": "./bundled-types/bb-plugin-sdk-environment-provider.d.ts",
+      "import": "./dist/environment-provider.js",
+      "default": "./dist/environment-provider.js"
+    },
+    "./machine-provider": {
+      "source": "./src/machine-provider.ts",
+      "types": "./bundled-types/bb-plugin-sdk-machine-provider.d.ts",
+      "import": "./dist/machine-provider.js",
+      "default": "./dist/machine-provider.js"
     },
     "./app": {
       "source": "./src/app.ts",

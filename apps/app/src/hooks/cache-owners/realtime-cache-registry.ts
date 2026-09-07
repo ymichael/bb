@@ -66,6 +66,7 @@ import {
   threadStoragePathsForThreadQueryKeyPrefix,
   threadTimelineQueryKeyPrefix,
 } from "../queries/query-keys";
+import { systemEnvironmentProvidersQueryKey } from "../queries/environment-provider-queries";
 import { schedulePluginFrontendReconcile } from "../../lib/plugin-frontend-lazy";
 import {
   getProjectListInvalidationQueryKeys,
@@ -517,6 +518,7 @@ export const REALTIME_SYSTEM_CHANGE_REGISTRY = {
       dirtyAllThreadTimelineQueries,
       dirtySystemProviderQueries,
       dirtySystemExecutionOptionQueries,
+      dirtyEnvironmentProviderQueries,
     ],
   },
   "plugins-changed": {
@@ -524,6 +526,7 @@ export const REALTIME_SYSTEM_CHANGE_REGISTRY = {
       dirtyPluginContributionQueries,
       dirtyProjectCommandCatalogQueries,
       dirtyPluginManagementQueries,
+      dirtyEnvironmentProviderQueries,
       reconcilePluginFrontendBundles,
     ],
   },
@@ -1146,6 +1149,10 @@ function dirtyPluginManagementQueries(): QueryKey[] {
     allPluginSourceQueryKeyPrefix(),
     allPluginCatalogSearchQueryKeyPrefix(),
   ];
+}
+
+function dirtyEnvironmentProviderQueries(): QueryKey[] {
+  return [systemEnvironmentProvidersQueryKey()];
 }
 
 function reconcilePluginFrontendBundles(): void {

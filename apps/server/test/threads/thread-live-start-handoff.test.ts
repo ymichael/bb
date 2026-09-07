@@ -1,9 +1,9 @@
 import { getThread } from "@bb/db";
+import type { EnvironmentRow } from "@bb/db";
 import {
   encodeClientTurnRequestIdNumber,
   threadScope,
   turnScope,
-  type Environment,
   type ResolvedThreadExecutionOptions,
   type Thread,
 } from "@bb/domain";
@@ -46,7 +46,7 @@ interface StartLiveThreadStartRpcArgs {
 }
 
 interface LiveThreadStartRpcFixture {
-  environment: Environment;
+  environment: EnvironmentRow;
   startCommand: QueuedCommand;
   thread: Thread;
 }

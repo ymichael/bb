@@ -4,6 +4,8 @@ import {
   changedMessageLenientSchema,
   changedMessageSchema,
   gitBranchNameSchema,
+  gitBranchSelectionSchema,
+  jsonValueSchema,
 } from "@bb/domain";
 import type { GitBranchName } from "@bb/domain";
 
@@ -59,15 +61,9 @@ export const unmanagedWorkspaceSchema = z.object({
   branch: unmanagedBranchSpecSchema.optional(),
 });
 
-export const baseBranchSpecSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("named"), name: gitBranchNameSchema }),
-  z.object({ kind: z.literal("default") }),
-]);
-export type BaseBranchSpec = z.infer<typeof baseBranchSpecSchema>;
-
 export const managedWorktreeWorkspaceSchema = z.object({
   type: z.literal("managed-worktree"),
-  baseBranch: baseBranchSpecSchema,
+  baseBranch: gitBranchSelectionSchema,
 });
 
 export const personalWorkspaceSchema = z.object({
@@ -112,10 +108,45 @@ export const projectDefaultEnvironmentSchema = z.object({
   type: z.literal("project-default"),
 });
 
+export const providerEnvironmentSchema = z.object({
+  type: z.literal("provider"),
+  environmentProviderId: z.string().min(1),
+  machine: z.discriminatedUnion("type", [
+    z.object({ type: z.literal("existing"), hostId: z.string().min(1) }),
+    z.object({
+      type: z.literal("new"),
+      machineProviderId: z.string().min(1),
+      inputs: jsonValueSchema.nullable().default(null),
+    }),
+  ]),
+  inputs: jsonValueSchema.nullable().default(null),
+});
+export type ProviderEnvironmentArgs = z.infer<typeof providerEnvironmentSchema>;
+
+export const environmentProviderInstanceKeySchema = z.string().min(1).max(128);
+
+export const providerReadyEnvironmentSchema = z.discriminatedUnion("type", [
+  reuseEnvironmentSchema,
+  z.object({
+    type: z.literal("host"),
+    hostId: z.string().min(1),
+    path: z.string().min(1),
+    mergeBaseBranch: gitBranchNameSchema.optional(),
+    ownsPath: z.boolean().default(true),
+  }),
+]);
+export type ProviderReadyEnvironmentArgs = z.infer<
+  typeof providerReadyEnvironmentSchema
+>;
+export type ProviderReadyEnvironmentInput = z.input<
+  typeof providerReadyEnvironmentSchema
+>;
+
 export const createThreadEnvironmentArgsSchema = z.discriminatedUnion("type", [
   reuseEnvironmentSchema,
   hostEnvironmentSchema,
   projectDefaultEnvironmentSchema,
+  providerEnvironmentSchema,
 ]);
 export type CreateThreadEnvironmentArgs = z.infer<
   typeof createThreadEnvironmentArgsSchema

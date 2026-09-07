@@ -5,6 +5,8 @@ import type {
   ProviderInfo,
   ReasoningLevel,
   ServiceTier,
+  EnvironmentWorkspaceDisplayKind,
+  WorkspaceGitOperation,
 } from "@bb/domain";
 import type {
   CreateExecutionInputSources,
@@ -789,15 +791,6 @@ export type PluginSidebarThreadIndicator =
   | "unread-success"
   | "none";
 
-/**
- * How a thread's environment presents its workspace: a worktree bb manages,
- * a worktree the user manages, or anything else (a plain checkout).
- */
-export type PluginSidebarWorkspaceKind =
-  | "managed-worktree"
-  | "unmanaged-worktree"
-  | "other";
-
 /** Live work counts on a thread. All zero means nothing is running. */
 export interface PluginSidebarThreadActivity {
   workflows: number;
@@ -850,7 +843,14 @@ export interface PluginSidebarThread {
     id: string | null;
     name: string | null;
     branchName: string | null;
-    workspaceDisplayKind: PluginSidebarWorkspaceKind;
+    /**
+     * The id of the environment provider that produced this environment, or
+     * null for a project's own checkout. Resolve it against
+     * `GET /system/environment-providers` for a display name and icon.
+     */
+    providerId: string | null;
+    /** @deprecated Use providerId and the environment provider catalog instead. */
+    workspaceDisplayKind: EnvironmentWorkspaceDisplayKind | null;
   } | null;
   /**
    * The machine this thread's work runs on, with the name resolved for you.
@@ -1402,6 +1402,81 @@ export interface PluginTimelineRendererRegistration {
   component: ComponentType<PluginTimelineRendererProps>;
 }
 
+/**
+ * Props passed to an `experimental_environmentProviderInputs` component — the
+ * control the New Thread environment picker renders beside this plugin's
+ * selected environment provider, for the provider's declared `inputs`.
+ */
+export interface PluginEnvironmentProviderInputsProps {
+  /** Project selected in the composer; null in projectless compose. */
+  projectId: string | null;
+  /**
+   * The machine the selection names, for a provider that requires `host`;
+   * null before one is picked or for a provider that runs without one.
+   */
+  hostId: string | null;
+  /**
+   * The `inputs` value the selection will carry: null until `onChange`
+   * supplies one.
+   * The server parses it with the provider's `inputs` schema at create time,
+   * so the component only has to produce a value that schema accepts.
+   */
+  value: JsonValue | null;
+  /**
+   * Replace the inputs that will be submitted or block submission with the
+   * reason the control should show.
+   */
+  onChange(next: PluginEnvironmentProviderInputsChange): void;
+}
+
+export type PluginEnvironmentProviderInputsChange =
+  | { status: "ready"; value: JsonValue }
+  | { status: "blocked"; reason: string };
+
+/**
+ * Supply the control for one of this plugin's environment providers that
+ * declared `inputs` (registered server-side via
+ * `bb.experimental_environments.register`). The New Thread environment picker
+ * renders the component beside the picker while that provider is selected and
+ * submits the component's latest `onChange` value as the selection's `inputs`.
+ * A provider whose schema rejects empty inputs cannot be submitted without a
+ * registration that reports ready inputs.
+ */
+export interface PluginEnvironmentProviderInputsRegistration {
+  /** The environment provider id this control supplies inputs for. */
+  environmentProviderId: string;
+  component: ComponentType<PluginEnvironmentProviderInputsProps>;
+}
+
+/**
+ * Props passed to an `experimental_machineProviderInputs` component. Machine
+ * inputs are persisted and readable by every plugin, so they must contain only
+ * non-secret configuration and references to credentials held in plugin
+ * settings.
+ */
+export interface PluginMachineProviderInputsProps {
+  /** Project selected in the composer; null outside a project. */
+  projectId: string | null;
+  /** The value persisted with the machine selection. */
+  value: JsonValue | null;
+  /** Replace the submitted value or block submission with a visible reason. */
+  onChange(next: PluginMachineProviderInputsChange): void;
+}
+
+export type PluginMachineProviderInputsChange =
+  | { status: "ready"; value: JsonValue }
+  | { status: "blocked"; reason: string };
+
+/**
+ * Supply the inputs control for one machine provider registered server-side
+ * through `bb.experimental_machines.register`.
+ */
+export interface PluginMachineProviderInputsRegistration {
+  /** The machine provider id this control supplies inputs for. */
+  machineProviderId: string;
+  component: ComponentType<PluginMachineProviderInputsProps>;
+}
+
 // ---------------------------------------------------------------------------
 // definePluginApp
 // ---------------------------------------------------------------------------
@@ -1478,8 +1553,8 @@ export interface PluginAppSlots {
     registration: PluginCommandPaletteActionRegistration,
   ): void;
   /**
-   * Draw one agent provider's icon with an inline React component instead of
-   * its `<img>`-rendered logo file (see
+   * Draw one agent, environment, or machine provider's icon with an inline
+   * React component instead of its `<img>`-rendered logo file (see
    * {@link PluginProviderIconRegistration}). Experimental: see
    * docs/api_to_audit.md.
    */
@@ -1492,6 +1567,23 @@ export interface PluginAppSlots {
    */
   experimental_timelineRenderer(
     registration: PluginTimelineRendererRegistration,
+  ): void;
+  /**
+   * Supply the inputs control the New Thread environment picker renders
+   * beside one of this plugin's selected environment providers (see
+   * {@link PluginEnvironmentProviderInputsRegistration}). Experimental:
+   * see docs/api_to_audit.md.
+   */
+  experimental_environmentProviderInputs(
+    registration: PluginEnvironmentProviderInputsRegistration,
+  ): void;
+  /**
+   * Supply the non-secret machine inputs control rendered by machine creation
+   * surfaces (see {@link PluginMachineProviderInputsRegistration}).
+   * Experimental: see docs/api_to_audit.md.
+   */
+  experimental_machineProviderInputs(
+    registration: PluginMachineProviderInputsRegistration,
   ): void;
 }
 
@@ -1942,6 +2034,70 @@ export interface ExperimentalProviderModelPickerProps {
   className?: string;
 }
 
+/**
+ * Props of the host-owned `experimental_BranchPicker` component — bb's branch
+ * picker bundled with its branch-options loading for the given host and
+ * project, the control bb's own New Thread composer renders as "Branch from".
+ * The host owns fetching, searching, and refreshing the branch list; the
+ * caller owns only the selection.
+ */
+export interface ExperimentalBranchPickerProps {
+  /**
+   * The enrolled machine whose project checkout supplies the branch list.
+   * Null renders the picker disabled with no options.
+   */
+  hostId: string | null;
+  /** The project whose source on `hostId` is listed; null disables loading. */
+  projectId: string | null;
+  /**
+   * The selected branch name, or null when no branch is chosen (the host
+   * shows its placeholder and the consumer falls back to its own default).
+   */
+  value: string | null;
+  /** Called with the picked branch name, or null when the pick is cleared. */
+  onChange(next: string | null): void;
+  /**
+   * Text placed before the branch on the trigger, e.g. "Base:". Omitted, the
+   * trigger is the branch alone.
+   */
+  label?: string;
+  /**
+   * The trigger while nothing is picked. Omitted, the host shows the resolved
+   * default worktree base branch muted, or a neutral `default` placeholder
+   * when the base cannot be resolved.
+   */
+  placeholder?: string;
+  /** Render the current selection without allowing changes. */
+  disabled?: boolean;
+}
+
+export interface UseBranchesArgs {
+  hostId: string | null;
+  projectId: string | null;
+  query?: string;
+}
+
+export interface BranchesState {
+  branches: readonly string[];
+  remoteBranches: readonly string[];
+  isLoading: boolean;
+  refresh(): Promise<void>;
+}
+
+export interface UseCheckoutStateArgs {
+  hostId: string | null;
+  projectId: string | null;
+}
+
+export interface CheckoutState {
+  isGit: boolean | null;
+  unborn: boolean;
+  detached: boolean;
+  dirty: boolean;
+  currentBranch: string | null;
+  operation: WorkspaceGitOperation;
+}
+
 /** Props of BB's controlled, host-resolved permission-mode picker. */
 export interface ExperimentalPermissionModePickerProps {
   /** Provider whose supported modes determine the available choices. */
@@ -2379,6 +2535,23 @@ export interface PluginSdkApp {
    * see docs/api_to_audit.md.
    */
   experimental_PermissionModePicker: ComponentType<ExperimentalPermissionModePickerProps>;
+  /**
+   * BB's branch picker with its branch-options loading for one host and
+   * project (see {@link ExperimentalBranchPickerProps}) — the same control
+   * the New Thread composer renders as "Branch from". Experimental: see
+   * docs/api_to_audit.md.
+   */
+  experimental_BranchPicker: ComponentType<ExperimentalBranchPickerProps>;
+  /**
+   * Search and refresh the branch list for one project source. Experimental:
+   * see docs/api_to_audit.md.
+   */
+  experimental_useBranches(args: UseBranchesArgs): BranchesState;
+  /**
+   * Inspect the checkout state for one project source. Experimental: see
+   * docs/api_to_audit.md.
+   */
+  experimental_useCheckoutState(args: UseCheckoutStateArgs): CheckoutState;
   /**
    * The host-owned source viewer (see {@link SourceCodeProps}). Renders
    * supplied source text with BB's syntax highlighting, gutters, and live code

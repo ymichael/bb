@@ -1,5 +1,5 @@
 import path from "node:path";
-import { getAbsoluteGitDir, runGit, type GitProcessOptions } from "./git.js";
+import { getAbsoluteGitDir, type GitProcessOptions } from "./git.js";
 import {
   withProcessLocalQueuedLocks,
   type ProcessLocalQueuedLockSpec,
@@ -45,23 +45,6 @@ async function resolveCheckoutMutationLockSpec(
   return { key: await getAbsoluteGitDir(checkoutPath, options) };
 }
 
-async function tryResolveCheckoutMutationLockSpec(
-  checkoutPath: string,
-  options: GitProcessOptions,
-): Promise<ProcessLocalQueuedLockSpec | null> {
-  const result = await runGit(["rev-parse", "--absolute-git-dir"], {
-    cwd: checkoutPath,
-    ...options,
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) {
-    return null;
-  }
-
-  const gitDir = result.stdout.trim();
-  return gitDir ? { key: path.resolve(gitDir) } : null;
-}
-
 export async function withCheckoutMutationLock<T>(
   checkoutPath: string,
   work: CheckoutMutationLockWork<T>,
@@ -88,29 +71,6 @@ async function withCheckoutMutationAdmissions<T>(
     signal,
     work,
   });
-}
-
-export async function tryWithCheckoutMutationLock<T>(
-  checkoutPath: string,
-  work: CheckoutMutationLockWork<T>,
-  signal?: AbortSignal,
-  options: GitProcessOptions = {},
-): Promise<T | null> {
-  return withCheckoutMutationAdmission(
-    checkoutPath,
-    async () => {
-      const lock = await tryResolveCheckoutMutationLockSpec(
-        checkoutPath,
-        options,
-      );
-      if (!lock) {
-        return null;
-      }
-
-      return withProcessLocalQueuedLocks({ locks: [lock], signal, work });
-    },
-    signal,
-  );
 }
 
 export async function withCheckoutMutationLocks<T>(

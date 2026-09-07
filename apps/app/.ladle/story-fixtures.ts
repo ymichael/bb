@@ -10,7 +10,10 @@ import type {
   ProviderCliKey,
   ProviderCliStatus,
 } from "@bb/host-daemon-contract";
-import type { ProjectResponse } from "@bb/server-contract";
+import type {
+  ProjectResponse,
+  SystemEnvironmentProvider,
+} from "@bb/server-contract";
 import { EMPTY_ORDERED_MENTION_SUGGESTIONS } from "@bb/client-core";
 import {
   makeEnvironment as makeEnvironmentFixture,
@@ -24,7 +27,7 @@ import { getProviderIconInfo } from "../src/lib/provider-icon";
 import type { PickerOption } from "../src/components/pickers/OptionPicker";
 import type { ModelPickerOption } from "../src/components/pickers/model-picker-option";
 import type { ProjectSelectorOption } from "../src/components/pickers/ProjectSelector";
-import type { ReuseThreadOption } from "../src/components/pickers/WorktreePicker";
+import type { ReuseThreadOption } from "../src/components/pickers/ReuseEnvironmentPicker";
 import type { ExecutionControlsProps } from "../src/components/promptbox/ExecutionControls";
 import {
   INERT_TYPEAHEAD_COMMAND_CONFIG,
@@ -267,6 +270,8 @@ export const STORY_WORKTREE_OPTIONS: readonly ReuseThreadOption[] = [
     environmentId: "env_review_flow",
     branchName: "bb/review-flow-thr_4hge9xn14m",
     name: null,
+    path: null,
+    environmentProviderId: "git-worktree",
     threads: [
       { id: "thr_review", title: "Review flow cleanup" },
       { id: "thr_tests", title: "Backfill promptbox tests" },
@@ -276,9 +281,47 @@ export const STORY_WORKTREE_OPTIONS: readonly ReuseThreadOption[] = [
     environmentId: "env_timeline",
     branchName: "bb/timeline-pagination-thr_qfk8ksbxkk",
     name: "Timeline workspace",
+    path: null,
+    environmentProviderId: "git-worktree",
     threads: [{ id: "thr_timeline", title: "Timeline pagination" }],
   },
 ];
+
+export const STORY_ENVIRONMENT_PROVIDERS: readonly SystemEnvironmentProvider[] =
+  [
+    {
+      id: "project-checkout",
+      displayName: "Project checkout",
+      icon: "Laptop",
+      logoUrl: null,
+      pluginId: "environment-project-checkout",
+      acceptsEmptyInputs: true,
+      availability: null,
+      requires: {
+        projectCheckout: true,
+        gitCheckout: false,
+        gitRemote: false,
+        projectless: false,
+      },
+      inputs: null,
+    },
+    {
+      id: "git-worktree",
+      displayName: "Worktree",
+      icon: "GitBranch",
+      logoUrl: null,
+      pluginId: "environment-git-worktree",
+      acceptsEmptyInputs: true,
+      availability: null,
+      requires: {
+        projectCheckout: true,
+        gitCheckout: true,
+        gitRemote: false,
+        projectless: false,
+      },
+      inputs: null,
+    },
+  ];
 
 export const STORY_PROJECTS: readonly ProjectSelectorOption[] = [
   { id: PROJECT_IDS.bb, name: PROJECT_NAMES.bb },

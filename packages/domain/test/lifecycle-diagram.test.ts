@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   ENVIRONMENT_LIFECYCLE,
-  ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES,
   lifecyclePredicateNames,
   renderLifecycleMermaid,
   THREAD_LIFECYCLE,
@@ -104,9 +103,7 @@ describe("docs/lifecycle-diagrams.md", () => {
       "```mermaid",
       `${renderLifecycleMermaid({
         initial: "provisioning",
-        predicateNames: lifecyclePredicateNames(
-          ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES,
-        ),
+        predicateNames: {},
         table: ENVIRONMENT_LIFECYCLE,
       }).trimEnd()}`,
       "```",

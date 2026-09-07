@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { hostTypeSchema } from "@bb/domain";
 
 export const HOST_AUTH_FILE_NAME = "auth.json";
 export const HOST_ID_FILE_NAME = "host-id";
@@ -14,18 +13,26 @@ export function normalizeServerUrl(serverUrl: string): string {
   return url.href.replace(/\/$/u, "");
 }
 
-export const hostAuthStateSchema = z
+const currentHostAuthStateSchema = z
   .object({
     hostId: z.string().min(1),
     hostKey: nonEmptyTrimmedStringSchema,
-    hostType: hostTypeSchema,
+  })
+  .strict();
+
+const legacyHostAuthStateSchema = z
+  .object({
+    hostId: z.string().min(1),
+    hostKey: nonEmptyTrimmedStringSchema,
+    hostType: z.enum(["persistent", "ephemeral"]).optional(),
     serverUrl: z.unknown().optional(),
   })
   .strict()
-  .transform(({ hostId, hostKey, hostType }) => ({
-    hostId,
-    hostKey,
-    hostType,
-  }));
+  .transform(({ hostId, hostKey }) => ({ hostId, hostKey }));
+
+export const hostAuthStateSchema = z.union([
+  currentHostAuthStateSchema,
+  legacyHostAuthStateSchema,
+]);
 
 export type HostAuthState = z.infer<typeof hostAuthStateSchema>;

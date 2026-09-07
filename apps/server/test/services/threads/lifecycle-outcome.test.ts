@@ -122,16 +122,15 @@ function setup(status: ThreadStatus): Setup {
   const host = upsertHost(db, noopNotifier, {
     id: "host-lifecycle-outcome",
     name: "Lifecycle Outcome Host",
-    type: "persistent",
   });
   const { project } = createProject(db, noopNotifier, {
     name: "Lifecycle Outcome Project",
     source: { type: "local_path", hostId: host.id, path: "/tmp/lifecycle" },
   });
   const environment = createEnvironment(db, noopNotifier, {
+    providerOwnsPath: false,
     hostId: host.id,
     projectId: project.id,
-    workspaceProvisionType: "unmanaged",
     path: "/tmp/lifecycle/env",
     status: "ready",
   });
@@ -155,7 +154,6 @@ function connectDaemon(db: DbConnection, hub: NotificationHub, hostId: string) {
     hostId,
     instanceId: `instance-${randomUUID()}`,
     hostName: "Lifecycle Outcome Host",
-    hostType: "persistent",
     dataDir: `/tmp/${hostId}`,
     protocolVersion: 1,
     heartbeatIntervalMs: 5_000,

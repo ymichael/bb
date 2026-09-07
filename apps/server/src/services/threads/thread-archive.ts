@@ -1,19 +1,23 @@
 import {
+  cancelProviderLaunch,
+  sweepProviderEnvironment,
+} from "../environments/provider-orchestration.js";
+import {
+  cancelMachineLaunch,
+  sweepProviderMachine,
+} from "../machines/provider-orchestration.js";
+import {
   listLiveThreadsInEnvironment,
   listUnarchivedAssignedChildThreads,
   listUnarchivedHiddenSourceThreads,
 } from "@bb/db";
-import type { Environment, Thread } from "@bb/domain";
+import type { EnvironmentRow } from "@bb/db";
+import type { Thread } from "@bb/domain";
 import type { AppDeps } from "../../types.js";
 import {
   threadEnvironmentUnavailableDetails,
   throwThreadEnvironmentUnavailable,
 } from "../lib/lifecycle-api-errors.js";
-import {
-  requestEnvironmentCleanup,
-  requestEnvironmentCleanupAdvance,
-  wouldCleanupEnvironment,
-} from "../environments/environment-cleanup-internal.js";
 import {
   pruneThreadEventHistoryBestEffort,
   resetActiveThreadEventPruningState,
@@ -43,7 +47,7 @@ interface ResolveArchiveThreadEnvironmentArgs {
 }
 
 interface ArchiveEnvironmentThreadsArgs {
-  environment: Environment;
+  environment: EnvironmentRow;
 }
 
 interface ArchiveThreadAndChildrenArgs {
@@ -101,6 +105,21 @@ function archiveThreadWithLifecycleEffects(
     mode: "archived",
     threadId: archivedThread.id,
   });
+  void cancelProviderLaunch(deps, archivedThread.id).catch((error) =>
+    deps.logger.warn({ error }, "Environment launch cancellation failed"),
+  );
+  void cancelMachineLaunch(deps, archivedThread.id).catch((error) =>
+    deps.logger.warn({ error }, "Machine launch cancellation failed"),
+  );
+  if (archivedThread.environmentId !== null)
+    void sweepProviderEnvironment(deps, archivedThread.environmentId).catch(
+      (error) => deps.logger.warn({ error }, "Environment retirement failed"),
+    );
+  if (args.environment !== null) {
+    void sweepProviderMachine(deps, args.environment.hostId).catch((error) =>
+      deps.logger.warn({ error }, "Machine retirement failed"),
+    );
+  }
   emitPluginThreadArchived(archivedThread);
 
   return archivedThread;
@@ -145,20 +164,6 @@ export function archiveEnvironmentThreads(
     archivedThreadIds.push(result.id);
   }
 
-  if (
-    archivedThreadIds.length > 0 &&
-    wouldCleanupEnvironment(deps, {
-      environmentId: args.environment.id,
-    })
-  ) {
-    requestEnvironmentCleanup(deps, {
-      environmentId: args.environment.id,
-    });
-    requestEnvironmentCleanupAdvance(deps, {
-      environmentId: args.environment.id,
-    });
-  }
-
   return archivedThreadIds;
 }
 
@@ -180,7 +185,6 @@ export function archiveThreadAndChildren(
     threads.push(args.parentThread);
   }
   const archivedThreadIds: string[] = [];
-  const affectedEnvironmentIds = new Set<string>();
 
   for (const thread of threads) {
     const environment = resolveArchiveThreadEnvironment(deps, { thread });
@@ -192,20 +196,6 @@ export function archiveThreadAndChildren(
       continue;
     }
     archivedThreadIds.push(result.id);
-    if (environment !== null) {
-      affectedEnvironmentIds.add(environment.id);
-    }
-  }
-
-  for (const environmentId of affectedEnvironmentIds) {
-    if (
-      wouldCleanupEnvironment(deps, {
-        environmentId,
-      })
-    ) {
-      requestEnvironmentCleanup(deps, { environmentId });
-      requestEnvironmentCleanupAdvance(deps, { environmentId });
-    }
   }
 
   return archivedThreadIds;

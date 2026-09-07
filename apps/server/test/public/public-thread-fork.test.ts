@@ -13,6 +13,7 @@ import {
   turnRequestEventDataSchema,
   turnScope,
   type ClientTurnRequestId,
+  type EnvironmentProviderSelection,
   type PromptInput,
 } from "@bb/domain";
 import {
@@ -31,6 +32,7 @@ import {
   waitForQueuedCommand,
   waitForQueuedCommandAfter,
 } from "../helpers/commands.js";
+import { installFakePersonalWorkspaceProvider } from "../helpers/environment-provider.js";
 import { readJson } from "../helpers/json.js";
 import { textInput } from "../helpers/prompt-input.js";
 import {
@@ -48,6 +50,11 @@ import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
 function seedForkSource(
   harness: TestAppHarness,
   args: {
+    branchName?: string;
+    environmentProvider?: (host: { id: string }) => {
+      environmentProviderId: string;
+      selection: EnvironmentProviderSelection;
+    };
     model?: string;
     permissionMode?: "accept-edits" | "auto" | "full";
     reasoningLevel?: string;
@@ -63,6 +70,15 @@ function seedForkSource(
     hostId: host.id,
     projectId: project.id,
     path: "/tmp/public-thread-fork",
+    ...(args.branchName === undefined ? {} : { branchName: args.branchName }),
+    ...(args.environmentProvider === undefined
+      ? {}
+      : {
+          environmentProviderId:
+            args.environmentProvider(host).environmentProviderId,
+          environmentProviderSelection:
+            args.environmentProvider(host).selection,
+        }),
   });
   const sourceThread = seedThread(harness.deps, {
     environmentId: environment.id,
@@ -98,7 +114,6 @@ function seedPersonalDirectoryForkSource(harness: TestAppHarness) {
     hostId: host.id,
     path: "/tmp/personal-switched-directory",
     projectId: PERSONAL_PROJECT_ID,
-    workspaceProvisionType: "unmanaged",
   });
   const sourceThread = seedThread(harness.deps, {
     environmentId: environment.id,
@@ -240,7 +255,7 @@ describe("public thread fork route", () => {
         code: "invalid_request",
         message: `Fork environment must use the source thread's host (${environment.hostId}), not ${otherHost.id}`,
       });
-      expect(listQueuedCommands(harness, "environment.provision")).toEqual([]);
+      expect(listQueuedCommands(harness, "environment.attach")).toEqual([]);
     });
   });
 
@@ -271,8 +286,17 @@ describe("public thread fork route", () => {
 
   it("creates a requested personal environment after a directory switch", async () => {
     await withTestHarness(async (harness) => {
+      const workspacePath = "/tmp/personal-isolated-fork-workspace";
       const { environment, sourceThread } =
         seedPersonalDirectoryForkSource(harness);
+      const provider = installFakePersonalWorkspaceProvider(() => ({
+        action: "ready",
+        environment: {
+          type: "host",
+          hostId: environment.hostId,
+          path: workspacePath,
+        },
+      }));
 
       const response = await postFork(harness, {
         sourceThreadId: sourceThread.id,
@@ -288,29 +312,9 @@ describe("public thread fork route", () => {
       expect(getThread(harness.db, fork.id)?.environmentId).not.toBe(
         environment.id,
       );
-      const personalEnvironment = getThread(harness.db, fork.id)?.environmentId;
-      expect(personalEnvironment).not.toBeNull();
-      const queued = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "environment.provision" &&
-          command.environmentId === personalEnvironment,
+      expect((await provider.waitForProvision()).host?.id).toBe(
+        environment.hostId,
       );
-      if (queued.command.type !== "environment.provision") {
-        throw new Error("Expected personal environment.provision");
-      }
-      expect(queued.command.workspaceProvisionType).toBe("personal");
-      if (queued.command.workspaceProvisionType !== "personal") {
-        throw new Error("Expected personal environment.provision");
-      }
-      await reportQueuedCommandSuccess(harness, queued, {
-        path: queued.command.targetPath,
-        branchName: "main",
-        defaultBranch: "main",
-        isGitRepo: false,
-        isWorktree: false,
-        transcript: [],
-      });
 
       const start = await waitForQueuedCommand(
         harness,
@@ -320,6 +324,12 @@ describe("public thread fork route", () => {
       if (start.command.type !== "thread.start") {
         throw new Error("Expected thread.start");
       }
+      const forkEnvironment = getEnvironment(
+        harness.db,
+        getThread(harness.db, fork.id)?.environmentId ?? "",
+      );
+      expect(forkEnvironment?.path).toBe(workspacePath);
+      expect(forkEnvironment?.status).toBe("ready");
       expect(start.command.fork).toEqual({
         sourceProviderThreadId: "provider-personal-directory-source",
       });

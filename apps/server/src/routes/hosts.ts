@@ -25,12 +25,20 @@ import {
   assertUsableHostId,
   resolvePrimaryHostId,
 } from "../services/hosts/primary-host.js";
-import { issuePersistentHostEnrollKey } from "../services/hosts/host-enrollment.js";
+import { issueHostEnrollKey } from "../services/hosts/host-enrollment.js";
 import {
   callHostOnlineRpc,
   callHostRetryableOnlineRpc,
 } from "../services/hosts/online-rpc.js";
 import { handleHostRemoved } from "../internal/session-owner-side-effects.js";
+import {
+  createMachine,
+  requestMachineResume,
+  requestMachineRemoval,
+  requestMachineSuspension,
+  retryMachineCleanup,
+  sweepProviderMachine,
+} from "../services/machines/provider-orchestration.js";
 
 const PROVIDER_CLI_INSTALL_TIMEOUT_MS = 15 * 60 * 1000;
 const FOLDER_PICKER_TIMEOUT_MS = 10 * 60 * 1000;
@@ -97,9 +105,18 @@ export function registerHostRoutes(
   });
   const routes = publicApiRoutes.hosts;
 
-  post(routes.createJoinCode, async (context) => {
+  post(routes.create, async (context, payload) => {
     assertHostManagementAllowed(context);
-    const issued = await issuePersistentHostEnrollKey(deps, {
+    const host = await createMachine(deps, {
+      ...payload,
+      signal: context.req.raw.signal,
+    });
+    return context.json(host, 201);
+  });
+
+  post(routes.createJoinCode, async (context, payload) => {
+    assertHostManagementAllowed(context);
+    const issued = await issueHostEnrollKey(deps, {
       enrollSource: "public-multi-machine",
     });
     return context.json(
@@ -170,6 +187,24 @@ export function registerHostRoutes(
     return context.json({ ok: true as const });
   });
 
+  post(routes.suspend, async (context) => {
+    assertHostManagementAllowed(context);
+    await requestMachineSuspension(deps, context.req.param("id"));
+    return context.json({ ok: true as const });
+  });
+
+  post(routes.resume, async (context) => {
+    assertHostManagementAllowed(context);
+    await requestMachineResume(deps, context.req.param("id"));
+    return context.json({ ok: true as const });
+  });
+
+  post(routes.retryCleanup, async (context) => {
+    assertHostManagementAllowed(context);
+    await retryMachineCleanup(deps, context.req.param("id"));
+    return context.json({ ok: true as const });
+  });
+
   del(routes.delete, async (context) => {
     assertHostManagementAllowed(context);
     const hostId = context.req.param("id");
@@ -182,9 +217,20 @@ export function registerHostRoutes(
       );
     }
 
+    if (host.machineProviderId !== null) {
+      if (!requestMachineRemoval(deps, hostId)) {
+        throw new ApiError(
+          409,
+          "machine_has_live_threads",
+          "Archive or delete every thread on this machine before removing it",
+        );
+      }
+      await sweepProviderMachine(deps, hostId);
+      return context.json({ ok: true });
+    }
+
     await deps.machineAuth.revokeHostAuthKeys({
       hostId,
-      hostType: host.type,
     });
     const sessionId = deps.hub.getDaemonSessionIdForHost(hostId);
     if (sessionId) {

@@ -30,8 +30,9 @@ import {
   useProviderCliInstallRunner,
 } from "@/components/provider-cli/provider-cli-install";
 import { providerCliJobKey } from "@/components/provider-cli/provider-cli-install-store";
+import { PROJECT_CHECKOUT_ENVIRONMENT_PROVIDER_ID } from "@bb/client-core";
 import {
-  encodeHostValue,
+  encodeProviderValue,
   encodeReuseValue,
 } from "@/components/pickers/environment-picker-value";
 import {
@@ -145,7 +146,6 @@ import {
   ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS,
   RootComposeSecondaryContent,
 } from "./RootComposeSecondaryContent";
-import { resolveComposeHostId } from "./root-compose-environment-selection";
 import { RootComposeMobileRecents } from "./RootComposeMobileRecents";
 import { RootComposeEmptyWelcome } from "./RootComposeEmptyWelcome";
 import {
@@ -854,10 +854,9 @@ function RootComposeSurface({
     return namesById;
   }, [sidebarNavigation]);
 
-  const composeHostId = resolveComposeHostId(parsedEnvironment, primaryHostId);
   const providerCliStatus = useHostProviderCliStatus({
-    hostId: composeHostId,
-    enabled: composeHostId !== null,
+    hostId: rootProjectHostId,
+    enabled: rootProjectHostId !== null,
   });
   const { queuedJobKeys, runningJobKey, startInstall } =
     useProviderCliInstallRunner();
@@ -880,9 +879,12 @@ function RootComposeSurface({
     selectedProviderId,
   ]);
   const handleUpdateProviderCli = useCallback(() => {
-    if (selectedProviderCliIssue === null || composeHostId === null) return;
-    startInstall({ hostId: composeHostId, issue: selectedProviderCliIssue });
-  }, [selectedProviderCliIssue, composeHostId, startInstall]);
+    if (selectedProviderCliIssue === null || rootProjectHostId === null) return;
+    startInstall({
+      hostId: rootProjectHostId,
+      issue: selectedProviderCliIssue,
+    });
+  }, [selectedProviderCliIssue, rootProjectHostId, startInstall]);
 
   useFixedPanelTabsStorageMaintenance();
   const fixedPanelTabsState = useFixedPanelTabsState(
@@ -947,10 +949,7 @@ function RootComposeSurface({
       if (rootPanelEnvironmentId !== null) {
         return null;
       }
-      const selectedHostId = resolveComposeHostId(
-        parsedEnvironment,
-        primaryHostId,
-      );
+      const selectedHostId = rootProjectHostId;
       if (selectedHostId === null) {
         return null;
       }
@@ -970,12 +969,7 @@ function RootComposeSurface({
         hostId: source.hostId,
         cwd: source.path,
       };
-    }, [
-      parsedEnvironment,
-      primaryHostId,
-      projectSources,
-      rootPanelEnvironmentId,
-    ]);
+    }, [projectSources, rootPanelEnvironmentId, rootProjectHostId]);
   const rootPanelTerminalTarget = useMemo<RootComposeTerminalTarget | null>(
     () =>
       rootPanelEnvironmentId !== null
@@ -1833,9 +1827,19 @@ function RootComposeSurface({
   const handleMachineSetupComplete = useCallback(
     ({ hostId: setUpHostId }: ProjectMachineSetupCompletion) => {
       setMachineSetupTarget(null);
-      setEnvironmentSelectionValue(encodeHostValue(setUpHostId, "worktree"));
+      if (parsedEnvironment?.type === "provider") {
+        setEnvironmentSelectionValue(
+          encodeProviderValue(parsedEnvironment.environmentProviderId),
+          setUpHostId,
+        );
+        return;
+      }
+      setEnvironmentSelectionValue(
+        encodeProviderValue(PROJECT_CHECKOUT_ENVIRONMENT_PROVIDER_ID),
+        setUpHostId,
+      );
     },
-    [setEnvironmentSelectionValue],
+    [parsedEnvironment, setEnvironmentSelectionValue],
   );
   const handleCancelForkDraft = useCallback(() => {
     setForkSeed(null);
@@ -1885,18 +1889,18 @@ function RootComposeSurface({
         }
         canUpdate={selectedProviderCliIssue !== null}
         updating={
-          composeHostId !== null &&
+          rootProjectHostId !== null &&
           (runningJobKey ===
-            providerCliJobKey(composeHostId, selectedProviderId) ||
+            providerCliJobKey(rootProjectHostId, selectedProviderId) ||
             queuedJobKeys.has(
-              providerCliJobKey(composeHostId, selectedProviderId),
+              providerCliJobKey(rootProjectHostId, selectedProviderId),
             ))
         }
         onUpdate={handleUpdateProviderCli}
       />
     );
   }, [
-    composeHostId,
+    rootProjectHostId,
     handleUpdateProviderCli,
     isProviderCliVersionBlocked,
     queuedJobKeys,
@@ -1950,7 +1954,6 @@ function RootComposeSurface({
       project: isForkDraft,
       provider: isForkDraft,
       environment: isForkDraft,
-      branch: isForkDraft,
     },
   });
 
