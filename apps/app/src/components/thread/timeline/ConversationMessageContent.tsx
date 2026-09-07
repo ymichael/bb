@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState, type CSSProperties } from "react";
+import remend from "remend";
 import type {
   TimelineConversationAttachments,
   TimelineRowBase,
@@ -494,6 +495,20 @@ function AssistantConversationMessage({
     () => (streaming ? splitStreamingMarkdown(text) : null),
     [streaming, text],
   );
+  const liveMarkdown = useMemo(() => {
+    const tail = streamingSplit?.tail ?? text;
+    if (!streaming || /::[a-zA-Z]|`{3}|~{3}/.test(tail)) {
+      return tail;
+    }
+    return remend(tail, {
+      linkMode: "text-only",
+      comparisonOperators: false,
+      htmlTags: false,
+      katex: false,
+      setextHeadings: false,
+      singleTilde: false,
+    });
+  }, [streaming, streamingSplit, text]);
   const linkRouting = useMemo<MarkdownLinkRouting>(() => {
     const localImage: NonNullable<MarkdownLinkRouting["localImage"]> = {
       absolutePaths: {
@@ -600,7 +615,9 @@ function AssistantConversationMessage({
               ? undefined
               : STREAMING_SETTLED_MARKDOWN_CLASS_NAME
           }
-          content={streamingSplit === null ? text : streamingSplit.settled}
+          content={
+            streamingSplit === null ? liveMarkdown : streamingSplit.settled
+          }
           linkRouting={linkRouting}
           messageDirectives={messageDirectives}
           threadMentions={ASSISTANT_THREAD_MENTIONS}
@@ -608,7 +625,7 @@ function AssistantConversationMessage({
         {streamingSplit === null ? null : (
           <MarkdownPreview
             className={STREAMING_TAIL_MARKDOWN_CLASS_NAME}
-            content={streamingSplit.tail}
+            content={liveMarkdown}
             linkRouting={linkRouting}
             messageDirectives={messageDirectives}
             threadMentions={ASSISTANT_THREAD_MENTIONS}
