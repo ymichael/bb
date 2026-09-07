@@ -156,7 +156,7 @@ function showDesktopContextMenu({
 export function registerDesktopContextMenu({
   webContents,
 }: RegisterDesktopContextMenuArgs): void {
-  webContents.session.setSpellCheckerEnabled(true);
+  webContents.session.setSpellCheckerEnabled(false);
   webContents.on("context-menu", (_event, params) => {
     showDesktopContextMenu({ params, webContents });
   });

@@ -276,7 +276,7 @@ describe("desktop context menu", () => {
 
     registerDesktopContextMenu({ webContents });
 
-    expect(webContents.spellCheckerEnabledValues).toEqual([true]);
+    expect(webContents.spellCheckerEnabledValues).toEqual([false]);
 
     const listener = webContents.on.mock.calls[0]?.[1];
     listener?.(

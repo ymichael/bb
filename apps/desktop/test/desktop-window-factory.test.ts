@@ -266,9 +266,12 @@ describe("desktop window factory", () => {
     expect(createdWindows[0]?.options.minHeight).toBe(MIN_WINDOW_HEIGHT);
     expect(createdWindows[0]?.options.minWidth).toBe(MIN_WINDOW_WIDTH);
     expect(createdWindows[0]?.options.titleBarStyle).toBe("hiddenInset");
-    expect(createdWindows[0]?.options.webPreferences?.spellcheck).toBe(true);
+    expect(createdWindows[0]?.options.webPreferences?.spellcheck).toBe(false);
+    expect(
+      createdWindows[0]?.options.webPreferences?.backgroundThrottling,
+    ).toBe(false);
     expect(createdWindows[0]?.webContents.spellCheckerEnabledValues).toEqual([
-      true,
+      false,
     ]);
     expect(createdWindows[0]?.options.trafficLightPosition).toEqual({
       x: 18,

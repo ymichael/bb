@@ -183,11 +183,12 @@ function createWindowOptions(
     show: false,
     title: "bb",
     webPreferences: {
+      backgroundThrottling: false,
       contextIsolation: true,
       nodeIntegration: false,
       preload: args.preloadPath,
       sandbox: true,
-      spellcheck: true,
+      spellcheck: false,
     },
     width: args.bounds.width,
     x: args.bounds.x,
@@ -241,7 +242,7 @@ export function createDesktopWindowFactory(
           preloadPath: args.preloadPath,
         }),
       );
-      browserWindow.webContents.session.setSpellCheckerEnabled(true);
+      browserWindow.webContents.session.setSpellCheckerEnabled(false);
 
       activeWindows.set(stateKey, browserWindow);
 
