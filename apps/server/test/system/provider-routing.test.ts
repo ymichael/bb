@@ -1,4 +1,5 @@
 import { updateHost } from "@bb/db";
+import { defaultAppSettings } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import type { HostDaemonOnlineRpcRequestMessage } from "@bb/host-daemon-contract";
@@ -255,6 +256,42 @@ describe("GET /api/v1/system/providers", () => {
           installation: expect.any(Boolean),
         });
       }
+    });
+  });
+
+  it("keeps the user's providerOrder across the installed-only visibility split", async () => {
+    await withTestHarness({}, async (harness) => {
+      const primary = seedHostSession(harness.deps, {
+        id: "host-provider-order-primary",
+      });
+      seedPrimaryHost(harness.deps, primary.host.id);
+      // Only acp-opencode reports installed; every other installed-only
+      // agent (acp-omp, acp-grok) stays hidden from the listing.
+      registerHostRpcResponder(harness, {
+        hostId: primary.host.id,
+        sessionId: primary.session.id,
+        handle: (request) =>
+          providerHostResponse(request, "acp-opencode", "model"),
+      });
+
+      const put = await harness.app.request("/api/v1/settings/general", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          ...defaultAppSettings,
+          providerOrder: ["acp-opencode", "claude-code", "codex"],
+          defaultProviderId: null,
+        }),
+      });
+      expect(put.status).toBe(200);
+
+      const ids = await providerIds(
+        await harness.app.request("/api/v1/system/providers"),
+      );
+      // The installed-only provider the user pinned first must lead the
+      // listing; the always-listed providers follow in pinned order, not
+      // ahead of it.
+      expect(ids.slice(0, 3)).toEqual(["acp-opencode", "claude-code", "codex"]);
     });
   });
 });

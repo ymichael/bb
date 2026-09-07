@@ -236,9 +236,25 @@ async function listSystemProviderInfosForHost(
   hostId: string,
   capability?: ProviderCapabilityFilter,
 ): Promise<ProviderInfo[]> {
-  return listConfiguredSystemProviderInfos(deps, capability).concat(
-    await listInstalledPluginProviderInfos(deps, hostId, capability),
+  const configured = listConfiguredSystemProviderInfos(deps, capability);
+  const installed = await listInstalledPluginProviderInfos(
+    deps,
+    hostId,
+    capability,
   );
+  // Both halves follow the registry's user order, but concatenating them
+  // would pin every always-listed provider above every installed-only one,
+  // so a drag that moves a provider across that boundary never sticks.
+  // Keep the registry's order instead: list whichever half survived the
+  // capability filter and the installed-only health probe.
+  const listedIds = new Set([
+    ...configured.map((provider) => provider.id),
+    ...installed.map((provider) => provider.id),
+  ]);
+  return deps.providerRegistry
+    .list()
+    .filter((registration) => listedIds.has(registration.info.id))
+    .map((registration) => registration.info);
 }
 
 function resolveSystemProviderInfosPlan(

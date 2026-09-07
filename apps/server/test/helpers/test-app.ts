@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { serve } from "@hono/node-server";
 import type { AddressInfo } from "node:net";
-import { createConnection, type DbConnection } from "@bb/db";
+import { createConnection, getAppSettings, type DbConnection } from "@bb/db";
 import { defaultFeatureFlags, type HostType } from "@bb/domain";
 import { initDb } from "../../src/db.js";
 import { createApp } from "../../src/server.js";
@@ -146,7 +146,17 @@ export async function createTestAppHarness(
   const watchInterests = new WatchInterestCoordinator({ db, hub });
   const sharedPorts = new HostSharedPortCoordinator({ db, hub });
   const workspaceReadCaches = new WorkspaceReadCaches({ hub });
-  const providerRegistry = createProviderRegistryService({});
+  // Same preference wiring as the real server: picker order and the default
+  // provider are user settings read per registry call.
+  const providerRegistry = createProviderRegistryService({
+    readUserProviderPreferences: () => {
+      const settings = getAppSettings(db);
+      return {
+        providerOrder: settings.providerOrder,
+        defaultProviderId: settings.defaultProviderId,
+      };
+    },
+  });
   const pluginHostArtifacts = new PluginHostArtifactRegistry();
   const providerNativeRoots = createProviderNativeRootsCache(
     nativeRootsClock === undefined ? {} : { now: nativeRootsClock },
