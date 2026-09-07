@@ -15,21 +15,6 @@ const BASE_CHROME = cn(
   "border border-border bg-surface-raised-solid",
 );
 
-/**
- * The track the stack itself lays cards on.
- *
- * A bare `grid gap-2` drops every card into an implicit `auto` column, and an
- * auto column's base size is the widest card's MIN-CONTENT width. That is not
- * the width the card renders at: a row built as `min-w-0 flex-1 truncate`
- * still reports its full untruncated string as its min-content contribution,
- * because the truncation only bites once the parent hands it a definite width.
- * So one long queued message — or one plugin banner with a long rule in it —
- * sized the column at ~1350px inside a 370px composer, and every other card
- * stretched to match and left the viewport with it.
- *
- * `minmax(0, 1fr)` pins the track to the shell's width instead. Each card then
- * gets a definite width and its own truncation does the rest.
- */
 export const PROMPT_STACK_TRACK_CLASS = "grid-cols-[minmax(0,1fr)]";
 
 export interface PromptStackCardProps {

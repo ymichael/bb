@@ -472,14 +472,6 @@ describe("FollowUpPromptBox", () => {
   });
 
   it("lays the banner stack on an explicit single-column track", () => {
-    // jsdom has no layout engine, so this guards the track declaration rather
-    // than the resulting geometry. A bare `grid gap-2` puts every card in an
-    // implicit `auto` column, whose base size is the widest card's min-content
-    // width — and a row built as `min-w-0 flex-1 truncate` still reports its
-    // full untruncated string there, because that guard only bites once the
-    // parent width is definite. One long queued message sized the column at
-    // ~1350px inside a 370px composer and stretched every other card off the
-    // viewport with it.
     const props = createFollowUpPromptBoxProps({ kind: "ready" });
     render(
       <FollowUpPromptBox
