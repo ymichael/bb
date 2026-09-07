@@ -344,6 +344,9 @@ importers:
       remark-math:
         specifier: ^6.0.0
         version: 6.0.0
+      remend:
+        specifier: 1.3.1
+        version: 1.3.1
       sonner:
         specifier: ^1.7.4
         version: 1.7.4(patch_hash=cmyzze74esm6ggsujpv6fshpbi)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -14302,6 +14305,9 @@ packages:
   remark-stringify@11.0.0:
     resolution: {integrity: sha512-1OSmLd3awB/t8qdoEOMazZkNsfVTeY4fTsgzcQFdXNq8ToTN4ZGwrMnlda4K6smTFKD+GRV6O48i6Z4iKgPPpw==}
 
+  remend@1.3.1:
+    resolution: {integrity: sha512-N3DiY5qbRPoa5vkxn1oDLMyXOVTeo6Hp+XOj6SIqJAYUgLS0Q587gILPMom/qm86AQ/ZrcOdwEIzCz8V3J0nxQ==}
+
   remove-trailing-slash@0.1.1:
     resolution: {integrity: sha512-o4S4Qh6L2jpnCy83ysZDau+VORNvnFw07CKSAymkd6ICNVEPisMyzlc00KlvvicsxKck94SEwhDnMNdICzO+tA==}
 
@@ -27728,6 +27734,8 @@ snapshots:
       '@types/mdast': 4.0.4
       mdast-util-to-markdown: 2.1.2
       unified: 11.0.5
+
+  remend@1.3.1: {}
 
   remove-trailing-slash@0.1.1: {}
 
