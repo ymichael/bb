@@ -22,7 +22,6 @@ import {
   systemErrorEventDataSchema,
   threadScope,
   turnRequestEventDataSchema,
-  type PermissionMode,
   WORKSPACE_PROVISIONING_STEP_KEYS,
 } from "@bb/domain";
 import { randomBytes } from "node:crypto";

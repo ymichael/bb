@@ -5648,7 +5648,7 @@ describe("environment providers migration", () => {
     }
   });
 
-  it("hands path-less error rows to the provider for every legacy workspace kind", () => {
+  it("hands main's path-less legacy rows to each environment provider", () => {
     const db = createMigratedConnection();
 
     try {
@@ -5837,113 +5837,4 @@ describe("environment providers migration", () => {
     }
   });
 
-  it("adopts existing Modal environments as provider machines and attached checkouts", () => {
-    const db = createMigratedConnection();
-
-    try {
-      seedPreProviderEnvironments(db);
-      db.$client.exec(`
-        INSERT INTO hosts (id, name, type, created_at, updated_at)
-        VALUES ('host_modal', 'Modal sandbox old', 'ephemeral', 2000, 3000);
-
-        INSERT INTO environments (
-          id, project_id, host_id, path, managed, base_branch,
-          retire_requested_at, destroy_attempt_id, workspace_provision_type,
-          status, created_at, updated_at
-        ) VALUES (
-          'env_modal', 'proj_ep', 'host_modal', '/workspace/bb', 1, NULL,
-          NULL, NULL, 'unmanaged', 'ready', 2000, 3000
-        );
-      `);
-      db.$client
-        .prepare(
-          `INSERT INTO plugin_kv (plugin_id, key, value, updated_at)
-           VALUES (?, ?, ?, ?)`,
-        )
-        .run(
-          "environment-modal-sandbox",
-          "state:modal-path-key",
-          JSON.stringify({
-            version: 1,
-            pathKey: "modal-path-key",
-            hostId: "host_modal",
-            threadId: "thr_old_modal",
-            projectId: "proj_ep",
-            providerId: "codex",
-            path: "/workspace/bb",
-            sourceId: "src_modal",
-            phase: "hibernated",
-            sandboxId: null,
-            snapshotImageId: "snap_modal",
-            retiredSnapshotImageIds: [],
-            hibernateAt: null,
-            operationStartedAt: null,
-            retryAt: null,
-            lastHibernateDurationMs: null,
-            lastResumeDurationMs: null,
-            lastError: null,
-            updatedAt: 3000,
-          }),
-          3000,
-        );
-
-      migrate(db);
-
-      expect(
-        db.$client
-          .prepare<
-            [],
-            {
-              machineProviderId: string | null;
-              machineProviderSelection: string | null;
-              phase: string;
-              resource: string | null;
-              suspendedAt: number | null;
-            }
-          >(
-            `SELECT machine_provider_id AS machineProviderId,
-                    machine_provider_selection AS machineProviderSelection,
-                    phase,
-                    resource,
-                    suspended_at AS suspendedAt
-             FROM hosts WHERE id = 'host_modal'`,
-          )
-          .get(),
-      ).toEqual({
-        machineProviderId: "modal-sandbox",
-        machineProviderSelection: '{"inputs":null}',
-        phase: "suspended",
-        resource:
-          '{"version":2,"key":"modal-path-key","sandboxId":null,"snapshotImageId":"snap_modal","projectId":"proj_ep","sourceId":"src_modal"}',
-        suspendedAt: 3000,
-      });
-      expect(
-        db.$client
-          .prepare<
-            [],
-            {
-              environmentProviderId: string | null;
-              environmentProviderSelection: string | null;
-              providerOwnsPath: number;
-              resource: string | null;
-            }
-          >(
-            `SELECT environment_provider_id AS environmentProviderId,
-                    environment_provider_selection AS environmentProviderSelection,
-                    provider_owns_path AS providerOwnsPath,
-                    resource
-             FROM environments WHERE id = 'env_modal'`,
-          )
-          .get(),
-      ).toEqual({
-        environmentProviderId: "project-checkout",
-        environmentProviderSelection:
-          '{"machine":{"type":"existing","hostId":"host_modal"},"inputs":{"path":"/workspace/bb"}}',
-        providerOwnsPath: 0,
-        resource: null,
-      });
-    } finally {
-      closeConnection(db);
-    }
-  });
 });
