@@ -100,9 +100,7 @@ const THREAD_SEARCH_DEBOUNCE_MS = 150;
 export const THREAD_SEARCH_LIMIT_PER_GROUP = 20;
 const THREAD_SEARCH_MIN_NON_WHITESPACE_CHARS = 2;
 
-interface ThreadDetailBootstrapQueryOptions extends QueryOptions {
-  timelinePrefetch?: boolean;
-}
+type ThreadDetailBootstrapQueryOptions = QueryOptions;
 
 export function didThreadDetailBootstrapRefreshAfterMount(query: {
   dataUpdatedAt: number;
@@ -663,19 +661,31 @@ export function useThreadDetailBootstrap(
     queryKey: threadDetailBootstrapQueryKey(id),
     queryFn: async ({ signal }) => {
       const threadId = requireThreadId(id, "useThreadDetailBootstrap");
-      const timelinePrefetch = options?.timelinePrefetch ?? false;
-
-      if (timelinePrefetch) {
-        void queryClient.prefetchQuery({
-          queryKey: threadTimelineQueryKey(threadId),
-          queryFn: ({ signal: timelineSignal }) =>
-            fetchThreadTimeline({
-              queryClient,
-              signal: timelineSignal,
-              threadId,
-            }),
-        });
-      }
+      void queryClient.prefetchQuery({
+        queryKey: threadTimelineQueryKey(threadId),
+        queryFn: () =>
+          fetchThreadTimeline({
+            queryClient,
+            signal,
+            threadId,
+          }),
+      });
+      void queryClient.prefetchQuery({
+        queryKey: threadQueuedMessagesQueryKey(threadId),
+        queryFn: () =>
+          sdk.threads.queuedMessages.list({
+            threadId,
+            signal,
+          }),
+      });
+      void queryClient.prefetchQuery({
+        queryKey: threadPendingInteractionsQueryKey(threadId),
+        queryFn: () =>
+          sdk.threads.interactions.list({
+            threadId,
+            signal,
+          }),
+      });
 
       const thread = await sdk.threads.get({
         include: "environment,host",

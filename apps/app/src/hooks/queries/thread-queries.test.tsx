@@ -162,7 +162,7 @@ beforeEach(() => {
 });
 
 describe("useThreadDetailBootstrap", () => {
-  it("starts the timeline request before the thread bootstrap settles", async () => {
+  it("starts timeline, queued, and pending-interaction reads before the thread bootstrap settles", async () => {
     let resolveThread:
       | ((thread: ThreadWithIncludesResponse) => void)
       | undefined;
@@ -172,17 +172,15 @@ describe("useThreadDetailBootstrap", () => {
     vi.mocked(sdk.threads.get).mockReturnValue(threadPromise);
     const { wrapper } = createQueryClientTestHarness();
 
-    const result = renderHook(
-      () =>
-        useThreadDetailBootstrap("thread-1", {
-          timelinePrefetch: true,
-        }),
-      { wrapper },
-    );
+    const result = renderHook(() => useThreadDetailBootstrap("thread-1"), {
+      wrapper,
+    });
 
     await waitFor(() => {
       expect(sdk.threads.get).toHaveBeenCalledTimes(1);
       expect(sdk.threads.timeline).toHaveBeenCalledTimes(1);
+      expect(sdk.threads.queuedMessages.list).toHaveBeenCalledTimes(1);
+      expect(sdk.threads.interactions.list).toHaveBeenCalledTimes(1);
     });
     expect(result.result.current.isPending).toBe(true);
 
@@ -232,13 +230,7 @@ describe("useThreadDetailBootstrap", () => {
       { updatedAt: 1 },
     );
 
-    renderHook(
-      () =>
-        useThreadDetailBootstrap("thread-1", {
-          timelinePrefetch: true,
-        }),
-      { wrapper },
-    );
+    renderHook(() => useThreadDetailBootstrap("thread-1"), { wrapper });
 
     await waitFor(() => {
       expect(sdk.threads.timeline).toHaveBeenCalledWith({

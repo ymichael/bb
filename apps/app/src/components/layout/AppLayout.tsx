@@ -520,7 +520,6 @@ export function AppLayout({ children }: AppLayoutProps) {
   );
   const threadDetailBootstrapQuery = useThreadDetailBootstrap(threadId ?? "", {
     enabled: isThreadView && Boolean(threadId),
-    timelinePrefetch: isThreadView && Boolean(threadId),
   });
   const hasThreadDetailBootstrapSettled =
     threadDetailBootstrapQuery.isSuccess || threadDetailBootstrapQuery.isError;
