@@ -812,6 +812,55 @@ describe("FollowUpPromptBox", () => {
     ).toBeNull();
   });
 
+  it("shows an attachment that arrives after mobile focus loss", async () => {
+    mocks.isCompactViewport = true;
+    const props = createFollowUpPromptBoxProps({ kind: "ready" });
+    const { rerender } = render(<FollowUpPromptBox {...props} />);
+    const input = screen.getByRole("textbox", { name: "Follow-up prompt" });
+
+    act(() => input.focus());
+    act(() => input.blur());
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-box").getAttribute("data-compact"),
+      ).toBe("true"),
+    );
+
+    rerender(
+      <FollowUpPromptBox
+        {...props}
+        attachments={{
+          ...props.attachments,
+          items: [
+            {
+              type: "localImage",
+              path: "uploads/photo.png",
+              name: "photo.png",
+              mimeType: "image/png",
+              sizeBytes: 1,
+            },
+          ],
+        }}
+      />,
+    );
+
+    expect(screen.getByTestId("prompt-box").getAttribute("data-compact")).toBe(
+      "false",
+    );
+    expect(
+      document
+        .querySelector("[data-follow-up-composer]")
+        ?.hasAttribute("data-follow-up-composer-expanded"),
+    ).toBe(true);
+
+    rerender(<FollowUpPromptBox {...props} />);
+
+    expect(screen.getByTestId("prompt-box").getAttribute("data-compact")).toBe(
+      "true",
+    );
+  });
+
   it("collapses a wide composer until the user focuses it again", () => {
     const props = createFollowUpPromptBoxProps({ kind: "ready" });
     props.environmentSummary = <span>Local environment</span>;
