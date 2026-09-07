@@ -21,6 +21,7 @@ import type { TunnelClientLogger } from "./logger.js";
 
 const HEARTBEAT_INTERVAL_MS = 20_000;
 const HEARTBEAT_DEADLINE_MS = 60_000;
+const HEARTBEAT_STARVATION_GRACE_MS = 2 * HEARTBEAT_INTERVAL_MS;
 
 const UNREGISTERED_PORT_BODY = "this port is not shared";
 const textEncoder = new TextEncoder();
@@ -118,13 +119,16 @@ interface TunnelSessionOptions {
   resolveOrigin: (target: string | undefined) => StreamOriginResult;
   onRemoteClientsChange?: (remoteClients: number) => void;
   onActivity?: (at: number) => void;
+  onHeartbeatTimeout?: () => void;
 }
 
 export class TunnelSession {
   private readonly httpStreams = new Map<number, HttpStream>();
   private readonly wsStreams = new Map<number, WsStream>();
   private lastAck = Date.now();
+  private lastTickAt = 0;
   private heartbeat: ReturnType<typeof setInterval> | undefined;
+  private disposed = false;
   private remoteClientCount = 0;
   lastRemoteActivityAt: number | null = null;
 
@@ -136,16 +140,37 @@ export class TunnelSession {
 
   start(): void {
     const { tunnel } = this.options;
+    this.lastTickAt = Date.now();
     this.heartbeat = setInterval(() => {
-      if (Date.now() - this.lastAck > HEARTBEAT_DEADLINE_MS) {
-        this.options.log.warn("tunnel heartbeat missed; reconnecting");
-        tunnel.terminate();
+      const now = Date.now();
+      const tickGap = now - this.lastTickAt;
+      this.lastTickAt = now;
+      if (tickGap > HEARTBEAT_STARVATION_GRACE_MS) {
+        this.lastAck = now;
+        this.options.log.warn(
+          `tunnel heartbeat timer starved (${tickGap}ms); granting ack grace`,
+        );
+        tunnel.send(HEARTBEAT_REQUEST);
+        return;
+      }
+      if (now - this.lastAck > HEARTBEAT_DEADLINE_MS) {
+        setImmediate(() => {
+          if (this.disposed) return;
+          if (Date.now() - this.lastAck <= HEARTBEAT_DEADLINE_MS) {
+            tunnel.send(HEARTBEAT_REQUEST);
+            return;
+          }
+          this.options.log.warn("tunnel heartbeat missed; reconnecting");
+          tunnel.terminate();
+          this.options.onHeartbeatTimeout?.();
+        });
         return;
       }
       tunnel.send(HEARTBEAT_REQUEST);
     }, HEARTBEAT_INTERVAL_MS);
 
     tunnel.on("message", (data: Buffer, isBinary: boolean) => {
+      if (this.disposed) return;
       if (!isBinary) {
         if (data.toString() === HEARTBEAT_RESPONSE) this.lastAck = Date.now();
         return;
@@ -160,6 +185,7 @@ export class TunnelSession {
   }
 
   dispose(): void {
+    this.disposed = true;
     if (this.heartbeat) clearInterval(this.heartbeat);
     for (const s of this.httpStreams.values()) s.abort.abort();
     for (const s of this.wsStreams.values())
@@ -194,6 +220,7 @@ export class TunnelSession {
   }
 
   private onFrame(frame: Frame): void {
+    if (this.disposed) return;
     this.noteActivity();
     switch (frame.type) {
       case "open-http": {
@@ -273,19 +300,18 @@ export class TunnelSession {
     stream: HttpStream,
   ): Promise<void> {
     const { meta } = stream;
-    const originResult = this.options.resolveOrigin(meta.target);
-    if (originResult.kind === "unregistered") {
-      this.rejectUnregisteredHttp(streamId);
-      this.httpStreams.delete(streamId);
-      return;
-    }
-    const { resolved } = originResult;
-    const headers = headersForLoopbackRequest(meta.headers, {
-      publicOrigin: resolved.publicOrigin,
-      loopbackOrigin: new URL(resolved.origin).origin,
-      ...(resolved.host !== undefined ? { host: resolved.host } : {}),
-    });
     try {
+      const originResult = this.options.resolveOrigin(meta.target);
+      if (originResult.kind === "unregistered") {
+        this.rejectUnregisteredHttp(streamId);
+        return;
+      }
+      const { resolved } = originResult;
+      const headers = headersForLoopbackRequest(meta.headers, {
+        publicOrigin: resolved.publicOrigin,
+        loopbackOrigin: new URL(resolved.origin).origin,
+        ...(resolved.host !== undefined ? { host: resolved.host } : {}),
+      });
       const startedAt = performance.now();
       const body = meta.hasBody ? Buffer.concat(stream.chunks) : undefined;
       const res = await requestOriginHttp({

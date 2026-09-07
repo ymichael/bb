@@ -10,6 +10,7 @@ interface FakeWebSocketOptions {
 interface FakeTunnelSocket {
   readyState: number;
   emit(eventName: string, ...args: unknown[]): boolean;
+  send(): void;
   terminate(): void;
 }
 
@@ -34,6 +35,8 @@ vi.mock("ws", async (importOriginal) => {
     terminate(): void {
       this.readyState = 3;
     }
+
+    send(): void {}
   }
 
   return { ...actual, WebSocket: FakeWebSocket };
@@ -235,6 +238,35 @@ describe("ConnectTunnel socket lifecycle", () => {
           resume: vi.fn(),
         },
       );
+      const nextRetryAt = tunnel.status().nextRetryAt;
+      expect(nextRetryAt).not.toBeNull();
+
+      socket.emit("close", 1006, Buffer.from("late close"));
+
+      expect(tunnel.status().nextRetryAt).toBe(nextRetryAt);
+      await vi.advanceTimersByTimeAsync(nextRetryAt! - Date.now());
+      expect(fakeWebSockets.instances).toHaveLength(2);
+    } finally {
+      tunnel.stop();
+      vi.useRealTimers();
+      await fakeHost.harness.dispose();
+    }
+  });
+
+  it("schedules one retry on heartbeat timeout before close", async () => {
+    vi.useFakeTimers();
+    const { fakeHost, tunnel } = createTunnelFixture();
+
+    try {
+      await tunnel.start();
+      const socket = fakeWebSockets.instances[0]!;
+      socket.emit("open");
+      expect(tunnel.status().state).toBe("connected");
+
+      await vi.advanceTimersByTimeAsync(80_000);
+      await vi.advanceTimersToNextTimerAsync();
+
+      expect(tunnel.status().state).toBe("reconnecting");
       const nextRetryAt = tunnel.status().nextRetryAt;
       expect(nextRetryAt).not.toBeNull();
 
