@@ -386,8 +386,9 @@ Known ACP agents appear when their CLI is installed on the host. bb exposes
 `acp-opencode` when `opencode` is on PATH and can be launched as `opencode acp`,
 `acp-omp` when `omp` (oh-my-pi) is on PATH, `acp-grok` when Grok Build's `grok`
 CLI is on PATH and can be launched as `grok agent stdio`, and
-`acp-hermes-agent` when Hermes' `hermes` CLI is on PATH. `acp-cursor` is always
-listed.
+`acp-hermes-agent` when Hermes' `hermes` CLI is on PATH. `acp-cursor` and
+`acp-junie` are always listed, because bb can install those CLIs itself from
+the provider's page; JetBrains' `junie` is launched as `junie --acp true`.
 
 Add your own agent through the ACP providers plugin's `customAgents` setting,
 which holds a JSON array. In the app it is the multi-line editor on the
@@ -401,12 +402,12 @@ bb plugin config provider-acp set customAgents '[
 
 Each entry needs `id` (lowercase letters, digits and dashes), `displayName`,
 and `command`. bb derives the provider id `acp-<id>`; it never changes once a
-thread has used it. An id bb always lists (`cursor`) is reserved; an id bb
-lists only where the agent is installed (`opencode`, `omp`, `grok`,
-`hermes-agent`) is not, so an entry with that id REPLACES the shipped agent.
-A replacing entry keeps the shipped agent's `nativeSkillRoots` unless it sets
-its own, and bb still lists the roots that agent's host config names (its
-config directory, compat trees, configured paths, plugins) either way.
+thread has used it. The id `cursor` is reserved; every other shipped id
+(`opencode`, `omp`, `grok`, `hermes-agent`, `junie`) is not, so an entry with
+that id REPLACES the shipped agent. A replacing entry keeps the shipped
+agent's `nativeSkillRoots` unless it sets its own, and bb still lists the
+roots that agent's host config names (its config directory, compat trees,
+configured paths, plugins) either way.
 Optional fields: `args`, `env`, `cwd`, `modelCli` (CLI model listing and
 selection), `reasoningCli` (launch-time reasoning flags), `nativeReasoning`
 (ACP `session/set_config_option` reasoning), `nativeSkillRoots` (native skills
@@ -416,7 +417,7 @@ an agent that nests skills or reads them from every ancestor directory),
 `permissionCli` (permission-mode launch flags), `supportsManualCompaction`
 (only if the agent accepts an explicit compaction request — bb hides
 `/compact` otherwise), and `dialect` (the vendor side channels bb reads for
-the agent: `cursor`, `opencode`, `omp`, or `grok`).
+the agent: `cursor`, `opencode`, `omp`, `grok`, or `junie`).
 
 The change applies immediately: the plugin re-registers its providers when the
 setting changes, with no restart and no `config refresh`.
@@ -535,6 +536,7 @@ table lists what the shipped plugins declare and resolve.
 | omp          | The active `~/.omp/.../agent` roots and supported Pi, Agents, Claude, Codex, and OpenCode roots          | `.omp/skills` and the supported compatibility roots from the repository root to the current directory        |
 | Grok Build   | `$GROK_HOME/skills` or `~/.grok/skills`, plus `~/.agents/skills`, `~/.claude/skills`, `~/.cursor/skills` | The same four roots from the repository root to the current directory                                        |
 | Hermes Agent | `$HERMES_HOME/skills` or `~/.hermes/skills`                                                              | None                                                                                                         |
+| Junie        | `~/.junie/skills`, `~/.agents/skills`                                                                    | `.junie/skills` and `.agents/skills` from the repository root to the current directory                       |
 
 OpenCode also uses `$OPENCODE_CONFIG_DIR/skills` when that variable exists.
 Pi and omp use `$PI_CODING_AGENT_DIR` when that variable exists. omp also uses

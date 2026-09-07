@@ -104,6 +104,7 @@ describe("resolveCreateThreadExecutionDefaults", () => {
       "acp-omp",
       "acp-grok",
       "acp-hermes-agent",
+      "acp-junie",
     ]);
     expect(
       resolveCreateThreadExecutionDefaults(userRegistry, {

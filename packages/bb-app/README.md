@@ -152,11 +152,12 @@ bb uses whichever providers you have configured. Common providers:
 | `opencode`     | Install [opencode](https://opencode.ai/) and authenticate per its docs.                                                                                                                   |
 | `grok`         | Install [Grok Build](https://docs.x.ai/build/overview) and authenticate with `grok login` or `XAI_API_KEY`.                                                                               |
 | `hermes-agent` | Install [Hermes Agent](https://hermes-agent.nousresearch.com/docs/getting-started/installation), configure credentials with `hermes model`, then verify ACP with `hermes acp --check`.    |
+| `junie`        | Install [Junie CLI](https://junie.jetbrains.com/docs/junie-cli.html) (`curl -fsSL https://junie.jetbrains.com/install.sh \| bash`; BB can run the install from Settings), then run `junie` once to sign in on the welcome screen. |
 
 BB indexes the documented native skill roots for Codex, Claude Code, Pi,
-Cursor, OpenCode, omp, Grok Build, and Hermes Agent. It includes user roots,
-project roots, and compatibility roots such as `.agents/skills`. These skills
-appear in the selected provider's `/` command menu. The Skills page and
+Cursor, OpenCode, omp, Grok Build, Hermes Agent, and Junie. It includes user
+roots, project roots, and compatibility roots such as `.agents/skills`. These
+skills appear in the selected provider's `/` command menu. The Skills page and
 `bb skill list` show native skills for Claude Code, Codex, and Cursor. BB also
 reads configured Pi, omp, Grok, and Hermes skill directories, plus enabled
 provider plugin skills.

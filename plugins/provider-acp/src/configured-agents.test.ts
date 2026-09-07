@@ -110,6 +110,20 @@ describe("resolveConfiguredAcpAgents", () => {
     expect(resolved.warnings).toEqual([]);
   });
 
+  it("accepts an entry that overrides the always-listed Junie agent", () => {
+    const resolved = resolveConfiguredAcpAgents({
+      settingValue: JSON.stringify([
+        { id: "junie", displayName: "Junie", command: "/opt/junie" },
+      ]),
+      legacyEntries: [],
+      reservedProviderIds: reserved,
+      shippedAgents: KNOWN_ACP_AGENTS,
+    });
+
+    expect(resolved.agents.map((agent) => agent.id)).toEqual(["acp-junie"]);
+    expect(resolved.warnings).toEqual([]);
+  });
+
   it("keeps a legacy entry's native skill roots and declares them", () => {
     const resolved = resolveConfiguredAcpAgents({
       settingValue: "",

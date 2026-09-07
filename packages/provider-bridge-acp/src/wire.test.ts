@@ -151,6 +151,59 @@ describe("acpSessionNewResultSchema", () => {
     expect(parsed.data.configOptions?.[1].category).toBeUndefined();
     expect(parsed.data.configOptions?.[1].options?.[0].name).toBeUndefined();
   });
+
+  it("flattens grouped select options into their values", () => {
+    const parsed = acpSessionNewResultSchema.safeParse({
+      sessionId: "session-1",
+      configOptions: [
+        {
+          type: "select",
+          id: "model",
+          name: "Model",
+          category: "model",
+          currentValue: "v1:12:jetbrains-ai:gpt-5.6-sol",
+          options: [
+            {
+              group: "jetbrains-ai",
+              name: "JetBrains AI",
+              options: [
+                {
+                  value: "v1:12:jetbrains-ai:gpt-5.6-sol",
+                  name: "GPT-5.6-SOL",
+                },
+                { value: "v1:12:jetbrains-ai:grok-4.6", name: "Grok 4.6" },
+              ],
+            },
+            { value: "local/qwen", name: "Qwen" },
+          ],
+        },
+        {
+          type: "select",
+          id: "brave_mode",
+          category: "mode",
+          currentValue: "on",
+          options: [
+            { group: "safety", name: "Safety", options: [{ value: "off" }] },
+            { value: "on", name: "Brave on" },
+          ],
+        },
+      ],
+    });
+
+    expect(parsed.success).toBe(true);
+    if (!parsed.success) {
+      return;
+    }
+    expect(parsed.data.configOptions?.[0].options).toEqual([
+      { value: "v1:12:jetbrains-ai:gpt-5.6-sol", name: "GPT-5.6-SOL" },
+      { value: "v1:12:jetbrains-ai:grok-4.6", name: "Grok 4.6" },
+      { value: "local/qwen", name: "Qwen" },
+    ]);
+    expect(parsed.data.configOptions?.[1].options).toEqual([
+      { value: "off" },
+      { value: "on", name: "Brave on" },
+    ]);
+  });
 });
 
 describe("acpSessionForkResultSchema", () => {

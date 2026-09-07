@@ -28,6 +28,7 @@ const CURSOR_DASHBOARD_URL =
 const CURSOR_KEYCHAIN_ACCOUNT = "cursor-user";
 const CURSOR_ACCESS_TOKEN_SERVICE = "cursor-access-token";
 const CURSOR_INSTALL_SCRIPT_URL = "https://cursor.com/install";
+const JUNIE_INSTALL_SCRIPT_URL = "https://junie.jetbrains.com/install.sh";
 
 function cursorAuthFilePath(): string {
   if (process.platform === "win32") {
@@ -129,10 +130,10 @@ function readAccountEmail(): string | null {
 }
 
 export interface AcpMaintenanceDialect {
-  loginCommand: string;
+  loginCommand?: string;
   installer(): { command: string; args: string[]; displayCommand: string };
-  readAccount(): Promise<{ email: string | null } | null>;
-  readUsage(): Promise<ProviderUsageResult>;
+  readAccount?(): Promise<{ email: string | null } | null>;
+  readUsage?(): Promise<ProviderUsageResult>;
 }
 
 function healthResult(args: {
@@ -175,7 +176,7 @@ export async function getAcpProviderHealth(args: {
     return healthResult({ maintenance, status: "not_installed" });
   }
   const version = await readCliVersion(args.command);
-  if (maintenance === undefined) {
+  if (maintenance?.readAccount === undefined) {
     return healthResult({
       maintenance,
       status: "ready",
@@ -376,14 +377,15 @@ export async function getAcpProviderUsage(args: {
   maintenance: AcpMaintenanceDialect | undefined;
   command: string | null;
 }): Promise<ProviderUsageResult> {
-  if (args.maintenance === undefined) return { supported: false };
+  const maintenance = args.maintenance;
+  if (maintenance?.readUsage === undefined) return { supported: false };
   if (
     args.command === null ||
     (await resolveExecutablePath(args.command)) === null
   ) {
     return { supported: true, usage: { status: "not_installed" } };
   }
-  return args.maintenance.readUsage();
+  return maintenance.readUsage();
 }
 
 export const CURSOR_ACP_MAINTENANCE: AcpMaintenanceDialect = {
@@ -394,6 +396,10 @@ export const CURSOR_ACP_MAINTENANCE: AcpMaintenanceDialect = {
     return accessToken === null ? null : { email: readAccountEmail() };
   },
   readUsage: readCursorUsage,
+};
+
+export const JUNIE_ACP_MAINTENANCE: AcpMaintenanceDialect = {
+  installer: () => downloadedInstallerCommand(JUNIE_INSTALL_SCRIPT_URL),
 };
 
 async function readCursorUsage(): Promise<ProviderUsageResult> {

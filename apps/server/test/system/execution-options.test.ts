@@ -1238,7 +1238,7 @@ describe("resolveSystemExecutionOptions", () => {
         registry.markRegistrationsSettled();
 
         expect((await providersPromise).map((provider) => provider.id)).toEqual(
-          ["codex", "claude-code", "pi", "acp-cursor"],
+          ["codex", "claude-code", "pi", "acp-cursor", "acp-junie"],
         );
       },
     );

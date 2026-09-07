@@ -163,12 +163,14 @@ describe("public provider installation routes", () => {
         "claude-code",
         "pi",
         "acp-cursor",
+        "acp-junie",
       ]);
       expect(Object.values(body).map((status) => status.displayName)).toEqual([
         "Codex",
         "Claude Code",
         "Pi",
         "Cursor",
+        "Junie",
       ]);
       expect(
         responder.requests
@@ -190,7 +192,7 @@ describe("public provider installation routes", () => {
               ? request.command.providerId
               : null,
           ),
-      ).toEqual(["codex", "claude-code", "pi", "acp-cursor"]);
+      ).toEqual(["codex", "claude-code", "pi", "acp-cursor", "acp-junie"]);
     });
   });
 
@@ -225,11 +227,17 @@ describe("public provider installation routes", () => {
 
       expect(response.status).toBe(200);
       const body = (await readJson(response)) as ProviderCliStatusResponse;
-      expect(Object.keys(body)).toEqual(["codex", "pi", "acp-cursor"]);
+      expect(Object.keys(body)).toEqual([
+        "codex",
+        "pi",
+        "acp-cursor",
+        "acp-junie",
+      ]);
       expect(Object.values(body).map((status) => status.displayName)).toEqual([
         "Codex",
         "Pi",
         "Cursor",
+        "Junie",
       ]);
       expect(warn).toHaveBeenCalledWith(
         {

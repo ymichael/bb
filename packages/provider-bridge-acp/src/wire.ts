@@ -258,6 +258,23 @@ const acpConfigOptionSelectOptionSchema = z
   })
   .passthrough();
 
+const acpConfigOptionSelectGroupSchema = z
+  .object({
+    group: z.string(),
+    name: acpOptionalString,
+    options: z.array(acpConfigOptionSelectOptionSchema),
+  })
+  .passthrough();
+
+const acpConfigOptionSelectOptionsSchema = z
+  .array(
+    z.union([
+      acpConfigOptionSelectGroupSchema.transform((group) => group.options),
+      acpConfigOptionSelectOptionSchema.transform((option) => [option]),
+    ]),
+  )
+  .transform((entries) => entries.flat());
+
 const acpConfigOptionSchema = z
   .object({
     id: z.string(),
@@ -265,7 +282,7 @@ const acpConfigOptionSchema = z
     category: acpOptionalString,
     type: z.string(),
     currentValue: acpOptionalString,
-    options: z.array(acpConfigOptionSelectOptionSchema).optional(),
+    options: acpConfigOptionSelectOptionsSchema.optional(),
   })
   .passthrough();
 export type AcpConfigOption = z.infer<typeof acpConfigOptionSchema>;
@@ -340,6 +357,11 @@ function parseAcpConfigOptions(
       ...(Array.isArray(loose.data.options)
         ? {
             options: loose.data.options.flatMap((selectOption) => {
+              const group =
+                acpConfigOptionSelectGroupSchema.safeParse(selectOption);
+              if (group.success) {
+                return group.data.options;
+              }
               const parsed =
                 acpConfigOptionSelectOptionSchema.safeParse(selectOption);
               return parsed.success ? [parsed.data] : [];

@@ -42,6 +42,7 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     signInCommand: "cursor-agent login",
     installUrl: "https://cursor.com/docs/cli/installation",
     dialect: "cursor",
+    reserved: true,
     providerUsage: true,
     providerInstallation: true,
     parameterizedModelPicker: true,
@@ -211,10 +212,29 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     },
     nativeRootsResolver: resolveHermesNativeRoots,
   },
+  {
+    id: "acp-junie",
+    displayName: "Junie",
+    icon: declaredIcon("junie"),
+    installUrl: "https://junie.jetbrains.com/docs/junie-cli.html",
+    dialect: "junie",
+    providerInstallation: true,
+    fork: "none",
+    launch: {
+      displayName: "Junie",
+      command: "junie",
+      args: ["--acp", "true"],
+      env: {},
+      nativeSkillRoots: {
+        user: plainRoots([".junie/skills", ".agents/skills"]),
+        project: ancestorRoots([".junie/skills", ".agents/skills"]),
+      },
+    },
+  },
 ];
 
 export const RESERVED_ACP_PROVIDER_IDS: ReadonlySet<string> = new Set(
-  KNOWN_ACP_AGENTS.filter(
-    (agent) => (agent.visibility ?? "always") === "always",
-  ).map((agent) => agent.id),
+  KNOWN_ACP_AGENTS.filter((agent) => agent.reserved === true).map(
+    (agent) => agent.id,
+  ),
 );

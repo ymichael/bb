@@ -27,7 +27,7 @@ declare const __SITE_ORIGIN__: string;
 const SITE_URL = __SITE_ORIGIN__;
 export const SITE_TITLE = "bb: the IDE that builds itself";
 export const SITE_DESCRIPTION =
-  "bb can control, customize, and automate itself, laying the groundwork for your own software factory. Fully open source and local-first, with Claude Code, Codex, Cursor, Pi, OpenCode, Grok, omp, and Hermes.";
+  "bb can control, customize, and automate itself, laying the groundwork for your own software factory. Fully open source and local-first, with Claude Code, Codex, Cursor, Pi, OpenCode, Grok, omp, Hermes, and Junie.";
 export const OG_DESCRIPTION =
   "bb can control, customize, and automate itself, laying the groundwork for your own software factory.";
 

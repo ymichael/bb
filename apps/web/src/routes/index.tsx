@@ -61,6 +61,7 @@ import {
   CursorIcon,
   GrokIcon,
   HermesAgentIcon,
+  JunieIcon,
   OmpIcon,
   OpenAiIcon,
   OpencodeIcon,
@@ -307,6 +308,7 @@ const PROVIDER_ICONS = [
   GrokIcon,
   OmpIcon,
   HermesAgentIcon,
+  JunieIcon,
 ] as const;
 
 const PROVIDER_ICONS_MOBILE_VISIBLE = 3;
@@ -1718,9 +1720,9 @@ function LandingPage() {
 
       <Band title="The gang's all here" flip visual={<SpawnSidebar />}>
         <p>
-          Claude Code, Codex, Cursor, Pi, OpenCode, Grok, omp, and Hermes all
-          live in bb. Give a task to whichever fits, and have one agent spawn
-          and manage another, each in its own thread.
+          Claude Code, Codex, Cursor, Pi, OpenCode, Grok, omp, Hermes, and Junie
+          all live in bb. Give a task to whichever fits, and have one agent
+          spawn and manage another, each in its own thread.
         </p>
         <p>
           Each runs on your own subscription: the provider plan you already pay

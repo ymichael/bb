@@ -17,7 +17,8 @@
         "opencode": "./icons/opencode.svg",
         "omp": "./icons/omp.svg",
         "grok": "./icons/grok.svg",
-        "hermes-agent": "./icons/hermes-agent.svg"
+        "hermes-agent": "./icons/hermes-agent.svg",
+        "junie": "./icons/junie.svg"
       }
     },
     "server": "./server.ts",

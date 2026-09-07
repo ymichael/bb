@@ -94,13 +94,15 @@ Claude process before its next turn and keeps the conversation.
 Known ACP agents can appear automatically when their CLI is installed on the
 host. For example, opencode, omp, Grok Build's grok CLI, or Hermes' hermes CLI
 on PATH appears as provider acp-opencode, acp-omp, acp-grok, or
-acp-hermes-agent.
+acp-hermes-agent. acp-cursor and acp-junie are listed even when their CLI is
+missing, because bb can install those from the provider's page.
 
 bb indexes the native user and project skill roots for Codex, Claude Code, Pi,
-Cursor, OpenCode, omp, Grok Build, and Hermes Agent. This includes compatibility
-roots such as .agents/skills and .claude/skills when the provider supports them.
-It also includes project ancestor roots for providers that search to the Git
-repository root. Configured Pi, omp, Grok, and Hermes directories are included.
+Cursor, OpenCode, omp, Grok Build, Hermes Agent, and Junie. This includes
+compatibility roots such as .agents/skills and .claude/skills when the provider
+supports them. It also includes project ancestor roots for providers that
+search to the Git repository root. Configured Pi, omp, Grok, and Hermes
+directories are included.
 Enabled provider plugins also contribute skills to the selected provider's `/`
 command menu. `bb skill list` shows native skills for Claude Code, Codex, and
 Cursor.
@@ -135,14 +137,14 @@ Custom ACP agents live in the ACP providers plugin's customAgents setting, a
 JSON array. Set it with bb plugin config provider-acp set customAgents '[...]'.
 Each entry needs id (lowercase letters, digits and dashes), displayName, and
 command. bb derives provider id acp-<id> from the slug id. The id is permanent.
-The id cursor is reserved because bb always lists that agent. The ids opencode,
-omp, grok and hermes-agent are not reserved, so an entry with one of those ids
-replaces the shipped agent. Use args, env, and cwd for the launch, modelCli
-for CLI model listing/selection, reasoningCli for launch-time reasoning flags,
+The id cursor is reserved. The ids opencode, omp, grok, hermes-agent and junie
+are not reserved, so an entry with one of those ids replaces the shipped agent.
+Use args, env, and cwd for the launch, modelCli for CLI model
+listing/selection, reasoningCli for launch-time reasoning flags,
 nativeReasoning for ACP session/set_config_option reasoning, permissionCli for
-permission-mode launch flags, and dialect (cursor, opencode, omp, or grok) for
-the vendor side channels bb reads. Use nativeSkillRoots to add native skills to
-the composer.
+permission-mode launch flags, and dialect (cursor, opencode, omp, grok, or
+junie) for the vendor side channels bb reads. Use nativeSkillRoots to add
+native skills to the composer.
 Give it a user list and a project list. User roots resolve from the target host
 home directory. Project roots resolve from the selected workspace. Each root
 must use a relative path without dot segments. Set supportsManualCompaction to true only

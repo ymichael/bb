@@ -244,6 +244,9 @@ describe("acpProviderDeclaration", () => {
     expect(byId.get("acp-opencode")?.experimental_bridgeOptions).toMatchObject({
       acpDialect: "opencode",
     });
+    expect(byId.get("acp-junie")?.experimental_bridgeOptions).toMatchObject({
+      acpDialect: "junie",
+    });
     expect(
       byId.get("acp-opencode")?.capabilities.supportsManualCompaction,
     ).toBe(true);
@@ -276,6 +279,13 @@ describe("acpProviderDeclaration", () => {
     expect(cursor.experimental_visibility).toBeUndefined();
     expect(cursor.maintenance?.usage).toBe(true);
     expect(cursor.maintenance?.installation).toBe(true);
+
+    const junie = acpProviderDeclaration(
+      KNOWN_ACP_AGENTS.find((agent) => agent.id === "acp-junie")!,
+    );
+    expect(junie.experimental_visibility).toBeUndefined();
+    expect(junie.maintenance?.installation).toBe(true);
+    expect(junie.maintenance?.usage).toBe(false);
   });
 
   it("gives a configured agent honest copy when it names no sign-in command", () => {

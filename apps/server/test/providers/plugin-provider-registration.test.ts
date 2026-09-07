@@ -375,6 +375,11 @@ describe("buildPluginProviderRegistration", () => {
         logoUrl: "/api/v1/system/providers/acp-hermes-agent/logo",
         icon: undefined,
       },
+      {
+        id: "acp-junie",
+        logoUrl: "/api/v1/system/providers/acp-junie/logo",
+        icon: undefined,
+      },
     ]);
   });
 });

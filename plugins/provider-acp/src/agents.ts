@@ -22,6 +22,7 @@ export interface AcpAgentDefinition {
   primaryModels?: readonly string[];
   reasoningProbePriorityModelIds?: readonly string[];
   visibility?: "always" | "installed";
+  reserved?: boolean;
   signInCommand?: string;
   installUrl?: string;
   iconTint?: { light: string; dark: string };

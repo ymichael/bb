@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { CURSOR_ACP_MAINTENANCE, __testing } from "./provider-maintenance.js";
+import {
+  CURSOR_ACP_MAINTENANCE,
+  getAcpProviderUsage,
+  JUNIE_ACP_MAINTENANCE,
+  __testing,
+} from "./provider-maintenance.js";
 
 function cursorMissingInstallationStatus() {
   return {
@@ -94,5 +99,39 @@ describe("ACP provider maintenance", () => {
       available: false,
       message: "opencode install is not available on this host.",
     });
+  });
+
+  it("installs Junie with JetBrains' installer and reports no usage", async () => {
+    const run = __testing.buildProviderInstallationRun(
+      {
+        ...cursorMissingInstallationStatus(),
+        executableName: "junie",
+        installAction: {
+          kind: "install" as const,
+          label: "Install" as const,
+          command: "install Junie",
+        },
+      },
+      {
+        maintenance: JUNIE_ACP_MAINTENANCE,
+        command: "junie",
+        action: "install",
+      },
+    );
+    expect(run).toMatchObject({
+      available: true,
+      command: { command: "sh" },
+      verification: { kind: "installed" },
+    });
+    expect(run.available ? run.command.displayCommand : "").toContain(
+      "https://junie.jetbrains.com/install.sh",
+    );
+
+    expect(
+      await getAcpProviderUsage({
+        maintenance: JUNIE_ACP_MAINTENANCE,
+        command: "junie",
+      }),
+    ).toEqual({ supported: false });
   });
 });

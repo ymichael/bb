@@ -1,7 +1,7 @@
 # ACP providers
 
 First-party plugin for ACP (Agent Client Protocol) agent providers: Cursor,
-opencode, omp, Grok Build and Hermes Agent.
+opencode, omp, Grok Build, Hermes Agent and Junie.
 
 The plugin has no bridge of its own. Every agent it registers runs on the
 published ACP kit, `@get-bb/plugin-sdk/provider-bridge/acp`, which its
