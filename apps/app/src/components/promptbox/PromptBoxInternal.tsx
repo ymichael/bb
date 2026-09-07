@@ -101,6 +101,7 @@ import {
   type PromptDraftObserver,
 } from "./editor/prompt-decoration-extension";
 import type { ComposerTextEffectSource } from "@/lib/composer-text-effects";
+import { promptEditorClipboardSerializer } from "./editor/prompt-editor-clipboard";
 import { promptEditorExtensions } from "./editor/prompt-editor-extensions";
 import {
   promptCommandResourceFromSuggestion,
@@ -1615,6 +1616,7 @@ export function PromptBoxInternal({
           ...(id ? { id } : {}),
           role: "textbox",
         },
+        clipboardSerializer: promptEditorClipboardSerializer,
         clipboardTextSerializer: (slice, view) =>
           promptEditorClipboardTextFromSlice(slice, view.state.schema),
         handleDOMEvents: {

@@ -433,6 +433,29 @@ function pasteClipboard({
   });
 }
 
+function createMutableClipboardData() {
+  const values = new Map<string, string>();
+  return {
+    values,
+    clipboardData: {
+      items: [],
+      clearData(type?: string) {
+        if (type) {
+          values.delete(type);
+        } else {
+          values.clear();
+        }
+      },
+      getData(type: string) {
+        return values.get(type) ?? "";
+      },
+      setData(type: string, value: string) {
+        values.set(type, value);
+      },
+    },
+  };
+}
+
 function mockPointerCoarse(matches: boolean): () => void {
   const originalMatchMedia = window.matchMedia;
   window.matchMedia = vi.fn().mockImplementation((query: string) => ({
@@ -3407,6 +3430,73 @@ describe("PromptBoxInternal prompt actions", () => {
 
     await waitFor(() => expect(latestValue(changes)).toBe("> quoted"));
     expect(getPromptEditorElement().querySelector("blockquote")).not.toBeNull();
+  });
+
+  it("preserves mentions and line breaks when copying between composers", async () => {
+    const serializedMention = "@thread:thr_1";
+    const initialValue = `first\nask ${serializedMention}\nthird`;
+    const mentionStart = initialValue.indexOf(serializedMention);
+    const initialMentions: PromptTextMention[] = [
+      {
+        start: mentionStart,
+        end: mentionStart + serializedMention.length,
+        resource: {
+          kind: "thread",
+          threadId: "thr_1",
+          projectId: "proj_1",
+          label: "Thread one",
+        },
+      },
+    ];
+    const source = renderPromptBox(initialValue, {
+      initialMentionRanges: initialMentions,
+    });
+
+    await focusPromptEnd(source.promptBoxRef);
+    await waitFor(() =>
+      expect(
+        getPromptEditorElement().querySelectorAll(".prompt-mention-pill"),
+      ).toHaveLength(1),
+    );
+
+    const { clipboardData, values } = createMutableClipboardData();
+    const sourceEditor = getPromptEditorElement();
+    fireEvent.keyDown(sourceEditor, {
+      key: "a",
+      code: "KeyA",
+      ctrlKey: true,
+    });
+    fireEvent.copy(sourceEditor, { clipboardData });
+
+    const plainText = values.get("text/plain") ?? "";
+    const html = values.get("text/html") ?? "";
+    const copiedDocument = new DOMParser().parseFromString(html, "text/html");
+    expect(plainText).toBe(initialValue);
+    expect(
+      [...copiedDocument.body.children].map((element) => element.tagName),
+    ).toEqual(["DIV"]);
+    expect(copiedDocument.body.querySelectorAll("br")).toHaveLength(2);
+    expect(copiedDocument.body.querySelector("p")).toBeNull();
+    expect(
+      copiedDocument
+        .querySelector("[data-prompt-mention]")
+        ?.getAttribute("data-prompt-mention-serialized-text"),
+    ).toBe(serializedMention);
+
+    cleanup();
+    const destination = renderPromptBox("");
+    await focusPromptEnd(destination.promptBoxRef);
+    pasteClipboard({ html, plainText });
+
+    await waitFor(() =>
+      expect(latestValue(destination.changes)).toBe(initialValue),
+    );
+    expect(latestChange(destination.changes)?.mentions).toEqual(
+      initialMentions,
+    );
+    expect(
+      getPromptEditorElement().querySelectorAll(".prompt-mention-pill"),
+    ).toHaveLength(1);
   });
 
   it("keeps multiple pasted plugin references as distinct pills", async () => {
