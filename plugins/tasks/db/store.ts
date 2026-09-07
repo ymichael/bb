@@ -910,12 +910,20 @@ export function createTasksStore(db: PluginDatabase) {
     }
     const search = filters.search?.trim();
     if (search) {
-      parameters.search = `%${escapeLike(search)}%`;
-      clauses.push(`(
-        t.title LIKE @search ESCAPE '\\'
-        OR t.description LIKE @search ESCAPE '\\'
-        OR (p.prefix || '-' || t.number) LIKE @search ESCAPE '\\'
-      )`);
+      clauses.push(
+        search
+          .split(/\s+/)
+          .map((term, index) => {
+            const name = `search${index}`;
+            parameters[name] = `%${escapeLike(term)}%`;
+            return `(
+              t.title LIKE @${name} ESCAPE '\\'
+              OR t.description LIKE @${name} ESCAPE '\\'
+              OR (p.prefix || '-' || t.number) LIKE @${name} ESCAPE '\\'
+            )`;
+          })
+          .join(" AND "),
+      );
     }
 
     const limit = filters.limit ?? TASKS_PAGE_DEFAULT_LIMIT;

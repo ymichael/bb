@@ -325,6 +325,35 @@ describe("tasks storage", () => {
     }
   });
 
+  it("finds all search terms without requiring their input order", async () => {
+    const { harness, store } = setup();
+    try {
+      const project = createProject(store, "SRC");
+      const matching = store.createTask({
+        projectId: project.id,
+        title: "Deployment readiness review",
+      });
+      store.createTask({
+        projectId: project.id,
+        title: "Deployment schedule",
+      });
+      store.createTask({
+        projectId: project.id,
+        title: "Readiness checklist",
+      });
+
+      const matchingKeys = (search: string) =>
+        store
+          .listTasks({ projectId: project.id, search })
+          .map((task) => task.key);
+
+      expect(matchingKeys("deployment readiness")).toEqual([matching.key]);
+      expect(matchingKeys("readiness deployment")).toEqual([matching.key]);
+    } finally {
+      await harness.dispose();
+    }
+  });
+
   it("traverses deterministic filtered and sorted keyset pages without gaps", async () => {
     const { harness, store } = setup();
     try {
