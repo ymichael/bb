@@ -252,9 +252,8 @@ export type {
 } from "@bb/provider-bridge-protocol/bridge-kit";
 
 /**
- * A bridge that supervises child processes builds their environment with this
- * one allowlist function rather than handing them the daemon's own env
- * (incident rule: ambient env leaks).
+ * Removes inherited `NODE_ENV` and `BB_*` names while preserving every other
+ * defined value; callers may overlay child-specific bb variables afterward.
  */
 export { sanitizeInheritedChildProcessEnv } from "@bb/process-utils";
 

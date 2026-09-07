@@ -530,9 +530,16 @@ bridge-internal and invisible to the runtime. Bridges that spawn children
 own the exit-race lessons the runtime learned (#1402): finalize on `close`
 not `exit` with a bounded grace, verify currency in stream callbacks, and
 never let a descendant holding an inherited pipe inject into a fresh
-session. The bridge's own environment is constructed by the runtime from an
-allowlist; bridges construct their children's environments the same way and
-must not leak their own inherited env downward (#1366, #1545).
+session. Before spawning a bridge, the runtime drops inherited `NODE_ENV` and
+every `BB_*` name (#1366), pins `PATH` to the login-shell value, adds
+`BB_PROVIDER_BRIDGE_RECORD_DIR` in record mode and `ELECTRON_RUN_AS_NODE` when
+needed, and re-adds each nonempty value named by the provider declaration's
+validated `env.passthrough` list. This is a denylist, not a general inherited-
+environment barrier: ordinary provider auth, proxy, and platform variables
+remain, as does the Volta guard in #1545. Provider child builders retain that
+ordinary inherited environment, with per-session overrides where applicable;
+`withoutBridgeRuntimeEnv` removes the bridge-only `ELECTRON_RUN_AS_NODE` and
+`BB_PROVIDER_BRIDGE_RECORD_DIR`, and individual bridges may sanitize further.
 
 ## Record mode
 
@@ -561,9 +568,8 @@ answer. Nothing buffers: each line is appended as it crosses.
 
 The daemon forwards the variable to the bridges it spawns and the runtime
 appends the provider id, so a daemon started with it writes
-`<dir>/<providerId>/<threadId>/…`. `withoutBridgeRuntimeEnv` and the
-`BB_*` allowlist both strip the variable from provider children, so a
-recorded provider never records itself.
+`<dir>/<providerId>/<threadId>/…`. `withoutBridgeRuntimeEnv` strips the
+variable from provider children, so a recorded provider never records itself.
 
 Recordings are the input of the parity harness
 (`packages/provider-bridge-protocol/src/testing/parity.ts`): the provider
