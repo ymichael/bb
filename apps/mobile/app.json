@@ -16,6 +16,10 @@
       },
       "bundleIdentifier": "app.getbb.mobile",
       "supportsTablet": true,
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/ios-icon-dark.png"
+      },
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "bb connects to a bb server on your local network or tailnet.",
         "NSCameraUsageDescription": "bb attaches photos you take to your prompts.",
