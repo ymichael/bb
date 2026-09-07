@@ -68,8 +68,6 @@ describe("selectActiveBrowserTab", () => {
 
     const selected = selectActiveBrowserTab(tabs, "tab-b");
 
-    // The lazy guarantee at the selection level: of many persisted tabs the
-    // deck mounts exactly one — the active tab — and never an inactive one.
     expect(selected).toBe(tabs[1]);
     expect(selected).not.toBe(tabs[0]);
     expect(selected).not.toBe(tabs[2]);
@@ -118,12 +116,6 @@ describe("buildBrowserTabIdSet", () => {
 
 describe("restoring a thread with persisted browser tabs", () => {
   it("drives one real attach + show through the coordinator for the restored active tab", () => {
-    // NB: this does not mount the deck (RTL is unavailable in this harness) —
-    // the deck's "mount only the active tab" guarantee is covered by the
-    // selectActiveBrowserTab tests above. Here we drive attach + show for the
-    // tab selectActiveBrowserTab returns through the REAL visibility coordinator
-    // and assert the nothing-visible-yet case: exactly one setVisible(true),
-    // bounds synced once, and no spurious hide.
     const browserTabs = [
       makeBrowserTab("tab-a", "https://a.example"),
       makeBrowserTab("tab-b", "https://b.example"),
@@ -140,6 +132,7 @@ describe("restoring a thread with persisted browser tabs", () => {
 
     let syncBoundsCalls = 0;
     api.attach({
+      threadId: "thread-1",
       tabId: activeBrowserTab.id,
       url: activeBrowserTab.url,
       bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -150,16 +143,11 @@ describe("restoring a thread with persisted browser tabs", () => {
     });
 
     expect(attachments).toEqual([{ tabId: "tab-b", url: "https://b.example" }]);
-    // First show from a clean coordinator: bounds synced, the tab shown, and no
-    // hide (there was no previously-visible view to hide). This assertion fails
-    // if show stops syncing bounds before showing or emits a spurious hide.
     expect(syncBoundsCalls).toBe(1);
     expect(visibility).toEqual([{ tabId: "tab-b", visible: true }]);
   });
 
   it("hides the previously-shown tab before showing the next when the user switches", () => {
-    // The coordinator's core invariant: switching the visible tab hides the old
-    // native view BEFORE showing the new one, regardless of mount/effect order.
     const { api, visibility } = createRecordingApi();
     const coordinator = createBrowserViewVisibilityCoordinator(api);
 

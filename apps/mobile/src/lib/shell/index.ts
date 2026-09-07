@@ -1,5 +1,3 @@
-// The WebView shell: URL work, screen-state rules, deep links, and the local
-// preference. Pure modules only; the RN glue lives in src/screens/webview.
 export {
   buildShellUrl,
   isExternallyOpenable,

@@ -38,7 +38,6 @@ export function PluginSignalLogo({
   );
 }
 
-/** The single status/action slot shared by installed plugin rows and galleries. */
 export function PluginRowSignalView({
   signal,
   onUpdateClick,
@@ -51,15 +50,13 @@ export function PluginRowSignalView({
   statusPresentation?: "standalone" | "badge";
 }) {
   if (signal.kind === "update") {
-    // The row only ever says what is offered — a readable version when there
-    // is one — and the dialog carries the (shortened) hash detail. The control
-    // is an icon key like the status one beside it; the tooltip and the
-    // accessible name carry the words.
     const readableVersion = isReadablePluginVersion(signal.version)
       ? signal.version
       : null;
     const updateDescription =
-      readableVersion === null ? "Update available" : `Update to ${readableVersion}`;
+      readableVersion === null
+        ? "Update available"
+        : `Update to ${readableVersion}`;
     return (
       <TooltipProvider delayDuration={250}>
         <Tooltip>

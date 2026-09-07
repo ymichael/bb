@@ -127,8 +127,6 @@ describe("desktop version feed schema", () => {
   });
 
   it("keeps the macOS feed file name unsuffixed so shipped builds keep updating", () => {
-    // Both platforms publish into one release tag, so the names must differ,
-    // and macOS must keep the name its released builds already request.
     expect(createBbDesktopVersionFeedFileName("macos")).toBe(
       "desktop-version.json",
     );

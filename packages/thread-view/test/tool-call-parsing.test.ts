@@ -52,9 +52,7 @@ describe("tool-call shell parsing", () => {
       'echo "==="\n' +
       "git show main:.gitignore 2>/dev/null | grep -E 'legacy-audit|timeline-replay' || echo \"(no matches)\"";
 
-    expect(
-      parseShellCommandIntents(command),
-    ).toEqual([
+    expect(parseShellCommandIntents(command)).toEqual([
       {
         type: "search",
         cmd: command,

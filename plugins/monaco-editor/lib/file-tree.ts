@@ -1,9 +1,3 @@
-/**
- * Turning the server's flat path list into something a tree view can render.
- * Kept free of React so the nesting, filtering, and reveal rules can be read
- * (and reasoned about) on their own.
- */
-
 export type EntryKind = "file" | "directory";
 
 export interface FlatEntry {
@@ -12,19 +6,12 @@ export interface FlatEntry {
 }
 
 export interface TreeNode {
-  /** Root-relative, `/`-separated. Unique; used as the React key. */
   path: string;
   name: string;
   kind: EntryKind;
-  /** Empty for files. Directories first, then case-insensitive by name. */
   children: TreeNode[];
 }
 
-/**
- * Nests flat entries. Intermediate directories are synthesised when missing —
- * a truncated listing can contain `a/b/c.ts` with no entry for `a/b`, and
- * dropping that file would misrepresent the tree as smaller than it is.
- */
 export function buildTree(entries: readonly FlatEntry[]): TreeNode[] {
   const root: TreeNode = {
     path: "",
@@ -38,7 +25,9 @@ export function buildTree(entries: readonly FlatEntry[]): TreeNode[] {
     const existing = byPath.get(path);
     if (existing !== undefined) return existing;
     const separator = path.lastIndexOf("/");
-    const parent = directoryAt(separator === -1 ? "" : path.slice(0, separator));
+    const parent = directoryAt(
+      separator === -1 ? "" : path.slice(0, separator),
+    );
     const node: TreeNode = {
       path,
       name: path.slice(separator + 1),
@@ -59,7 +48,9 @@ export function buildTree(entries: readonly FlatEntry[]): TreeNode[] {
     }
     if (byPath.has(path)) continue;
     const separator = path.lastIndexOf("/");
-    const parent = directoryAt(separator === -1 ? "" : path.slice(0, separator));
+    const parent = directoryAt(
+      separator === -1 ? "" : path.slice(0, separator),
+    );
     const node: TreeNode = {
       path,
       name: path.slice(separator + 1),
@@ -88,7 +79,6 @@ function sortRecursively(node: TreeNode): void {
   for (const child of node.children) sortRecursively(child);
 }
 
-/** Every directory containing `path`, nearest last: `a`, `a/b` for `a/b/c.ts`. */
 export function ancestorsOf(path: string): string[] {
   const segments = normalize(path).split("/");
   segments.pop();
@@ -103,17 +93,14 @@ export function ancestorsOf(path: string): string[] {
 
 export interface FilteredTree {
   nodes: TreeNode[];
-  /** Directories to force open so every match is visible without clicking. */
   expand: Set<string>;
   matchCount: number;
 }
 
-/**
- * Filters to files whose path contains `query`, keeping the directories that
- * lead to them. Matching is on the whole relative path, not just the file
- * name, so "components/ui" narrows by directory as readily as by file.
- */
-export function filterTree(nodes: readonly TreeNode[], query: string): FilteredTree {
+export function filterTree(
+  nodes: readonly TreeNode[],
+  query: string,
+): FilteredTree {
   const needle = query.trim().toLowerCase();
   if (needle === "") {
     return { nodes: [...nodes], expand: new Set(), matchCount: 0 };

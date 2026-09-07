@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, rm, symlink, utimes, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  rm,
+  symlink,
+  utimes,
+  writeFile,
+} from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { experimental_nativeRootsResolveOutputSchema } from "@get-bb/plugin-sdk/host";
@@ -25,19 +32,29 @@ afterEach(async () => {
   await rm(tempRoot, { recursive: true, force: true });
 });
 
-async function writeFileEnsuringDir(filePath: string, content: string): Promise<void> {
+async function writeFileEnsuringDir(
+  filePath: string,
+  content: string,
+): Promise<void> {
   await mkdir(path.dirname(filePath), { recursive: true });
   await writeFile(filePath, content, "utf8");
 }
 
-async function writePluginManifest(pluginRoot: string, manifest: unknown): Promise<void> {
+async function writePluginManifest(
+  pluginRoot: string,
+  manifest: unknown,
+): Promise<void> {
   await writeFileEnsuringDir(
     path.join(pluginRoot, ".codex-plugin", "plugin.json"),
     JSON.stringify(manifest, null, 2),
   );
 }
 
-function cachedPluginRoot(marketplace: string, plugin: string, version: string): string {
+function cachedPluginRoot(
+  marketplace: string,
+  plugin: string,
+  version: string,
+): string {
   return path.join(codexHome, "plugins", "cache", marketplace, plugin, version);
 }
 
@@ -46,17 +63,20 @@ async function resolveSkills(
 ): Promise<CodexResolvedSkillRoot[]> {
   const answer = await resolveCodexNativeRoots({ homeDir, env });
   expect(answer.commands).toBeUndefined();
-  // The contract rejects relative paths, dot segments, and bad prefixes; a
-  // rejected answer yields no roots at all, so every case must pass it.
-  expect(experimental_nativeRootsResolveOutputSchema.safeParse(answer).success).toBe(true);
+  expect(
+    experimental_nativeRootsResolveOutputSchema.safeParse(answer).success,
+  ).toBe(true);
   return answer.skills ?? [];
 }
 
-/** The two roots every answer starts with, in order. */
 function homeRoots(home: string): CodexResolvedSkillRoot[] {
   return [
     { path: path.join(home, "skills"), origin: "user", shape: "skills" },
-    { path: path.join(home, "skills", ".system"), origin: "user", shape: "skills" },
+    {
+      path: path.join(home, "skills", ".system"),
+      origin: "user",
+      shape: "skills",
+    },
   ];
 }
 
@@ -64,19 +84,26 @@ describe("resolveCodexNativeRoots", () => {
   it("answers from ~/.codex when CODEX_HOME is unset or blank", async () => {
     const defaultHome = path.join(homeDir, ".codex");
     expect(await resolveSkills({})).toEqual(homeRoots(defaultHome));
-    expect(await resolveSkills({ CODEX_HOME: "   " })).toEqual(homeRoots(defaultHome));
+    expect(await resolveSkills({ CODEX_HOME: "   " })).toEqual(
+      homeRoots(defaultHome),
+    );
   });
 
   it("follows a moved CODEX_HOME and normalizes its dot segments", async () => {
     expect(await resolveSkills()).toEqual(homeRoots(codexHome));
-    const dotted = path.join(tempRoot, "elsewhere", "..", "codex-home") + path.sep;
-    expect(await resolveSkills({ CODEX_HOME: dotted })).toEqual(homeRoots(codexHome));
+    const dotted =
+      path.join(tempRoot, "elsewhere", "..", "codex-home") + path.sep;
+    expect(await resolveSkills({ CODEX_HOME: dotted })).toEqual(
+      homeRoots(codexHome),
+    );
   });
 
   it("lists an enabled plugin's default and manifest skill roots with its name prefix", async () => {
     await writeFileEnsuringDir(
       path.join(codexHome, "config.toml"),
-      ['[plugins."disabled-plugin@test-market"]', "enabled = false", ""].join("\n"),
+      ['[plugins."disabled-plugin@test-market"]', "enabled = false", ""].join(
+        "\n",
+      ),
     );
 
     const pluginRoot = cachedPluginRoot("test-market", "local-plugin", "1.0.0");
@@ -104,37 +131,65 @@ describe("resolveCodexNativeRoots", () => {
       path.join(pluginRoot, "single", "SKILL.md"),
       "---\ndescription: One skill directory\n---\n",
     );
-    await writeFileEnsuringDir(path.join(pluginRoot, "notes.md"), "not a skill\n");
     await writeFileEnsuringDir(
-      path.join(codexHome, "plugins", "cache", "test-market", "local-plugin", "outside", "SKILL.md"),
+      path.join(pluginRoot, "notes.md"),
+      "not a skill\n",
+    );
+    await writeFileEnsuringDir(
+      path.join(
+        codexHome,
+        "plugins",
+        "cache",
+        "test-market",
+        "local-plugin",
+        "outside",
+        "SKILL.md",
+      ),
       "---\ndescription: Outside the plugin\n---\n",
     );
 
-    const linkedSkillTarget = path.join(tempRoot, "codex-linked-plugin-skill.md");
+    const linkedSkillTarget = path.join(
+      tempRoot,
+      "codex-linked-plugin-skill.md",
+    );
     await writeFileEnsuringDir(
       linkedSkillTarget,
       "---\nname: linked-file-skill\ndescription: Linked Codex file skill\n---\n",
     );
     await mkdir(path.join(pluginRoot, "linked-skill"), { recursive: true });
-    await symlink(linkedSkillTarget, path.join(pluginRoot, "linked-skill", "SKILL.md"));
+    await symlink(
+      linkedSkillTarget,
+      path.join(pluginRoot, "linked-skill", "SKILL.md"),
+    );
 
-    const linkedSkillsTarget = path.join(tempRoot, "codex-linked-plugin-skills");
+    const linkedSkillsTarget = path.join(
+      tempRoot,
+      "codex-linked-plugin-skills",
+    );
     await writeFileEnsuringDir(
       path.join(linkedSkillsTarget, "nested-skill", "SKILL.md"),
       "---\ndescription: Linked Codex directory skill\n---\n",
     );
     await symlink(linkedSkillsTarget, path.join(pluginRoot, "linked-skills"));
 
-    const disabledPluginRoot = cachedPluginRoot("test-market", "disabled-plugin", "1.0.0");
+    const disabledPluginRoot = cachedPluginRoot(
+      "test-market",
+      "disabled-plugin",
+      "1.0.0",
+    );
     await writePluginManifest(disabledPluginRoot, { name: "disabled-plugin" });
     await writeFileEnsuringDir(
       path.join(disabledPluginRoot, "skills", "hidden", "SKILL.md"),
       "---\ndescription: Hidden\n---\n",
     );
 
-    // A cache directory without a manifest is not a plugin.
     await writeFileEnsuringDir(
-      path.join(cachedPluginRoot("test-market", "not-a-plugin", "1.0.0"), "skills", "x", "SKILL.md"),
+      path.join(
+        cachedPluginRoot("test-market", "not-a-plugin", "1.0.0"),
+        "skills",
+        "x",
+        "SKILL.md",
+      ),
       "---\ndescription: No manifest\n---\n",
     );
 
@@ -142,7 +197,6 @@ describe("resolveCodexNativeRoots", () => {
     const namePrefix = "local-plugin:";
     expect(skills).toEqual([
       ...homeRoots(codexHome),
-      // A root SKILL.md without a frontmatter name lists as `local-plugin:local-plugin`.
       {
         path: path.join(pluginRoot, "SKILL.md"),
         origin: "user",
@@ -150,15 +204,30 @@ describe("resolveCodexNativeRoots", () => {
         shape: "skill-file",
         fallbackName: "local-plugin",
       },
-      { path: path.join(pluginRoot, "skills"), origin: "user", namePrefix, shape: "skills" },
+      {
+        path: path.join(pluginRoot, "skills"),
+        origin: "user",
+        namePrefix,
+        shape: "skills",
+      },
       {
         path: path.join(pluginRoot, "linked-skill", "SKILL.md"),
         origin: "user",
         namePrefix,
         shape: "skill-file",
       },
-      { path: path.join(pluginRoot, "linked-skills"), origin: "user", namePrefix, shape: "skills" },
-      { path: path.join(pluginRoot, "single"), origin: "user", namePrefix, shape: "skill" },
+      {
+        path: path.join(pluginRoot, "linked-skills"),
+        origin: "user",
+        namePrefix,
+        shape: "skills",
+      },
+      {
+        path: path.join(pluginRoot, "single"),
+        origin: "user",
+        namePrefix,
+        shape: "skill",
+      },
     ]);
   });
 
@@ -169,26 +238,39 @@ describe("resolveCodexNativeRoots", () => {
 
     const skills = await resolveSkills();
     expect(skills.slice(2)).toEqual([
-      { path: path.join(pluginRoot, "skills"), origin: "user", namePrefix: "dir-named:", shape: "skills" },
+      {
+        path: path.join(pluginRoot, "skills"),
+        origin: "user",
+        namePrefix: "dir-named:",
+        shape: "skills",
+      },
     ]);
   });
 
   it("reads the most recently modified cached install that has a manifest", async () => {
     const olderRoot = cachedPluginRoot("market", "versioned", "1.0.0");
     const newerRoot = cachedPluginRoot("market", "versioned", "1.1.0");
-    const newestWithoutManifest = cachedPluginRoot("market", "versioned", "2.0.0");
+    const newestWithoutManifest = cachedPluginRoot(
+      "market",
+      "versioned",
+      "2.0.0",
+    );
     for (const root of [olderRoot, newerRoot]) {
       await writePluginManifest(root, { name: "versioned" });
       await mkdir(path.join(root, "skills"), { recursive: true });
     }
-    await mkdir(path.join(newestWithoutManifest, "skills"), { recursive: true });
+    await mkdir(path.join(newestWithoutManifest, "skills"), {
+      recursive: true,
+    });
     const base = Date.now() / 1000;
     await utimes(olderRoot, base - 300, base - 300);
     await utimes(newerRoot, base - 200, base - 200);
     await utimes(newestWithoutManifest, base - 100, base - 100);
 
     const skills = await resolveSkills();
-    expect(skills.slice(2).map((root) => root.path)).toEqual([path.join(newerRoot, "skills")]);
+    expect(skills.slice(2).map((root) => root.path)).toEqual([
+      path.join(newerRoot, "skills"),
+    ]);
   });
 
   it("orders plugins by marketplace then plugin name and skips marketplace files", async () => {
@@ -201,15 +283,25 @@ describe("resolveCodexNativeRoots", () => {
       await writePluginManifest(root, { name: plugin });
       await mkdir(path.join(root, "skills"), { recursive: true });
     }
-    await writeFileEnsuringDir(path.join(codexHome, "plugins", "cache", "README.md"), "");
+    await writeFileEnsuringDir(
+      path.join(codexHome, "plugins", "cache", "README.md"),
+      "",
+    );
 
     const skills = await resolveSkills();
-    expect(skills.slice(2).map((root) => root.namePrefix)).toEqual(["beta:", "zulu:", "alpha:"]);
+    expect(skills.slice(2).map((root) => root.namePrefix)).toEqual([
+      "beta:",
+      "zulu:",
+      "alpha:",
+    ]);
   });
 
   it("skips a plugin whose manifest is not JSON or names a non-string", async () => {
     const brokenRoot = cachedPluginRoot("market", "broken", "1.0.0");
-    await writeFileEnsuringDir(path.join(brokenRoot, ".codex-plugin", "plugin.json"), "{ not json");
+    await writeFileEnsuringDir(
+      path.join(brokenRoot, ".codex-plugin", "plugin.json"),
+      "{ not json",
+    );
     await mkdir(path.join(brokenRoot, "skills"), { recursive: true });
     const wrongTypeRoot = cachedPluginRoot("market", "wrong-type", "1.0.0");
     await writePluginManifest(wrongTypeRoot, { name: 42 });
@@ -277,7 +369,6 @@ describe("resolveCodexNativeRoots contract filtering", () => {
       ["spaced", { name: "bad name" }],
       ["scoped", { name: "@scope/x" }],
       ["long", { name: "a".repeat(70) }],
-      // No manifest name: the cache directory name is the name.
       [".hidden", {}],
     ];
     for (const [directory, manifest] of plugins) {

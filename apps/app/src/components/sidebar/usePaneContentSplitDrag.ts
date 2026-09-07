@@ -1,4 +1,8 @@
-import { useCallback, type PointerEvent as ReactPointerEvent } from "react";
+import {
+  useCallback,
+  useMemo,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import { useStore } from "jotai";
 import { useNavigate } from "react-router-dom";
 import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
@@ -44,33 +48,57 @@ function routeForContent(content: PaneContent): string {
   });
 }
 
-/** Prototype drag/cmd-click source for non-thread pages. */
-export function usePaneContentSplitDrag({
-  content,
-  enabled,
-  label,
-}: {
+export function usePaneContentSplitDrag(options: PaneContentSplitOptions) {
+  const actions = usePaneContentSplitActions();
+  const openInSplit = useCallback(
+    () => actions.openInSplit(options),
+    [actions, options],
+  );
+  const onPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLElement>) =>
+      actions.beginDrag(event, options),
+    [actions, options],
+  );
+
+  return {
+    onPointerDown:
+      options.enabled && !actions.isCompact ? onPointerDown : undefined,
+    openInSplit,
+  };
+}
+
+interface PaneContentSplitOptions {
   content: PaneContent;
   enabled: boolean;
   label: string;
-}) {
+  onNavigate?: () => void;
+}
+
+export function usePaneContentSplitActions() {
   const store = useStore();
   const navigate = useNavigate();
   const isCompact = useIsCompactViewport();
 
-  const openInSplit = useCallback(() => {
-    openPaneContentInSplit({
-      store,
-      navigate,
-      content,
-      route: routeForContent(content),
-      enabled: enabled && !isCompact,
-    });
-  }, [content, enabled, isCompact, navigate, store]);
+  const openInSplit = useCallback(
+    ({ content, enabled, onNavigate }: PaneContentSplitOptions) => {
+      onNavigate?.();
+      openPaneContentInSplit({
+        store,
+        navigate,
+        content,
+        route: routeForContent(content),
+        enabled: enabled && !isCompact,
+      });
+    },
+    [isCompact, navigate, store],
+  );
 
   const onPointerDown = useCallback(
-    (event: ReactPointerEvent<HTMLElement>) => {
-      if (!enabled || event.button !== 0) return;
+    (
+      event: ReactPointerEvent<HTMLElement>,
+      { content, enabled, label, onNavigate }: PaneContentSplitOptions,
+    ) => {
+      if (!enabled || isCompact || event.button !== 0) return;
       const rowEl = event.currentTarget;
       const sidebarEl = rowEl.closest(SIDEBAR_SELECTOR);
       const sidebarRightEdge = (sidebarEl ?? rowEl).getBoundingClientRect()
@@ -112,6 +140,7 @@ export function usePaneContentSplitDrag({
                 ? replacePaneContent(layout, target.paneId, content)
                 : splitPane(layout, target.paneId, target.zone, content);
           if (next !== layout) store.set(splitLayoutAtom, next);
+          onNavigate?.();
           navigate(
             routeForContent(content),
             existing !== null ? { replace: true } : undefined,
@@ -119,13 +148,13 @@ export function usePaneContentSplitDrag({
         },
       });
     },
-    [content, enabled, label, navigate, store],
+    [isCompact, navigate, store],
   );
 
-  return {
-    onPointerDown: enabled && !isCompact ? onPointerDown : undefined,
-    openInSplit,
-  };
+  return useMemo(
+    () => ({ beginDrag: onPointerDown, isCompact, openInSplit }),
+    [isCompact, onPointerDown, openInSplit],
+  );
 }
 
 function singlePaneFallback(

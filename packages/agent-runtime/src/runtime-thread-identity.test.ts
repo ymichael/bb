@@ -100,9 +100,6 @@ describe("RuntimeThreadIdentityRegistry", () => {
       }),
     ).toBe("thread-3");
 
-    // …but never for an id that names another live thread: that is a bridge
-    // reporting on a session it does not own, and the single-thread fallback
-    // would file its work under this process's unrelated thread.
     expect(
       registry.resolveProviderEventThreadId({
         providerState: singleThreadState,

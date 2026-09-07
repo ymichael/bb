@@ -41,7 +41,6 @@ describe("experimental_filterResolvedNativeRoots", () => {
       },
     ]);
     expect(warn).toHaveBeenCalledTimes(1);
-    // What the filter keeps is what the contract's strict boundary accepts.
     expect(() =>
       experimental_nativeRootsResolveOutputSchema.parse(result.answer),
     ).not.toThrow();
@@ -63,7 +62,6 @@ describe("experimental_filterResolvedNativeRoots", () => {
       expect.stringContaining('dropped the skills root "/p/spaced"'),
       expect.stringContaining("kept the first"),
     ]);
-    // A fresh set (a new worker) warns again.
     experimental_filterResolvedNativeRoots(answer, { warn, warned: new Set() });
     expect(warn).toHaveBeenCalledTimes(4);
   });
@@ -94,8 +92,6 @@ describe("experimental_filterResolvedNativeRoots", () => {
           },
         ],
         commands: [
-          // A well-formed marker on a commands root is dropped silently
-          // (the side carries none); a malformed one refuses the root.
           {
             path: "/p/commands-marker",
             origin: "user",
@@ -164,7 +160,6 @@ describe("experimental_filterResolvedNativeRoots", () => {
     expect(warn).toHaveBeenLastCalledWith(
       'resolveNativeRoots: dropped the commands root "/p/skill": A commands root needs a command shape',
     );
-    // What passed the filter passes the server boundary unchanged.
     const parsed = experimental_nativeRootsResolveOutputSchema.safeParse(
       result.answer,
     );
@@ -172,13 +167,6 @@ describe("experimental_filterResolvedNativeRoots", () => {
   });
 
   it("names the reason classes a root with more than one defect reports", () => {
-    // The reason is a return value a resolver's own test may pin. A malformed
-    // field (a relative path, a bad prefix, a malformed marker) is refused by
-    // the input parse before the cross-field rules are judged, so the reason
-    // names the field clause(s) only; a malformed path beside a wrong-typed
-    // option lists both clauses; an empty string carries the refinement's
-    // clause after the length clause; and a commands root's marker is dropped
-    // when well-formed and refuses the root when malformed.
     const PATH_REASON =
       "path: Absolute roots must be absolute paths without dot segments";
     const MARKER_REASON =
@@ -250,7 +238,6 @@ describe("experimental_filterResolvedNativeRoots", () => {
 
     const result = experimental_filterResolvedNativeRoots(
       {
-        // The refused root in front does not count toward the cap.
         skills: [{ path: "relative", origin: "user" }, ...roots(300, "s")],
         commands: roots(PROVIDER_RESOLVED_NATIVE_ROOTS_MAX, "c"),
       },
@@ -315,8 +302,6 @@ describe("experimental_nativeRootsResolveOutputSchema", () => {
         },
       ],
     });
-    // Only a well-formed marker is dropped there; a malformed one is refused
-    // on either side.
     expect(
       experimental_nativeRootsResolveOutputSchema.safeParse({
         commands: [

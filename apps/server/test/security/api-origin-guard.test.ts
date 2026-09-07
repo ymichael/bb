@@ -6,14 +6,6 @@ import {
   type RunningTestServer,
 } from "../helpers/test-app.js";
 
-// CORS decides whether a browser may read a response; it never stops the
-// request. A `no-cors` POST with a simple content type skips the preflight and
-// the handler runs. `/api/v1/*` now rejects a foreign browser origin outright.
-//
-// These tests pin the callers that must keep working, because the guard's whole
-// risk is locking someone out: bb Connect through the tunnel, curl, the `bb`
-// CLI, and the SDK.
-
 let server: RunningTestServer | null = null;
 
 afterEach(async () => {
@@ -41,7 +33,6 @@ async function statusFor(
   return response.status;
 }
 
-/** `fetch` drops a `Host` override, so proxy shapes need the raw client. */
 function rawStatus(
   baseUrl: string,
   headers: Record<string, string>,
@@ -64,8 +55,6 @@ describe("/api/v1 browser origin guard", () => {
   it("passes callers that send no Origin: curl, the bb CLI, and the SDK", async () => {
     server = await startTestServer();
 
-    // Node's `fetch` sends no `Origin` on a same-origin-less request, exactly
-    // as curl and the CLI/SDK HTTP clients do.
     expect(await statusFor(server.baseUrl)).toBe(200);
     expect(
       await statusFor(server.baseUrl, {
@@ -75,8 +64,6 @@ describe("/api/v1 browser origin guard", () => {
       }),
     ).not.toBe(403);
 
-    // A mutation with a non-JSON body must NOT be rejected for its content
-    // type: `requireJsonForMutation` stays off so `curl -d` keeps working.
     expect(
       await statusFor(server.baseUrl, {
         method: "POST",
@@ -85,7 +72,6 @@ describe("/api/v1 browser origin guard", () => {
       }),
     ).not.toBe(415);
 
-    // The SDK over its own HTTP client, end to end.
     const sdk = createNodeBbSdk({ baseUrl: server.baseUrl });
     await expect(sdk.threads.list()).resolves.toBeDefined();
   });
@@ -109,8 +95,6 @@ describe("/api/v1 browser origin guard", () => {
   it("rejects a sandboxed iframe's opaque origin", async () => {
     server = await startTestServer();
 
-    // A `sandbox="allow-scripts"` frame (the HTML/file previews) has an opaque
-    // origin and sends the literal `null`, which is not a bb app origin.
     expect(
       await statusFor(server.baseUrl, {
         method: "POST",
@@ -126,11 +110,6 @@ describe("/api/v1 browser origin guard", () => {
     expect(await statusFor(server.baseUrl, { headers: { origin } })).toBe(200);
   });
 
-  // The bb Connect tunnel forwards a remote request to the loopback server
-  // after rewriting `Origin` from the public connect origin to the loopback
-  // origin (`headersForLoopbackRequest` in @bb/tunnel-client) and dropping the
-  // public `Host`. That rewrite is what keeps a remote user working; this test
-  // is the canary for it.
   it("accepts the origin the connect tunnel rewrites to", async () => {
     server = await startTestServer();
     const loopbackOrigin = new URL(server.baseUrl).origin;
@@ -147,9 +126,6 @@ describe("/api/v1 browser origin guard", () => {
     ).not.toBe(403);
   });
 
-  // If the tunnel ever stops rewriting `Origin`, a remote user is locked out of
-  // their own server. This asserts the shape of that failure so the cause is
-  // obvious rather than mysterious.
   it("rejects an unrewritten public connect origin, documenting the tunnel dependency", async () => {
     server = await startTestServer();
 
@@ -160,17 +136,10 @@ describe("/api/v1 browser origin guard", () => {
     ).toBe(403);
   });
 
-  // bb is commonly served over a LAN address or Tailscale Serve, which the
-  // server cannot enumerate into an allowlist. `isTrustedOrigin` admits those
-  // by matching the origin against the request `Host` (or `X-Forwarded-Host`
-  // with `X-Forwarded-Proto`). `fetch` silently drops a `Host` override, so
-  // these go over `http.request` — a `fetch`-based version of this test passes
-  // for the wrong reason.
   it("accepts bb served over a LAN address or Tailscale Serve", async () => {
     server = await startTestServer();
     const port = new URL(server.baseUrl).port;
 
-    // LAN: the reverse proxy passes Host through.
     expect(
       await rawStatus(server.baseUrl, {
         origin: `http://192.168.1.5:${port}`,
@@ -178,8 +147,6 @@ describe("/api/v1 browser origin guard", () => {
       }),
     ).toBe(200);
 
-    // Tailscale Serve: TLS terminated upstream, Host preserved. bb supports
-    // this shape deliberately (see the plugin-wire suite), so it must pass.
     expect(
       await rawStatus(server.baseUrl, {
         origin: "https://box.ts.net",
@@ -188,7 +155,6 @@ describe("/api/v1 browser origin guard", () => {
       }),
     ).toBe(200);
 
-    // A LAN deployment behind a proxy that rewrites Host but forwards it.
     expect(
       await rawStatus(server.baseUrl, {
         origin: `http://192.168.1.5:${port}`,
@@ -197,7 +163,6 @@ describe("/api/v1 browser origin guard", () => {
       }),
     ).toBe(200);
 
-    // IPv6 literals are addresses too.
     expect(
       await rawStatus(server.baseUrl, {
         origin: `http://[::1]:${port}`,
@@ -206,8 +171,6 @@ describe("/api/v1 browser origin guard", () => {
     ).toBe(200);
   });
 
-  // A rewriting proxy must forward the original authority. bb already imposes
-  // this on its plugin routes, which have used the same check all along.
   it("requires a rewriting proxy to send X-Forwarded-Host", async () => {
     server = await startTestServer();
     const port = new URL(server.baseUrl).port;
@@ -220,8 +183,6 @@ describe("/api/v1 browser origin guard", () => {
     ).toBe(403);
   });
 
-  // A deployment that serves the app from a non-loopback domain configures
-  // `appUrl`; that origin must be trusted.
   it("accepts a configured app origin", async () => {
     server = await startTestServer({ appUrl: "https://app.example.com" });
 

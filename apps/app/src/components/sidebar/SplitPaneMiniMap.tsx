@@ -12,7 +12,6 @@ interface SplitPaneMiniMapProps {
   isWorking?: boolean;
 }
 
-// Position a normalized [0,1] value onto the padded glyph canvas.
 function offset(value: number): number {
   return GLYPH_PADDING + value * INNER;
 }
@@ -21,16 +20,10 @@ function extent(value: number): number {
   return value * INNER;
 }
 
-// SVG strokes are centered on a rect's edge. Inset outlined slots by half the
-// stroke so their visible bounds match the filled slot bounds exactly.
 function outlineInset(isFilled: boolean): number {
   return isFilled ? 0 : OUTLINE_WIDTH / 2;
 }
 
-/**
- * Tiny outline of the current pane arrangement, with the sidebar item's slot
- * filled and the focused pane's slot in the accent token.
- */
 export function SplitPaneMiniMap({
   slots,
   label,

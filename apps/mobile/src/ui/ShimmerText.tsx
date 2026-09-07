@@ -10,17 +10,10 @@ import Animated, {
 import { Text, type TextProps } from "./Text";
 
 export interface ShimmerTextProps extends TextProps {
-  /** Animate (default true); false renders plain text with no animation. */
   active?: boolean;
-  /** Style of the animated wrapper (flex sizing inside a row). */
   containerStyle?: StyleProp<ViewStyle>;
 }
 
-/**
- * Text with the web `animate-shine` treatment for in-progress labels
- * ("Working…", the active bundle verb): a slow opacity breathe on a wrapper
- * view instead of the CSS gradient sweep, which RN text cannot mask cheaply.
- */
 export function ShimmerText({
   active = true,
   containerStyle,

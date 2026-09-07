@@ -34,6 +34,7 @@ import {
   ThreadRow,
   type ThreadRowOptions,
 } from "@/components/sidebar/ThreadRow";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 export default {
   title: "plugins/Composer actions",
@@ -52,18 +53,9 @@ function registrations(
   >,
   scopes: ComposerView["scope"]["kind"][] = ["new-thread", "thread"],
 ): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
+  return makePluginRegistrationSet({
     composerCustomizations: [{ id: "story-actions", scopes, actions }],
-    pendingInteractions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    messageActions: [],
-  };
+  });
 }
 
 function StoryPluginRegistration({

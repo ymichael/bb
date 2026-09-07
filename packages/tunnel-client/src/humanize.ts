@@ -1,8 +1,3 @@
-/**
- * Turn a raw socket error into a human line for the reconnecting card:
- * "can't reach getbb.app — connection refused". Falls back to the raw
- * message for unrecognized failures rather than inventing a cause.
- */
 export function humanizeTransportError(error: Error, host: string): string {
   const code = (error as NodeJS.ErrnoException).code;
   let reason: string;

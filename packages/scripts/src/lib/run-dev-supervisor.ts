@@ -405,8 +405,6 @@ export async function runDevSupervisorWithRuntime(
     }
 
     if (restartRequested) {
-      // Manual restarts represent fresh operator intent, even if they arrive
-      // while we are already backing off after a crash.
       restartRequested = false;
       unexpectedRestartAttempt = 0;
     }

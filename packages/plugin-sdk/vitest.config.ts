@@ -12,7 +12,6 @@ export default defineWorkspaceTestConfig({
       include: [
         "src/**/*.test.ts",
         "src/**/*.test.tsx",
-        // Build/release scripts are plain .mjs and live outside src.
         "scripts/**/*.test.mjs",
       ],
     }),

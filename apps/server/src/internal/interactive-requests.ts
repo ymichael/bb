@@ -39,7 +39,6 @@ function pendingInteractionBlockerLabel(
     return "user question";
   }
   if (isPluginExtensionInteractionRequestPayload(interaction.payload)) {
-    // A plugin form, named by the plugin that renders it.
     return `${parseExtensionKind(interaction.payload.kind).pluginId} request`;
   }
   if (!isApprovalPendingInteractionPayload(interaction.payload)) {
@@ -75,10 +74,6 @@ function truncateChildThreadBlockerSummary(summary: string): string {
   return `${summary.slice(0, retainedLength).trimEnd()}${CHILD_THREAD_BLOCKER_SUMMARY_TRUNCATION_MARKER}`;
 }
 
-/**
- * A plugin form contributes no detail lines (its data is the plugin's to
- * render), so its title stands in, and the summary still names the blocker.
- */
 function pluginFormTitleLines(interaction: PendingInteraction): string[] {
   const { payload } = interaction;
   return isApprovalPendingInteractionPayload(payload) ||
@@ -113,8 +108,6 @@ function requestChildThreadNeedsAttentionNotification(
   args: RequestChildThreadNeedsAttentionNotificationArgs,
 ): void {
   const childThread = getThread(deps.db, args.childThreadId);
-  // Forks / side chats are user-initiated branches the user interacts with
-  // directly, so a needs-attention prompt must not notify their parent.
   if (!childThread || !isParentNotifiableChildThread(childThread)) {
     return;
   }
@@ -167,9 +160,6 @@ export function registerInternalInteractiveRequestRoutes(
         );
       }
 
-      // Daemons must flush provider turn events before every interactive
-      // registration attempt. This precondition keeps the server from
-      // accepting turn-scoped interaction state before turn/started exists.
       const turnStarted = hasStoredTurnStarted(deps.db, {
         threadId: payload.interaction.threadId,
         turnId: payload.interaction.turnId,

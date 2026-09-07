@@ -1,4 +1,3 @@
-/* shadcn/ui-derived */
 import * as React from "react";
 import * as ContextMenuPrimitive from "@radix-ui/react-context-menu";
 
@@ -77,8 +76,6 @@ type ContextMenuSeparatorProps = React.ComponentPropsWithoutRef<
 
 type ContextMenuShortcutProps = React.HTMLAttributes<HTMLSpanElement>;
 
-// Sticky application chrome can reach z-60 (for example sidebar group labels).
-// Context menus portal to the document root and must paint above those tiers.
 const CONTEXT_MENU_LAYER_CLASS = "z-[70]";
 
 const ContextMenu = ContextMenuPrimitive.Root;
@@ -135,8 +132,6 @@ const ContextMenuSubContent = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <ContextMenuPrimitive.SubContent
     ref={ref}
-    // Sub menus portal beside the root content, not inside it — stamp them
-    // too so plugin CSS reaches sub-menu items (see portal-scope.ts).
     {...usePortalScopeProps()}
     className={cn(
       CONTEXT_MENU_LAYER_CLASS,
@@ -155,8 +150,6 @@ const ContextMenuContent = React.forwardRef<
   <ContextMenuPrimitive.Portal>
     <ContextMenuPrimitive.Content
       ref={ref}
-      // Portaled outside every plugin mount; re-attach the plugin CSS scope
-      // when rendered from a plugin slot (see portal-scope.ts).
       {...usePortalScopeProps()}
       className={cn(
         CONTEXT_MENU_LAYER_CLASS,

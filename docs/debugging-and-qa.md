@@ -2,6 +2,7 @@
 
 - `pnpm dev` prints the active frontend URL, server API URL, host daemon port, data dir, and logs dir. Do not assume fixed dev ports.
 - `pnpm start:worktree` builds production artifacts and serves the optimized app bundle from the checkout-specific dev server URL, while keeping the same dev data directory and deterministic server/host-daemon ports. It has no Vite dev server or hot reload.
+- `pnpm start:worktree-remote` is the trusted-network variant of `pnpm start:worktree`; it binds that server to all IPv4 interfaces.
 - The packaged app defaults to server/frontend `:38886`, host daemon `:38887`, data dir `~/.bb/`, and logs under `~/.bb/logs/`.
 - Entity IDs in URLs (`proj_*`, `thr_*`) are primary keys. Query them directly against the active data dir: `sqlite3 <data>/bb.db "SELECT * FROM threads WHERE id = 'thr_xxx';"`.
 - API routes are under `/api/v1/`, for example `GET /api/v1/threads/:id`.
@@ -12,7 +13,7 @@
 
 Use `scripts/bb-dev-app` when validating changes in the desktop dev app or helping QA from this checkout:
 
-- `pnpm dev:status` runs `scripts/bb-dev-app status` to print the active branch, dev URLs, data dir, and logs.
+- `pnpm dev:status` runs `scripts/bb-dev-app status` to print the active branch, Node runtime, dev URLs, data dir, and logs.
 - `scripts/bb-dev-app current` restarts the dev server on the current branch.
 - `scripts/bb-dev-app main` fetches `origin/main`, fast-forwards `main`, and launches the dev server from this checkout.
 - `scripts/bb-dev-app branch <branch>` switches to a local branch, or creates it from `origin/<branch>`, then launches the dev server.
@@ -20,6 +21,8 @@ Use `scripts/bb-dev-app` when validating changes in the desktop dev app or helpi
 - `scripts/bb-dev-app logs dev` and `scripts/bb-dev-app logs desktop` follow logs.
 
 By default the launcher starts only the dev server (web frontend, server, host daemon) and prints the URL without opening a browser. Pass `--open` to open the browser after startup. Pass `--desktop` (e.g. `scripts/bb-dev-app current --desktop`) to also launch the Electron desktop shell — only do this when the user is testing a desktop-only change.
+
+The launcher uses the Node executable from the caller's `PATH`. It does not select another installed Node version. The `.nvmrc` file pins the primary development runtime to Node 22.19.0. Node 24 and Node 26 remain compatibility targets. Desktop development requires Node 22.19 or newer in the Node 22 release line.
 
 A bb connect shared-port URL is a different browser origin from localhost. If
 QA through that URL needs the browser-local host daemon, restart the dev app
@@ -44,6 +47,84 @@ Test agents with:
 eval "$(scripts/bb-dev-app env)"
 pnpm bb:dev thread spawn --project proj_personal --provider codex --permission-mode accept-edits --title "Smoke test" --prompt "Reply only with ok." --json
 ```
+
+## Desktop Browser CDP Prototype
+
+Run the isolated Electron compatibility fixture through Turbo:
+
+```bash
+pnpm exec turbo run smoke:browser-cdp --filter=@bb/desktop > /tmp/browser-cdp-smoke.log 2>&1
+```
+
+The harness currently requires Linux x64, `xvfb-run`, and network access to
+GitHub releases. It downloads checksum-pinned DevBrowser 1.0.0-rc.2 and
+agent-browser 0.36.0 into a fresh temporary directory, bundles the fixture,
+and drives real `WebContentsView` tabs through the production CDP bridge and
+native adapter. It uses a local fixture website and a separate Electron
+profile, without starting a BB core or reading an existing BB store.
+
+The command prints its artifact directory, including screenshots, protocol
+method traces, and the result summary. Connection credentials are redacted
+from the diagnostic output. Desktop startup now registers the native broker;
+`bb browser` and `bb.sdk.experimental_desktopBrowsers` expose its public API.
+This fixture also exercises service-created hidden automation tabs and leases.
+The fixture verifies simultaneous control of a hidden thread and another
+thread, in addition to both clients’ main-page workflows. It verifies trusted
+snapshot-reference clicks in same-origin and nested iframes, scrolling,
+selector clicks in a cross-origin iframe with a native child CDP session,
+and pointer input in a hidden thread’s iframe. Site isolation is enabled
+for the fixture. Unmodified RC2 omits cross-origin iframe contents from
+snapshots; use the local-build mode below for the implemented cross-origin
+ref support. Popup control remains untested.
+
+To validate a modified DevBrowser build, run:
+
+```bash
+pnpm exec turbo run smoke:browser-cdp --filter=@bb/desktop -- --dev-browser /absolute/path/to/dev-browser > /tmp/browser-cdp-local-smoke.log 2>&1
+```
+
+The `--dev-browser` option copies that binary into the artifact directory,
+records its SHA256 and local-build provenance, and adds required cross-origin
+snapshot-ref tests. These reject old refs after same-URL reloads, origin
+changes, frame removal, and parent navigation, even after a fresh snapshot
+has allocated new refs. It checks both the stale-ref error and absence of
+click side effects. Frame origin changes are driven through the parent
+iframe’s `src`: Puppeteer’s `Frame.goto()` can lose its session on a renderer
+swap, including in ordinary Chrome. The default command continues to test the unmodified
+release. Run the task with `-- --help` for usage.
+
+The native adapter uses one viewport capture before pointer input following
+attachment or navigation, so input does not race the renderer’s readiness.
+Concurrent pointer commands share that capture and preserve their order.
+Attachment enables Chromium focus emulation and temporarily disables background
+throttling, restoring the original throttling state on detach. While a CDP
+screenshot is pending, bounded native captures request frames without revealing
+the view; they stop at completion or a five-second deadline. The original CDP
+screenshot parameters are preserved.
+The image is discarded locally; pending input is rejected if navigation
+or a replacement controller invalidates it. A failed capture can be retried,
+and detaching one virtual session cancels its pending input while other
+sessions remain usable.
+
+After library cleanup and writing the result, the runner allows five seconds
+for Electron to quit. If it remains alive, the runner terminates its fixture
+process group and records `forcedExit: true`. A successful smoke command with
+that flag proves the listed browser checks, not graceful Electron shutdown.
+
+## Desktop Browser Broker Integration
+
+```bash
+pnpm exec turbo run smoke:browser-broker --filter=@bb/desktop -- --dev-browser /absolute/path/to/dev-browser > /tmp/browser-broker-smoke.log 2>&1
+```
+
+This isolated fixture uses an in-memory migrated test server, the actual SDK
+and CLI, an authenticated host broker, the desktop broker client, and real
+Electron tabs. The test harness supplies the server-to-host RPC responder;
+it does not start a full enrolled daemon or prove remote-machine transport.
+It verifies private connection-file permissions, ownership, browser input,
+capture, revocation, and connection generations. The default downloads the
+checksum-pinned release; the optional binary path records local provenance.
+No existing BB store or browser profile is used.
 
 ## Record Provider Bridge Traffic
 
@@ -218,7 +299,7 @@ worktree-specific local origin serves the dashboard at `bb.localhost` and
 routes `<handle>.bb.localhost` through the Connect worker. Email/password auth
 is enabled only for this loopback workflow; production remains GitHub-only.
 `pnpm dev` automatically sets `BB_DEV_CONNECT_BASE_URL` to that worktree's
-local Cloud origin. While the bb is unpaired, Extensions → Plugins → Connect
+local Cloud origin. While the bb is unpaired, Settings → Installed plugins → Connect
 therefore opens the local dashboard and a pasted code redeems locally. An
 explicit `bb connect --server ...` or `--base-url ...` still wins, so the dev bb
 can still pair with getbb.app.
@@ -240,3 +321,13 @@ literals, regenerate the baseline with `--write` and commit it so the reduction
 is recorded. `--list` prints every hit. When the baseline reaches zero, delete
 it and the guard. This is guardrail G1 of the provider-plugin migration
 (the provider-plugin API design (docs/provider-plugin-api.md, added by the v3 contract PR; overview at https://get-bb.github.io/reports/design/provider-plugin-api.html)).
+
+## Linux AppImage Node runtime
+
+The AppImage launcher probes user namespaces and injects `--no-sandbox` when
+they are unavailable. Electron running as Node rejects that Chromium flag.
+The owned runtime supplies it after Node's `--` argument separator: AppRun sees
+the explicit flag and skips injection, while Node treats it as a script
+argument. The bridge subprocess receives only its script path. The AppImage
+lifecycle smoke exercises this launch and verifies that its runtime mount
+survives closing the GUI.

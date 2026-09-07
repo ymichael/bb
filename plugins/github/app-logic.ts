@@ -53,9 +53,6 @@ export function routeToSubPath(route: Route): string {
   }
 }
 
-// GitHub-style qualifiers parsed and matched client-side:
-// is:open, is:closed, is:merged, assignee:<login>, assignee:@me,
-// author:<login>, label:<name>, repo:<owner/name>, no:assignee, no:label.
 interface ParsedQuery {
   states: string[];
   assignees: string[];
@@ -96,7 +93,6 @@ export function parseQuery(query: string): ParsedQuery {
     const idx = token.indexOf(":");
     const key = idx > 0 ? token.slice(0, idx).toLowerCase() : "";
     const value = idx > 0 ? unquote(token.slice(idx + 1)) : "";
-    // A dangling "key:" (still being typed) filters nothing.
     if (idx > 0 && value.length === 0) continue;
     if (key === "is" || key === "state") {
       parsed.states.push(
@@ -167,7 +163,6 @@ export type SuggestionIcon =
   | { kind: "avatar"; login: string };
 
 export interface Suggestion {
-  /** Replaces the token being typed. */
   insert: string;
   label: string;
   hint?: string;

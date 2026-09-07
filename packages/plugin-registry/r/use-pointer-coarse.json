@@ -1,0 +1,18 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry-item.json",
+  "name": "use-pointer-coarse",
+  "type": "registry:hook",
+  "title": "use-pointer-coarse",
+  "description": "BB hook \"use-pointer-coarse\" — vendored from the BB app's own source (version-matched to this BB release).",
+  "registryDependencies": [
+    "@bb/use-media-query"
+  ],
+  "files": [
+    {
+      "path": "registry/components/ui/hooks/use-pointer-coarse.ts",
+      "content": "import { useMediaQuery } from \"./use-media-query.js\";\n\nexport const POINTER_COARSE_QUERY = \"(pointer: coarse)\";\n\nexport function usePointerCoarse(): boolean {\n  return useMediaQuery(POINTER_COARSE_QUERY);\n}\n",
+      "type": "registry:hook",
+      "target": "components/ui/hooks/use-pointer-coarse.ts"
+    }
+  ]
+}

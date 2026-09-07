@@ -1,11 +1,5 @@
 import { useTheme } from "@/theme";
 
-/*
- * Fills for the Settings `IconBadge`s. Blue / green / orange / red come
- * from the palette tokens so a custom palette (Nord, Dracula) keeps its
- * accent; the rest are the iOS system colors Apple's Settings uses, fixed
- * per mode because no token carries them.
- */
 const SYSTEM_BADGE_COLORS = {
   light: {
     gray: "#8e8e93",
@@ -41,7 +35,6 @@ export interface BadgeColors {
   github: string;
 }
 
-/** The badge fills for the current palette and mode. */
 export function useBadgeColors(): BadgeColors {
   const { tokens, mode } = useTheme();
   return {

@@ -22,13 +22,11 @@ describe("createShellPreferenceStore", () => {
     const store = createShellPreferenceStore(fakeStorage());
     store.setLastPath("p1", "/threads/thr_1?tab=diff");
     expect(store.getLastPath("p1")).toBe("/threads/thr_1?tab=diff");
-    // A profile the phone has never opened has no remembered path.
     expect(store.getLastPath("p2")).toBeNull();
   });
 
   it("refuses a path that could send the next load somewhere else", () => {
     const store = createShellPreferenceStore(fakeStorage());
-    // Protocol-relative: `//evil.example.com/` would leave the server.
     store.setLastPath("p1", "//evil.example.com/");
     expect(store.getLastPath("p1")).toBeNull();
     store.setLastPath("p2", "no-leading-slash");
@@ -38,7 +36,6 @@ describe("createShellPreferenceStore", () => {
   });
 
   it("ignores a stored path that no longer passes the check", () => {
-    // The value could have been written by an older build, or edited.
     const storage = fakeStorage();
     storage.map.set(lastShellPathStorageKey("p1"), "//evil.example.com/");
     expect(createShellPreferenceStore(storage).getLastPath("p1")).toBeNull();

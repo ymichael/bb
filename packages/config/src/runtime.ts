@@ -304,11 +304,6 @@ export function resolvePortFromEnv(args: ResolvePortFromEnvArgs): number {
   });
 }
 
-/**
- * Remove context that bb injects into an agent shell for one specific thread.
- * Long-lived server and daemon processes must never adopt that identity or the
- * thread-specific storage directory as process-wide configuration.
- */
 export function stripThreadContextEnv(
   baseEnv: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {

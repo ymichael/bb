@@ -56,7 +56,6 @@ function parseInline(
       tokens.push({
         kind: "link",
         href,
-        // No nested links, so a stray `[` inside the label stays literal.
         children: parseInline(
           text.slice(tokenStart + 1, labelEnd),
           allowStrong,

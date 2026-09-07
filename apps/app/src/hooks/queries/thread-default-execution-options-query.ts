@@ -30,9 +30,6 @@ async function fetchThreadDefaultExecutionOptions(
     threadId,
     signal,
   });
-  // Remember a real resolution so the next mount of this thread paints it
-  // immediately. Null means the server could not resolve options; there is
-  // nothing worth replaying then.
   if (options !== null) {
     writeCachedThreadExecutionOptions(
       threadExecutionOptionsCacheKey(threadId),
@@ -60,11 +57,6 @@ export function useThreadDefaultExecutionOptions(
     refetchOnMount: options?.refetchOnMount ?? true,
     ...REALTIME_OWNED_NO_FOCUS_QUERY_POLICY,
     staleTime: options?.staleTime,
-    // Composers read model/reasoning/permission defaults from this query, so
-    // a full page load otherwise paints neutral defaults for a beat and then
-    // snaps to the thread's real settings. Replay the last resolution as
-    // placeholder data; consumers keep submission gated on `isPlaceholderData`
-    // so nothing runs on a stale replay.
     placeholderData: () =>
       id
         ? (readCachedThreadExecutionOptions(

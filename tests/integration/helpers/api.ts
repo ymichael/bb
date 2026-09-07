@@ -319,8 +319,6 @@ export async function getEnvironmentDiffPatch(
   environmentId: string,
   paths: string[],
 ): Promise<EnvironmentDiffPatchResponse> {
-  // The patch route takes the domain diff target in its body (POST), unlike
-  // the flat `target` query string the GET diff routes use.
   const response = await api.environments[":id"].diff.patch.$post({
     param: { id: environmentId },
     json: { target: { type: "uncommitted" }, paths },

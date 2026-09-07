@@ -13,6 +13,7 @@ import {
   BUILT_IN_REPLACEMENT_PROVIDER,
 } from "@/lib/plugin-replacement-preference";
 import { SidebarThreadListSetting } from "./SidebarThreadListSetting";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 afterEach(() => {
   cleanup();
@@ -22,22 +23,18 @@ afterEach(() => {
 
 describe("SidebarThreadListSetting", () => {
   it("defaults to automatic and lets the user pin BB's list", async () => {
-    setPluginSlotRegistrations("inbox", {
-      homepageSections: [],
-      settingsSections: [],
-      navPanels: [],
-      threadPanelActions: [],
-      sidebarFooterActions: [],
-      threadLists: [
-        {
-          id: "inbox",
-          title: "Inbox",
-          component: () => null,
-        },
-      ],
-      fileOpeners: [],
-      messageDirectives: [],
-    });
+    setPluginSlotRegistrations(
+      "inbox",
+      makePluginRegistrationSet({
+        threadLists: [
+          {
+            id: "inbox",
+            title: "Inbox",
+            component: () => null,
+          },
+        ],
+      }),
+    );
     const store = createStore();
     render(
       <JotaiProvider store={store}>

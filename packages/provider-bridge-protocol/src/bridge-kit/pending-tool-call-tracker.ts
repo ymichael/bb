@@ -8,9 +8,7 @@ import {
 
 export interface BridgeToolCallResult {
   content: string;
-  /** Ordered provider result blocks; absent on local transport failures. */
   contentBlocks?: BridgeToolCallContent[];
-  /** Absent on the failure paths below, which have no image to report. */
   images?: BridgeToolCallImage[];
   isError?: boolean;
 }
@@ -23,38 +21,19 @@ interface PendingToolCall {
 export interface ForwardBridgeToolCallArgs {
   arguments: Record<string, unknown>;
   providerThreadId: string;
-  /**
-   * The session the pending call belongs to. `resolvePendingToolCalls`
-   * error-resolves by scope identity, so a bridge passes its own session
-   * object and settles that session's calls on close/replace without touching
-   * calls minted by a successor session under the same thread id.
-   */
   scope: object;
   threadId: string;
   toolName: string;
 }
 
 export interface PendingToolCallTracker {
-  /**
-   * Mints an `item/tool/call` JSON-RPC request toward the runtime and returns
-   * a promise settled by the matching response (or by
-   * `resolvePendingToolCalls`). Never rejects: failures resolve as
-   * `isError: true` results.
-   */
   forwardToolCall: (
     args: ForwardBridgeToolCallArgs,
   ) => Promise<BridgeToolCallResult>;
-  /** Returns true when the response settled a pending tool call. */
   handleToolCallResponse: (response: BridgeJsonRpcResponse) => boolean;
-  /** Error-resolves every pending call minted under `scope`. */
   resolvePendingToolCalls: (scope: object, message: string) => void;
 }
 
-/**
- * Tracks the bridge's outgoing tool-call requests: mints request ids, sends
- * the `item/tool/call` envelope, and matches responses back to their waiting
- * promise via `decodeToolCallResponsePayload`.
- */
 export function createPendingToolCallTracker(options: {
   sendToolCall: (request: BridgeToolCallRequest) => void;
 }): PendingToolCallTracker {
@@ -82,8 +61,6 @@ export function createPendingToolCallTracker(options: {
             },
           });
         } catch (error) {
-          // A throwing sender would otherwise reject the promise (breaking
-          // the never-rejects contract) and strand the pending entry.
           pendingToolCalls.delete(requestId);
           resolve({
             content: error instanceof Error ? error.message : String(error),

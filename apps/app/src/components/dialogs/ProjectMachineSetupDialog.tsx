@@ -29,8 +29,6 @@ import { getMutationErrorMessage } from "@/lib/mutation-errors";
 export interface ProjectMachineSetupDialogTarget {
   projectId: string;
   projectName: string;
-  /** The project's git remote anchor. Null (non-git project) hides the clone
-   * option — only "use an existing folder" remains, without radio chrome. */
   gitRemoteUrl: string | null;
   hostId: string;
   hostName: string;
@@ -44,16 +42,9 @@ export interface ProjectMachineSetupCompletion {
 interface ProjectMachineSetupDialogProps {
   target: ProjectMachineSetupDialogTarget | null;
   onOpenChange: (open: boolean) => void;
-  /** Fires after the source is created (source queries already invalidated).
-   * The caller closes the dialog and moves the composer onto the machine. */
   onComplete: (completion: ProjectMachineSetupCompletion) => void;
 }
 
-/**
- * Guided one-time "Set up <project> on <machine>" flow (multi-machine plan
- * §4.2, Mockup B): clone from the project remote onto the target daemon, or
- * point at a checkout that already exists there.
- */
 export function ProjectMachineSetupDialog({
   target,
   onOpenChange,
@@ -61,8 +52,6 @@ export function ProjectMachineSetupDialog({
 }: ProjectMachineSetupDialogProps) {
   const addSource = useAddProjectSource();
   const targetKey = target ? `${target.projectId}:${target.hostId}` : null;
-  // The mutation outlives the keyed content so the dialog can refuse to
-  // dismiss mid-clone; clear stale results when the target changes.
   const resetAddSource = addSource.reset;
   useEffect(() => {
     resetAddSource();
@@ -71,8 +60,6 @@ export function ProjectMachineSetupDialog({
     <Dialog
       open={target !== null}
       onOpenChange={(open) => {
-        // A clone in flight keeps the dialog open — it reports progress and
-        // its completion moves the composer onto the machine.
         if (!open && addSource.isPending) return;
         onOpenChange(open);
       }}
@@ -111,7 +98,6 @@ function ProjectMachineSetupDialogContent({
   const [option, setOption] = useState<SetupOption>(
     hasRemote ? "clone" : "folder",
   );
-  // Null means "use the host's default destination"; set once the user edits.
   const [customClonePath, setCustomClonePath] = useState<string | null>(null);
   const [isEditingClonePath, setIsEditingClonePath] = useState(false);
   const [clonePathDraft, setClonePathDraft] = useState("");
@@ -400,9 +386,7 @@ function SetupOptionCard({
           selected ? "border-primary" : "border-muted-foreground",
         )}
       >
-        {selected ? (
-          <span className="size-2 rounded-full bg-primary" />
-        ) : null}
+        {selected ? <span className="size-2 rounded-full bg-primary" /> : null}
       </span>
       <div className="min-w-0 flex-1 space-y-1">
         <p className="text-sm font-medium">{title}</p>

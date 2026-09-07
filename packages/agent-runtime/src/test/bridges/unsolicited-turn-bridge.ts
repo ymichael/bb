@@ -1,16 +1,3 @@
-/**
- * A bridge that reports a turn on a bb thread it never identified: after the
- * handshake it keeps opening provider turn `turn-1` on the thread named by
- * `UNSOLICITED_TURN_THREAD_ID` (passed through the runtime's `env`) and
- * answers every other request `{}`. The repeat is deliberate — the runtime
- * drops the notification until the thread is registered, and the grammar
- * drops the replays once the turn is open — so the test sees exactly one
- * `turn/started` for a thread that has no provider identity.
- *
- * The scripted echo bridge cannot express this: it only reports turns it
- * started for sessions it opened. Launch via
- * `createScriptedEchoLaunch({ modulePath })`.
- */
 import {
   BRIDGE_REQUEST_METHODS,
   PROVIDER_BRIDGE_PROTOCOL_VERSION,

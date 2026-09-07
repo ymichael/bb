@@ -13,12 +13,16 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   useCloseMobileSidebar,
+  useSidebar,
 } from "@/components/ui/sidebar.js";
-import { ProjectList, ProjectListActionButtons } from "./ProjectList";
+import { ProjectList } from "./ProjectList";
 import { PluginThreadList } from "./PluginThreadList";
 import { useThreadListReplacement } from "./threadListProvider";
-import { PluginNavSidebarItems } from "@/components/plugin/PluginNavSidebarItems";
-import { PluginSidebarFooterActions } from "@/components/plugin/PluginSidebarFooterActions";
+import {
+  PluginSidebarFooterDisclosure,
+  PluginSidebarFooterItems,
+  usePluginSidebarFooterDisclosure,
+} from "@/components/plugin/PluginSidebarFooterItems";
 import { SidebarPluginAttentionGlyph } from "./SidebarPluginAttentionGlyph";
 import { SidebarUpdatesBadge } from "./SidebarUpdatesBadge";
 import { SidebarHistoryNavigationControls } from "./SidebarHistoryNavigationControls";
@@ -49,6 +53,7 @@ import {
   useIndexedAppCommandHandlers,
 } from "@/components/commands/AppCommandProvider";
 import { useRouteState } from "@/hooks/useRouteState";
+import { SidebarNavigationRegion } from "./SidebarNavigationRegion";
 
 const NEW_THREAD_PANE_CONTENT = { kind: "new-thread" } as const;
 
@@ -64,12 +69,6 @@ interface AppSidebarProps {
   showTopReserve: boolean;
   settingsRoutePath: string;
   toolsRoutePath?: string;
-  /**
-   * Compact drawer hosting. When set, the sidebar renders its body only,
-   * inside a persistent `<Sidebar>` panel owned by AppLayoutSidebar, and stays
-   * mounted (hidden) while a Settings/Tools body is showing, so returning to
-   * the app never remounts the thread list in the closed drawer.
-   */
   mobileHosted?: { hidden: boolean };
 }
 
@@ -82,9 +81,6 @@ export function AppSidebar({
   mobileHosted,
 }: AppSidebarProps) {
   const quickCreateProject = useQuickCreateProjectController();
-  // The resolved replacement owns the sidebar's scrolling thread list. It never
-  // replaces the chrome around it: the New-thread button, search action,
-  // the plugin nav rows, and the footer stay host-rendered in every sidebar.
   const threadListReplacement = useThreadListReplacement();
   const { threadId: activeThreadId } = useRouteState();
   const navigate = useNavigate();
@@ -94,6 +90,8 @@ export function AppSidebar({
     label: "New thread",
   });
   const closeOnMobile = useCloseMobileSidebar();
+  const { isCompactViewport, openMobile } = useSidebar();
+  const [compactCustomizeMode, setCompactCustomizeMode] = useState(false);
   const [desktopInfo] = useState(getBbDesktopInfo);
   const [threadShortcutKeysById, setThreadShortcutKeysById] = useState<
     ReadonlyMap<string, SidebarThreadShortcutPresentation>
@@ -108,6 +106,7 @@ export function AppSidebar({
   );
   const isAppCommandModifierHeld = useIsAppCommandModifierHeld();
   const settingsShortcut = useAppCommandShortcut("settings.open");
+  const pluginSidebarFooter = usePluginSidebarFooterDisclosure();
 
   const handleNewChat = useCallback(() => {
     closeOnMobile();
@@ -166,8 +165,6 @@ export function AppSidebar({
         target.element.click();
         return true;
       }
-      // The neighbor sits inside a windowed-out placeholder: there is no row
-      // to click, so navigate by id, matching what the row's link would do.
       if (!target.projectId) return false;
       closeOnMobile();
       void navigate(
@@ -181,11 +178,14 @@ export function AppSidebar({
     [activeThreadId, closeOnMobile, navigate],
   );
 
-  // While hosted-and-hidden (a Settings/Tools body is showing in the drawer)
-  // this sidebar is not the visible one: leave its shortcuts unhandled, as
-  // they are on wide viewports where Settings/Tools replace the sidebar,
-  // rather than clicking rows the user cannot see.
   const isHiddenHostedBody = mobileHosted?.hidden === true;
+  const isCompactCustomizeModeActive =
+    isCompactViewport && compactCustomizeMode;
+  useEffect(() => {
+    if (!isCompactViewport || !openMobile || isHiddenHostedBody) {
+      setCompactCustomizeMode(false);
+    }
+  }, [isCompactViewport, isHiddenHostedBody, openMobile]);
   const activateVisibleThreadShortcut = useCallback(
     (index: number) =>
       isHiddenHostedBody ? false : activateThreadShortcut(index),
@@ -225,19 +225,6 @@ export function AppSidebar({
   const body = (
     <>
       {showTopReserve ? (
-        /* Top reserve that keeps the sidebar's content (New Thread / New
-             Projects) anchored below the title-bar chrome, mirroring
-             the page-header height on the content side. The sidebar toggle is
-             pinned at the app's top-left for every chrome (see AppLayout's
-             SidebarTriggerOverlay), so this row hosts no trigger of its own — it
-             stays mounted in every sidebar state, including while the panel
-             collapses off-canvas, so the content holds its vertical position
-             instead of riding up under the pinned toggle during the animation.
-             On desktop it doubles as the window-drag strip. The Back/Forward
-             route-history controls live on the right of this chrome row, clear
-             of the pinned toggle/traffic lights on the left and the resize
-             handle on the right; they opt out of the desktop drag region so
-             clicks register. */
         <div
           data-testid="app-sidebar-top-reserve-row"
           className={cn(
@@ -255,23 +242,29 @@ export function AppSidebar({
           />
         </div>
       ) : null}
-      <div
-        data-testid="app-sidebar-primary-actions"
-        className="shrink-0 px-2 py-2 group-data-[collapsible=icon]:hidden"
-      >
-        <ProjectListActionButtons
-          splitEnabled
-          newThreadSplit={newThreadSplit}
-          onNewChat={handleNewChat}
-          onSearchThreads={closeOnMobile}
-        />
-      </div>
-      <PluginNavSidebarItems
+      <SidebarNavigationRegion
+        compactCustomizeMode={isCompactCustomizeModeActive}
+        onCompactCustomizeModeChange={setCompactCustomizeMode}
         onNavigate={closeOnMobile}
         splitEnabled
         toolsRoutePath={toolsRoutePath}
+        newThreadSplit={newThreadSplit}
+        onNewChat={handleNewChat}
+        onSearchThreads={closeOnMobile}
       />
-      <SidebarContent>
+      <div
+        aria-hidden="true"
+        className={cn(
+          "mx-2 my-2 shrink-0 border-t border-sidebar-border/25",
+          isCompactCustomizeModeActive && "hidden",
+        )}
+        data-testid="app-sidebar-navigation-divider"
+      />
+      <SidebarContent
+        className={cn(isCompactCustomizeModeActive && "hidden")}
+        aria-hidden={isCompactCustomizeModeActive ? true : undefined}
+        inert={isCompactCustomizeModeActive ? true : undefined}
+      >
         <PluginThreadList
           replacement={threadListReplacement}
           original={originalThreadList}
@@ -281,15 +274,10 @@ export function AppSidebar({
       </SidebarContent>
       <SidebarFooter className="relative">
         <OverflowFade placement="above" tone="sidebar" size="sm" />
-        {/* The footer holds a variable number of plugin action buttons, so a
-         * narrowed sidebar plus several plugins can no longer fit the action
-         * row and the update chips on one line. `flex-wrap-reverse` plus the
-         * flexible spacer below handles both layouts without measuring:
-         * while everything fits, the spacer stretches and pushes the chips to
-         * the right of a single row; once it doesn't, the chips wrap onto
-         * their own line, which wrap-reverse renders above the actions, and
-         * they sit flush left because the spacer stays behind on the action
-         * line. */}
+        <PluginSidebarFooterDisclosure
+          item={pluginSidebarFooter.activeItem}
+          onDismiss={pluginSidebarFooter.dismiss}
+        />
         <SidebarMenu className="flex-row flex-wrap-reverse items-center gap-1">
           <SidebarMenuItem className="min-w-0">
             <SidebarMenuButton
@@ -315,7 +303,15 @@ export function AppSidebar({
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
-          <PluginSidebarFooterActions onNavigate={closeOnMobile} />
+          <PluginSidebarFooterItems
+            activeDisclosureKey={pluginSidebarFooter.activeKey}
+            suppressedTooltipKey={pluginSidebarFooter.suppressedTooltipKey}
+            onTooltipSuppressionEnd={
+              pluginSidebarFooter.clearTooltipSuppression
+            }
+            onDisclosureCommand={pluginSidebarFooter.handleCommand}
+            onNavigate={closeOnMobile}
+          />
           <SidebarMenuItem className="min-w-0">
             <SidebarMenuButton
               className={SIDEBAR_FOOTER_ACTION_CLASS}

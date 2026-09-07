@@ -16,12 +16,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Real web-search rows pulled from live threads in ~/.bb-dev/bb.db.
-// webSearch events emit only `item/completed`, so startedAt == createdAt.
-// ---------------------------------------------------------------------------
-
-// thr_yr83zs2m7f — sequence 7467. Three editor-CLI doc queries.
 const multiQuerySearch: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:web-search:ws_0e85bcec855f8f510169eff17843408198a4a02ff7f35a29bb",
   threadId: "thr_yr83zs2m7f",
@@ -40,7 +34,6 @@ const multiQuerySearch: TimelineRow = webSearchRow({
   durationMs: 0,
 });
 
-// thr_zeb7z9afmw — sequence 36100. Single short query with quoted symbol.
 const singleQuerySearch: TimelineRow = webSearchRow({
   id: "thr_zeb7z9afmw:web-search:ws_00cfb2afcbffe81a0169f0041d73e4819b8801cbc6cfc3ff66",
   threadId: "thr_zeb7z9afmw",
@@ -55,7 +48,6 @@ const singleQuerySearch: TimelineRow = webSearchRow({
   durationMs: 0,
 });
 
-// thr_p93awt656h — sequence 3739. Single longer query about TanStack Query v5.
 const tanstackSearch: TimelineRow = webSearchRow({
   id: "thr_p93awt656h:web-search:ws_034f339785f02f2b0169f23ac02c9881908f9a6bc38167bcbc",
   threadId: "thr_p93awt656h",
@@ -72,8 +64,6 @@ const tanstackSearch: TimelineRow = webSearchRow({
   durationMs: 0,
 });
 
-// Running — based on the same thr_yr83zs2m7f search, but mid-flight: status=pending,
-// completedAt null. startedAt/createdAt = Date.now() so the "running" timing reads live.
 const runningSearch: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:web-search:ws_running",
   threadId: "thr_yr83zs2m7f",
@@ -92,9 +82,6 @@ const runningSearch: TimelineRow = webSearchRow({
   durationMs: null,
 });
 
-// Error — same shape as the multi-query search but flipped to status=error.
-// No real "errored" web-search rows exist in ~/.bb-dev/bb.db; we reuse a real
-// queries payload and surface the error state.
 const erroredSearch: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:web-search:ws_errored",
   threadId: "thr_yr83zs2m7f",
@@ -112,7 +99,6 @@ const erroredSearch: TimelineRow = webSearchRow({
   durationMs: 0,
 });
 
-// Interrupted — agent cancelled mid-search.
 const interruptedSearch: TimelineRow = webSearchRow({
   id: "thr_fjav9z98vu:web-search:ws_interrupted",
   threadId: "thr_fjav9z98vu",

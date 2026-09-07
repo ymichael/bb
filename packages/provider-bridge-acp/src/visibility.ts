@@ -1,5 +1,13 @@
-import { createProviderVisibilityMetadata, getStringProperty, isRecord } from "@bb/provider-bridge-protocol/bridge-kit";
-import type { JsonRpcMessage, ProviderRawEventDescription, ProviderVisibilityMetadata } from "@bb/provider-bridge-protocol/bridge-kit";
+import {
+  createProviderVisibilityMetadata,
+  getStringProperty,
+  isRecord,
+} from "@bb/provider-bridge-protocol/bridge-kit";
+import type {
+  JsonRpcMessage,
+  ProviderRawEventDescription,
+  ProviderVisibilityMetadata,
+} from "@bb/provider-bridge-protocol/bridge-kit";
 import {
   ACP_FS_WRITE_METHOD,
   ACP_TURN_COMPLETED_METHOD,
@@ -26,8 +34,6 @@ const NORMALIZED_ACP_UPDATE_KINDS = new Set<string>([
   "usage_update",
 ]);
 
-// Update kinds the agent may legitimately send but BB intentionally does not
-// render: replayed history, agent-side mode/command/config/session metadata.
 const NOISE_ACP_UPDATE_KINDS = new Set<string>([
   "user_message_chunk",
   "available_commands_update",

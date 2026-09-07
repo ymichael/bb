@@ -2,20 +2,14 @@ import { StyleSheet, View } from "react-native";
 import { useTheme } from "@/theme/ThemeProvider";
 import { cn } from "./cn";
 
-/** Left inset that lines a separator up with a row's text column (px-4). */
 export const SEPARATOR_INSET = 16;
 
 export interface SeparatorProps {
   orientation?: "horizontal" | "vertical";
-  /**
-   * Left inset so list separators start at the row content: `true` = the
-   * row padding (16), a number = exact px (e.g. past a leading glyph).
-   */
   inset?: number | boolean;
   className?: string;
 }
 
-/** One-pixel (hairline) rule in `border-hairline`. */
 export function Separator({
   orientation = "horizontal",
   inset = 0,

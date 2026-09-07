@@ -5,10 +5,6 @@ const SKIP_REQUEST_HEADERS = new Set(["host", "content-length", "connection"]);
 interface LoopbackHeaderRewrite {
   publicOrigin: string;
   loopbackOrigin: string;
-  /**
-   * When set, inject a Host header (share streams). When omitted, Host is
-   * dropped — bare-handle behavior, byte-identical to pre-share.
-   */
   host?: string;
 }
 

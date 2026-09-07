@@ -11,11 +11,6 @@ interface ToolCallDetailBlockProps {
   toolName: string;
   args: TimelineToolArgs;
   output: string;
-  /**
-   * Whether the producing row is still pending. Drives sticky-bottom for the
-   * output scroll so streamed bytes land visible. Args don't grow, so the
-   * args scroll never sticky-bottoms regardless.
-   */
   streaming?: boolean;
 }
 
@@ -105,7 +100,9 @@ export function ToolCallDetailBlock({
         <CollapsibleHeader toolName={toolName} argEntries={argEntries} />
         {hasOutput ? (
           <div className="mt-2 border-t border-border pt-2">
-            <pre className="m-0 min-w-0 overflow-x-auto whitespace-pre">{output}</pre>
+            <pre className="m-0 min-w-0 overflow-x-auto whitespace-pre">
+              {output}
+            </pre>
           </div>
         ) : null}
       </TimelineDetailScroll>

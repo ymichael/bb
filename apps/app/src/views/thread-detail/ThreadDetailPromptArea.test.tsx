@@ -20,6 +20,10 @@ import {
 } from "@testing-library/react";
 import type { TimelineWorkflowWorkRow } from "@bb/server-contract";
 import { createDeferredPromise } from "@bb/test-helpers";
+import {
+  makeThreadQueuedMessage as makeThreadQueuedMessageFixture,
+  makeThreadWithRuntime as makeThreadWithRuntimeFixture,
+} from "@bb/test-helpers/domain-fixtures";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { workflowRow } from "@/test/fixtures/thread-timeline-rows";
@@ -36,6 +40,7 @@ import {
   ThreadDetailPromptArea,
   type ThreadDetailSentMessageEdit,
 } from "./ThreadDetailPromptArea";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 const mocks = vi.hoisted(() => ({
   cancelThreadPlanMutate: vi.fn(),
@@ -59,7 +64,7 @@ const mocks = vi.hoisted(() => ({
     subscribe: vi.fn(() => () => {}),
     text: "",
   },
-  queuedMessages: [] as ThreadQueuedMessage[],
+  queuedMessages: [] as ThreadQueuedMessage[] | undefined,
   reorderQueuedMessageMutateAsync: vi.fn(),
   sendQueuedMessageMutateAsync: vi.fn(),
   setQueuedMessageGroupBoundaryMutateAsync: vi.fn(),
@@ -137,8 +142,7 @@ vi.mock("@/components/promptbox/FollowUpPromptBox", async () => {
       }[];
     }) => (
       <div data-testid="follow-up-prompt-box">
-        {/* Mirrors the real stack: plugin banners for the composer scope, then
-          the caller's stack, then the pending interaction (if any). */}
+        {}
         <div data-testid="prompt-stack">
           {pluginComposerHost ? (
             <ComposerBannersSlot
@@ -283,46 +287,68 @@ vi.mock("@/components/promptbox/ThreadEnvironmentSummary", () => ({
   ThreadEnvironmentSummary: () => <div />,
 }));
 
-vi.mock("@/components/promptbox/banner/QueuedMessagesList", () => ({
-  QueuedMessagesList: ({
-    inlineEditor,
-    queuedMessages,
-    onEdit,
-  }: {
-    inlineEditor?: { content: ReactNode; onDismiss: () => void };
-    queuedMessages: readonly ThreadQueuedMessage[];
-    onEdit: (request: {
-      queuedMessageId: string;
-      queuedMessageIndex: number;
-    }) => void;
-  }) => (
-    <div data-testid="queued-message-list">
-      <div data-testid="queued-message-count">{queuedMessages.length}</div>
-      {queuedMessages.map((message, index) => (
-        <button
-          key={message.id}
-          type="button"
-          onClick={() =>
-            onEdit({
-              queuedMessageId: message.id,
-              queuedMessageIndex: index,
-            })
-          }
-        >
-          Edit queued message {index + 1}
-        </button>
-      ))}
-      {inlineEditor ? (
-        <div data-testid="inline-queued-message-editor">
-          {inlineEditor.content}
-          <button type="button" onClick={inlineEditor.onDismiss}>
-            Cancel queued edit
-          </button>
-        </div>
-      ) : null}
-    </div>
-  ),
-}));
+vi.mock(
+  "@/components/promptbox/banner/QueuedMessagesList",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@/components/promptbox/banner/QueuedMessagesList")
+    >()),
+    QueuedMessagesList: ({
+      inlineEditor,
+      queuedMessages,
+      onEdit,
+      onSend,
+      sendAction,
+      sendDisabled,
+    }: {
+      inlineEditor?: { content: ReactNode; onDismiss: () => void };
+      queuedMessages: readonly ThreadQueuedMessage[];
+      onEdit: (request: {
+        queuedMessageId: string;
+        queuedMessageIndex: number;
+      }) => void;
+      onSend: (queuedMessageId: string) => void;
+      sendAction: "send-now" | "steer-when-ready";
+      sendDisabled: boolean;
+    }) => (
+      <div
+        data-testid="queued-message-list"
+        data-send-action={sendAction}
+        data-send-disabled={sendDisabled ? "" : undefined}
+      >
+        <div data-testid="queued-message-count">{queuedMessages.length}</div>
+        {queuedMessages.map((message, index) => (
+          <div key={message.id}>
+            <button type="button" onClick={() => onSend(message.id)}>
+              {sendAction === "steer-when-ready"
+                ? `Steer queued message ${index + 1} when ready`
+                : `Send queued message ${index + 1} now`}
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                onEdit({
+                  queuedMessageId: message.id,
+                  queuedMessageIndex: index,
+                })
+              }
+            >
+              Edit queued message {index + 1}
+            </button>
+          </div>
+        ))}
+        {inlineEditor ? (
+          <div data-testid="inline-queued-message-editor">
+            {inlineEditor.content}
+            <button type="button" onClick={inlineEditor.onDismiss}>
+              Cancel queued edit
+            </button>
+          </div>
+        ) : null}
+      </div>
+    ),
+  }),
+);
 
 vi.mock("@/components/promptbox/banner/ThreadBackgroundCommandsCard", () => ({
   ThreadBackgroundCommandsCard: () => null,
@@ -534,7 +560,7 @@ vi.mock("@/hooks/mutations/thread-state-mutations", () => ({
 }));
 
 vi.mock("@/hooks/queries/sidebar-navigation-query", () => ({
-  useProjectWorkspaceDisplay: () => null,
+  useProjectDisplayName: () => null,
 }));
 
 vi.mock("@/hooks/queries/thread-default-execution-options-query", () => ({
@@ -563,33 +589,26 @@ vi.mock("@/hooks/queries/thread-queries", () => ({
 function makeQueuedMessage(
   overrides: Partial<ThreadQueuedMessage> = {},
 ): ThreadQueuedMessage {
-  return {
+  return makeThreadQueuedMessageFixture({
     id: "qmsg_1",
+    threadId: "thr_1",
     content: [{ type: "text", text: "Already queued", mentions: [] }],
     model: "gpt-5",
-    reasoningLevel: "medium",
-    permissionMode: "auto",
-    serviceTier: "default",
-    groupWithNext: false,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
-  };
+  });
 }
 
 function makeThread(
   overrides: Partial<ThreadWithRuntime> = {},
 ): ThreadWithRuntime {
-  return {
-    archivedAt: null,
+  return makeThreadWithRuntimeFixture({
     environmentId: null,
     id: "thr_1",
     projectId: "proj_1",
-    providerId: "codex",
-    runtime: { displayStatus: "idle" },
-    status: "idle",
     ...overrides,
-  } as ThreadWithRuntime;
+  });
 }
 
 const activePlan = {
@@ -672,6 +691,7 @@ interface RenderPromptAreaOptions {
   pendingInteractions?: readonly PendingInteraction[];
   childPendingInteractions?: readonly ChildThreadPendingAttention[];
   pendingInteractionsInitialLoading?: boolean;
+  queuedMessageCount?: number;
   sentMessageEdit?: ThreadDetailSentMessageEdit;
   thread?: ThreadWithRuntime;
 }
@@ -684,6 +704,7 @@ function buildPromptAreaElement({
   pendingInteractions = [],
   childPendingInteractions = [],
   pendingInteractionsInitialLoading = false,
+  queuedMessageCount = 0,
   sentMessageEdit,
   thread = makeThread(),
 }: RenderPromptAreaOptions = {}) {
@@ -706,6 +727,7 @@ function buildPromptAreaElement({
       parentThreadSection={null}
       pendingInteractions={pendingInteractions}
       pendingInteractionsInitialLoading={pendingInteractionsInitialLoading}
+      queuedMessageCount={queuedMessageCount}
       pendingTodos={null}
       projectId="proj_1"
       pullRequest={null}
@@ -755,6 +777,19 @@ afterEach(() => {
 });
 
 describe("ThreadDetailPromptArea", () => {
+  it("shows queued work while its message details are loading", () => {
+    mocks.queuedMessages = undefined;
+
+    renderPromptArea({ queuedMessageCount: 1 });
+
+    expect(screen.getByRole("status").textContent).toContain(
+      "Loading queued message details",
+    );
+    expect(screen.getByLabelText("Queued messages").textContent).toContain(
+      "Queue1",
+    );
+  });
+
   it("keeps sent-message edit submission out of the normal send path", () => {
     mocks.defaultExecutionOptions = {
       model: "gpt-5",
@@ -850,8 +885,6 @@ describe("ThreadDetailPromptArea", () => {
     );
     expect(onCancel).toHaveBeenCalledTimes(1);
 
-    // Escape in the edit composer cancels too; the bottom composer keeps its
-    // default Escape behavior (no onEscape).
     expect(
       within(bottomComposer!).queryByRole("button", {
         name: "Escape composer",
@@ -909,6 +942,39 @@ describe("ThreadDetailPromptArea", () => {
     const composer = screen.getByTestId("composer-boundary");
     expect(stack.lastElementChild).toBe(queue);
     expect(stack.nextElementSibling).toBe(composer);
+  });
+
+  it("steers a queued row once a provisioning thread is ready", async () => {
+    mocks.queuedMessages = [
+      makeQueuedMessage({ waitingOn: { kind: "provisioning" } }),
+    ];
+
+    renderPromptArea({
+      thread: makeThread({
+        runtime: {
+          displayStatus: "provisioning",
+          hostReconnectGraceExpiresAt: null,
+        },
+        status: "starting",
+      }),
+    });
+
+    const queue = screen.getByTestId("queued-message-list");
+    expect(queue.dataset.sendAction).toBe("steer-when-ready");
+    expect(queue.dataset.sendDisabled).toBeUndefined();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Steer queued message 1 when ready",
+      }),
+    );
+
+    await waitFor(() => {
+      expect(mocks.sendQueuedMessageMutateAsync).toHaveBeenCalledWith({
+        id: "thr_1",
+        mode: "steer",
+        queuedMessageId: "qmsg_1",
+      });
+    });
   });
 
   it("uses the real thread cache keys immediately", () => {
@@ -1490,7 +1556,6 @@ describe("ThreadDetailPromptArea", () => {
       "rfn-pass-a-balance",
     ]);
 
-    // Expanding one workflow must not expand its concurrent sibling.
     fireEvent.click(cards[1]!);
     expect(
       screen
@@ -1528,41 +1593,39 @@ describe("ThreadDetailPromptArea", () => {
   });
 
   it("keeps plugin banners mounted while pending interaction suspends editor regions", () => {
-    setPluginSlotRegistrations("pending-plugin", {
-      homepageSections: [],
-      settingsSections: [],
-      navPanels: [],
-      threadPanelActions: [],
-      composerCustomizations: [
-        {
-          id: "pending",
-          scopes: ["thread"],
-          actions: [
-            { id: "action", component: () => <button>Editor action</button> },
-          ],
-          plusMenu: [{ id: "menu", label: "Editor menu", run: () => {} }],
-          banners: [
-            {
-              id: "banner",
-              component: () => <div>Persistent plugin banner</div>,
-            },
-          ],
-          richText: {
-            effects: [
+    setPluginSlotRegistrations(
+      "pending-plugin",
+      makePluginRegistrationSet({
+        composerCustomizations: [
+          {
+            id: "pending",
+            scopes: ["thread"],
+            actions: [
+              { id: "action", component: () => <button>Editor action</button> },
+            ],
+            plusMenu: [{ id: "menu", label: "Editor menu", run: () => {} }],
+            banners: [
               {
-                id: "rule",
-                className: "pending-rule",
-                match: (text) => [{ from: 0, to: text.length }],
+                id: "banner",
+                component: () => <div>Persistent plugin banner</div>,
               },
             ],
+            richText: {
+              effects: [
+                {
+                  id: "rule",
+                  className: "pending-rule",
+                  match: (text) => [{ from: 0, to: text.length }],
+                },
+              ],
+            },
           },
-        },
-      ],
-      pendingInteractions: [],
-      sidebarFooterActions: [],
-      fileOpeners: [],
-      messageDirectives: [],
-    });
+        ],
+        pendingInteractions: [],
+        sidebarFooterActions: [],
+        fileOpeners: [],
+      }),
+    );
 
     renderPromptArea({ pendingInteractions: [makePendingInteraction()] });
 
@@ -1570,13 +1633,10 @@ describe("ThreadDetailPromptArea", () => {
     expect(screen.queryByRole("button", { name: "Editor action" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Prompt actions" })).toBeNull();
     expect(document.querySelector(".pending-rule")).toBeNull();
-    // The composer is retained (blocked, hidden) rather than swapped out, so
-    // approving does not rebuild the editor.
     expect(screen.getByTestId("composer-hidden").textContent).toBe("true");
     expect(screen.getByTestId("submit-mode").textContent).toBe(
       "blocked:pending-interaction",
     );
-    // The reduced pending stack keeps the queued drawer and todo card out.
     expect(screen.queryByTestId("queued-message-list")).toBeNull();
   });
 
@@ -1629,8 +1689,6 @@ describe("ThreadDetailPromptArea", () => {
       screen
         .getAllByTestId("composer-stack-item")
         .map((item) => item.textContent),
-      // The banner routes a plugin request to the plugin's slot itself
-      // (ThreadPendingInteractionBanner.test.tsx); the stack only orders it.
     ).toEqual(["Plan banner", "Goal banner", "Pending interaction"]);
   });
 

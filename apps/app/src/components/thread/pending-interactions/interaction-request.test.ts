@@ -16,12 +16,6 @@ const base = {
   resolution: null,
 } as const;
 
-/**
- * The interaction split (docs/provider-plugin-api.md §4) on the client:
- * approvals are the closed policy set; requests are the open set that always
- * reach the user or a plugin. Both today's wire and the target request family
- * classify the same way.
- */
 describe("classifyInteractionRequest", () => {
   it("keeps command/file/permission/tool-use approvals in the approval family", () => {
     const interaction: PendingInteraction = {
@@ -80,7 +74,11 @@ describe("classifyInteractionRequest", () => {
 
   it("routes a plugin request to its plugin by namespaced kind, from either wire shape", () => {
     const fromToday = classifyInteractionRequest({
-      origin: { kind: "plugin", pluginId: "secrets", rendererId: "secret-request" },
+      origin: {
+        kind: "plugin",
+        pluginId: "secrets",
+        rendererId: "secret-request",
+      },
       payload: { kind: "plugin", title: "Add secrets", data: { fields: [] } },
     });
     const fromRequestFamily = classifyInteractionRequest({

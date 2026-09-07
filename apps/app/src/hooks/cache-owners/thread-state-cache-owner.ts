@@ -114,8 +114,6 @@ interface SettleArchiveThreadsTransactionArgs {
   transaction: ArchiveThreadsTransaction | undefined;
 }
 
-interface DeleteThreadTransactionArgs extends ThreadIdCacheArgs {}
-
 interface RollbackDeleteThreadTransactionArgs extends ThreadIdCacheArgs {
   transaction: DeleteThreadTransaction | undefined;
 }
@@ -581,7 +579,7 @@ export function settleArchiveThreadsTransaction({
 export async function beginDeleteThreadTransaction({
   queryClient,
   threadId,
-}: DeleteThreadTransactionArgs): Promise<DeleteThreadTransaction> {
+}: ThreadIdCacheArgs): Promise<DeleteThreadTransaction> {
   await queryClient.cancelQueries({ queryKey: threadQueryKey(threadId) });
   await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
   await queryClient.cancelQueries({ queryKey: sidebarNavigationQueryKey() });

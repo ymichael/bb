@@ -1,0 +1,44 @@
+{
+  "name": "bb-plugin-account-pool",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Routes Claude and Codex API traffic across provider account pools.",
+  "engines": {
+    "bb": ">=0.0"
+  },
+  "bb": {
+    "name": "Account Pooler [Experimental]",
+    "description": "Routes Claude and Codex API traffic across provider account pools.",
+    "branding": {
+      "icon": "Layers"
+    },
+    "server": "./src/server.ts",
+    "app": "./app.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts"
+  },
+  "dependencies": {
+    "@bb/shared-ui": "workspace:*",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@testing-library/react": "^16.3.2",
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "better-sqlite3": "12.10.0",
+    "jsdom": "^29.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}

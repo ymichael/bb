@@ -42,6 +42,26 @@ describe("run-cli", () => {
     expect(execution.env.NODE_ENV).toBe("production");
   });
 
+  it("removes the package-manager argument separator", () => {
+    vi.stubEnv("NODE_ENV", "production");
+
+    const execution = resolveCliExecution([
+      "--",
+      "project",
+      "show",
+      "slopcop-probe",
+      "--json",
+    ]);
+
+    expect(execution.args).toEqual([
+      "apps/cli/dist/index.js",
+      "project",
+      "show",
+      "slopcop-probe",
+      "--json",
+    ]);
+  });
+
   it("lets explicit development CLI targets win", () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("BB_SERVER_URL", "http://localhost:4444");

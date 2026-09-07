@@ -114,11 +114,6 @@ let openDialog: {
   window: BrowserWindow;
 } | null = null;
 
-/**
- * Modal "Set Server URL…" prompt. A second open while one is up focuses the
- * existing dialog and returns its pending result. Resolves "clear" when the
- * field is submitted empty, "cancelled" on cancel/escape/close.
- */
 export function openServerUrlDialog(
   args: OpenServerUrlDialogArgs,
 ): Promise<ServerUrlDialogResult> {

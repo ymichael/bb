@@ -3,14 +3,9 @@ import { PERSONAL_PROJECT_ID } from "@bb/domain";
 export const APP_ROOT_ROUTE_PATH = "/";
 export const AUTH_CALLBACK_ROUTE_PATH = "/auth/callback";
 export const SETTINGS_ROUTE_PATH = "/settings";
-// Settings buckets (general, files, …) plus legacy plugin routes that redirect
-// to the canonical Extensions → Plugins surfaces. The static "plugins" segment must
-// win over :section so those old deep links resolve before redirecting.
 export const SETTINGS_SECTION_ROUTE_PATH = "/settings/:section";
 export const SETTINGS_PLUGINS_ROUTE_PATH = "/settings/plugins";
 export const SETTINGS_PLUGIN_ROUTE_PATH = "/settings/plugins/:pluginId";
-// Per-machine detail page. The static "machines" segment sits above the
-// :section route, which has no splat and so never matches this two-segment path.
 export const SETTINGS_MACHINE_ROUTE_PATH = "/settings/machines/:hostId";
 export const TOOLS_ROUTE_PATH = "/extensions";
 export const TOOLS_SKILLS_ROUTE_PATH = "/extensions/skills";
@@ -24,8 +19,6 @@ export const TOOLS_REGISTRY_SKILL_DETAIL_ROUTE_PATH =
 export const TOOLS_PLUGINS_ROUTE_PATH = "/extensions/plugins";
 export const TOOLS_PLUGIN_BROWSE_ROUTE_PATH = "/extensions/plugins/browse";
 export const TOOLS_PLUGIN_DETAIL_ROUTE_PATH = "/extensions/plugins/:pluginId";
-// The pre-rename Extensions prefix. Every /tools URL redirects to the same
-// path under /extensions, so old deep links keep working.
 export const LEGACY_TOOLS_PREFIX_ROUTE_PATH = "/tools";
 export const LEGACY_TOOLS_SPLAT_ROUTE_PATH = "/tools/*";
 export const LEGACY_TOOLS_AUTOMATIONS_ROUTE_PATH = "/tools/automations";
@@ -56,7 +49,6 @@ const PROJECTLESS_THREAD_DETAIL_ROUTE_PATH = "/threads/:threadId";
 export const PROJECT_SETTINGS_ROUTE_PATH = "/projects/:projectId/settings";
 export const PROJECT_ARCHIVED_ROUTE_PATH = "/projects/:projectId/archived";
 const THREAD_DETAIL_ROUTE_PATH = "/projects/:projectId/threads/:threadId";
-// Trailing splat: the remainder is the panel's `subPath` (empty at the root).
 export const PLUGIN_PANEL_ROUTE_PATH = "/plugins/:pluginId/:panelPath/*";
 
 export interface ThreadRoutePathArgs {
@@ -78,8 +70,6 @@ export function getLegacyProjectComposeRoutePath(projectId: string): string {
   return `/projects/${projectId}`;
 }
 
-// Opens a project's compose view. The personal project has no `/projects/:id`
-// surface — its compose view is the app root — so it routes there instead.
 export function getProjectComposeRoutePath(projectId: string): string {
   return isProjectlessProjectId(projectId)
     ? getRootComposeRoutePath()
@@ -140,13 +130,11 @@ export function getPluginDetailRoutePath({
   view,
 }: PluginDetailRoutePathArgs): string {
   const path = `${TOOLS_PLUGINS_ROUTE_PATH}/${encodeURIComponent(pluginId)}`;
-  return view === "installed" ? `${path}?view=installed` : path;
+  return view === "installed"
+    ? `${SETTINGS_PLUGINS_ROUTE_PATH}/${encodeURIComponent(pluginId)}?view=installed`
+    : path;
 }
 
-/**
- * A plugin's configuration lives on the Settings page; the Extensions detail
- * page links here instead of hosting the form.
- */
 export function getPluginConfigurationRoutePath(
   args: PluginDetailRoutePathArgs,
 ): string {
@@ -183,9 +171,7 @@ export function getProjectSettingsRoutePath(projectId: string): string {
 
 interface PluginPanelRoutePathArgs {
   pluginId: string;
-  /** The nav panel's registered `path` segment (validated: [a-zA-Z0-9_-]+). */
   path: string;
-  /** Location inside the panel; segments are encoded, slashes preserved. */
   subPath?: string;
 }
 
@@ -252,7 +238,6 @@ const baseRoutePatterns: readonly string[] = [
 
 export const ROUTE_PATTERNS = baseRoutePatterns;
 
-/** Drops the `?query` and `#hash` from a path so route matching sees only the pathname. */
 export function stripRoutePathSuffix(path: string): string {
   const queryIndex = path.indexOf("?");
   const hashIndex = path.indexOf("#");

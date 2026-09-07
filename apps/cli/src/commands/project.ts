@@ -235,8 +235,6 @@ async function attachmentMimeType(
     }
     return normalized;
   }
-  // Only attachment upload needs the mime-db table; loading it here keeps it
-  // out of every other `bb project` invocation.
   const { default: mimeTypes } = await import("mime-types");
   const inferred = mimeTypes.lookup(filename) || mimeTypes.lookup(clientPath);
   return typeof inferred === "string" ? inferred : "application/octet-stream";

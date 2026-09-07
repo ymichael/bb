@@ -1,4 +1,3 @@
-/* shadcn/ui-derived */
 import * as React from "react";
 
 import { COARSE_POINTER_TEXT_BASE_CLASS } from "./coarse-pointer-sizing.js";

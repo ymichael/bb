@@ -4,28 +4,12 @@ import {
   getPluginSlotSnapshot,
   resetPluginSlotStoreForTest,
   setPluginSlotRegistrations,
-  type PluginRegistrationSet,
 } from "./plugin-slots";
 import { resolveTimelineRenderer } from "./plugin-slot-resolvers";
+import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
 
 function Renderer(_props: PluginTimelineRendererProps) {
   return null;
-}
-
-function registrationSet(
-  overrides: Partial<PluginRegistrationSet> = {},
-): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    composerCustomizations: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    ...overrides,
-  };
 }
 
 afterEach(() => {
@@ -33,12 +17,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * Q17: a plugin renders only its own rows — its extension kinds and the
- * generic tool items of its providers. The store drops a kind in another
- * plugin's namespace; the resolver scopes `"tool"` to the thread's provider
- * plugin.
- */
 describe("experimental_timelineRenderer slots", () => {
   it("keeps a plugin's own kinds and drops a kind in another plugin's namespace", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -57,9 +35,7 @@ describe("experimental_timelineRenderer slots", () => {
       "echo-provider/receipt",
       "tool",
     ]);
-    expect(slots.every((slot) => slot.pluginId === "echo-provider")).toBe(
-      true,
-    );
+    expect(slots.every((slot) => slot.pluginId === "echo-provider")).toBe(true);
     expect(warn).toHaveBeenCalledWith(
       expect.stringContaining('timeline renderer for "provider-codex/goal"'),
     );
@@ -96,7 +72,6 @@ describe("experimental_timelineRenderer slots", () => {
       }),
     ).toBeNull();
 
-    // A tool row belongs to the plugin that owns the thread's provider.
     expect(
       resolveTimelineRenderer(slots, {
         kind: "tool",
@@ -109,7 +84,6 @@ describe("experimental_timelineRenderer slots", () => {
         providerPluginId: "echo-provider",
       })?.pluginId,
     ).toBe("echo-provider");
-    // Unknown provider owner: no plugin may claim the row.
     expect(
       resolveTimelineRenderer(slots, { kind: "tool", providerPluginId: null }),
     ).toBeNull();

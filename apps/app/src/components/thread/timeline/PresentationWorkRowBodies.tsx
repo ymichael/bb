@@ -11,12 +11,6 @@ import { Icon, type IconName } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { MarkdownPreview } from "../../ui/markdown-preview.js";
 
-/**
- * The declarative base for a row's expanded body: the bridge's short
- * Markdown `detail` (length-capped at ingest), rendered read-only with no
- * images. Every presented kind may carry one; an extension row has nothing
- * else unless a plugin registered a renderer for its kind.
- */
 export function PresentationDetail({
   presentation,
 }: {
@@ -51,11 +45,6 @@ const PLAN_STEP_ICON: Record<PlanStepStatus, IconName> = {
   failed: "X",
 };
 
-/**
- * A plan snapshot's steps in the order the agent keeps them (the todo banner
- * re-sorts by status; the row is the historical record and keeps the
- * agent's order).
- */
 export function PlanStepsWorkRowBody({
   row,
 }: {

@@ -5,8 +5,8 @@ import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@bb/shared-ui/hooks/use-compact-viewport";
 import type { Task } from "../../shared/contract.js";
 import { LIST_PREFERENCE_STORAGE_KEY } from "./list-preference.js";
+import { makeTask } from "../../test-fixtures.js";
 
-// Compact viewport so sort/filter menus render as clickable drawers in jsdom.
 window.matchMedia = (query: string) => ({
   matches: query === COMPACT_VIEWPORT_QUERY,
   media: query,
@@ -67,22 +67,16 @@ function task(
   priority: Task["priority"] = "none",
 ): Task {
   const prefix = projectId === PROJECT_A ? "ALP" : "BET";
-  return {
+  return makeTask({
     id: `01HZZZZZZZZZZZZZZZZZZZZT${projectId.slice(-2)}${number}`,
     projectId,
     number,
     key: `${prefix}-${number}`,
     title: `Task ${number}`,
-    description: "",
     status,
     priority,
-    dueDate: null,
-    parentTaskId: null,
     position: number,
-    createdAt: "2026-07-15T00:00:00.000Z",
-    updatedAt: "2026-07-15T00:00:00.000Z",
-    labelIds: [],
-  };
+  });
 }
 
 const tasksA = [
@@ -223,7 +217,6 @@ describe("list filter/sort preference persistence", () => {
       ),
     );
 
-    // Filter to done only via the Status chip.
     fireEvent.click(slot.getByRole("button", { name: /^Status/ }));
     const doneOption = await slot.findByRole("menuitemcheckbox", {
       name: /Done/,
@@ -247,11 +240,9 @@ describe("list filter/sort preference persistence", () => {
     expect(
       remounted.getByRole("button", { name: /Sort/ }).textContent,
     ).toContain("Priority");
-    // Active status filter is reflected on the chip label.
     expect(
       remounted.getByRole("button", { name: /^Status/ }).textContent,
     ).toContain("Done");
-    // Only done task remains visible for project A.
     expect(remounted.queryByText("ALP-1")).toBeNull();
     expect(remounted.queryByText("ALP-2")).toBeNull();
     expect(remounted.getByText("ALP-3")).toBeDefined();
@@ -279,7 +270,6 @@ describe("list filter/sort preference persistence", () => {
       { rpc: baseRpc() },
     );
     await slotB.findByText("BET-1");
-    // Project B still defaults to manual.
     expect(
       slotB.getByRole("button", { name: /Sort/ }).textContent,
     ).not.toContain("Priority");
@@ -307,7 +297,6 @@ describe("list filter/sort preference persistence", () => {
 
   it("remembers an explicit clear across remount", async () => {
     const registration = app.navPanels[0]!;
-    // Seed a preference, then clear via UI.
     window.localStorage.setItem(
       LIST_PREFERENCE_STORAGE_KEY,
       JSON.stringify({
@@ -348,7 +337,6 @@ describe("list filter/sort preference persistence", () => {
     expect(
       remounted.getByRole("button", { name: /Sort/ }).textContent,
     ).toContain("Priority");
-    // Filters cleared; sort still priority because Clear only resets filters.
     expect(remounted.getByText("ALP-2")).toBeDefined();
   });
 
@@ -364,7 +352,6 @@ describe("list filter/sort preference persistence", () => {
         "Priority",
       ),
     );
-    // Session still applies sort even though nothing was persisted.
     expect(slot.getByText("ALP-2")).toBeDefined();
   });
 
@@ -489,7 +476,6 @@ describe("list filter/sort preference persistence", () => {
         ),
       ).toBe(true);
     });
-    // Empty labelIds filter yields no rows (not the full unfiltered list).
     await waitFor(() => {
       expect(slot.queryByText("ALP-1")).toBeNull();
       expect(slot.queryByText("ALP-2")).toBeNull();

@@ -13,11 +13,6 @@ const desktopSessionResponseSchema = z.object({
 
 export type DesktopSession = z.infer<typeof desktopSessionResponseSchema>;
 
-/**
- * Exchange the durable machine credential for a short-lived browser session
- * cookie at the connect gate. The cookie lasts one hour, so every caller mints
- * a fresh one rather than storing it.
- */
 export async function fetchDesktopSession(
   credential: ConnectCredential,
   fetchImpl: typeof fetch = globalThis.fetch,

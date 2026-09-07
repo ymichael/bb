@@ -49,7 +49,7 @@ describe("SplitButton", () => {
     render(
       <SplitButton
         primaryAction={{ label: "Commit", onSelect: vi.fn() }}
-        secondaryActions={[{ label: "Squash merge", onSelect: vi.fn() }]}
+        secondaryActions={[{ label: "Amend commit", onSelect: vi.fn() }]}
         triggerLabel="More commit actions"
         disabled
       />,

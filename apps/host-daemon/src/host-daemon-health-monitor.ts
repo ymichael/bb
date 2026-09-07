@@ -1,18 +1,6 @@
 import fs from "node:fs";
 import type { HostDaemonLogger } from "./logger.js";
 
-/**
- * Periodically checks host-daemon resource and watch metrics so a leak or wedge
- * emits an actionable warning instead of needing a live post-mortem.
- *
- * The headline signal is the inotify instance count. `@parcel/watcher` shares a
- * single inotify backend across every watched path, so a healthy daemon needs
- * roughly one instance no matter how many paths it watches. A count that climbs
- * with uptime means dead, leaked watcher backends (each one a thread parked
- * forever in the native teardown after a `poll()` interruption), which both
- * leaks resources and means filesystem-driven updates have silently stopped.
- */
-
 interface HostDaemonHealthMonitorTimer {
   clear(): void;
   unref(): void;
@@ -30,11 +18,8 @@ interface HostDaemonWatchCounts {
 
 export interface HostDaemonResourceUsage {
   rssBytes: number;
-  /** Open file descriptors, or null when unavailable (e.g. no /proc). */
   openFds: number | null;
-  /** Live inotify instances, or null when unavailable. */
   inotifyInstances: number | null;
-  /** OS thread count, or null when unavailable. */
   threads: number | null;
 }
 
@@ -52,8 +37,6 @@ interface HostDaemonHealthMonitor {
 }
 
 const DEFAULT_HEALTH_MONITOR_INTERVAL_MS = 60_000;
-// Headroom above the ~1 shared backend a healthy daemon needs, so brief
-// overlaps during watch-set churn do not warn but a real leak does.
 const DEFAULT_INOTIFY_INSTANCE_WARN_THRESHOLD = 8;
 
 function countInotifyInstances(fds: string[]): number {
@@ -63,9 +46,7 @@ function countInotifyInstances(fds: string[]): number {
       if (fs.readlinkSync(`/proc/self/fd/${fd}`).includes("inotify")) {
         count += 1;
       }
-    } catch {
-      // The fd may close between listing and reading; ignore it.
-    }
+    } catch {}
   }
   return count;
 }
@@ -79,14 +60,10 @@ function defaultReadResourceUsage(): HostDaemonResourceUsage {
     const fds = fs.readdirSync("/proc/self/fd");
     openFds = fds.length;
     inotifyInstances = countInotifyInstances(fds);
-  } catch {
-    // /proc is unavailable (non-Linux); leave fd metrics null.
-  }
+  } catch {}
   try {
     threads = fs.readdirSync("/proc/self/task").length;
-  } catch {
-    // /proc is unavailable; leave thread count null.
-  }
+  } catch {}
   return { rssBytes, openFds, inotifyInstances, threads };
 }
 

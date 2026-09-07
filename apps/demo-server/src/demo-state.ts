@@ -1,7 +1,3 @@
-// One Durable Object per client: its DemoWorld plus the WebSockets that
-// receive the world's change notices. HTTP and the socket share the object,
-// so a sent message and the notice that announces it cannot disagree.
-
 import { DemoWorld } from "./demo-world.js";
 
 export class DemoStateDO {

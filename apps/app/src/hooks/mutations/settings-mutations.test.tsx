@@ -105,8 +105,6 @@ describe("general settings mutation", () => {
     expect(queryClient.getQueryState(configKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(timelineKey)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(summaryKey)?.isInvalidated).toBe(true);
-    // The server's `config-changed` broadcast already refreshes catalogs; an
-    // unrelated preference must not add a second picker refetch here.
     expect(queryClient.getQueryState(executionOptionsKey)?.isInvalidated).toBe(
       false,
     );
@@ -136,8 +134,6 @@ describe("general settings mutation", () => {
     expect(queryClient.getQueryState(providersKey)?.isInvalidated).toBe(true);
   });
 
-  // A stale catalog can still name a model the server now hides, both in the
-  // active query and in the localStorage preload, until a refetch succeeds.
   it("drops cached model catalogs when streamer mode flips", async () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
     const executionOptionsKey = systemExecutionOptionsQueryKey({

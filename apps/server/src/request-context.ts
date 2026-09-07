@@ -55,12 +55,6 @@ export function getGateMachineId(context: GateAuthHeaderReader): string | null {
   return value ? value : null;
 }
 
-/**
- * The surface that made this request. A request without the header comes from
- * the bb CLI, the SDK, an automation, or an agent, so it is `api`. It must not
- * inherit the server surface: that counted headless traffic as desktop or web
- * users.
- */
 export function resolveRequestAppSurface(context: Context): RequestAppSurface {
   return (
     parseRequestAppSurface(context.req.header(APP_SURFACE_HEADER_NAME)) ??

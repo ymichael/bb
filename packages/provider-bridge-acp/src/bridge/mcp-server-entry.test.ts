@@ -1,13 +1,3 @@
-/**
- * Regression test for get-bb/bb#1918.
- *
- * bridge.test.ts imports the bridge in-process, so process.argv[1] there is
- * vitest. The agent runtime runs the bridge through the provider-bridge
- * bootstrap (`node <bridge-worker-entry> <bridge module> <pluginId>
- * <dataDir>`), so inside the real bridge process.argv[1] is the bootstrap, not
- * the bridge module. This test spawns the bridge that way and then executes the
- * `bb-bridge` MCP server command the bridge advertises to the ACP agent.
- */
 import { spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -73,9 +63,6 @@ async function waitFor<T>(
 }
 
 function agentMessageTexts(): string[] {
-  // The bridge speaks the narrow grammar: assistant text arrives as
-  // `item.textDelta` deltas on the `agentMessage` channel inside batched
-  // `thread/delta` notifications.
   const texts: string[] = [];
   for (const line of bridgeLines) {
     if (line.method !== "thread/delta") {
@@ -115,9 +102,7 @@ function spawnBridgeLikeTheAgentRuntime(dataDir: string): ChildProcess {
   createInterface({ input: bridge.stdout }).on("line", (line) => {
     try {
       bridgeLines.push(JSON.parse(line) as BridgeLine);
-    } catch {
-      // Ignore non-JSON bridge output.
-    }
+    } catch {}
   });
   return bridge;
 }
@@ -292,7 +277,6 @@ describe("bb-bridge MCP server entry point (#1918)", () => {
           : undefined,
       "bridge-side MCP initialize diagnostic",
     );
-    // The entry must be the bridge module itself, never the bootstrap.
     expect(config.args.some((arg) => arg.includes("bridge-worker"))).toBe(
       false,
     );

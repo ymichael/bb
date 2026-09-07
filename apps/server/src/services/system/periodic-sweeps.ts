@@ -9,6 +9,7 @@ import {
   DATABASE_INCREMENTAL_VACUUM_MIN_FREELIST_PAGES,
   DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE,
   DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE,
+  DEFAULT_DESTROYED_ENVIRONMENT_EVENT_DETACH_BATCH_SIZE,
   DEFAULT_DESTROYED_ENVIRONMENT_PRUNE_BATCH_SIZE,
   DESTROYED_ENVIRONMENT_TTL_MS,
   dropDeferredLegacyTables,
@@ -48,28 +49,27 @@ import {
 } from "../projects/project-deletion.js";
 import { hasLiveThreadStartInFlight } from "../threads/thread-lifecycle.js";
 import { advanceThreadProvisioning } from "../threads/thread-provisioning.js";
-import { runQueuedMessageAutoSendSweep } from "../threads/queued-messages.js";
-import { runDeferredThreadMessageSweep } from "../threads/thread-send-request.js";
+import {
+  runQueuedMessageDispatch,
+  type QueueWaitPluginDirectory,
+} from "../threads/queued-message-dispatch.js";
+import { deliverLegacyDeferredThreadMessages } from "../threads/legacy-deferred-messages.js";
 import { LIVE_DAEMON_COMMAND_TIMEOUT_MS } from "../hosts/live-command.js";
 import { runEventLoopWork, runEventLoopWorkSync } from "./event-loop-work.js";
 
 type DatabaseMaintenanceSweepDeps = Pick<AppDeps, "db" | "logger">;
 
-/**
- * Narrow slice of the plugin service the schedule sweep needs (the plugin
- * service owns claiming and invocation; this loop just drives it).
- */
 interface PluginScheduleSweeper {
   sweepDueSchedules(now: number): Promise<void>;
 }
 
 type PeriodicSweepDeps = LoggedPendingInteractionWorkSessionDeps & {
   pluginSchedules: PluginScheduleSweeper;
+  /** Liveness directory for `plugin:<id>` wait holders. */
+  plugins: QueueWaitPluginDirectory;
 };
 
 const DATABASE_MAINTENANCE_CHECK_INTERVAL_MS = 60 * 60_000;
-// Archive cleanup paths schedule immediate advances; this bounds only fallback
-// recovery from polling blocked workspaces while the app is idle.
 const MANAGED_ENVIRONMENT_ARCHIVE_CLEANUP_RECOVERY_INTERVAL_MS = 15 * 60_000;
 const ORPHANED_ENVIRONMENT_DESTROY_RECOVERY_DELAY_MS =
   LIVE_DAEMON_COMMAND_TIMEOUT_MS;
@@ -181,8 +181,6 @@ export async function runPeriodicSweepJobs(
 async function advanceRetiringManagedEnvironments(
   deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<ManagedEnvironmentArchiveCleanupEvaluationResult> {
-  // The advance enforces the archive grace window per environment, so this sweeps
-  // every retiring candidate each tick and lets in-grace ones short-circuit.
   const environmentsToClean = sweepManagedEnvironments(deps.db);
   if (environmentsToClean.length === 0) {
     return {
@@ -311,17 +309,12 @@ export function runDatabaseMaintenanceSweep(
         stats: freelistStats,
       })
     ) {
-      // Incremental vacuum only reclaims freelist pages. It does not defragment
-      // internal page slack reported by dbstat.unused, and checking dbstat here
-      // would add an expensive scan to busy servers that cannot act on it.
       deps.logger.debug(
         { freelistStats },
         "Incremental database vacuum skipped below freelist threshold",
       );
       return;
     }
-    // This steady-state path may write and checkpoint, but each attempt is
-    // capped by page count and DB busy timeout so active app work can proceed.
     databaseMaintenanceRunning = true;
     try {
       const result = runIncrementalVacuum(deps.db, {
@@ -336,10 +329,6 @@ export function runDatabaseMaintenanceSweep(
     return;
   }
 
-  // Non-incremental databases need a full VACUUM to reclaim dbstat-reported
-  // internal slack and convert legacy auto_vacuum=NONE databases to
-  // incremental mode. A full VACUUM rewrites the file, so only compute the
-  // expensive dbstat-based compaction stats after the instance is idle.
   const activity = getDatabaseMaintenanceActivity(deps.db);
   if (!isDatabaseMaintenanceIdle(activity)) {
     deps.logger.debug(
@@ -379,9 +368,6 @@ export async function runManagedEnvironmentArchiveCleanupRecoverySweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
   now: number,
 ): Promise<void> {
-  // Orphaned-destroy recovery only touches environments stuck `destroying` for
-  // longer than the daemon command timeout, so it stays throttled — it is a rare
-  // backstop, not the steady-state driver.
   if (
     now - lastManagedEnvironmentArchiveCleanupRecoveryAt >=
     MANAGED_ENVIRONMENT_ARCHIVE_CLEANUP_RECOVERY_INTERVAL_MS
@@ -392,10 +378,6 @@ export async function runManagedEnvironmentArchiveCleanupRecoverySweep(
     lastManagedEnvironmentArchiveCleanupRecoveryAt = now;
   }
 
-  // Grace-gated destroy runs every tick: a retiring managed worktree is reclaimed
-  // ~one sweep tick after its archive grace window elapses. The advance enforces
-  // the window against the durable `updatedAt` clock (no in-memory timer), so it
-  // survives restart.
   await advanceRetiringManagedEnvironments(deps);
 }
 
@@ -417,9 +399,6 @@ async function runProjectDeletionSweep(
   }
 }
 
-// Provisioning has no host-command queue to resume here. This
-// sweep only re-enters server-owned provisioning state so orphaned in-process
-// advances can either continue from persisted resource state or fail cleanly.
 export async function runEnvironmentProvisioningSweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
@@ -446,8 +425,6 @@ export async function runEnvironmentProvisioningSweep(
   }
 }
 
-// Thread provisioning context is process-local. This sweep is orphan cleanup,
-// not resumable recovery, and live same-process provisioning is skipped.
 async function runThreadProvisioningOrphanCleanupSweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
@@ -517,32 +494,21 @@ async function runDestroyedEnvironmentPruneSweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
   now: number,
 ): Promise<void> {
-  // One environment per event-loop turn. Each DELETE runs its ON DELETE SET
-  // NULL cascade synchronously, and that cost scales with the environment's
-  // event count (~756 ms measured for 101k events), so a batch of ten deleted
-  // back-to-back could stall the loop longer than the backlog this sweep was
-  // bounded to avoid. The `running` guard in runPeriodicSweepJob keeps the next
-  // tick from overlapping while this one is parked on setImmediate.
-  //
-  // Each prune runs in its own blocking frame: the enclosing async
-  // `sweep:destroyed-environment-prune` frame is non-blocking, and the stall
-  // monitor only credits blocking frames as `slowestWork`, so without this a
-  // single large cascade that crosses the stall threshold would be logged
-  // against whatever unrelated sync unit ran in the same window.
   for (
     let pruned = 0;
     pruned < DEFAULT_DESTROYED_ENVIRONMENT_PRUNE_BATCH_SIZE;
     pruned += 1
   ) {
-    const { deleted } = runEventLoopWorkSync(
-      "sweep:destroyed-environment-prune:delete",
+    const { deleted, detachedEvents } = runEventLoopWorkSync(
+      "sweep:destroyed-environment-prune:advance",
       () =>
         pruneDestroyedEnvironments(deps.db, deps.hub, {
           updatedBefore: now - DESTROYED_ENVIRONMENT_TTL_MS,
+          eventBatchSize: DEFAULT_DESTROYED_ENVIRONMENT_EVENT_DETACH_BATCH_SIZE,
           limit: 1,
         }),
     );
-    if (deleted === 0) {
+    if (deleted === 0 && detachedEvents === 0) {
       break;
     }
     await new Promise<void>((resolve) => setImmediate(resolve));
@@ -590,13 +556,28 @@ const PERIODIC_SWEEP_JOBS: PeriodicSweepJob[] = [
     cadenceMs: 0,
     category: "durable-intent-retry",
     name: "queued-message-auto-send",
-    run: runQueuedMessageAutoSendSweep,
+    run: (deps, now) =>
+      runQueuedMessageDispatch(deps, {
+        kind: "idle-recovery",
+        now,
+      }),
   },
   {
     cadenceMs: 0,
     category: "durable-intent-retry",
-    name: "deferred-thread-message-flush",
-    run: runDeferredThreadMessageSweep,
+    name: "due-scheduled-queue-dispatch",
+    run: (deps, now) =>
+      runQueuedMessageDispatch(deps, { kind: "time-reached", now }),
+  },
+  {
+    cadenceMs: 0,
+    category: "durable-intent-retry",
+    name: "orphaned-queue-wait-clear",
+    run: (deps) =>
+      runQueuedMessageDispatch(deps, {
+        kind: "orphaned-plugin-recovery",
+        plugins: deps.plugins,
+      }),
   },
   {
     cadenceMs: 0,
@@ -614,8 +595,6 @@ const PERIODIC_SWEEP_JOBS: PeriodicSweepJob[] = [
     cadenceMs: 0,
     category: "scheduler",
     name: "plugin-schedule",
-    // No primary-host gate: plugin schedules run even with no hosts enrolled
-    // (design §4.8) — they are not automations.
     run: (deps, now) => deps.pluginSchedules.sweepDueSchedules(now),
   },
   {
@@ -629,13 +608,9 @@ const PERIODIC_SWEEP_JOBS: PeriodicSweepJob[] = [
 export async function runStartupRecoverySweep(
   deps: LoggedPendingInteractionWorkSessionDeps,
 ): Promise<void> {
+  await deliverLegacyDeferredThreadMessages(deps);
   await runEnvironmentProvisioningSweep(deps);
   await runThreadLifecycleSweep(deps);
-  // A daemon can reconnect and settle an in-flight destroy after the server
-  // restarts. Apply the same orphan timeout used by periodic recovery instead
-  // of immediately moving every `destroying` row to `error`; genuinely stale
-  // attempts are still recovered, and a matching late success can settle from
-  // `error` as a final backstop.
   recoverOrphanedEnvironmentDestroyRequests(deps, {
     updatedBefore: Date.now() - ORPHANED_ENVIRONMENT_DESTROY_RECOVERY_DELAY_MS,
   });

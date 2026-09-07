@@ -19,9 +19,7 @@ afterEach(() => {
 describe("reset-bb-data", () => {
   it("documents the NODE_ENV-based reset contract", () => {
     expect(renderHelpText()).not.toContain("--mode");
-    expect(renderHelpText()).toContain(
-      "Production resets respect BB_DATA_DIR",
-    );
+    expect(renderHelpText()).toContain("Production resets respect BB_DATA_DIR");
     expect(renderHelpText()).toContain(
       "Development resets always target this checkout's dev data directory",
     );

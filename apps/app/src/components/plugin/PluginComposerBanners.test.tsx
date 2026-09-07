@@ -12,6 +12,7 @@ import {
 import { ComposerBannersSlot } from "./PluginComposerBanners";
 import { resetAllCrashedPluginSlotsForTest } from "./PluginSlotMount";
 import { useComposerView } from "@/lib/plugin-sdk-hooks";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 function composerView(threadId: string, text = "") {
   return {
@@ -25,16 +26,9 @@ function composerView(threadId: string, text = "") {
 function registrations(
   composerCustomizations: PluginRegistrationSet["composerCustomizations"],
 ): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
+  return makePluginRegistrationSet({
     composerCustomizations,
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-  };
+  });
 }
 
 beforeEach(() => {

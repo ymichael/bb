@@ -30,9 +30,6 @@ function chunk(
   };
 }
 
-// A bundle shaped like the app's: an entry with a shared boot chunk, a lazy
-// route chunk that reaches the shared boot chunk and a route-only chunk, and
-// a chunk only a dynamic import reaches.
 const chunks: BundleStatsChunkInput[] = [
   chunk("assets/index.js", {
     isEntry: true,
@@ -73,8 +70,6 @@ describe("computeBundleStats", () => {
     const route = stats.routeClosures.SplitWorkspaceRoute;
     if (route === undefined) throw new Error("expected the route closure");
     expect(route.entry).toBe("assets/SplitWorkspaceRoute.js");
-    // boot-shared is already paid for by the boot payload, so it must not be
-    // counted twice; the dynamic-only chunk is not part of the closure.
     expect(route.chunks.map((c) => c.fileName)).toEqual([
       "assets/SplitWorkspaceRoute.js",
       "assets/route-only.js",
@@ -93,7 +88,6 @@ describe("computeBundleStats", () => {
 
 interface Fixture {
   distDir: string;
-  /** Holds bundle-stats.json and bundle-budget.json (the check's budgetDir). */
   budgetDir: string;
 }
 
@@ -106,7 +100,6 @@ async function writeFixture(budget: unknown): Promise<Fixture> {
     { SplitWorkspaceRoute: "/src/views/SplitWorkspaceRoute.tsx" },
     () => undefined,
   );
-  // 100-byte brotli sidecars for every chunk: the check reads sizes only.
   for (const c of chunks) {
     await writeFile(resolve(distDir, `${c.fileName}.br`), "b".repeat(100));
   }
@@ -175,8 +168,6 @@ describe("check-bundle-budget", () => {
   });
 
   it("fails when the route closure grows past its ratchet", async () => {
-    // Two 2 KiB chunks in the closure; a 3 KiB raw budget is exceeded while
-    // the brotli budget (2 x 100 B) is not.
     const result = await runCheck(
       await writeFixture({
         ...passingBudget,

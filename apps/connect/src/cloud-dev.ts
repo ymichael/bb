@@ -24,7 +24,6 @@ function resolveCloudDevLabel(
     : null;
 }
 
-/** Resolve the small, fail-closed set of overrides used by local Cloud. */
 export function resolveConnectRuntime(env: {
   ACCOUNT_APP_URL?: string;
   BASE_DOMAIN: string;
@@ -73,7 +72,6 @@ export function resolveConnectRuntime(env: {
   };
 }
 
-/** Wrangler replaces wildcard hosts locally; the launcher preserves the label. */
 export function resolveConnectRequestHost(
   headers: Headers,
   runtime: ConnectRuntime,

@@ -4,20 +4,8 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const POLL_INTERVAL_MS = 100;
 
-/**
- * How far the recorded start time may sit from the real process start time.
- * A launcher records the time a moment after the process starts, and `ps`
- * reports whole seconds, so the two never match exactly. The window stays small
- * enough that a recycled PID from an earlier session cannot pass.
- */
 const PROCESS_START_TOLERANCE_MS = 60_000;
 
-/**
- * Stopping a PID recorded in a file is only safe when the PID still belongs to
- * the process that wrote it. The operating system reuses PIDs, so a stale file
- * can name an unrelated process. Every caller therefore checks both the command
- * line and the process start time before it sends a signal.
- */
 export interface VerifiedProcessOps {
   isRunning(pid: number): boolean;
   kill(pid: number, signal: NodeJS.Signals): void;
@@ -32,20 +20,12 @@ export interface WaitForProcessExitArgs {
 }
 
 interface StopVerifiedProcessArgs {
-  /** How long to wait after SIGKILL. SIGKILL is not catchable, so keep it short. */
   killTimeoutMs: number;
   pid: number;
   processOps?: VerifiedProcessOps;
   signal: NodeJS.Signals;
-  /** ISO time the record was written, checked against the real start time. */
   startedAt: string;
   timeoutMs: number;
-  /**
-   * The `ps` command line must contain at least one of these substrings. Node
-   * resolves `argv[1]` to an absolute path, but `ps` shows the command line as
-   * it was typed, so a relative invocation never contains the absolute path.
-   * This is a weak signal on its own; the start-time check carries the identity.
-   */
   verifyTokens: string[];
 }
 
@@ -85,7 +65,6 @@ async function readPsField(pid: number, field: string): Promise<string | null> {
   }
 }
 
-/** Parse the `ps -o etime=` format `[[dd-]hh:]mm:ss` into seconds. */
 export function parseElapsedSeconds(rawElapsed: string): number | null {
   const match = rawElapsed
     .trim()
@@ -148,8 +127,6 @@ async function verifyProcessIdentity(
     return { command, reason: "command" };
   }
 
-  // The command line alone cannot tell two bb launchers apart, and a recycled
-  // PID can carry a matching name. The start time is what proves identity.
   const recordedStart = Date.parse(args.startedAt);
   const elapsedSeconds = await args.processOps.readElapsedSeconds(args.pid);
   if (Number.isNaN(recordedStart) || elapsedSeconds === null) {
@@ -162,12 +139,6 @@ async function verifyProcessIdentity(
   return null;
 }
 
-/**
- * Send `signal` to a PID, then escalate to SIGKILL when it does not exit in
- * time. Signals nothing unless the process still matches the record, and
- * reports `still-running` when even SIGKILL does not end it, so callers never
- * treat a surviving process as stopped.
- */
 export async function stopVerifiedProcess(
   args: StopVerifiedProcessArgs,
 ): Promise<StopVerifiedProcessResult> {

@@ -1,0 +1,125 @@
+{
+  "account-pool": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "ask-user-question": {
+    "category": "thread-content",
+    "screenshots": []
+  },
+  "automations": {
+    "category": "tasks-and-workflows",
+    "screenshots": [
+      "https://getbb.app/marketplace/v2/screenshots/automations/automations-catalog.png",
+      "https://getbb.app/marketplace/v2/screenshots/automations/automations-sidebar.png"
+    ]
+  },
+  "connect": {
+    "category": "cloud-and-remote",
+    "screenshots": []
+  },
+  "custom-instructions": {
+    "category": "memory-and-context",
+    "screenshots": []
+  },
+  "plugin-api-tester": {
+    "category": "plugin-development",
+    "screenshots": []
+  },
+  "inline-vis": {
+    "category": "thread-content",
+    "screenshots": []
+  },
+  "monaco-editor": {
+    "category": "file-viewers-and-editors",
+    "screenshots": []
+  },
+  "pdf-preview": {
+    "category": "file-viewers-and-editors",
+    "screenshots": []
+  },
+  "provider-codex": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "provider-claude-code": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "provider-pi": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "provider-acp": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "keep-awake": {
+    "category": "utilities",
+    "screenshots": []
+  },
+  "plugin-api-docs": {
+    "category": "plugin-development",
+    "screenshots": [
+      "https://getbb.app/marketplace/v2/screenshots/plugin-api-docs/plugin-guide-map.png",
+      "https://getbb.app/marketplace/v2/screenshots/plugin-api-docs/plugin-guide-surfaces.png",
+      "https://getbb.app/marketplace/v2/screenshots/plugin-api-docs/plugin-guide-reference.png"
+    ]
+  },
+  "provider-retry": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "provider-usage": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  },
+  "secrets": {
+    "category": "security",
+    "screenshots": []
+  },
+  "scheduled-send": {
+    "category": "tasks-and-workflows",
+    "screenshots": []
+  },
+  "concurrency-limit": {
+    "category": "tasks-and-workflows",
+    "screenshots": []
+  },
+  "side-chat": {
+    "category": "thread-content",
+    "screenshots": []
+  },
+  "workflows": {
+    "category": "tasks-and-workflows",
+    "screenshots": []
+  },
+  "github": {
+    "category": "code-and-reviews",
+    "screenshots": []
+  },
+  "docs": {
+    "category": "file-viewers-and-editors",
+    "screenshots": []
+  },
+  "memory": {
+    "category": "memory-and-context",
+    "screenshots": []
+  },
+  "tasks": {
+    "category": "tasks-and-workflows",
+    "screenshots": []
+  },
+  "theme-preview": {
+    "category": "themes-and-appearance",
+    "screenshots": []
+  },
+  "push-notifications": {
+    "category": "notifications",
+    "screenshots": []
+  },
+  "browser-automation": {
+    "category": "agents-and-providers",
+    "screenshots": []
+  }
+}

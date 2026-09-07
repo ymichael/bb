@@ -2,12 +2,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-/**
- * The bar above the editor. Mirrors BB's own file-preview header (`h-9`,
- * `bg-surface-raised`, monospace `text-file-accent` path) so a plugin-opened
- * file does not look like a different application from a BB-opened one.
- */
-
 export type SaveIndicator = "clean" | "dirty" | "saving" | "error";
 
 export interface FileToolbarProps {
@@ -55,11 +49,6 @@ export function FileToolbar({
   );
 }
 
-/**
- * Present only while the file differs from disk, the way editors do it — a
- * saved file is the resting state and needs no ornament. The slot keeps its
- * width either way so the reload button does not shift when the dot appears.
- */
 function SaveDot({ indicator }: { indicator: SaveIndicator }) {
   if (indicator === "clean") {
     return <span className="size-4 shrink-0" aria-hidden />;
@@ -89,7 +78,6 @@ function SaveDot({ indicator }: { indicator: SaveIndicator }) {
   );
 }
 
-/** Truncates from the start, so the file name stays visible in a narrow panel. */
 function CopyablePath({ path }: { path: string }) {
   const [copied, setCopied] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,11 +112,9 @@ function CopyablePath({ path }: { path: string }) {
         "font-medium leading-5 text-file-accent underline-offset-2",
         "hover:underline focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
       )}
-      // Truncation from the left keeps the file name readable; `direction`
-      // does the work so the ellipsis lands on the directory prefix.
       style={{ direction: "rtl", textAlign: "left" }}
     >
-      {/* The bidi isolate stops RTL from reordering punctuation in the path. */}
+      {}
       <bdi>{path}</bdi>
     </button>
   );
@@ -182,10 +168,6 @@ function TreeIcon() {
   );
 }
 
-/**
- * Inline glyphs rather than an icon dependency: the plugin needs three shapes,
- * and pulling in an icon package to get them would bundle a whole map.
- */
 function FileGlyph({ path, className }: { path: string; className?: string }) {
   const kind = glyphKindForPath(path);
   if (kind === "code") {

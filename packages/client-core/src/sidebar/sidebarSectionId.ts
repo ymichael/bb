@@ -1,5 +1,3 @@
-// Identity of a top-level sidebar section. Built-in sections are "pinned" and
-// "threads"; entity sections are keyed by kind and id.
 export type SidebarSectionId =
   | "pinned"
   | "threads"

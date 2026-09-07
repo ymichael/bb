@@ -81,11 +81,6 @@ function findFile(
 
 const UNCOMMITTED: WorkspaceDiffTarget = { type: "uncommitted" };
 
-/**
- * Reads the full diff for a target, then splits it per-file the same way the
- * production splitter does, so a per-path patch can be compared byte-for-byte
- * against the corresponding slice of the full diff.
- */
 async function fullDiffSectionFor(
   workspace: Workspace,
   target: WorkspaceDiffTarget,
@@ -123,7 +118,6 @@ function splitFullDiff(combinedDiff: string): Map<string, string> {
   return byPath;
 }
 
-/** Mirror of the production trailing-empty-line normalization. */
 function formatDiffSection(lines: string[]): string {
   let end = lines.length;
   while (end > 0 && lines[end - 1] === "") {
@@ -207,8 +201,6 @@ describe("Workspace.diffFiles", () => {
     await write(repoPath, "keep.txt", "a\nB\nc\nd\n");
     await write(repoPath, "added.txt", "new\nfile\n");
     await fs.rm(path.join(repoPath, "remove.txt"));
-    // Stage the new file so it is a tracked addition (vs. an untracked file)
-    // in the `git diff HEAD` the uncommitted target computes.
     await runGit(["add", "added.txt"], { cwd: repoPath });
 
     const workspace = new Workspace(repoPath);
@@ -453,11 +445,7 @@ describe("Workspace.diffFiles", () => {
     await commitAll(repoPath, "base");
 
     await runGit(["mv", "a-before.txt", "a-after.txt"], { cwd: repoPath });
-    await write(
-      repoPath,
-      "a-after.txt",
-      "one\ntwo\nthree\nfour\nfive\nsix\n",
-    );
+    await write(repoPath, "a-after.txt", "one\ntwo\nthree\nfour\nfive\nsix\n");
     await write(repoPath, "b.txt", "after\n");
     await write(repoPath, "c.txt", "after\n");
 
@@ -577,7 +565,6 @@ describe("Workspace.diffPatch", () => {
     expect(patches[0]?.path).toBe("alpha.txt");
     expect(patches[0]?.truncated).toBe(false);
     expect(patches[0]?.patch).toBe(expected);
-    // The subset must not bleed the other changed file into the patch.
     expect(patches[0]?.patch).not.toContain("beta.txt");
   });
 
@@ -599,9 +586,6 @@ describe("Workspace.diffPatch", () => {
     await write(repoPath, "alpha.txt", "1\nTWO\n3\n");
 
     const workspace = new Workspace(repoPath);
-    // A binary section from the combined-split must be byte-equal to the
-    // standalone `git diff --binary` — including the `GIT binary patch` block's
-    // terminating blank line, which an earlier strip dropped.
     const perFileBinary = await runGit(
       ["diff", "--no-ext-diff", "--binary", "-M", "HEAD", "--", "logo.png"],
       { cwd: repoPath },
@@ -616,7 +600,6 @@ describe("Workspace.diffPatch", () => {
     expect(binary?.patch).toContain("GIT binary patch");
     expect(binary?.patch).toBe(perFileBinary.stdout);
     expect(binary?.patch.endsWith("\n\n")).toBe(true);
-    // The combined page must not bleed the sibling text file into this section.
     expect(binary?.patch).not.toContain("alpha.txt");
   });
 
@@ -649,7 +632,6 @@ describe("Workspace.diffPatch", () => {
 
     expect(patches).toHaveLength(1);
     expect(patches[0]?.patch).toBe(expected);
-    // Rename detection intact: a rename header, not an add+delete pair.
     expect(patches[0]?.patch).toMatch(/rename from original\.txt/);
     expect(patches[0]?.patch).toMatch(/rename to renamed\.txt/);
   });
@@ -737,7 +719,6 @@ describe("Workspace.diffPatch", () => {
       maxBytesPerFile: BIG_BUDGET,
     });
 
-    // Requested order is preserved.
     expect(patches.map((entry) => entry.path)).toEqual([
       "untracked.txt",
       "tracked.txt",
@@ -775,10 +756,6 @@ describe("Workspace.diffPatch", () => {
     await write(repoPath, "huge.txt", "seed\n");
     await commitAll(repoPath, "base");
 
-    // One very long single line (~400 KB) so the raw `git diff` for this file
-    // far exceeds the small per-file budget below. A pre-fix unbounded read
-    // would either return the full ~400 KB patch or, with a 16 MB default
-    // buffer overflow on a larger page, throw — here we assert it is bounded.
     const longLine = "x".repeat(400 * 1024);
     await write(repoPath, "huge.txt", `${longLine}\n`);
 
@@ -793,8 +770,6 @@ describe("Workspace.diffPatch", () => {
     expect(patches).toHaveLength(1);
     expect(patches[0]?.path).toBe("huge.txt");
     expect(patches[0]?.truncated).toBe(true);
-    // Non-empty, bounded patch — truncation must keep a real prefix, not blank
-    // the whole page, and must respect the byte budget.
     expect(patches[0]?.patch.length).toBeGreaterThan(0);
     expect(
       Buffer.byteLength(patches[0]?.patch ?? "", "utf8"),
@@ -809,12 +784,6 @@ describe("Workspace.diffPatch", () => {
     }
     await commitAll(repoPath, "base");
 
-    // Each file's raw patch is one ~5 MB long line; 6 of them put the combined
-    // page diff well past the 16 MB default `git diff` buffer. Pre-fix, the
-    // unbounded combined `runGit` would throw WorkspaceError("git_command_failed")
-    // on MAXBUFFER overflow and fail the WHOLE page. Post-fix the page buffer is
-    // capped and `allowTruncatedStdout` is set, so the read truncates, the
-    // per-file fallback fires, and every entry returns bounded — no throw.
     const longLine = "z".repeat(5 * 1024 * 1024);
     const paths: string[] = [];
     for (let index = 0; index < fileCount; index += 1) {
@@ -894,7 +863,6 @@ describe("Workspace.diffPatch", () => {
       "does-not-exist.txt",
     ]);
     expect(patches.find((p) => p.path === "real.txt")?.patch).toContain("+b");
-    // A path with no changes yields an empty patch rather than an error.
     expect(patches.find((p) => p.path === "does-not-exist.txt")?.patch).toBe(
       "",
     );
@@ -923,9 +891,6 @@ describe("Workspace.diffPatch", () => {
     expect(patches).toHaveLength(1);
     expect(patches[0]?.path).toBe("my file.txt");
     expect(patches[0]?.patch.length).toBeGreaterThan(0);
-    // Byte-equal to the full-diff slice: a space in the path must not break the
-    // per-file split (git does not C-quote spaces, so a header-token split that
-    // tokenizes on the first space would key the wrong path and return "").
     expect(patches[0]?.patch).toBe(expected);
     expect(expected.length).toBeGreaterThan(0);
   });
@@ -965,7 +930,6 @@ describe("Workspace.diffPatch", () => {
     expect(patches[0]?.path).toBe("new name.txt");
     expect(patches[0]?.patch).toBe(expected);
     expect(expected.length).toBeGreaterThan(0);
-    // Rename detection intact even with spaces on both sides of the pairing.
     expect(patches[0]?.patch).toMatch(/rename from /);
     expect(patches[0]?.patch).toMatch(/rename to /);
   });
@@ -992,8 +956,6 @@ describe("Workspace.diffPatch", () => {
       "normal.txt",
     );
 
-    // Both files come back from a SINGLE combined `git diff` invocation; the
-    // space-in-path file must not bleed into or steal the normal file's patch.
     const patches = await workspace.diffPatch({
       target: UNCOMMITTED,
       paths: ["my file.txt", "normal.txt"],
@@ -1012,7 +974,6 @@ describe("Workspace.diffPatch", () => {
     );
     expect(expectedSpace.length).toBeGreaterThan(0);
     expect(expectedNormal.length).toBeGreaterThan(0);
-    // No cross-contamination between the two sections of the combined patch.
     expect(patches.find((p) => p.path === "my file.txt")?.patch).not.toContain(
       "normal.txt",
     );
@@ -1056,14 +1017,12 @@ describe("Workspace.diffPatch", () => {
       maxBytesPerFile: BIG_BUDGET,
     });
 
-    // Renamed file keyed by its NEW path, byte-equal to the full-diff slice.
     expect(patches.find((p) => p.path === "after.txt")?.patch).toBe(
       expectedRename,
     );
     expect(patches.find((p) => p.path === "edit.txt")?.patch).toBe(
       expectedEdit,
     );
-    // Rename framing survives the combined split (not an add+delete pair).
     expect(patches.find((p) => p.path === "after.txt")?.patch).toMatch(
       /rename from before\.txt/,
     );
@@ -1081,10 +1040,6 @@ describe("Workspace.diffPatch", () => {
     await write(repoPath, "café.txt", "un\nDEUX\ntrois\nquatre\n");
 
     const workspace = new Workspace(repoPath);
-    // The daemon keys patches by the literal requested path, so a non-ASCII
-    // path must resolve to its own changes rather than an empty patch. (The
-    // header path is git-C-quoted at the default quotePath setting, so we assert
-    // on the keyed result and hunk content, not a header-parsed ground truth.)
     const patches = await workspace.diffPatch({
       target: UNCOMMITTED,
       paths: ["café.txt"],
@@ -1096,7 +1051,6 @@ describe("Workspace.diffPatch", () => {
     expect(patches[0]?.patch.length).toBeGreaterThan(0);
     expect(patches[0]?.patch).toContain("+DEUX");
     expect(patches[0]?.patch).toContain("+quatre");
-    // The subset must not bleed the other changed file into the patch.
     expect(patches[0]?.patch).not.toContain("plain.txt");
   });
 
@@ -1105,9 +1059,6 @@ describe("Workspace.diffPatch", () => {
     await write(repoPath, "seed.txt", "seed\n");
     await commitAll(repoPath, "base");
 
-    // A patch body dense with the 3-byte character 中 (E4 B8 AD): a byte budget
-    // that lands on either continuation byte of a sequence must trim back to the
-    // sequence start, dropping the straddled character whole.
     const multibyteBody = `${"中".repeat(200)}\n`;
     await write(repoPath, "multibyte.txt", multibyteBody);
 
@@ -1119,12 +1070,9 @@ describe("Workspace.diffPatch", () => {
     });
     const fullPatch = full?.patch ?? "";
     const fullBytes = Buffer.from(fullPatch, "utf8");
-    // Byte offset of the first 中 lead byte (E4) in the added "+中中…" line.
     const leadOffset = fullBytes.indexOf(0xe4);
     expect(leadOffset).toBeGreaterThan(0);
 
-    // Budgets that land exactly on the lead byte (clean boundary) and on each of
-    // the two continuation bytes of that 中 (mid-character straddles).
     for (const maxBytes of [leadOffset, leadOffset + 1, leadOffset + 2]) {
       const [entry] = await workspace.diffPatch({
         target: UNCOMMITTED,
@@ -1133,14 +1081,10 @@ describe("Workspace.diffPatch", () => {
       });
 
       expect(entry?.truncated).toBe(true);
-      // No replacement character: a naive byte slice would corrupt the straddled
-      // 中 into U+FFFD (which would also overshoot the budget).
       expect(entry?.patch).not.toContain("�");
       expect(Buffer.byteLength(entry?.patch ?? "", "utf8")).toBeLessThanOrEqual(
         maxBytes,
       );
-      // The kept prefix must be a byte-exact prefix of the full patch — i.e. we
-      // only dropped a tail, never mutated bytes.
       expect(
         fullBytes
           .subarray(0, Buffer.byteLength(entry?.patch ?? "", "utf8"))

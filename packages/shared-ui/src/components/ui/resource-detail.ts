@@ -1,6 +1,3 @@
-// Narrow entry for the resource detail surface. Settings-side callers import
-// from here instead of the resource-list barrel so the collection surface
-// (browse grid, viewport, shelves) stays out of the boot path's Settings chunk.
 export {
   ResourceDetailActionRow,
   ResourceDetailCollection,

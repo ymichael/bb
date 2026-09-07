@@ -1,10 +1,3 @@
-/**
- * Shared security boundary for Claude readonly Bash commands.
- *
- * Both the PreToolUse hook and canUseTool path must use this policy so safe,
- * non-mutating pwd/Git probes are allowed consistently without widening the
- * shell surface beyond the explicitly parsed command and option sets below.
- */
 import { z } from "zod";
 
 const READONLY_GIT_TOP_LEVEL_OPTIONS = new Set([
@@ -211,8 +204,6 @@ function isAbsolutePathToken(token: string): boolean {
 }
 
 function tokenizeSimpleReadonlyShellCommand(command: string): string[] | null {
-  // Intentionally accept only a tiny whitespace-token grammar. Quoting and
-  // other shell syntax are denied instead of parsed or interpreted.
   const tokens = command.trim().split(/\s+/u).filter(Boolean);
   if (tokens.length === 0) {
     return null;
@@ -433,8 +424,6 @@ function withGitDiffSafetyOptions(tokens: readonly string[]): string[] {
   }
   const args = tokens.slice(subcommandIndex + 1);
   const pathspecSeparatorIndex = args.indexOf("--");
-  // Tokens after "--" are pathspecs, so safety-looking strings there do not
-  // harden Git and must not satisfy the option check.
   const optionArgs =
     pathspecSeparatorIndex === -1
       ? args

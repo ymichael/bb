@@ -5,8 +5,6 @@ import type {
   EventProjectionProvisioningTranscriptEntry,
 } from "./event-projection-types.js";
 
-// --- Helpers used by build-event-projection.ts (event -> draft projection) ---
-
 export function readProvisioningTranscript(
   entries: ProvisioningTranscriptEntry[] | undefined,
 ): EventProjectionProvisioningTranscriptEntry[] | undefined {
@@ -69,7 +67,8 @@ export function provisioningTitleForStatus(
   }
 }
 
-function mergeProvisioningTranscript(
+/** Transcript entries arrive as deltas, so merging is concatenation. */
+function mergeTranscriptEntries(
   existing: EventProjectionProvisioningTranscriptEntry[] | undefined,
   incoming: EventProjectionProvisioningTranscriptEntry[] | undefined,
 ): EventProjectionProvisioningTranscriptEntry[] | undefined {
@@ -98,7 +97,7 @@ export function mergeProvisioningMetadata(
       ...incoming,
       ...(incoming.transcript
         ? {
-            transcript: mergeProvisioningTranscript(
+            transcript: mergeTranscriptEntries(
               undefined,
               incoming.transcript,
             ),
@@ -107,7 +106,7 @@ export function mergeProvisioningMetadata(
     };
   }
 
-  const transcript = mergeProvisioningTranscript(
+  const transcript = mergeTranscriptEntries(
     existing.transcript,
     incoming.transcript,
   );

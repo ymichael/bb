@@ -187,14 +187,12 @@ export function sleep(ms: number, signal: AbortSignal): Promise<void> {
       resolve();
       return;
     }
-    const timeout = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
+    const settle = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", settle);
+      resolve();
+    };
+    const timeout = setTimeout(settle, ms);
+    signal.addEventListener("abort", settle, { once: true });
   });
 }

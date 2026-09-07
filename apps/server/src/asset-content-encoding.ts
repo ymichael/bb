@@ -32,7 +32,6 @@ function acceptedEncodingQuality(
   return wildcardQuality;
 }
 
-/** Rank supported encodings by the client's q-values, preserving server order on ties. */
 export function rankAcceptedAssetEncodings<
   Candidate extends AssetEncodingCandidate,
 >(

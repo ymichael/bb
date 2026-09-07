@@ -1,7 +1,3 @@
-// NOTE: "./thread-status.js" is deliberately not re-exported here. It has its
-// own subpath export (@bb/domain/thread-status) for low-level consumers, and
-// thread.ts re-exports its public names; starring it here would collide with
-// "./thread.js".
 export * from "./active-thinking.js";
 export * from "./acp-cli.js";
 export * from "./native-roots.js";
@@ -27,6 +23,8 @@ export * from "./number-utils.js";
 export * from "./pending-interactions.js";
 export * from "./legacy-thread-events.js";
 export * from "./plugin-icon.js";
+export * from "./plugin-catalog-category.js";
+export * from "./plugin-marketplace-entry.js";
 export * from "./plugin-id.js";
 export * from "./plugin-manifest.js";
 export * from "./plugin-sdk-version.js";
@@ -34,6 +32,8 @@ export * from "./project-path.js";
 export * from "./project.js";
 export * from "./prompt-history.js";
 export * from "./protocol-ids.js";
+export * from "./queued-message.js";
+export * from "./system-message.js";
 export * from "./provider-event.js";
 export * from "./provider-extension-kind.js";
 export * from "./provider-fork.js";

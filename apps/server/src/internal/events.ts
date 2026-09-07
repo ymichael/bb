@@ -39,7 +39,10 @@ import {
 } from "../services/system/event-pruning.js";
 import { queueChildThreadTurnNotificationBestEffort } from "../services/threads/child-thread-notifications.js";
 import { isParentNotifiableChildThread } from "../services/threads/thread-parent.js";
-import { runQueuedMessageAutoSendForThread } from "../services/threads/queued-messages.js";
+import {
+  runQueuedMessageDispatch,
+  type QueuedMessageDispatchWake,
+} from "../services/threads/queued-message-dispatch.js";
 import { deferAfterResponse } from "../services/lib/response-deferral.js";
 import {
   isCommandTimeoutError,
@@ -189,14 +192,17 @@ interface ParentTurnNotificationFollowUp {
   turnStatus: ThreadEventTurnStatus;
 }
 
-interface QueuedMessageAutoSendFollowUp {
-  kind: "queued-message-auto-send";
-  threadId: string;
+interface QueuedMessageDispatchFollowUp {
+  kind: "queued-message-dispatch";
+  wake: Extract<
+    QueuedMessageDispatchWake,
+    { kind: "thread-ready" } | { kind: "turn-started" }
+  >;
 }
 
 type EventEffectFollowUp =
   | ParentTurnNotificationFollowUp
-  | QueuedMessageAutoSendFollowUp;
+  | QueuedMessageDispatchFollowUp;
 
 function isRootTurnStartedEvent(
   event: Extract<HostDaemonEventEnvelope["event"], { type: "turn/started" }>,
@@ -228,6 +234,7 @@ function resolveProviderIdentifiers(event: HostDaemonEventEnvelope["event"]): {
     case "provider/warning":
     case "provider/modelFallback":
     case "provider/rateLimits/updated":
+    case "provider.env-resolved":
       return { providerThreadId: event.providerThreadId };
     case "thread/compacted":
       return { providerThreadId: event.providerThreadId };
@@ -340,9 +347,6 @@ async function applyEventEffects(
   deps: LoggedPendingInteractionWorkSessionDeps,
   events: HostDaemonEventEnvelope[],
 ): Promise<EventEffectFollowUp[]> {
-  // Apply event-owned state changes before returning so the accepted batch and
-  // immediately visible thread state agree. Follow-ups that may queue daemon
-  // work stay deferred to avoid command waits inside daemon ingress.
   const followUps: EventEffectFollowUp[] = [];
   const failedParentNotificationThreadIds = new Set<string>();
   for (const entry of events) {
@@ -353,8 +357,6 @@ async function applyEventEffects(
           type: event.type,
           scope: event.scope,
         });
-        // Event-log staleness stays caller-side: a stop recorded before this
-        // turn started means the activation is stale.
         if (
           hasThreadStopBeforeTurnStarted(deps, {
             threadId: entry.threadId,
@@ -363,10 +365,14 @@ async function applyEventEffects(
         ) {
           continue;
         }
-        if (hasThreadAlreadyStartedRun(deps, entry.threadId)) {
+        if (!isRootTurnStartedEvent(event)) {
           continue;
         }
-        if (!isRootTurnStartedEvent(event)) {
+        followUps.push({
+          kind: "queued-message-dispatch",
+          wake: { kind: "turn-started", threadId: entry.threadId },
+        });
+        if (hasThreadAlreadyStartedRun(deps, entry.threadId)) {
           continue;
         }
         applyLoggedThreadLifecycleEvent(deps, {
@@ -397,13 +403,8 @@ async function applyEventEffects(
         if (
           turnCompleted.thread &&
           turnCompleted.isRootTurnCompletion &&
-          // Forks / side chats are user-initiated branches, not agent-delegated
-          // sub-tasks, so a completed turn must not post a "child finished"
-          // notification back into their parent thread.
           isParentNotifiableChildThread(turnCompleted.thread)
         ) {
-          // Command-result failures already notify parent threads for failed turns
-          // without terminal events; late terminal events still own status effects.
           const alreadyHandledByCommandFailure =
             event.status === "failed" &&
             hasThreadCommandFailureSystemErrorForTurn(deps, {
@@ -424,8 +425,8 @@ async function applyEventEffects(
           turnCompleted.nextStatus === "idle"
         ) {
           followUps.push({
-            kind: "queued-message-auto-send",
-            threadId: entry.threadId,
+            kind: "queued-message-dispatch",
+            wake: { kind: "thread-ready", threadId: entry.threadId },
           });
         }
         continue;
@@ -489,10 +490,8 @@ async function executeEventFollowUpBestEffort(
           turnStatus: followUp.turnStatus,
         });
         return;
-      case "queued-message-auto-send":
-        await runQueuedMessageAutoSendForThread(deps, {
-          threadId: followUp.threadId,
-        });
+      case "queued-message-dispatch":
+        await runQueuedMessageDispatch(deps, followUp.wake);
         return;
     }
   } catch (error) {
@@ -704,8 +703,6 @@ function shouldApplyEventEffect(args: ShouldApplyEventEffectArgs): boolean {
     );
   }
 
-  // Keep other projections replayable so a daemon retry can repair them if the
-  // event insert committed before the projection side effect ran.
   return true;
 }
 
@@ -836,7 +833,6 @@ interface DroppedLifecycleEvent {
   threadId: string;
 }
 
-/** The interaction id a lifecycle event names, by event type. */
 function lifecycleInteractionId(
   event: HostDaemonEventEnvelope["event"],
 ): string | null {
@@ -851,12 +847,6 @@ function lifecycleInteractionId(
   }
 }
 
-/**
- * Drop every interaction lifecycle record a daemon posts. The server is the
- * only author of these records: it appends one on each status change of an
- * interaction it registered, so nothing a daemon sends is a legitimate one.
- * Every other entry passes through untouched.
- */
 function dropInteractionLifecycleEvents(entries: PostableEventBatchEntry[]): {
   entries: PostableEventBatchEntry[];
   droppedLifecycleEvents: DroppedLifecycleEvent[];
@@ -917,13 +907,6 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
           hostId: session.hostId,
           events,
         });
-      // An interaction lifecycle record is the server's own account of an
-      // interaction it registered, written by the server when the interaction
-      // is created and each time it settles. No daemon or bridge produces one,
-      // and a daemon-posted record naming a real pending interaction would
-      // render it as granted or answered — with whatever content the record
-      // carries — while the row stays pending. So every such record is
-      // dropped here and logged, never stored, whatever interaction it names.
       const { entries, droppedLifecycleEvents } =
         dropInteractionLifecycleEvents(ownedEntries);
       if (droppedLifecycleEvents.length > 0) {
@@ -946,10 +929,6 @@ export function registerInternalEventRoutes(app: Hono, deps: AppDeps): void {
           "Rejected daemon events for threads outside the session host",
         );
       }
-      // Extension payloads are validated against the owning plugin's declared
-      // schema before anything else reads them; a miss becomes a visible
-      // provider/unhandled in the same batch slot. Namespaced presentation
-      // glyphs get the same pass against the plugin's declared icons.
       const validatedEnvelopes = validatePresentationIcons(
         deps,
         await validateExtensionPayloads(

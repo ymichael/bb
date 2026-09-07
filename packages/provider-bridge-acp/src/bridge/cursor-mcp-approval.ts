@@ -60,12 +60,6 @@ function cursorMcpServerConfig(config: AcpMcpServerConfig): {
   };
 }
 
-/**
- * Cursor hashes the project root and normalized MCP server config into the
- * approval identifier stored in its project data. Its ACP adapter applies
- * this approval gate to client-supplied session MCP servers, but ACP has no
- * permission round-trip through which bb can answer that gate (#2018).
- */
 export function buildCursorMcpApprovalIdentifier(args: {
   config: AcpMcpServerConfig;
   projectRoot: string;

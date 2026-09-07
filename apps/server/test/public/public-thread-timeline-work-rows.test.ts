@@ -1,10 +1,3 @@
-/**
- * The timeline routes serve one work-row vocabulary to every client. The
- * `file-read`, `search`, `plan-steps` and `extension` rows are served to a
- * request that declares nothing about itself: there is no capability header
- * and no projection back to the tool rows an older client rendered. Every
- * client ships with the server, so an older one is never served.
- */
 import { describe, expect, it } from "vitest";
 import { turnScope } from "@bb/domain";
 import {
@@ -26,7 +19,6 @@ const V3_WORK_KINDS = [
   "extension",
 ] as const;
 
-/** Every work kind in the window, through turn children and delegations. */
 function collectWorkKinds(
   rows: readonly TimelineRow[],
   into = new Set<string>(),
@@ -85,12 +77,6 @@ function completedTurnRow(rows: readonly TimelineRow[], turnId: string) {
   return row;
 }
 
-/**
- * One completed turn carrying every v3 item kind, then a running turn
- * carrying a file read and a plan snapshot, so both the collapsed-turn path
- * (turn-summary-details, nested children) and the live window carry rows of
- * every kind.
- */
 function seedV3Thread(harness: TestAppHarness): string {
   const { environment, thread } = seedThreadFixture(harness);
   const turnOne = {
@@ -201,7 +187,6 @@ describe("GET /threads/:id/timeline work-row kinds", () => {
           expect.arrayContaining([...V3_WORK_KINDS]),
         );
       }
-      // Nothing is served as a generic tool row in their place.
       for (const rows of [latest.rows, nested.rows, details.rows]) {
         expect(collectWorkKinds(rows).has("tool")).toBe(false);
       }

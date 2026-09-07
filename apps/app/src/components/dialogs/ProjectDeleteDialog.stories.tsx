@@ -2,10 +2,7 @@ import {
   ProjectDeleteDialogContent,
   type ProjectDeleteDialogTarget,
 } from "./ProjectDeleteDialog";
-import {
-  PROJECT_IDS,
-  PROJECT_NAMES,
-} from "../../../.ladle/story-fixtures";
+import { PROJECT_IDS, PROJECT_NAMES } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { DialogStage } from "../../../.ladle/story-dialog-stage";
 
@@ -51,11 +48,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow label="pending" hint="destructive button disabled">
         <DialogStage>
-          <ProjectDeleteDialogContent
-            target={target}
-            pending
-            onDelete={noop}
-          />
+          <ProjectDeleteDialogContent target={target} pending onDelete={noop} />
         </DialogStage>
       </StoryRow>
     </StoryCard>

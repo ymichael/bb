@@ -20,7 +20,6 @@ async function writeFile(filePath: string, contents: string): Promise<void> {
   await fs.writeFile(filePath, contents, "utf8");
 }
 
-/** Repo with a committed `.gitignore` plus the given tracked extra files. */
 async function initRepo(gitignore: string): Promise<string> {
   const repoPath = await makeTempDir("bb-worktree-include-repo-");
   await runGit(["init", "-b", "main"], { cwd: repoPath });
@@ -117,7 +116,6 @@ describe("copyWorktreeIncludeFiles", () => {
     const hostFile = path.join(outsideDir, "host-file");
     await writeFile(hostFile, "untouched\n");
     const targetPath = await makeTempDir("bb-worktree-include-target-");
-    // The base branch can track a symlink where the source has a real file.
     await fs.symlink(hostFile, path.join(targetPath, ".env"));
 
     const result = await copyWorktreeIncludeFiles({ sourcePath, targetPath });
@@ -174,7 +172,6 @@ describe("copyWorktreeIncludeFiles", () => {
     );
     const targetPath = await makeTempDir("bb-worktree-include-target-");
     const controller = new AbortController();
-    // Abort after git has listed the matches, before the copy loop runs.
     const listed = copyWorktreeIncludeFiles({
       sourcePath,
       targetPath,

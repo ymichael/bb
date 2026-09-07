@@ -1,3 +1,4 @@
+import { registerDesktopBrowserRoutes } from "./routes/desktop-browsers.js";
 import { createNodeWebSocket } from "@hono/node-ws";
 import { createHash } from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
@@ -18,6 +19,7 @@ import { registerThreadSectionRoutes } from "./routes/thread-sections.js";
 import { registerSystemRoutes } from "./routes/system.js";
 import { registerTerminalRoutes } from "./routes/terminals.js";
 import { registerThreadRoutes } from "./routes/threads/index.js";
+import { registerQueueRoutes } from "./routes/queue.js";
 import { registerPluginRoutes } from "./routes/plugins.js";
 import { registerPluginCatalogRoutes } from "./routes/plugin-catalog.js";
 import { registerSkillsRegistryRoutes } from "./routes/skills-registry.js";
@@ -27,7 +29,8 @@ import {
 } from "./services/plugins/plugin-service.js";
 import { setPluginAgentContributions } from "./services/plugins/plugin-agent-contributions.js";
 import { setPluginThreadEventEmitter } from "./services/plugins/plugin-thread-events.js";
-import { requestDeferredThreadMessageFlush } from "./services/threads/thread-send-request.js";
+import { setPluginHookProvider } from "./services/plugins/plugin-hook-registry.js";
+import { requestQueuedMessageDispatch } from "./services/threads/queued-message-dispatch.js";
 import { registerInternalEventRoutes } from "./internal/events.js";
 import { registerInternalHostRoutes } from "./internal/hosts.js";
 import { registerInternalInteractiveRequestRoutes } from "./internal/interactive-requests.js";
@@ -81,10 +84,6 @@ import {
   disposePluginHostWorkers,
 } from "./services/plugins/plugin-host-rpc.js";
 
-/**
- * `/api/v1/plugins/<id>/http/...` — the plugin-owned wire, whose auth mode is
- * declared per route by the plugin itself.
- */
 const PLUGIN_WIRE_HTTP_PATH = /^\/api\/v1\/plugins\/[^/]+\/http(?:\/|$)/u;
 import { rankAcceptedAssetEncodings } from "./asset-content-encoding.js";
 import { apiJsonCompression } from "./api-response-compression.js";
@@ -134,27 +133,12 @@ interface StaticResponseHeadersArgs {
   contentEncoding?: string;
   contentLength?: number;
   contentType: string;
-  /** Present only for the app shell; other static files rely on hashes/TTLs. */
   etag?: string;
   urlPath: string;
 }
 
-// `no-cache` (not `no-store`): every client — browsers, the desktop window,
-// the connect worker's edge copy — revalidates the document on every
-// navigation, so a new build is picked up immediately. The document travels
-// with a build-id ETag (see shellEtag), so that revalidation is an
-// If-None-Match answered with an empty 304: a handful of header bytes, also
-// through the connect tunnel, where the worker keeps the last confirmed
-// document at the edge. A positive max-age would let a browser reuse the
-// shell without asking (`must-revalidate` only governs stale entries) and
-// boot a stale build — whose hashed assets no longer exist after an in-place
-// update — for the whole window. Not `no-store`: WebKit may still keep the
-// page in the back/forward cache and restore it without a reload.
 const STATIC_INDEX_CACHE_CONTROL = "no-cache";
 const STATIC_ASSET_CACHE_CONTROL = "public, max-age=31536000, immutable";
-// Icons and manifests under public/ are not content-hashed but change only
-// with a release; a day of caching keeps favicon/badge flips and PWA
-// relaunches from refetching them.
 const STATIC_PUBLIC_FILE_CACHE_CONTROL = "public, max-age=86400";
 const WEB_SOCKET_SHUTDOWN_CODE = 1001;
 const WEB_SOCKET_SHUTDOWN_FORCE_CLOSE_MS = 1_000;
@@ -212,14 +196,6 @@ function createStaticResponseHeaders(args: StaticResponseHeadersArgs): Headers {
   return headers;
 }
 
-/**
- * Build-id ETag for the app shell, derived from the served file's bytes:
- * index.html embeds every content-hashed asset URL, so its content changes
- * exactly when a build does. Cached per path and revalidated by (size,
- * mtime) so an in-place dist swap gets a fresh tag without hashing every
- * request. Weak, because the precompressed sidecars are equivalent — not
- * byte-identical — representations of the same document.
- */
 const shellEtagCache = new Map<
   string,
   { etag: string; mtimeMs: number; size: number }
@@ -247,13 +223,10 @@ async function shellEtag(filePath: string): Promise<string | undefined> {
     });
     return etag;
   } catch {
-    // Unreadable file: serve without a validator rather than failing the
-    // request here; the read below will surface the real error.
     return undefined;
   }
 }
 
-/** RFC 9110 §13.1.2: If-None-Match always compares weakly for GET. */
 export function ifNoneMatchSatisfied(
   ifNoneMatchHeader: string,
   etag: string,
@@ -281,12 +254,6 @@ const STATIC_MIME_TYPES: Record<string, string> = {
   ".map": "application/json",
 };
 
-/**
- * Serves the built app from `staticDir`: content-hashed assets, public files,
- * and the shell (index.html — directly and as the single-page-app fallback
- * for every client route). Registered by createApp; exported so tests can
- * exercise the shell contract (sidecar, ETag, 304) against a bare Hono app.
- */
 export function registerStaticAppRoutes(app: Hono, staticDir: string): void {
   const root = resolve(staticDir);
 
@@ -297,10 +264,6 @@ export function registerStaticAppRoutes(app: Hono, staticDir: string): void {
     ifNoneMatchHeader: string | undefined;
     urlPath: string;
   }): Promise<Response> => {
-    // Only the shell carries a validator: assets are immutable by hash and
-    // public files by TTL, but the document is `no-cache` and revalidated on
-    // every navigation — the 304 here is what keeps that revalidation a few
-    // header bytes instead of the document each time.
     const etag =
       args.contentType === "text/html"
         ? await shellEtag(args.filePath)
@@ -360,20 +323,10 @@ export function registerStaticAppRoutes(app: Hono, staticDir: string): void {
           urlPath,
         });
       }
-    } catch {
-      // File not found — fall through to SPA fallback
-    }
-    // /assets/ holds content-hashed build output, never a client route, so
-    // a miss there is a stale reference rather than a page to render. The
-    // single-page-app fallback would answer it with index.html at status
-    // 200, and the browser would report a confusing MIME type error for a
-    // script instead of a plain 404. Mirrors the /api/v1/* guard above.
+    } catch {}
     if (urlPath.startsWith("/assets/")) {
       return context.notFound();
     }
-    // The SPA fallback is the document response for every client route
-    // (every thread page a phone opens), so it serves the same sidecar and
-    // validator as a direct /index.html hit.
     return serveStaticAppFile({
       acceptEncodingHeader: context.req.header("accept-encoding"),
       contentType: "text/html",
@@ -423,9 +376,7 @@ async function findPrecompressedStaticFile(args: {
           filePath: encodedFilePath,
         };
       }
-    } catch {
-      // Sidecar missing — try the next acceptable encoding.
-    }
+    } catch {}
   }
 
   return null;
@@ -499,23 +450,14 @@ export function createApp(
   const compressResponse = compress();
   const compressApiJson = apiJsonCompression();
   app.use("*", (context, next) => {
-    // Plugin JS/CSS negotiates Brotli and gzip itself and caches immutable
-    // variants. Letting this outer middleware transform an identity fallback
-    // would also ignore explicit q=0 values in Hono's current parser.
     if (PLUGIN_APP_ASSET_PATH_PATTERN.test(context.req.path)) {
       return next();
     }
-    // Core API JSON is buffered and Brotli-encoded (gzip fallback) with an
-    // exact Content-Length by the inner middleware; the streaming gzip
-    // fallback then only touches what the inner one leaves untransformed.
     return compressResponse(context, async () => {
       await compressApiJson(context, next);
     });
   });
   app.onError((error) => errorToResponse(error, deps.logger));
-  // The launch id lets the bb-app launcher prove that the process answering on
-  // its port is the child it just spawned, not another bb server that already
-  // owned the port (its own child then dies with EADDRINUSE a moment later).
   app.get("/health", (context) =>
     context.json(
       deps.config.launchId === undefined
@@ -538,16 +480,21 @@ export function createApp(
       protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
     });
   });
-  // bb-app is public on npm. A paired tunnel can expose an unpublished build
-  // slightly before release; serving the exact server build is an accepted
-  // tradeoff so remote daemons cannot be stranded by protocol skew.
   app.get("/install/bb-app.tgz", async (context) => {
-    const tarball = await readFile(await bbAppArtifactService.getTarballPath());
+    const artifact = await bbAppArtifactService.getArtifact();
+    const etag = `"sha256-${artifact.digest}"`;
+    const headers = {
+      "cache-control": "public, max-age=300",
+      "content-type": "application/gzip",
+      etag,
+      "x-bb-artifact-sha256": artifact.digest,
+    };
+    if (context.req.header("if-none-match") === etag) {
+      return new Response(null, { headers, status: 304 });
+    }
+    const tarball = await readFile(artifact.path);
     return new Response(tarball, {
-      headers: {
-        "cache-control": "public, max-age=300",
-        "content-type": "application/gzip",
-      },
+      headers: { ...headers, "content-length": String(artifact.size) },
     });
   });
   app.use("/api/v1/*", async (context, next) => {
@@ -609,6 +556,7 @@ export function createApp(
     pendingInteractions: deps.pendingInteractions,
     dataDir: deps.config.dataDir,
     appVersion: deps.config.appVersion,
+    getAppUrl: () => deps.config.appUrl ?? null,
     sharedPorts: deps.sharedPorts,
     providerRegistry: deps.providerRegistry,
     pluginHostArtifacts: deps.pluginHostArtifacts,
@@ -623,38 +571,42 @@ export function createApp(
       ),
     callPluginHost: (args) => callPluginHostRpc(deps, args),
     disposePluginHost: (args) => disposePluginHostWorkers(deps, args),
-    // A plugin resolves its providers' native roots from its settings, so a
-    // settings save must reach the next listing, not the cached answer.
-    onSettingsChanged: (pluginId) => deps.providerNativeRoots.invalidate(pluginId),
+    onSettingsChanged: (pluginId) => {
+      deps.providerNativeRoots.invalidate(pluginId);
+      deps.providerRegistry.forgetAllInstalled();
+    },
+    onPluginUnregistered: (pluginId) => {
+      requestQueuedMessageDispatch(deps, {
+        kind: "plugin-unregistered",
+        pluginId,
+      });
+    },
+    // `bb.experimental_hooks.recheck()`: a plugin whose wait condition
+    // may have changed asks core to re-attempt the plugin-queued rows. Core
+    // owns the walk, the coalescing and the pacing; the plugin owns knowing
+    // when to ask.
+    requestQueueDrain: () => {
+      requestQueuedMessageDispatch(deps, { kind: "plugin-recheck" });
+    },
     watchBuiltinPluginSources:
       process.env.BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD === "1",
   });
-  // Messages held back while a thread awaited user interaction deliver once
-  // that interaction settles (#1650); the periodic sweep covers the rest.
+  // Messages queued while a thread awaited user interaction stop waiting once
+  // that interaction settles (#1650); the idle drain then delivers them.
   deps.pendingInteractions.setThreadInteractionSettledListener((threadId) => {
-    requestDeferredThreadMessageFlush(deps, threadId);
+    requestQueuedMessageDispatch(deps, {
+      kind: "interaction-settled",
+      threadId,
+    });
   });
-  // Bridge the thread lifecycle seams to this service's plugins (§4.5).
   setPluginThreadEventEmitter(pluginService.events);
+  // Bridge the dispatch pipeline to this service's hooks. Until this runs
+  // there are no hooks, which is exactly the zero-overhead path.
+  setPluginHookProvider(pluginService.hooks);
   // Bridge runtime-config assembly to plugin skills + context (§4.4).
   setPluginAgentContributions(pluginService);
   const publicApi = new Hono();
-  // CORS decides whether a browser may *read* a response; it does not stop the
-  // request being sent and acted on. A `no-cors` POST with a simple content
-  // type skips the preflight entirely, and the typed route parser reads the
-  // body with `c.req.json()` regardless of content type — so a page on any
-  // origin could drive this API blind. Reject a foreign browser origin here
-  // instead. `requireJsonForMutation` is deliberately NOT set: it answers 415
-  // to any mutation without `application/json`, which would break every
-  // existing `curl -d` caller. The origin check alone stops browser CSRF,
-  // because a browser always sends `Origin` on a cross-origin mutation.
-  // Non-browser callers (curl, the `bb` CLI, the SDK) send no `Origin` and pass
-  // through untouched.
   publicApi.use("*", async (context, next) => {
-    // A plugin's own HTTP routes declare their auth mode (`local` | `token` |
-    // `none`). `none` is deliberately reachable from any origin, and `token`
-    // authenticates with a secret rather than an origin, so this blanket check
-    // must not pre-empt the per-route one `registerPluginRoutes` applies.
     if (PLUGIN_WIRE_HTTP_PATH.test(context.req.path)) {
       return next();
     }
@@ -670,8 +622,6 @@ export function createApp(
     marketplaceUrl: deps.config.marketplaceUrl,
     dataDir: deps.config.dataDir,
     plugins: pluginService,
-    // The store's installed/compatible flags ride the plugin-list broadcast,
-    // so a refreshed catalog reaches open windows without polling.
     notifyCatalogChanged: () => deps.hub.notifySystem(["plugins-changed"]),
     warn: (message) => deps.logger.warn(message),
   });
@@ -679,12 +629,14 @@ export function createApp(
   registerThreadSectionRoutes(publicApi, deps);
   registerFileRoutes(publicApi, deps);
   registerHostRoutes(publicApi, deps, pluginService);
+  registerDesktopBrowserRoutes(publicApi, deps);
   registerTerminalRoutes(publicApi, deps);
   registerEnvironmentRoutes(publicApi, deps);
   registerThreadRoutes(publicApi, deps);
+  registerQueueRoutes(publicApi, deps);
   registerSystemRoutes(publicApi, deps, pluginService);
   registerPluginCatalogRoutes(publicApi, pluginCatalogService);
-  registerPluginRoutes(publicApi, deps, pluginService);
+  registerPluginRoutes(publicApi, deps, pluginService, upgradeWebSocket);
   registerSkillsRegistryRoutes(publicApi, deps);
   app.route("/api/v1", publicApi);
   app.use("/api/v1/*", () => {

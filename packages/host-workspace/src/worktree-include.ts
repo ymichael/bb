@@ -5,20 +5,15 @@ import { WORKTREE_INCLUDE_FILE_NAME } from "@bb/domain";
 import { runGit, WorkspaceError } from "./git.js";
 
 interface CopyWorktreeIncludeFilesArgs {
-  /** Existing checkout that owns the `.worktreeinclude` file. */
   sourcePath: string;
-  /** Freshly created worktree that receives the copies. */
   targetPath: string;
   shellPath?: string;
   signal?: AbortSignal;
 }
 
 export interface CopyWorktreeIncludeFilesResult {
-  /** False when the source checkout has no usable `.worktreeinclude`. */
   ran: boolean;
-  /** Repo-relative paths copied into the worktree. */
   copied: string[];
-  /** Human-readable reasons for entries that were not copied. */
   skipped: string[];
 }
 
@@ -28,11 +23,6 @@ const EMPTY_RESULT: CopyWorktreeIncludeFilesResult = {
   skipped: [],
 };
 
-/**
- * True when `.worktreeinclude` holds at least one pattern. Git rejects
- * `ls-files --ignored` when every exclude source is empty, so a file of only
- * comments must short-circuit before we shell out.
- */
 function hasPattern(contents: string): boolean {
   return contents
     .split(/\r?\n/u)
@@ -48,11 +38,6 @@ function isMissingFileError(error: unknown): boolean {
   );
 }
 
-/**
- * Read `.worktreeinclude`, or return null when the repo has no such file. Any
- * other read failure — a permission error, a directory in its place — is a
- * real problem the caller must report.
- */
 async function readIncludeFile(sourcePath: string): Promise<string | null> {
   try {
     return await fs.readFile(
@@ -67,13 +52,6 @@ async function readIncludeFile(sourcePath: string): Promise<string | null> {
   }
 }
 
-/**
- * List untracked files in `sourcePath` that match the `.worktreeinclude`
- * patterns. `--others` limits the walk to untracked paths, and `--ignored`
- * with `--exclude-from` (and no `--exclude-standard`) makes the include file
- * the only exclude source, so git's own gitignore matcher decides every
- * pattern — including directory patterns, `**`, and negation.
- */
 async function listMatchingFiles(
   sourcePath: string,
   shellPath: string | undefined,
@@ -96,11 +74,6 @@ async function listMatchingFiles(
   return result.stdout.split("\0").filter(Boolean);
 }
 
-/**
- * True when anything already occupies `targetPath`, including a broken
- * symlink. `lstat` never follows the last component, so a symlink planted by
- * the base branch reports itself rather than what it points at.
- */
 async function pathPresent(targetPath: string): Promise<boolean> {
   try {
     await fs.lstat(targetPath);
@@ -131,16 +104,6 @@ function isInside(parentRealPath: string, childRealPath: string): boolean {
   );
 }
 
-/**
- * Copy the untracked files a repo lists in `.worktreeinclude` from the source
- * checkout into a new worktree. A fresh worktree contains tracked files only,
- * so local `.env` files and credentials never arrive on their own.
- *
- * A per-file failure is collected in `skipped` and the remaining files still
- * copy. An unreadable include file or a failed `git ls-files` throws, because
- * silently reporting zero matches would hide the real cause. Cancellation
- * throws `provision_cancelled` between files.
- */
 export async function copyWorktreeIncludeFiles(
   args: CopyWorktreeIncludeFilesArgs,
 ): Promise<CopyWorktreeIncludeFilesResult> {
@@ -191,8 +154,6 @@ export async function copyWorktreeIncludeFiles(
         skipped.push(`${relativePath}: destination escapes the worktree`);
         continue;
       }
-      // COPYFILE_EXCL fails rather than following a symlink or replacing a
-      // file that appeared between the check above and this write.
       await fs.copyFile(sourceFile, targetFile, fsConstants.COPYFILE_EXCL);
       copied.push(relativePath);
     } catch (error) {

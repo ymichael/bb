@@ -140,8 +140,7 @@ describe("createInsertParagraphBeforeBlockquoteTransaction", () => {
       2,
     );
 
-    const transaction =
-      createInsertParagraphBeforeBlockquoteTransaction(state);
+    const transaction = createInsertParagraphBeforeBlockquoteTransaction(state);
     expect(transaction).not.toBeNull();
     const nextState = state.apply(transaction!);
 

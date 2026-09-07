@@ -13,20 +13,15 @@ const COMPOSER_EDITOR_MAX_HEIGHT_BY_LAYOUT: Record<
   ComposerEditorLayout,
   string
 > = {
-  // Reserve the fixed action row and border so the standard prompt box does
-  // not grow beyond its intended viewport-relative cap.
   thread: "calc(50dvh - 3rem)",
   "root-compose": "calc(70dvh - 3rem)",
 };
 
-// TipTap's `blur` command defers to the next animation frame, so blur the
-// editor DOM directly and drop the caret with it.
 function blurComposerEditor(editor: Editor): void {
   editor.view.dom.blur();
   window.getSelection()?.removeAllRanges();
 }
 
-/** BB's editor region with the effects already resolved by the Composer host. */
 export function ComposerEditorSlot({
   editor,
   scrollContainerRef,
@@ -52,9 +47,6 @@ export function ComposerEditorSlot({
       className={cn(
         "w-full overflow-y-auto bg-transparent px-4 pb-1 pr-14 pt-3 outline-none",
         COARSE_POINTER_TEXT_BASE_CLASS,
-        // Keep line-height after the text-size class. tailwind-merge treats
-        // text size utilities as owning line-height and would otherwise drop
-        // this, making Composer rows tighter than timeline messages.
         "leading-relaxed",
         isCompactLayout && "h-12 overflow-hidden pb-0 pr-14 pt-0",
       )}
@@ -69,8 +61,6 @@ export function ComposerEditorSlot({
       <PromptMentionLinkContext.Provider value={resolveMentionLink ?? null}>
         <EditorContent
           editor={editor}
-          // A plugin lock makes the editor non-editable, so ProseMirror skips
-          // its own Escape handler. Release focus explicitly in that state.
           onKeyDown={(event) => {
             if (event.key !== "Escape") return;
             if (editor === null || editor.isEditable) return;

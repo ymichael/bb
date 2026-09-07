@@ -67,7 +67,6 @@ describe("observeSharedResize", () => {
       write: (value) => order.push(`write:${value}`),
     });
 
-    // Two registrations, one observer: the whole point of sharing.
     expect(ResizeObserverStub.instances).toHaveLength(1);
     lastObserver().callback(
       [makeEntry(first, 10), makeEntry(second, 20)],
@@ -88,7 +87,10 @@ describe("observeSharedResize", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     const order: string[] = [];
     const seenEntries: (ResizeObserverEntry | undefined)[] = [];
-    const targets = [document.createElement("div"), document.createElement("div")];
+    const targets = [
+      document.createElement("div"),
+      document.createElement("div"),
+    ];
     const unobservers = targets.map((target, index) =>
       observeSharedResize(target, {
         read: (entry) => {
@@ -102,8 +104,6 @@ describe("observeSharedResize", () => {
 
     lastObserver().callback([], lastObserver());
 
-    // No entries means no target information: every registration re-syncs
-    // from live layout, still phased.
     expect(order).toEqual(["read:0", "read:1", "write:0", "write:1"]);
     expect(seenEntries).toEqual([undefined, undefined]);
     for (const unobserve of unobservers) unobserve();
@@ -122,8 +122,6 @@ describe("observeSharedResize", () => {
     expect(observer.unobserve).toHaveBeenCalledWith(target);
     expect(observer.disconnect).toHaveBeenCalled();
 
-    // The next registration installs a fresh observer, so per-test
-    // `ResizeObserver` stubs take effect.
     const unobserveAgain = observeSharedResize(target, phases);
     expect(ResizeObserverStub.instances).toHaveLength(2);
     unobserveAgain();
@@ -158,7 +156,6 @@ describe("ExpandablePanel on the shared observer", () => {
     vi.stubGlobal("ResizeObserver", ResizeObserverStub);
     const view = renderTwoPanels();
 
-    // Two panels, one shared observer, one observation per panel body.
     expect(ResizeObserverStub.instances).toHaveLength(1);
     expect(lastObserver().observedTargets).toHaveLength(2);
 
@@ -177,8 +174,6 @@ describe("ExpandablePanel on the shared observer", () => {
       throw new Error("Panel bodies were not observed");
     }
 
-    // One batch resizing both panels sizes each region from its own entry's
-    // border box — no per-panel layout read.
     act(() => {
       lastObserver().callback(
         [makeEntry(firstTarget, 40), makeEntry(secondTarget, 60)],

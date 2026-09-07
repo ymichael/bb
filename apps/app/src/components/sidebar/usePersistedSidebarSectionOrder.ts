@@ -4,6 +4,7 @@ import {
   normalizeSidebarSectionOrder,
   type LegacySidebarEntityAnchor,
 } from "@bb/client-core";
+import { haveSameOrder } from "@/lib/stored-order";
 
 interface UsePersistedSidebarSectionOrderArgs {
   entitySectionIds: readonly SidebarSectionId[];
@@ -13,16 +14,6 @@ interface UsePersistedSidebarSectionOrderArgs {
   legacyEntityAnchor: LegacySidebarEntityAnchor;
   setStoredOrder: (order: string[]) => void;
   storedOrder: readonly string[];
-}
-
-export function haveSameOrder(
-  left: readonly string[],
-  right: readonly string[],
-) {
-  return (
-    left.length === right.length &&
-    left.every((sectionId, index) => sectionId === right[index])
-  );
 }
 
 export function usePersistedSidebarSectionOrder({

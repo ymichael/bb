@@ -20,7 +20,8 @@ const planCommandMention = {
   },
 } as const;
 
-const PLAN_MODE_COPY = "The agent will plan without normal full-access execution.";
+const PLAN_MODE_COPY =
+  "The agent will plan without normal full-access execution.";
 
 describe("permissionDisplayForPromptMode", () => {
   it("shows plan mode for a plan command pill on a provider that declares plan-mode copy", () => {
@@ -45,8 +46,6 @@ describe("permissionDisplayForPromptMode", () => {
         mentionRanges: [],
       }),
     ).toBeUndefined();
-    // A provider with a plan action but no permission-changing plan mode
-    // (Codex) declares no copy, so its plan pill is not relabelled.
     expect(
       permissionDisplayForPromptMode({
         planModeCopy: undefined,

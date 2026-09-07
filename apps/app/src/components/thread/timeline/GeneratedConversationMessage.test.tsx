@@ -16,6 +16,7 @@ import { ThreadTitleMentionResourcesProvider } from "@/components/thread/ThreadT
 import { RouteNavigationProvider } from "@/components/ui/app-route-anchor";
 import type { TimelineTitleActionResolver } from "./TimelineTitleView";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { makeThreadListEntry as makeThreadListEntryFixture } from "@bb/test-helpers/domain-fixtures";
 import { GENERATED_MESSAGE_COLLAPSED_PREVIEW_CHAR_CAP } from "@bb/client-core";
 import { generatedConversationCollapsedPreview } from "./GeneratedConversationMessage";
 
@@ -85,9 +86,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-// An agent-generated body that carries an offset-based `path` mention and a
-// leading markdown heading. Both Markdown and the structured mention must
-// survive the combined renderer.
 const AGENT_BODY = "# notes\nedited path:src/app.ts here";
 const AGENT_PATH_TOKEN = "path:src/app.ts";
 const AGENT_PATH_START = AGENT_BODY.indexOf(AGENT_PATH_TOKEN);
@@ -99,47 +97,17 @@ const RAW_THREAD_BODY = `Continue in ${RAW_THREAD_ID}; exact code reference \`${
 function threadListEntry(
   overrides: Partial<ThreadListEntry> = {},
 ): ThreadListEntry {
-  return {
+  return makeThreadListEntryFixture({
     id: "thr_test",
     projectId: "proj_demo",
-    environmentId: null,
-    providerId: "codex",
     title: "Thread",
     titleFallback: "Thread",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    childOrigin: null,
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
     lastReadAt: 0,
     latestAttentionAt: 1,
     createdAt: 1,
     updatedAt: 1,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
     ...overrides,
-  };
+  });
 }
 
 function renderAgentMessage(
@@ -624,8 +592,6 @@ describe("GeneratedConversationMessage markdown body", () => {
     ).not.toBeNull();
   });
 
-  // A side chat opens in the plugin's panel, so its name carries the panel
-  // title action rather than a route link to the thread.
   it("opens a side-chat sender in the plugin panel instead of linking it", () => {
     const openPanel = vi.fn();
     const { container } = renderAgentMessage("Handed back.", {

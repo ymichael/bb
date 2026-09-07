@@ -25,43 +25,21 @@ interface PluginArtifactMetaParseResult {
   error: string | null;
 }
 
-/**
- * Frontend bundle inventory + asset state for plugins that declare `bb.app`
- * (design §5.1). The plugin service refreshes this per load (install, boot,
- * reload); GET /api/v1/plugins serves the wire shape and the asset routes
- * serve the recorded file paths with the recorded content hash.
- */
-
-/** Wire shape of one plugin's loadable frontend bundle (GET /api/v1/plugins). */
 interface PluginAppBundleInfo {
-  /** App-relative asset URL, content-hash query included. */
   jsUrl: string;
-  /** Null when the plugin ships no dist/app.css (host loads JS only). */
   cssUrl: string | null;
-  /** Byte size of dist/app.js. The frontend loads smaller bundles first so
-   * a phone gets several light plugins on screen before one heavy one. */
   jsBytes: number;
-  /** sha256 (first 16 hex chars) over dist/app.js + dist/app.css +
-   * dist/app.meta.json bytes. Meta rides the hash so an SDK-version-only
-   * change (identical js/css) still re-keys frontend reconcile + caching. */
   hash: string;
-  /** SDK version stamped into dist/app.meta.json at build time. */
   sdkMajor: number;
   sdkVersion: string;
-  /** False when sdkMajor differs from the running PLUGIN_SDK_MAJOR — the
-   * frontend skips the bundle ("needs update"); the backend keeps running. */
   compatible: boolean;
 }
 
-/** App-bundle slice of a GET /api/v1/plugins entry. */
 interface PluginAppState {
-  /** Whether the manifest declares a `bb.app` frontend entry. */
   hasApp: boolean;
-  /** Null when dist/app.js or dist/app.meta.json is missing/unreadable. */
   bundle: PluginAppBundleInfo | null;
 }
 
-/** On-disk asset record backing GET /plugins/:id/assets/*. */
 interface PluginAppAssets {
   jsPath: string;
   cssPath: string | null;
@@ -73,57 +51,32 @@ export interface PluginAppBundleSnapshot {
   assets: PluginAppAssets | null;
 }
 
-// ---------------------------------------------------------------------------
-// Plugin branding assets from path-shaped `bb.branding.icon` values and
-// `bb.branding.logo`. Served with the same hash-busting scheme as bundle
-// assets and refreshed on every load like the bundle snapshot.
-// ---------------------------------------------------------------------------
-
 const BRANDING_ASSET_CONTENT_TYPES: Record<string, string> = {
   svg: "image/svg+xml",
   png: "image/png",
   webp: "image/webp",
 };
 
-/** Stable route names for plugin-owned branding assets. */
 export type PluginBrandingAssetVariant = "icon" | "logo" | "logo-dark";
 
-/** Immutable byte snapshot backing one GET /plugins/:id/assets/<variant>. */
 export interface PluginBrandingAssetSnapshot {
-  /** App-relative asset URL, content-hash query included. */
   url: string;
-  /** The exact bytes used to compute `hash`; never re-read from source. */
   bytes: Uint8Array;
   contentType: string;
-  /** sha256 (first 16 hex chars) over the asset bytes. */
   hash: string;
 }
 
-/** All declared branding assets of one plugin; each is null when absent. */
 export interface PluginBrandingAssetSet {
   compactIcon: PluginBrandingAssetSnapshot | null;
   logo: PluginBrandingAssetSnapshot | null;
   logoDark: PluginBrandingAssetSnapshot | null;
-  /**
-   * `bb.branding.experimental_icons`, declared name → snapshot served by
-   * GET /plugins/:id/assets/icons/<name>.svg. Empty when the plugin declares
-   * none.
-   */
   icons: ReadonlyMap<string, PluginBrandingAssetSnapshot>;
 }
 
-function brandingAssetHash(bytes: Uint8Array): string {
+export function brandingAssetHash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex").slice(0, 16);
 }
 
-/**
- * Read and hash one explicitly declared branding asset. Manifest parsing has
- * already validated that the path is a readable supported asset. The compact
- * icon is validated again here because this is the snapshot the route
- * serves, and the file may have changed between the two reads (a dev-loop
- * edit); a logo is snapshotted as declared, whatever markup it carries — the
- * route's headers keep it inert.
- */
 async function loadPluginBrandingAsset(
   pluginId: string,
   manifestPath: string | undefined,
@@ -148,13 +101,6 @@ async function loadPluginBrandingAsset(
   };
 }
 
-/**
- * Read and hash one declared icon (`bb.branding.experimental_icons`). The
- * manifest reader validated the bytes at load; they are validated again here
- * because this is the snapshot the route serves, and the file may have
- * changed between the two reads (a dev-loop edit). Reject-only, like the
- * manifest: the hash is over the shipped bytes.
- */
 async function loadPluginIconAsset(
   pluginId: string,
   name: string,
@@ -171,7 +117,6 @@ async function loadPluginIconAsset(
   };
 }
 
-/** Read and hash every explicitly declared branding asset. */
 export async function loadPluginBrandingAssets(
   pluginId: string,
   manifest: {
@@ -206,12 +151,6 @@ export async function loadPluginBrandingAssets(
   };
 }
 
-/**
- * Parse `dist/app.meta.json` contents strictly, or null when malformed:
- * sdkMajor must be a non-negative safe integer, sdkVersion a valid semver,
- * and the two must agree (semver.major(sdkVersion) === sdkMajor) — an
- * inconsistent sidecar would make the compatibility gate lie.
- */
 function parsePluginArtifactMeta(raw: string): PluginArtifactMetaParseResult {
   let json: unknown;
   try {
@@ -313,7 +252,6 @@ export function parsePluginAppBundleMeta(
   return parsePluginArtifactMeta(raw).meta;
 }
 
-/** Validate one install artifact against the running SDK and its manifest. */
 export function validatePluginArtifactMeta(args: {
   artifact: "server" | "app" | "host";
   raw: string;
@@ -338,7 +276,6 @@ export function validatePluginArtifactMeta(args: {
   return null;
 }
 
-/** `dist/app.meta.json` contents, or null when missing/malformed. */
 export async function readPluginAppBundleMeta(
   rootDir: string,
 ): Promise<PluginArtifactMeta | null> {
@@ -351,11 +288,6 @@ export async function readPluginAppBundleMeta(
   return parsePluginAppBundleMeta(raw);
 }
 
-/**
- * Read `<rootDir>/dist/` into a servable snapshot. Missing/unreadable
- * app.js or app.meta.json → `bundle: null` (the frontend has nothing to
- * load); a missing app.css is fine (`cssUrl: null`).
- */
 export async function loadPluginAppBundle(
   pluginId: string,
   rootDir: string,
@@ -385,10 +317,6 @@ export async function loadPluginAppBundle(
   } catch {
     css = null;
   }
-  // Meta bytes ride the hash: a meta-only change (same js/css) must still
-  // produce a fresh hash, or the frontend's hash-keyed reconcile would never
-  // re-evaluate compatibility and the immutable asset cache would never key
-  // off the new state.
   const hasher = createHash("sha256").update(js);
   if (css !== null) hasher.update(css);
   hasher.update(metaRaw);

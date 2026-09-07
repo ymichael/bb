@@ -16,25 +16,12 @@ import { promptMentionClipboardDataAttributes } from "@/components/promptbox/men
 import type { PromptMentionLinkResolver } from "@/components/promptbox/editor/prompt-mention-link";
 
 interface PromptMentionPillProps {
-  /** Render visual mention styling without allowing navigation or activation. */
   interactive?: boolean;
   resource: PromptMentionResource;
   resolveMentionLink?: PromptMentionLinkResolver;
   serializedText: string;
-  /**
-   * Explicit href for a thread mention, used by the markdown body renderer to
-   * route through the timeline's `resolveSegmentLinkHref` (consistent with the
-   * title links). When absent, a thread mention falls back to its
-   * `resource.projectId` react-router link; a non-thread mention ignores this.
-   */
   linkHref?: string;
-  /** Activates a mention that opens an in-place surface instead of a route. */
   onActivate?: () => void;
-}
-
-interface NormalizeMentionsArgs {
-  mentions: readonly PromptTextMention[];
-  textLength: number;
 }
 
 interface ShiftMentionsToTextRangeArgs {
@@ -52,20 +39,6 @@ interface ClipMentionTextToVisibleRangeArgs {
 interface ClipMentionTextToVisibleRangeResult {
   mentions: PromptTextMention[];
   text: string;
-}
-
-export function normalizePromptTextMentions({
-  mentions,
-  textLength,
-}: NormalizeMentionsArgs): PromptTextMention[] {
-  return mentions
-    .filter(
-      (mention) =>
-        mention.start >= 0 &&
-        mention.end > mention.start &&
-        mention.end <= textLength,
-    )
-    .sort((left, right) => left.start - right.start || left.end - right.end);
 }
 
 export function shiftMentionsToTextRange({
@@ -177,9 +150,6 @@ export function PromptMentionPill({
     );
   }
 
-  // Markdown bodies route thread mentions through `resolveSegmentLinkHref`
-  // (same resolver the title links use); the plain-text path passes no
-  // `linkHref` and keeps the `resource.projectId` react-router link below.
   if (resource.kind === "thread" && linkHref) {
     return (
       <RouteAnchor
@@ -239,11 +209,6 @@ export function PromptMentionPill({
     }
   }
 
-  // Timeline path mentions are workspace/thread-storage-relative resources.
-  // Opening them needs environment and thread-storage context from the page
-  // owner; without a resolver, they stay display-only.
-  // Thread mentions without project context are also display-only; linking
-  // through the current page project can misroute cross-project mentions.
   return (
     <span
       className={mentionPillClassName(false)}
@@ -255,12 +220,6 @@ export function PromptMentionPill({
   );
 }
 
-/**
- * Resolves a thread mention's display resource for the markdown body renderer:
- * the `@thread:<id>` token carries only the id, so the label/projectId are
- * recovered from the body `mentions` array (matched by `threadId`). Falls back
- * to a display-only resource labelled with the id when no mention matches.
- */
 export function resolveThreadMentionResource(
   mentions: readonly PromptTextMention[],
   threadId: string,

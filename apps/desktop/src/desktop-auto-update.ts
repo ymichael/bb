@@ -306,11 +306,6 @@ export function createDesktopAutoUpdateService(
     if (!args.enabled) {
       return currentInfo;
     }
-    // A downloaded update is a staged ShipIt install. Re-checking tears that
-    // staging down (Squirrel replaces update.<id> with a fresh partial
-    // extraction), so a Relaunch issued afterwards installs a directory
-    // without the app bundle and ShipIt aborts three times, leaving the user
-    // on the old version. Hold the staged install until it is applied.
     if (currentInfo.updateDownloaded) {
       return currentInfo;
     }
@@ -366,7 +361,6 @@ export function createDesktopAutoUpdateService(
   if (args.enabled) {
     args.updater.setLogger(logger);
     args.updater.setFeedURL(DESKTOP_AUTO_UPDATE_FEED_CONFIG);
-    // The service owns the background download so downloadInFlight can guard it.
     args.updater.setAutoDownload(false);
     args.updater.setAutoInstallOnAppQuit(true);
     args.updater.setForceDevUpdateConfig(args.forceDevUpdateConfig);

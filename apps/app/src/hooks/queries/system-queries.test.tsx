@@ -7,6 +7,7 @@ import type {
   SystemProviderStatesResponse,
 } from "@bb/server-contract";
 import type { ProviderInfo } from "@bb/domain";
+import { makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import type {
   ProviderCliStatusResponse,
   ProviderUsageResponse,
@@ -81,14 +82,10 @@ afterEach(() => {
 
 describe("useSystemProviderInfo", () => {
   it("uses capabilities already loaded by the composer while the provider roster loads", async () => {
-    const provider: ProviderInfo = {
+    const provider = makeProviderInfo({
       id: "codex",
-      pluginId: "provider-codex",
       displayName: "Codex",
       logoUrl: null,
-      available: true,
-      maintenance: { health: false, usage: false, installation: false },
-      composerActions: [],
       capabilities: {
         supportsThreadArchive: true,
         supportsThreadRename: true,
@@ -99,7 +96,7 @@ describe("useSystemProviderInfo", () => {
         modelCatalogScope: "workspace",
         permissionModes: ["accept-edits", "auto", "full"],
       },
-    };
+    });
     vi.mocked(sdk.providers.list).mockImplementation(
       () => new Promise(() => undefined),
     );
@@ -130,25 +127,15 @@ describe("useSystemProviderInfo", () => {
 
   it("loads routed provider capabilities without waiting for model discovery", async () => {
     const providers: ProviderInfo[] = [
-      {
+      makeProviderInfo({
         id: "codex",
-        pluginId: "provider-codex",
         displayName: "Codex",
         logoUrl: null,
-        available: true,
-        maintenance: { health: false, usage: false, installation: false },
-        composerActions: [],
         capabilities: {
-          supportsThreadArchive: true,
-          supportsThreadRename: true,
           supportsServiceTier: true,
-          supportsNativeUserQuestion: false,
-          supportsFork: true,
           supportsSessionRewind: true,
-          modelCatalogScope: "workspace",
-          permissionModes: ["accept-edits", "auto", "full"],
         },
-      },
+      }),
     ];
     vi.mocked(sdk.providers.list).mockResolvedValue(providers);
     vi.mocked(sdk.system.executionOptions).mockImplementation(
@@ -207,6 +194,46 @@ describe("useSystemProviders", () => {
       });
     });
   });
+
+  it("replays only usage-capable providers for a usage query", async () => {
+    const provider = (id: string, usage: boolean): ProviderInfo =>
+      makeProviderInfo({
+        id,
+        displayName: id,
+        logoUrl: null,
+        maintenance: { health: true, usage, installation: false },
+        capabilities: { permissionModes: ["full"] },
+      });
+    const usageProvider = provider("usage-provider", true);
+    const unsupportedProvider = provider("unsupported-provider", false);
+    vi.mocked(sdk.providers.list).mockResolvedValueOnce([
+      usageProvider,
+      unsupportedProvider,
+    ]);
+    const warm = createQueryClientTestHarness();
+    const initial = renderHook(() => useSystemProviders({ hostId: "host-a" }), {
+      wrapper: warm.wrapper,
+    });
+    await waitFor(() => {
+      expect(initial.result.current.data).toEqual([
+        usageProvider,
+        unsupportedProvider,
+      ]);
+    });
+    initial.unmount();
+
+    vi.mocked(sdk.providers.list).mockImplementation(
+      () => new Promise(() => undefined),
+    );
+    const reload = createQueryClientTestHarness();
+    const { result } = renderHook(
+      () => useSystemProviders({ capability: "usage", hostId: "host-a" }),
+      { wrapper: reload.wrapper },
+    );
+
+    expect(result.current.isPlaceholderData).toBe(true);
+    expect(result.current.data).toEqual([usageProvider]);
+  });
 });
 
 describe("useSystemExecutionOptions", () => {
@@ -221,52 +248,34 @@ describe("useSystemExecutionOptions", () => {
       { wrapper },
     );
 
-    // The app knows no provider by name: with nothing remembered there is no
-    // honest provisional frame, so the query is simply pending.
     expect(result.current.isPlaceholderData).toBe(false);
     expect(result.current.data).toBeUndefined();
   });
 
   it("keeps dynamic providers visible while another provider's models load", async () => {
     const providers: ProviderInfo[] = [
-      {
+      makeProviderInfo({
         id: "codex",
-        pluginId: "provider-codex",
         displayName: "Codex",
         logoUrl: null,
-        available: true,
         maintenance: { health: true, usage: true, installation: false },
-        composerActions: [],
         capabilities: {
-          supportsThreadArchive: true,
-          supportsThreadRename: true,
           supportsServiceTier: true,
-          supportsNativeUserQuestion: false,
-          supportsFork: true,
           supportsSessionRewind: true,
-          modelCatalogScope: "workspace",
-          permissionModes: ["accept-edits", "auto", "full"],
         },
-      },
-      {
+      }),
+      makeProviderInfo({
         id: "acp-opencode",
-        pluginId: "provider-acp-opencode",
         displayName: "OpenCode",
         logoUrl: null,
-        available: true,
         maintenance: { health: true, usage: true, installation: false },
-        composerActions: [],
         capabilities: {
           supportsThreadArchive: false,
           supportsThreadRename: false,
-          supportsServiceTier: false,
-          supportsNativeUserQuestion: false,
           supportsFork: false,
-          supportsSessionRewind: false,
-          modelCatalogScope: "workspace",
           permissionModes: ["full"],
         },
-      },
+      }),
     ];
     let resolveDynamicModels: (
       response: SystemExecutionOptionsResponse,
@@ -349,26 +358,23 @@ describe("useSystemExecutionOptions", () => {
     );
   });
 
-  /** The built-in roster a host reports alongside its catalog. */
-  const BUILT_IN_PROVIDERS: ProviderInfo[] = ["codex", "pi"].map((id) => ({
-    id,
-    pluginId: `provider-${id}`,
-    displayName: id,
-    logoUrl: null,
-    available: true,
-    maintenance: { health: true, usage: true, installation: false },
-    composerActions: [],
-    capabilities: {
-      supportsThreadArchive: false,
-      supportsThreadRename: false,
-      supportsServiceTier: false,
-      supportsNativeUserQuestion: false,
-      supportsFork: true,
-      supportsSessionRewind: true,
-      modelCatalogScope: "workspace",
-      permissionModes: ["accept-edits", "auto", "full"],
-    },
-  }));
+  const BUILT_IN_PROVIDERS: ProviderInfo[] = ["codex", "pi"].map((id) =>
+    makeProviderInfo({
+      id,
+      logoUrl: null,
+      maintenance: { health: true, usage: true, installation: false },
+      capabilities: {
+        supportsThreadArchive: false,
+        supportsThreadRename: false,
+        supportsServiceTier: false,
+        supportsNativeUserQuestion: false,
+        supportsFork: true,
+        supportsSessionRewind: true,
+        modelCatalogScope: "workspace",
+        permissionModes: ["accept-edits", "auto", "full"],
+      },
+    }),
+  );
   const CODEX_MODEL: AvailableModel = {
     id: "gpt-5.6-sol",
     model: "gpt-5.6-sol",
@@ -383,7 +389,6 @@ describe("useSystemExecutionOptions", () => {
     providers: BUILT_IN_PROVIDERS,
     models: [CODEX_MODEL],
   };
-  /** A request that never settles, so the pre-fetch render is observable. */
   const pendingForever = () => new Promise<never>(() => {});
 
   it("preloads a provider's last verified catalog until the probe lands", async () => {
@@ -399,8 +404,6 @@ describe("useSystemExecutionOptions", () => {
     );
     warm.unmount();
 
-    // A full page load starts from an empty query cache; only the profile's
-    // last-known catalog can fill the composer before the network answers.
     vi.mocked(sdk.system.executionOptions).mockImplementation(pendingForever);
     const reload = createQueryClientTestHarness();
     const { result } = renderHook(
@@ -411,7 +414,6 @@ describe("useSystemExecutionOptions", () => {
     expect(result.current.isPlaceholderData).toBe(true);
     expect(result.current.data?.models).toEqual([CODEX_MODEL]);
     expect(result.current.data?.modelLoadError).toBeNull();
-    // Provisional data fails safe: the widest ceiling is never replayed.
     expect(result.current.data?.permissionCeiling).toBe("accept-edits");
     await waitFor(() =>
       expect(sdk.system.executionOptions).toHaveBeenCalledWith(
@@ -421,16 +423,13 @@ describe("useSystemExecutionOptions", () => {
   });
 
   it("replays the host's provider list so a custom provider paints as itself", async () => {
-    const customProvider = {
+    const customProvider = makeProviderInfo({
       id: "acp:my-agent",
-      pluginId: "provider-acp:my-agent",
       displayName: "My agent",
       logoUrl: null,
       maintenance: { health: true, usage: true, installation: false },
       capabilities: CODEX_CATALOG.providers[0]!.capabilities,
-      composerActions: [],
-      available: true,
-    };
+    });
     const customCatalog: SystemExecutionOptionsResponse = {
       ...CODEX_CATALOG,
       providers: [...CODEX_CATALOG.providers, customProvider],
@@ -461,16 +460,11 @@ describe("useSystemExecutionOptions", () => {
       { wrapper: reload.wrapper },
     );
     expect(result.current.isPlaceholderData).toBe(true);
-    // The remembered list, not the built-in list: the selected provider is
-    // present, so the composer does not fall back to the first built-in one.
     expect(result.current.data?.providers).toEqual(customCatalog.providers);
     expect(result.current.data?.models).toEqual([CODEX_MODEL]);
   });
 
   it("withholds the placeholder when the remembered provider is not in any list it can replay", async () => {
-    // Warm the catalog for a custom provider from a routing whose provider
-    // list was never stored (a bumped cache version, a cleared entry): the
-    // built-in fallback list cannot vouch for it, so the composer waits.
     vi.mocked(sdk.system.executionOptions).mockResolvedValue({
       ...CODEX_CATALOG,
       providers: [],
@@ -524,17 +518,11 @@ describe("useSystemExecutionOptions", () => {
         useSystemExecutionOptions({ hostId: "host-a", providerId: "codex" }),
       { wrapper: reload.wrapper },
     );
-    // The provider roster replays; the failed probe's rows do not.
     expect(result.current.isPlaceholderData).toBe(true);
     expect(result.current.data?.models).toEqual([]);
   });
 
   it("does not replay a catalog across environments", async () => {
-    // The model endpoint resolves the environment's path as its working
-    // directory, so an environment's catalog must not stand in for a routing
-    // that was never fetched to completion (a composer mounted before its
-    // environment is known, or another environment): a placeholder is enough
-    // for the composer to offer a model for submission.
     vi.mocked(sdk.system.executionOptions).mockResolvedValue(CODEX_CATALOG);
     const first = createQueryClientTestHarness();
     const warm = renderHook(
@@ -566,13 +554,10 @@ describe("useSystemExecutionOptions", () => {
       ],
       { wrapper: reload.wrapper },
     );
-    // Other routings have nothing to replay — no vendored roster stands in —
-    // so they wait for their own probe.
     expect(result.current[0]!.isPlaceholderData).toBe(false);
     expect(result.current[0]!.data).toBeUndefined();
     expect(result.current[1]!.isPlaceholderData).toBe(false);
     expect(result.current[1]!.data).toBeUndefined();
-    // The routing that was observed replays its own catalog.
     expect(result.current[2]!.isPlaceholderData).toBe(true);
     expect(result.current[2]!.data?.models).toEqual([CODEX_MODEL]);
   });
@@ -599,13 +584,8 @@ describe("useSystemExecutionOptions", () => {
       ],
       { wrapper: reload.wrapper },
     );
-    // Another provider never inherits this catalog: the host's remembered
-    // roster replays with no rows.
     expect(result.current[0]!.isPlaceholderData).toBe(true);
     expect(result.current[0]!.data?.models).toEqual([]);
-    // Nor does another host of the same provider: hosts can be signed into
-    // different accounts, and nothing was remembered for host B, so it waits
-    // for its own probe.
     expect(result.current[1]!.isPlaceholderData).toBe(false);
     expect(result.current[1]!.data).toBeUndefined();
   });

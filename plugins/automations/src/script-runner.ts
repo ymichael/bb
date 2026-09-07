@@ -19,7 +19,6 @@ const SCRIPT_OUTPUT_MAX_BYTES = 1024 * 1024;
 
 let resolvedBbPath: string | null = null;
 
-/** Warning prepended to a script's output when bb could not be injected. */
 const BB_NOT_INJECTED_WARNING =
   "[bb] warning: could not locate the bb CLI, so `bb` is not on PATH for this script.";
 
@@ -32,25 +31,6 @@ async function commandWorks(command: string, args: string[]): Promise<boolean> {
   }
 }
 
-/**
- * Ordered places to look for the bb CLI, most authoritative first.
- *
- * Every candidate is an absolute path. The resolved value is handed to scripts
- * as `BB_CLI`, which is documented as an absolute path, and a script is free to
- * rewrite `PATH` before it runs `"$BB_CLI"` — a bare `bb` would then resolve to
- * a different binary, or to none. Expanding `PATH` here rather than letting the
- * shell do it also keeps the probe and the script on the same executable.
- *
- * The env vars come before `PATH` because the server process does not reliably
- * inherit a `PATH` containing bb: on a packaged install bb lives in the daemon
- * bundle directory, which is on no shell `PATH`. `BB_CLI` (the binary) and
- * `BB_CLI_DIR` (its directory) are the two documented pointers; see
- * packages/config/src/env-vars.ts. Relative values are skipped rather than
- * resolved against the process cwd, which has nothing to do with either.
- *
- * The trailing paths are macOS-only install locations, kept as a last resort.
- * Relying on them alone is what left Linux hosts unable to resolve bb at all.
- */
 export function bbBinaryCandidates(env: NodeJS.ProcessEnv): string[] {
   const candidates: string[] = [];
   const pushIfAbsolute = (candidate: string): void => {
@@ -66,9 +46,6 @@ export function bbBinaryCandidates(env: NodeJS.ProcessEnv): string[] {
   if (fromCliDir !== undefined && fromCliDir.length > 0) {
     pushIfAbsolute(join(fromCliDir, "bb"));
   }
-  // Empty PATH entries mean "the current directory". Scripts run inside the
-  // automation scripts directory, so honouring one would let a file named `bb`
-  // dropped next to a script stand in for the CLI.
   for (const entry of (env.PATH ?? "").split(delimiter)) {
     const trimmed = entry.trim();
     if (trimmed.length > 0) {
@@ -90,16 +67,6 @@ async function isExecutableFile(candidate: string): Promise<boolean> {
   }
 }
 
-/**
- * Locate the bb CLI so it can be put on a script's PATH. Returns null rather
- * than throwing: injection is a convenience for scripts that call `bb`, not a
- * precondition for running one. Failing the whole automation here meant a
- * script that never mentions bb still died before its first line.
- *
- * Candidates are stat-ed before being executed. Expanding `PATH` makes the list
- * long, and spawning a process per entry — each with its own timeout — would
- * make a host without bb pay seconds on every run.
- */
 async function resolveBbBinary(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<string | null> {
@@ -114,13 +81,6 @@ async function resolveBbBinary(
   return null;
 }
 
-/**
- * PATH for a script run, with bb's directory prepended when it is known.
- *
- * The absolute-path guard is belt and braces: bbBinaryCandidates only yields
- * absolute paths, so a relative one would mean dirname() could return ".",
- * putting the automation scripts directory ahead of the system PATH.
- */
 export function scriptPathEnv(
   bbPath: string | null,
   inheritedPath: string | undefined,
@@ -226,9 +186,7 @@ function signalProcessGroup(child: ChildProcess, signal: NodeJS.Signals): void {
     if ((error as NodeJS.ErrnoException).code === "ESRCH") return;
     try {
       child.kill(signal);
-    } catch {
-      // The child may have exited between the group and direct signals.
-    }
+    } catch {}
   }
 }
 
@@ -324,8 +282,6 @@ export async function executeStoredScript(args: {
     args.interpreter ?? resolveDefaultInterpreter(args.scriptFile);
   const command = resolveInterpreterCommand(interpreter);
   const bbPath = await resolveBbBinary();
-  // A script that never calls bb must still run, so an unresolved CLI only
-  // costs the PATH injection and leaves a note in the captured output.
   const warning = bbPath === null ? `${BB_NOT_INJECTED_WARNING}\n` : "";
   const scriptEnv: NodeJS.ProcessEnv = {
     ...process.env,
@@ -336,8 +292,6 @@ export async function executeStoredScript(args: {
     BB_AUTOMATION_ID: args.automationId,
     BB_AUTOMATION_RUN_ID: args.runId,
   };
-  // Scripts are told where bb is the same way agent shells are, so `"$BB_CLI"`
-  // works even when the directory is already on PATH.
   if (bbPath !== null) {
     scriptEnv.BB_CLI = bbPath;
   }

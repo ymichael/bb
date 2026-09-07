@@ -58,10 +58,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/**
- * A bundle built against an SDK before 0.4.16 reads `experimental_Original`
- * (renamed `Original` in 0.4.16). The host passes both for one release.
- */
 describe("PluginThreadList experimental_Original alias", () => {
   it("delegates to BB's list through the alias and warns once across renders", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

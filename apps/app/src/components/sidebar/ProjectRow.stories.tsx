@@ -24,11 +24,6 @@ export default {
   title: "sidebar/Projects",
 };
 
-// Caps at the production sidebar max (460px) but shrinks with the parent so
-// truncation behavior is visible at any container width. Provides the outer
-// sidebar frame only; each story decides whether to use ProjectListShell (for
-// full-sidebar shots) or a bare SidebarStickyStack (for isolated ProjectRow
-// demos).
 function SidebarStage({ children }: { children: ReactNode }) {
   return (
     <ProjectActionsProvider>
@@ -41,8 +36,6 @@ function SidebarStage({ children }: { children: ReactNode }) {
   );
 }
 
-// Wrap the shared builders for slightly different defaults the sidebar wants
-// (a different demo project id; ThreadListEntry instead of Thread).
 const makeProject = (overrides: Partial<ProjectResponse> = {}) =>
   makeSharedProject({ id: PROJECT_IDS.bb, name: "bb", ...overrides });
 
@@ -78,9 +71,6 @@ interface InteractiveProjectListArgs {
   initialCollapsedEnvironmentIds?: ReadonlySet<string>;
 }
 
-// Owns the list-level collapse state that jotai atoms own in production
-// (ProjectList) so the chevrons in stories actually toggle, then renders the
-// real ProjectListProjects — the same component the live sidebar uses.
 function InteractiveProjectList({
   rows,
   initialCollapsedThreadIds,
@@ -124,6 +114,7 @@ function InteractiveProjectList({
     <ProjectListProjects
       status="ready"
       rows={resolvedRows}
+      progressiveDisclosureEnabled
       collapsedProjectIds={collapsedProjectIds}
       collapsedThreadIds={collapsedThreadIds}
       collapsedEnvironmentIds={collapsedEnvironmentIds}
@@ -146,8 +137,6 @@ interface SingleProjectArgs {
   isLocalPathInvalid?: boolean;
 }
 
-// Isolated single-project demos: no "Projects" label — just the minimum
-// sticky-stack context the row depends on.
 function singleProject({
   project,
   threadListState,
@@ -205,6 +194,7 @@ const rootThread = makeThread({
   titleFallback: "Stabilize Pnpm Dev Environment",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: BRANCH_NAMES.default,
+  queuedWork: "none",
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const sharedWorktreeThreadA = makeThread({
@@ -214,6 +204,7 @@ const sharedWorktreeThreadA = makeThread({
   environmentId: "env_shared_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
+  queuedWork: "none",
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const sharedWorktreeThreadB = makeThread({
@@ -223,6 +214,7 @@ const sharedWorktreeThreadB = makeThread({
   environmentId: "env_shared_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/set-default-tab-for-panel-thr_vnj2qze4fg",
+  queuedWork: "none",
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const parentThread = makeThread({
@@ -270,10 +262,6 @@ const deepNestedParent = makeThread({
   titleFallback: "Nested Parent Marker",
   parentThreadId: deepParentChild.id,
 });
-// depth 4: child of the depth-3 nested parent. Its parent is the deepest row
-// that still pins (level 3 = the cap); this row itself sits one past the cap and
-// renders non-sticky, so the story exercises both the last pinned level and the
-// first unpinned one.
 const deepNestedParentChild = makeThread({
   id: "thr_deep_nested_parent_child",
   title: "Beyond The Sticky Cap",
@@ -288,6 +276,7 @@ const deepWorktreeA = makeThread({
   environmentId: "env_deep_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/sidebar-parent-child-nesting",
+  queuedWork: "none",
   environmentWorkspaceDisplayKind: "managed-worktree",
 });
 const deepWorktreeB = makeThread({
@@ -298,6 +287,7 @@ const deepWorktreeB = makeThread({
   environmentId: "env_deep_worktree",
   environmentHostId: HOST_IDS.local,
   environmentBranchName: "bb/sidebar-parent-child-nesting",
+  queuedWork: "none",
   environmentWorkspaceDisplayKind: "managed-worktree",
   hasPendingInteraction: true,
 });
@@ -640,13 +630,6 @@ export function Overview() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Projects list — three realistic, fully-expanded projects stacked together.
-// Scoped to the Projects section (not the whole sidebar: no Pinned/Threads/Apps
-// sections or section chrome). Helpful for eyeballing the vertical rhythm:
-// project↔project separation vs. the tighter grouping inside a parent thread.
-// ---------------------------------------------------------------------------
-
 const fullParentA = makeThread({
   id: "thr_full_a_parent",
   projectId: "proj_full_a",
@@ -696,7 +679,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     parentThreadId: fullParentA.id,
     environmentId: "env_full_a_codex_train",
     environmentHostId: "host_local",
-    environmentBranchName: "bb/squash-merge-ready-app-train-thr_s6fn8fuv9w",
+    environmentBranchName: "bb/ready-app-train-thr_s6fn8fuv9w",
+    queuedWork: "none",
     environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
@@ -707,7 +691,8 @@ const fullProjectAThreads: ThreadListEntry[] = [
     parentThreadId: fullParentA.id,
     environmentId: "env_full_a_codex_train",
     environmentHostId: "host_local",
-    environmentBranchName: "bb/squash-merge-ready-app-train-thr_s6fn8fuv9w",
+    environmentBranchName: "bb/ready-app-train-thr_s6fn8fuv9w",
+    queuedWork: "none",
     environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
@@ -717,6 +702,7 @@ const fullProjectAThreads: ThreadListEntry[] = [
     titleFallback: "Stabilize Pnpm Dev Environment",
     environmentHostId: "host_local",
     environmentBranchName: "main",
+    queuedWork: "none",
     environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
@@ -735,6 +721,7 @@ const fullProjectAThreads: ThreadListEntry[] = [
     environmentId: "env_full_a_sidebar_rail",
     environmentHostId: "host_local",
     environmentBranchName: "bb/fix-diff-panel-issues-thr_u8cnp5fnea",
+    queuedWork: "none",
     environmentWorkspaceDisplayKind: "managed-worktree",
   }),
   makeThread({
@@ -745,6 +732,7 @@ const fullProjectAThreads: ThreadListEntry[] = [
     environmentId: "env_full_a_sidebar_rail",
     environmentHostId: "host_local",
     environmentBranchName: "bb/fix-diff-panel-issues-thr_u8cnp5fnea",
+    queuedWork: "none",
     environmentWorkspaceDisplayKind: "managed-worktree",
   }),
 ];

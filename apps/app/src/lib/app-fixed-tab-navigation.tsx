@@ -17,10 +17,6 @@ export function getPluginFixedTabOwnerId(
   return `plugin:${pluginId}:${panelId}`;
 }
 
-/**
- * Generic fixed-tab transition. Destination owners validate and interpret
- * targets; this controller only resolves an owner-scoped reference.
- */
 export function openAppFixedTabFromDestinations(
   destinations: readonly AppFixedTabDestination[],
   intent: AppFixedTabOpenIntent,

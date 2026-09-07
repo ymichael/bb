@@ -21,8 +21,6 @@ describe("adapter-utils", () => {
     return { added, removed };
   }
 
-  // A name a shell cannot carry must be dropped, not passed through: one bad
-  // key would otherwise become a config path of its own inside the provider.
   it("drops environment names a shell would refuse", () => {
     expect(
       buildShellEnvOverrides({

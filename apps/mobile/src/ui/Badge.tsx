@@ -4,7 +4,6 @@ import { View } from "react-native";
 import { cn } from "./cn";
 import { Text } from "./Text";
 
-/* Mirrors packages/shared-ui/src/components/ui/badge.tsx. */
 const badgeVariants = cva(
   "flex-row items-center self-start rounded-md border px-2.5 py-0.5",
   {
@@ -31,10 +30,6 @@ const badgeTextVariants = cva("text-xs font-semibold", {
   },
   defaultVariants: { variant: "default" },
 });
-
-export type BadgeVariant = NonNullable<
-  VariantProps<typeof badgeVariants>["variant"]
->;
 
 export interface BadgeProps extends VariantProps<typeof badgeVariants> {
   children: ReactNode;

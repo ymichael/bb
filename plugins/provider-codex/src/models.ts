@@ -17,28 +17,16 @@ const codexModelIdentitySchema = z
   })
   .passthrough();
 
-/** Map a Codex-native reasoning effort string into a BB ReasoningLevel. */
 export function mapCodexReasoningLevelToBb(
   value: unknown,
 ): ReasoningLevel | null {
   if (typeof value !== "string") {
     return null;
   }
-  // Codex levels that BB knows about (including Codex-only "ultra") pass
-  // through via the shared schema. Unknown future names soft-fail to null.
   const parsed = reasoningLevelSchema.safeParse(value);
   return parsed.success ? parsed.data : null;
 }
 
-/**
- * Map a BB ReasoningLevel to the string Codex app-server expects for
- * `model_reasoning_effort`. Returns null for levels Codex never accepts
- * (currently only "none").
- *
- * "ultracode" is Claude-specific and is not sent to Codex; callers should not
- * offer it for Codex models. "ultra" is the Codex-native top tier and passes
- * through as-is.
- */
 export function mapBbReasoningLevelToCodex(
   level: ReasoningLevel,
 ): string | null {
@@ -95,7 +83,6 @@ function parseSupportedReasoningEfforts(raw: unknown): ModelReasoningEffort[] {
     efforts.push(effort);
   }
 
-  // All efforts unknown/unmapped — fall back rather than rejecting the model.
   return efforts.length > 0 ? efforts : cloneDefaultReasoningEfforts();
 }
 
@@ -124,13 +111,6 @@ function toAvailableModel(
   };
 }
 
-/**
- * Parse Codex `model/list` results.
- *
- * Soft by design: unknown reasoning efforts are skipped, malformed model
- * entries are skipped, and only a completely unusable payload fails hard.
- * This keeps the model picker working when Codex introduces new effort names.
- */
 export function parseModelsResponse(result: unknown): AvailableModel[] {
   if (result == null || typeof result !== "object") {
     throw new Error("Invalid response from codex model/list.");

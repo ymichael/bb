@@ -1,11 +1,7 @@
 import type { ProjectSource } from "@bb/domain";
 import { EnvironmentPickerUI } from "./EnvironmentPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import {
-  HOST_IDS,
-  HOST_NAMES,
-  makeHost,
-} from "../../../.ladle/story-fixtures";
+import { HOST_IDS, HOST_NAMES, makeHost } from "../../../.ladle/story-fixtures";
 
 const localHost = makeHost({ id: HOST_IDS.local });
 const remoteHost = makeHost({ id: HOST_IDS.local, name: "studio-mac-mini" });

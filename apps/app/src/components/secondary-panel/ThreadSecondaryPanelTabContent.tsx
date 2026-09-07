@@ -41,12 +41,6 @@ interface GitDiffTabContentProps {
   environmentId?: string;
   target: WorkspaceDiffTarget | undefined;
   isDiffPanelActive: boolean;
-  /**
-   * Whether the secondary panel is currently open. The body stays mounted
-   * while the panel is closed so reopening is instant, but its TOC / patch
-   * fetches pause: realtime workspace events keep invalidating the diff cache,
-   * and refetching into an off-screen panel is wasted network and diff work.
-   */
   isPanelOpen: boolean;
   gitDiffPresentation: DiffPresentation;
   onClearPendingGitDiffIntent?: () => void;
@@ -59,14 +53,6 @@ interface GitDiffTabContentProps {
 
 interface WorkspaceFilePreviewTabContentProps {
   activePath: string;
-  /**
-   * Whether the secondary panel is open. The preview stays mounted while the
-   * panel is closed (retained drawer content / desktop subtree), but its
-   * content query pauses: every workspace write invalidates the preview cache,
-   * and a live observer would refetch and remount the highlighted file into an
-   * off-screen panel. A closed panel keeps its cached preview and refetches
-   * once on reopen.
-   */
   isPanelOpen: boolean;
   copyPath?: string | null;
   environmentId?: string | null;
@@ -81,14 +67,6 @@ interface WorkspaceFilePreviewTabContentProps {
 
 interface ProjectFilePreviewTabContentProps {
   activePath: string;
-  /**
-   * Whether the secondary panel is open. The preview stays mounted while the
-   * panel is closed (retained drawer content / desktop subtree), but its
-   * content query pauses: every workspace write invalidates the preview cache,
-   * and a live observer would refetch and remount the highlighted file into an
-   * off-screen panel. A closed panel keeps its cached preview and refetches
-   * once on reopen.
-   */
   isPanelOpen: boolean;
   copyPath?: string | null;
   environmentId: string | null;
@@ -101,14 +79,6 @@ interface ProjectFilePreviewTabContentProps {
 
 interface HostFilePreviewTabContentProps {
   activePath: string;
-  /**
-   * Whether the secondary panel is open. The preview stays mounted while the
-   * panel is closed (retained drawer content / desktop subtree), but its
-   * content query pauses: every workspace write invalidates the preview cache,
-   * and a live observer would refetch and remount the highlighted file into an
-   * off-screen panel. A closed panel keeps its cached preview and refetches
-   * once on reopen.
-   */
   isPanelOpen: boolean;
   copyPath: string;
   environmentId?: string | null;
@@ -122,10 +92,6 @@ interface HostFilePreviewTabContentProps {
 interface HostScopedFilePreviewTabContentProps {
   activePath: string;
   hostId: string;
-  /**
-   * Whether the secondary panel is open. The retained panel body stays
-   * mounted while closed, but its host read must pause until it is visible.
-   */
   isPanelOpen: boolean;
   lineRange: FilePreviewLineRange | null;
   onOpenInEditor?: (path: string) => void;
@@ -133,14 +99,6 @@ interface HostScopedFilePreviewTabContentProps {
 
 interface ThreadStorageFilePreviewTabContentProps {
   activePath: string;
-  /**
-   * Whether the secondary panel is open. The preview stays mounted while the
-   * panel is closed (retained drawer content / desktop subtree), but its
-   * content query pauses: every workspace write invalidates the preview cache,
-   * and a live observer would refetch and remount the highlighted file into an
-   * off-screen panel. A closed panel keeps its cached preview and refetches
-   * once on reopen.
-   */
   isPanelOpen: boolean;
   copyPath?: string | null;
   lineRange: FilePreviewLineRange | null;
@@ -179,14 +137,6 @@ function ThreadDiffSkeleton() {
   );
 }
 
-/**
- * The diff tab body. Fetches the diff's table of contents
- * ({@link useEnvironmentDiffFiles}) and renders it through the virtualized
- * {@link DiffFilesPanel}, which fetches per-file patches on demand as rows
- * scroll into view. Handles the TOC's loading / empty / `not_applicable` /
- * `unavailable` states; per-file patch errors surface as retryable card errors
- * inside the panel.
- */
 export function GitDiffTabContent({
   environmentId,
   target,
@@ -231,9 +181,6 @@ export function GitDiffTabContent({
     mergeBaseRef,
   });
 
-  // Drop per-card UI state belonging to any other diff slice once a new target
-  // / environment resolves, so collapse defaults are re-derived fresh rather
-  // than inheriting a previous diff's choices at a shared path.
   useEffect(() => {
     clearDiffFileCardStates(diffIdentity);
   }, [diffIdentity]);
@@ -306,8 +253,6 @@ export function GitDiffTabContent({
     );
   }
 
-  // The panel needs a concrete target to drive its patch fetches; `isQueryEnabled`
-  // above already guarantees both once an `available` outcome resolved.
   if (!environmentId || target === undefined) {
     return (
       <div className={cn(PANEL_SCROLL_SLOT_CLASS, "px-4 pb-3")}>

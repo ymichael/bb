@@ -53,12 +53,6 @@ import { createNoopTelemetryService } from "../../../src/services/system/telemet
 const logger = testLogger as unknown as Logger;
 const run = promisify(execFile);
 
-/**
- * The scaffold's vendored components import real npm packages that
- * `bb plugin new` installs for authors. This offline test links them from the
- * repo's own install (resolved the way apps/app sees them) so the path:
- * install's frontend bundle build can resolve every import.
- */
 async function linkScaffoldDependencies(targetDir: string): Promise<void> {
   const manifest = JSON.parse(
     await readFile(join(targetDir, "package.json"), "utf8"),
@@ -161,7 +155,6 @@ async function git(cwd: string, args: string[]): Promise<string> {
   return stdout.trim();
 }
 
-/** Init a commit-able repo with identity config that works anywhere. */
 async function initGitRepo(repoDir: string): Promise<void> {
   await git(repoDir, ["init", "-q", "-b", "main"]);
   await git(repoDir, ["config", "user.email", "test@example.com"]);
@@ -246,8 +239,6 @@ describe("plugin install sources", () => {
   });
 
   it("reads git semver ranges, explicit selectors, and tag prefixes", () => {
-    // A range operator means a range; a bare version token stays the tag it
-    // almost always is.
     for (const spec of ["^1.2.0", "~1.2", "1.x", ">=1.0.0 <2.0.0", "*"]) {
       expect(
         parsePluginSource(`git:github.com/acme/repo@${spec}`),
@@ -351,21 +342,10 @@ describe("plugin install sources", () => {
   });
 
   it("keeps script-policy npm config out of git/npm children", async () => {
-    // Launching bb through a package manager exports the user's whole .npmrc
-    // as npm_config_*, and npm reads env above every .npmrc file. An ordinary
-    // allow-scripts entry arrived at npm 11/12 as --allow-scripts and made
-    // every git and npm plugin install fail with EALLOWSCRIPTS. Installs pass
-    // --ignore-scripts; that policy is not the environment's to override.
-    // The test runner itself may have been launched that way, so restore
-    // whatever was there rather than deleting.
     const overrides: Record<string, string> = {
       npm_config_allow_scripts: "@github/keytar,node-pty",
       npm_config_ignore_scripts: "false",
-      // npm case-folds config keys; the filter must too.
       NPM_CONFIG_FOREGROUND_SCRIPTS: "true",
-      // Other npm config is a supported way to point bb at a registry or
-      // cache (plugin-registration reads npm_config_registry itself), so it
-      // must pass.
       npm_config_registry: "https://registry.example.invalid/",
     };
     const previous = new Map<string, string | undefined>();
@@ -456,8 +436,6 @@ describe("plugin install flows", () => {
     await rm(workDir, { recursive: true, force: true });
   });
 
-  // Each test clones a repo and runs a full install (git subprocesses +
-  // esbuild build + plugin load); the 5s default flakes on loaded CI runners.
   describe.skipIf(!hasGit)("git sources", { timeout: 30_000 }, () => {
     it("installs and tracks the default branch when the ref is omitted", async () => {
       const repoDir = join(workDir, "repo-default-branch");
@@ -539,9 +517,6 @@ describe("plugin install flows", () => {
       expect(getInstalledPlugin(db, "confirmed")).toBeUndefined();
     });
 
-    // A listing declares no ranges, so nothing rejects this entry before the
-    // clone. The plugin's own package.json is the only source of truth, and
-    // the install pipeline must read it and refuse.
     it("refuses a catalog entry whose plugin requires another plugin SDK", async () => {
       const repoDir = join(workDir, "repo-catalog-sdk-too-new");
       await writePluginFixture(repoDir, {
@@ -672,8 +647,6 @@ describe("plugin install flows", () => {
       const source = `git:${repoDir}@^1.0.0`;
       const entry = await service.install(source, { kind: "root" });
 
-      // The highest stable release inside the range wins: not 2.0.0, and not
-      // the 1.2.0 prerelease the range does not name.
       expect(entry).toMatchObject({ id: "ranger", status: "running" });
       expect(entry.sourceDisplay).toContain("tracks compatible");
       expect(getInstalledPluginRegistration(db, "ranger")).toMatchObject({
@@ -697,8 +670,6 @@ describe("plugin install flows", () => {
       await initGitRepo(repoDir);
       await commitAll(repoDir, "init");
       await git(repoDir, ["tag", "v1.0.0"]);
-      // A branch literally named like a range: bb must not guess which one
-      // the user meant.
       await git(repoDir, ["branch", "1.x"]);
 
       await expect(
@@ -726,7 +697,6 @@ describe("plugin install flows", () => {
       await writePluginFixture(repoDir, { name: "bb-plugin-prefixed" });
       await initGitRepo(repoDir);
       await commitAll(repoDir, "init");
-      // Repository-wide tags must not answer a prefixed range.
       await git(repoDir, ["tag", "v9.0.0"]);
       await writeFile(join(repoDir, "note.txt"), "prefixed");
       const tagged = await commitAll(repoDir, "prefixed release");
@@ -796,7 +766,6 @@ describe("plugin install flows", () => {
       await writePluginFixture(repoDir, { name: "bb-plugin-shaman" });
       await initGitRepo(repoDir);
       const sha = await commitAll(repoDir, "init");
-      // Advance the branch so the sha is not the tip — proves the checkout.
       await writePluginFixture(repoDir, {
         name: "bb-plugin-shaman",
         version: "9.9.9",
@@ -939,15 +908,12 @@ describe("plugin install flows", () => {
       const first = await service.install(source, { kind: "root" });
       expect(first.status).toBe("running");
 
-      // The tip now carries a broken manifest: the refresh clone fails
-      // validation in its staging dir, so the live install must survive.
       await writeFile(join(repoDir, "package.json"), "{ not json");
       await commitAll(repoDir, "broken manifest");
       await expect(
         service.install(source, { kind: "root" }),
       ).rejects.toThrowError();
 
-      // The registration still points at real, loadable files.
       await stat(join(first.rootDir, "package.json"));
       await service.reload("sturdy");
       const entry = service.list().find((p) => p.id === "sturdy");
@@ -955,11 +921,6 @@ describe("plugin install flows", () => {
       expect(entry?.version).toBe("0.1.0");
     });
 
-    // bb now builds a git plugin's server bundle itself, so a committed
-    // dist/ is not authoritative for git the way it is for npm: whatever the
-    // author checked in is replaced by a bundle built against this SDK.
-    // `validatePluginArtifactMeta` still guards npm artifacts; it is covered
-    // directly in "plugin artifact metadata validation" below.
     it("rebuilds a git plugin's server bundle over any committed dist", async () => {
       const identityRepo = join(workDir, "repo-artifact-identity");
       await writePluginFixture(identityRepo, {
@@ -1044,18 +1005,12 @@ describe("plugin install flows", () => {
 
       expect(await service.remove("managed")).toBe(true);
       await stat(managedEntry.rootDir);
-      // The user's original repo is untouched.
       await stat(join(repoDir, "package.json"));
 
       expect(await service.remove("localdir")).toBe(true);
       await stat(join(pathDir, "package.json"));
     });
 
-    // A cache hit registers with `validated: true`, which skips
-    // `validateInstallDir` and the engine checks inside it. The cached bytes
-    // were compatible when bb first accepted them, so nothing re-reads the
-    // range — and after a bb version change the same artifact can register
-    // while this build cannot run it.
     it("refuses a cached artifact whose engine range no longer matches", async () => {
       const repoDir = join(workDir, "repo-cached-engine");
       await writePluginFixture(repoDir, {
@@ -1071,9 +1026,8 @@ describe("plugin install flows", () => {
       const clonesBefore = materializationCount;
       await service.stop();
 
-      // The same db and dataDir, so the checkout and its artifact row survive.
       service = createPluginService({
-      aiServices: createAiServiceRegistry(),
+        aiServices: createAiServiceRegistry(),
         telemetry: createNoopTelemetryService(),
         db,
         hub: {
@@ -1093,8 +1047,6 @@ describe("plugin install flows", () => {
       await expect(
         service.install(source, { kind: "root" }),
       ).rejects.toThrowError(/install refused.*requires bb >=0\.9\.0/u);
-      // No re-clone: the refusal came from the cache-hit path, not a fresh
-      // materialization that would have run the checks anyway.
       expect(materializationCount).toBe(clonesBefore);
       expect(
         getInstalledPluginRegistration(db, "cached-engine"),
@@ -1117,8 +1069,6 @@ describe("plugin install flows", () => {
         kind: "root",
       });
       expect(entry.status).toBe("running");
-      // Built here rather than committed, so the loader prefers a bundle
-      // stamped for this exact SDK over the TypeScript source.
       await stat(join(entry.rootDir, "dist", "server.js"));
       await stat(join(entry.rootDir, "dist", "server.meta.json"));
     });
@@ -1172,8 +1122,6 @@ describe("plugin install flows", () => {
       },
     );
 
-    // This performs an initial git install and a second startup recovery build;
-    // loaded runners need more headroom than the suite's 30s default.
     it("restores a target moved aside by an interrupted promotion", async () => {
       const repoDir = join(workDir, "repo-interrupted-promotion");
       await writePluginFixture(repoDir, {
@@ -1197,7 +1145,7 @@ describe("plugin install flows", () => {
       await mkdir(`${entry.rootDir}.promoting`, { recursive: true });
       await writeFile(join(`${entry.rootDir}.promoting`, "partial"), "copy");
       service = createPluginService({
-      aiServices: createAiServiceRegistry(),
+        aiServices: createAiServiceRegistry(),
         telemetry: createNoopTelemetryService(),
         db,
         hub: {
@@ -1228,9 +1176,6 @@ describe("plugin install flows", () => {
     it("ignores a repository .npmrc when installing dependencies", async () => {
       const repoDir = join(workDir, "repo-npmrc");
       await writePluginFixture(repoDir, { name: "bb-plugin-npmrc" });
-      // `npm --prefix <clone>` reads this file. An author could redirect the
-      // registry, relax TLS, or interpolate ${ENV} into request URLs, so it
-      // must not survive into the install.
       await writeFile(
         join(repoDir, ".npmrc"),
         "registry=http://127.0.0.1:1/evil\nstrict-ssl=false\n",
@@ -1294,8 +1239,6 @@ describe("plugin install flows", () => {
           "utf8",
         );
         expect(bundle).toContain("hello from the dependency");
-        // node_modules is retained: esbuild only bundles statically reachable
-        // code, so a dependency's runtime data files must survive.
         await stat(join(entry.rootDir, "node_modules"));
       },
     );
@@ -1365,8 +1308,6 @@ describe("plugin install flows", () => {
         expect(
           getInstalledPluginRegistration(db, "collection-beta"),
         ).toMatchObject({ sourceGitSubdirectory: "plugins/beta" });
-        // The second install must not replace the checkout the first one
-        // built into: its bundle and dependencies stay untouched.
         expect(
           await readFile(join(alpha.rootDir, "dist", "server.js"), "utf8"),
         ).toBe(alphaBundle);
@@ -1432,8 +1373,6 @@ describe("plugin install flows", () => {
         });
 
         expect(top.status).toBe("running");
-        // The root install owns the checkout the nested sibling already built
-        // into, so it must not replace it wholesale.
         expect(
           await readFile(join(alpha.rootDir, "dist", "server.js"), "utf8"),
         ).toBe(alphaBundle);
@@ -1509,8 +1448,6 @@ describe("plugin install flows", () => {
           name: "alpha",
         });
         expect(await service.remove("collection-alpha")).toBe(true);
-        // Garbage collection removes the plugin root and then its now empty
-        // parent, while the shared checkout stays for the siblings.
         const checkout = gitArtifactCacheDir(
           dataDir,
           `local${repoDir}`,
@@ -1563,8 +1500,6 @@ describe("plugin install flows", () => {
           name: "beta",
         });
 
-        // The service records the canonical path. macOS resolves the temporary
-        // directory through /private, so the expectation must canonicalize too.
         const betaRoot = await realpath(join(repoDir, "plugins", "beta"));
         expect(entry.rootDir).toBe(betaRoot);
         expect(
@@ -1624,8 +1559,6 @@ describe("plugin install flows", () => {
   );
 
   describe("plugin artifact metadata validation", () => {
-    // Guards npm artifacts, which bb never builds. Covered directly because
-    // git installs now overwrite any committed dist/ metadata.
     it("rejects an artifact whose pluginId does not match the manifest", () => {
       expect(
         validatePluginArtifactMeta({
@@ -1723,8 +1656,6 @@ describe("plugin install flows", () => {
         const tarball = await readFile(join(packDir, tarballName));
         let tarballRequests = 0;
 
-        // Minimal npm registry over loopback: packument + tarball. Keeps the
-        // real `npm install` code path while staying offline.
         const registry = await new Promise<Server>((resolvePromise) => {
           const server = createServer((request, response) => {
             const url = request.url ?? "";
@@ -1876,15 +1807,11 @@ describe("plugin install flows", () => {
     await stat(join(targetDir, "README.md"));
     await linkScaffoldDependencies(targetDir);
 
-    // A path: install of a plugin with `bb.app` builds the frontend bundle
-    // from the vendored components, so this also proves the scaffold's
-    // component set and dependency list agree.
     const entry = await service.install(`path:${targetDir}`, { kind: "root" });
     expect(entry.id).toBe("scaffolded");
     expect(entry.status).toBe("running");
     expect(entry.statusDetail).toBeNull();
 
-    // Scaffolding refuses to overwrite an existing directory.
     await expect(
       scaffoldPlugin({
         targetDir,

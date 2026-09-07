@@ -19,11 +19,6 @@ interface Crumb {
   path: string;
 }
 
-/**
- * Splits an absolute directory into navigable ancestor crumbs. The host's
- * separator is inferred from the path string (the client can't know a remote
- * host's platform), so this handles both POSIX and Windows roots.
- */
 export function toBreadcrumb(directory: string): Crumb[] {
   const isWindows = /^[A-Za-z]:/.test(directory);
   if (!isWindows) {
@@ -47,10 +42,6 @@ export function toBreadcrumb(directory: string): Crumb[] {
   return crumbs;
 }
 
-/**
- * Appends a child name to a host directory using that host's separator, which
- * is inferred from the path string the same way {@link toBreadcrumb} does.
- */
 export function joinHostPath(directory: string, name: string): string {
   if (/^[A-Za-z]:/.test(directory)) {
     return `${directory.replace(/[\\/]+$/, "")}\\${name}`;
@@ -58,7 +49,6 @@ export function joinHostPath(directory: string, name: string): string {
   return `${directory.replace(/\/+$/, "")}/${name}`;
 }
 
-/** Rejects names that would silently create somewhere other than here. */
 export function getFolderNameValidationMessage(name: string): string | null {
   if (!name) return "Enter a folder name.";
   if (name === "." || name === "..") return "Enter a folder name.";
@@ -66,31 +56,15 @@ export function getFolderNameValidationMessage(name: string): string | null {
   return null;
 }
 
-/**
- * Every entry row is one truncated `text-sm` line with `py-1`, so this
- * estimate is exact; `measureElement` still corrects it for zoom or font
- * changes.
- */
 const DIRECTORY_ENTRY_ROW_HEIGHT_PX = 28;
-/**
- * Also covers the "new folder" form that sits above the list inside the same
- * scroll box (at most ~3 rows tall), so the virtualizer can treat the list as
- * starting at scroll offset 0 without a `scrollMargin` measurement.
- */
 const DIRECTORY_ENTRY_OVERSCAN_ROWS = 10;
 
 const NO_ENTRIES: HostDirectoryListing["entries"] = [];
 
 interface RemotePathBrowserProps {
   hostId: string;
-  /** Directory to open at; null starts at the host's home directory. */
   initialPath?: string | null;
-  /** Whether this picker may create and select a new child directory. */
   allowCreateFolder: boolean;
-  /**
-   * Reports the resolved directory currently shown (the folder that would be
-   * picked). Null while the first listing loads or a manual path fails to read.
-   */
   onDirectoryChange: (directory: string | null) => void;
   disabled?: boolean;
 }
@@ -120,10 +94,6 @@ export function RemotePathBrowser({
   const directory = data?.directory ?? null;
   const crumbs = directory ? toBreadcrumb(directory) : [];
 
-  // The daemon lists the whole directory, so a build output or home folder
-  // can hold thousands of entries. The list box shows ~8 rows; mounting every
-  // entry made that box cost one DOM row per file (#1615). Mount only the rows
-  // near the viewport instead.
   const entries = data?.entries ?? NO_ENTRIES;
   const scrollRef = useRef<HTMLDivElement>(null);
   const entryVirtualizer = useVirtualizer({
@@ -155,8 +125,6 @@ export function RemotePathBrowser({
     setNewFolderError(null);
   };
 
-  // A pending name belongs to the folder it was started in, so leaving that
-  // folder (including after a successful create) abandons it.
   const navigateTo = (path: string) => {
     cancelCreatingFolder();
     setCurrentPath(path);
@@ -170,8 +138,6 @@ export function RemotePathBrowser({
     },
     onSuccess: async (path, { parent }) => {
       setNewFolderName("");
-      // The new folder becomes the picked directory; refresh the parent so it
-      // is listed too when the user navigates back up.
       navigateTo(path);
       await invalidateHostDirectoryListing({
         queryClient,
@@ -209,7 +175,6 @@ export function RemotePathBrowser({
     createFolder.mutate({ parent: directory, name });
   };
 
-  // Keep the dialog's pick target in sync with the resolved directory.
   useEffect(() => {
     onDirectoryChange(directory);
   }, [directory, onDirectoryChange]);
@@ -440,8 +405,7 @@ export function RemotePathBrowser({
             aria-label="Create new folder"
             className="mb-1 flex flex-col gap-1"
           >
-            {/* Mirrors an entry row's px-2 + size-4 icon + gap-2 so the name
-                being typed lines up with the folder names below it. */}
+            {}
             <div className="flex items-center gap-2 px-2">
               <Icon
                 name="Folder"

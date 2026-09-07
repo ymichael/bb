@@ -1,6 +1,6 @@
 ---
 name: tasks
-description: Use when asked to work on or track a task in the Tasks plugin, when the prompt mentions a task key such as ABC-12, or when work needs task comments, attachments, delegation tracking, or status updates.
+description: "Work on or manage records in BB Tasks, including task keys such as ABC-12."
 ---
 
 # Tasks
@@ -8,21 +8,8 @@ description: Use when asked to work on or track a task in the Tasks plugin, when
 Use the `bb tasks` CLI to understand the assigned task, keep its record useful,
 and report the outcome where the work is tracked.
 
-Delegation presets are user-defined; Tasks ships with none. Before dispatching
-work, use `bb tasks preset list` and create a preset if the required one does
-not already exist. Dispatch requires an existing preset.
-
-Create or update the same execution selection exposed in the Tasks UI with
-`--provider`, `--model`, `--reasoning`, and optional
-`--service-tier default|fast|none`:
-
-```sh
-bb tasks preset create --name "Codex high" --provider codex \
-  --model gpt-5.6-sol --reasoning high --service-tier fast \
-  --permission auto
-```
-
-`preset update` accepts the same flags; `--service-tier none` clears a tier.
+For task dispatch and execution presets, read
+[references/delegation.md](references/delegation.md).
 
 ## Work a task
 
@@ -65,51 +52,18 @@ bb tasks preset create --name "Codex high" --provider codex \
    targets the prior latest responder rather than the new comment itself.
 
 4. Attach result artifacts that belong with the task, such as reports,
-   screenshots, patches, or generated files. `--file` accepts images and
-   other files (for example `.png`, `.jpg`, `.svg`, `.pdf`, `.md`, `.patch`,
-   or logs).
-
-   **Task-level attachment** — pass the task key so the file sits on the
-   task itself:
+   screenshots, patches, or generated files:
 
    ```sh
    bb tasks attachment add ABC-12 --file ./report.md
    bb tasks attachment add ABC-12 --file ./screenshot.png
    ```
 
-   **Comment-level attachment** — pass a comment ID so the file sits on that
-   comment (for example a screenshot that belongs with a specific milestone
-   note). Create the comment with `--json`, capture `.comment.id`, then add
-   the attachment:
+   Read `references/attachments.md` for comment attachments, initial files,
+   removal rules, and machine selection.
 
-   ```sh
-   comment_id=$(
-     bb tasks comment ABC-12 \
-       --body "Screenshot of the failing step." \
-       --json | jq -r '.comment.id'
-   )
-   bb tasks attachment add "$comment_id" --file ./screenshot.png
-   bb tasks attachment add "$comment_id" --file ./trace.log
-   ```
-
-   A task key attaches at task level; a comment ID attaches to that comment.
-   Do not pass a task key when the file should hang off a comment. Use
-   `--json` when capturing the returned attachment metadata. When creating a
-   task that should start with files, pass repeatable `--attach <path>` to
-   `bb tasks create` instead of attaching afterwards. Remove an attachment by
-   id with `bb tasks attachment remove <attachment-id>` (row and blob are
-   deleted together); reuse the ids from `bb tasks attachment list <key>`.
-   Referenced attachments are rejected unless the caller explicitly confirms
-   content cleanup with `--remove-references`; that flag removes the saved
-   description image reference together with the row and blob.
-
-   File paths (`--file`, `--attach`, `--out`, `--description-file`,
-   `--body-file`) are read from and written to the invoking machine: inside
-   an agent thread that is the thread's machine, so local paths just work.
-   Outside a thread they target the server's machine; pass
-   `--machine <id-or-name>` to address files on another enrolled machine.
-
-5. When the work is ready for review, update the task:
+5. Set the status to match the completion criteria. Use `done` when they are
+   met, or `in_review` when required review remains:
 
    ```sh
    bb tasks update ABC-12 --status in_review

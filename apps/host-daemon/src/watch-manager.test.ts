@@ -78,12 +78,6 @@ function createFakeWorkspace(path: string, isGitRepo = true) {
       commitSubject: "commit",
     })),
     reset: vi.fn(async () => undefined),
-    squashMerge: vi.fn(async () => ({
-      merged: true,
-      commitSha: "commit-1",
-      commitSubject: "commit",
-      targetBranch: "main",
-    })),
     setLocalStateFingerprint(value: GetLocalStateFingerprintResult) {
       localStateFingerprint = value;
     },

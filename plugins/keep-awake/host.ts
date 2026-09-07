@@ -23,7 +23,6 @@ interface KeepAwakeHostDependencies {
   ): KeepAwakeChild;
 }
 
-/** Dependency-injected factory used by host-entry tests. */
 export function createKeepAwakeHostEntry(deps: KeepAwakeHostDependencies) {
   let child: KeepAwakeChild | null = null;
   let lifecycleSignal: AbortSignal | null = null;

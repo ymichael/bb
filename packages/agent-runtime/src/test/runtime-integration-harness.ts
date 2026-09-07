@@ -37,6 +37,7 @@ import {
   type LaunchBoundAgentRuntime,
 } from "./runtime-test-harness.js";
 import {
+  formatRuntimeErrorEvent,
   waitForRuntimeConditionUnsafe,
   waitForThreadTurnCompleted as waitForSharedThreadTurnCompleted,
   waitForThreadTurnStarted as waitForSharedThreadTurnStarted,
@@ -161,12 +162,12 @@ const runtimeOptionsTemplates = {
 
 const INTEGRATION_REASONING_LEVEL = "low" satisfies ReasoningLevel;
 const PI_CODING_AGENT_DIR_ENV = "PI_CODING_AGENT_DIR";
-/** The pi plugin's session-dir override (plugins/provider-pi session-paths). */
 const PI_BRIDGE_SESSION_DIR_ENV = "BB_PI_BRIDGE_SESSION_DIR";
 
-/** Where the user-installed pi keeps its agent files (pi's `getAgentDir`). */
 function piAgentDir(): string {
-  return process.env[PI_CODING_AGENT_DIR_ENV] ?? join(homedir(), ".pi", "agent");
+  return (
+    process.env[PI_CODING_AGENT_DIR_ENV] ?? join(homedir(), ".pi", "agent")
+  );
 }
 const resolvedIntegrationModelPromises = new Map<string, Promise<string>>();
 
@@ -413,11 +414,6 @@ function findLatestErrorEvent(events: ThreadEvent[]): ErrorThreadEvent | null {
   return null;
 }
 
-function formatErrorEvent(event: ErrorThreadEvent): string {
-  const detail = event.detail ? ` detail=${event.detail}` : "";
-  return `${event.type}: ${event.message}${detail}`;
-}
-
 function formatInteractiveRequest(request: PendingInteractionCreate): string {
   if (isUserQuestionPendingInteractionPayload(request.payload)) {
     const firstQuestion = request.payload.questions[0];
@@ -467,7 +463,7 @@ export function describeRuntimeDiagnostics(
 
   return [
     `Diagnostics: threadId=${args.threadId ?? "all"} events=${events.length} turnStarted=${turnStartedCount(events)} turnCompleted=${turnCompletedCount(events)}`,
-    `latestError=${latestError ? formatErrorEvent(latestError) : "none"}`,
+    `latestError=${latestError ? formatRuntimeErrorEvent(latestError) : "none"}`,
     `toolCalls=[${toolCalls || "none"}]`,
     `interactiveRequests=[${interactiveRequests || "none"}]`,
     `agentText=${JSON.stringify(agentText)}`,
@@ -484,7 +480,7 @@ function failOnRuntimeError(args: RuntimeDiagnosticsArgs): string | null {
   if (!latestError) {
     return null;
   }
-  return `${formatErrorEvent(latestError)}\n${describeRuntimeDiagnostics(args)}`;
+  return `${formatRuntimeErrorEvent(latestError)}\n${describeRuntimeDiagnostics(args)}`;
 }
 
 export function waitForRuntimeCondition(
@@ -768,7 +764,6 @@ function expectSemanticInteractiveRequest(
       expectSemanticUserQuestionRequest(payload);
       return;
     default:
-      // A plugin-defined request: the namespaced kind names the form.
       expect(payload.title.length).toBeGreaterThan(0);
       return;
   }
@@ -825,8 +820,6 @@ function preparePiAgentDir(args: PreparePiAgentDirArgs): string {
   mkdirSync(targetAgentDir, { recursive: true });
 
   const sourceAgentDir = piAgentDir();
-  // Keep credentials/custom model metadata available while isolating mutable
-  // Pi prompts, extensions, settings, and session files per concurrent test.
   for (const fileName of ["auth.json", "models.json"]) {
     copyPiAgentFileIfPresent({
       fileName,
@@ -893,7 +886,6 @@ export function createTestRuntime(
     onStderr: () => {},
   });
 
-  // Every provider has a launch now, so every command carries one.
   return {
     runtime: withBridgeLaunch(
       runtime,
@@ -913,15 +905,6 @@ export function cleanup(ctx: TestContext): void {
   }
 }
 
-/**
- * The affirmative resolution for any interactive request, built from the
- * request's own payload kind: an approval takes the widest decision it
- * offers with the grant it asked for; a user question takes each question's
- * first option, or a short free-text answer when it offers none; a
- * plugin-defined request takes a small answer value. The shape always
- * matches the payload, so no flow can answer an approval with a user answer
- * or the reverse.
- */
 export async function createApprovalResolution(
   request: PendingInteractionCreate,
 ): Promise<PendingInteractionResolution> {
@@ -956,7 +939,6 @@ export async function createApprovalResolution(
         ),
       };
     default:
-      // A plugin-defined request is answered with a value for its form.
       return { kind: "request_answer", value: { answered: true } };
   }
 }

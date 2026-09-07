@@ -14,8 +14,6 @@ vi.mock("node:child_process", async () => {
       "node:child_process",
     );
   const { promisify } = await import("node:util");
-  // Real execFile carries a promisify custom that resolves { stdout, stderr };
-  // mirror it so `promisify(execFile)` behaves the same over the mock.
   Object.defineProperty(execFileMock, promisify.custom, {
     value: (file: string, args: readonly string[], options: object) =>
       new Promise((resolve, reject) => {

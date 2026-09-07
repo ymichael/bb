@@ -51,11 +51,6 @@ export class ProviderResponseEncodeError extends Error {
 
 export class JsonRpcResponseError extends Error {
   readonly code: number;
-  /**
-   * The bridge's typed recovery hint for this rejection (`error.data.
-   * recovery`), or null for a plain failure. A timeout or a bridge exit
-   * never carries one: those reject without a response.
-   */
   readonly recovery: ProviderRecoveryHint | null;
 
   constructor(
@@ -184,7 +179,6 @@ function jsonRpcResponseError(error: unknown): Error {
   return new Error(formatJsonRpcErrorMessage(error));
 }
 
-/** A malformed `data` is a plain failure, like a missing one. */
 function decodeRecoveryHint(data: unknown): ProviderRecoveryHint | null {
   if (data === undefined) {
     return null;
@@ -337,9 +331,6 @@ export function sendJsonRpcRequest<TResult>(
         clearTimeout(timer);
         const parsedResult = args.resultSchema.safeParse(result);
         if (!parsedResult.success) {
-          // Name what is wrong with the result: a bridge author reading
-          // "thread/start: providerThreadId: expected string" knows which
-          // field the protocol requires without opening the schema.
           const issues = parsedResult.error.issues
             .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
             .join("; ");

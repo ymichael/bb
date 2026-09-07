@@ -18,28 +18,16 @@ import { resolveSystemExecutionOptions } from "../system/execution-options.js";
 import { getLastExecutionOptions } from "./thread-events.js";
 import { getSupportedReasoningLevelsForProvider } from "./thread-reasoning-policy.js";
 
-/**
- * Presence-sensitive patch for the thread execution override. A field that is
- * absent (key not present) is left unchanged; an explicit `null` clears it.
- */
 interface ThreadExecutionOverridePatch {
   model?: string | null;
   reasoningLevel?: ReasoningLevel | null;
 }
 
 interface ResolveThreadExecutionOverrideUpdateArgs {
-  /** The thread's currently persisted override. */
   existing: ThreadExecutionOverride;
-  /** The requested change (presence-sensitive). */
   patch: ThreadExecutionOverridePatch;
-  /** The active model catalog for the thread's provider (swap targets). */
   models: readonly AvailableModel[];
-  /** The thread's provider id, for error messages and the reasoning fallback. */
   providerId: string;
-  /**
-   * The model a turn would resolve to absent any override (last turn ?? project
-   * default). Used to validate a reasoning-only change against the right model.
-   */
   fallbackModel: string | null;
 }
 
@@ -54,13 +42,6 @@ interface RecoverThreadModelOverrideArgs {
   thread: Thread;
 }
 
-/**
- * Pure resolver for the next override values. Validates a requested model
- * against the active catalog (same-provider + in-catalog), validates an
- * explicit reasoning level against the target model's supported efforts, and
- * reconciles a now-incompatible stored reasoning level when only the model
- * changes. Throws `ApiError(400)` for incompatible input. No IO.
- */
 export function resolveThreadExecutionOverrideUpdate(
   registry: ProviderRegistryService,
   args: ResolveThreadExecutionOverrideUpdateArgs,
@@ -87,8 +68,6 @@ export function resolveThreadExecutionOverrideUpdate(
     }
   }
 
-  // The model whose reasoning support we validate/reconcile against: the new
-  // override if set, otherwise what the next turn would resolve to.
   const effectiveModel = nextModel ?? fallbackModel;
   const effectiveModelEntry = effectiveModel
     ? models.find((candidate) => candidate.model === effectiveModel)
@@ -125,23 +104,12 @@ export function resolveThreadExecutionOverrideUpdate(
     supportedReasoning.length > 0 &&
     !supportedReasoning.includes(nextReasoning)
   ) {
-    // The stored reasoning override is not supported by the effective model →
-    // reconcile to the closest supported level rather than failing. This covers
-    // a model switch and also a model whose catalog entry lost a level: Pi
-    // reports provider-verified thinking levels, so a model that advertised
-    // `medium` yesterday can advertise only `high`/`max` today.
     nextReasoning = reconcileReasoningLevel(nextReasoning, supportedReasoning);
   }
 
   return { modelOverride: nextModel, reasoningLevelOverride: nextReasoning };
 }
 
-/**
- * Validates and persists the sticky thread-level execution override. Loads the
- * thread provider's active model catalog from the daemon to validate, then
- * stores the resolved values. The change takes effect on the next turn via
- * `resolveExecutionOptions` + the runtime's `recordThreadExecutionOptions`.
- */
 export async function applyThreadExecutionOverride(
   deps: LoggedWorkSessionDeps,
   args: ApplyThreadExecutionOverrideArgs,
@@ -169,12 +137,6 @@ export async function applyThreadExecutionOverride(
   });
 }
 
-/**
- * Replaces a sticky model override when a user explicitly submits a different
- * model. This is the recovery path for an override whose model was removed:
- * the replacement is validated against a successfully loaded catalog before
- * persistence, while a discovery failure remains a retryable 503.
- */
 export async function recoverThreadModelOverride(
   deps: LoggedWorkSessionDeps,
   args: RecoverThreadModelOverrideArgs,
@@ -213,10 +175,6 @@ async function loadThreadProviderModels(
       `Unable to load ${thread.providerId} models to validate the change. Try again once the host is connected.`,
     );
   }
-  // Selected-only models are browsable in the picker's collapsed "More
-  // models" section, so they are valid swap targets too. The curated Claude
-  // catalog needs no special handling here: it is always present in
-  // `result.models`, so any row the picker can offer already validates.
   return [...result.models, ...result.selectedOnlyModels];
 }
 

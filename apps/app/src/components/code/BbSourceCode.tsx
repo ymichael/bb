@@ -1,3 +1,4 @@
+import { SourceLoadingSkeleton } from "@/components/code/code-loading-skeletons";
 import {
   type CSSProperties,
   type ReactNode,
@@ -18,7 +19,6 @@ import {
   type VirtualFileMetrics,
 } from "@pierre/diffs";
 import { Button } from "@bb/shared-ui/button";
-import { Skeleton } from "@bb/shared-ui/skeleton";
 import { usePierreLineSelectionActions } from "@/components/git-diff/PierreLineSelectionActions.js";
 import { usePreferredTheme } from "@/hooks/useTheme";
 import { useResolvedCodeThemePair } from "@/lib/code-theme";
@@ -34,29 +34,6 @@ import {
   type SourceCodeTruncation,
 } from "./source-code-budget";
 import type { BbSourceCodeProps } from "./code-rendering";
-
-/**
- * BB's default source renderer: the `@pierre/diffs` `File` view plus BB's line
- * selection menu, resolved code theme, worker-pool gating, virtualized
- * scrolling, the large-file rendering budget, and highlighted-line scrolling.
- *
- * Reached only through {@link import("./SourceCodeHost").SourceCodeHost}, and
- * only lazily — a plugin that replaces the renderer and never delegates never
- * downloads this module or builds the worker pool.
- */
-
-function BbSourceCodeSkeleton() {
-  return (
-    <div className="space-y-2 px-4 pt-4" aria-busy>
-      <Skeleton className="h-3 w-3/4 rounded-sm" />
-      <Skeleton className="h-3 w-full rounded-sm" />
-      <Skeleton className="h-3 w-5/6 rounded-sm" />
-      <Skeleton className="h-3 w-2/3 rounded-sm" />
-      <Skeleton className="h-3 w-full rounded-sm" />
-      <Skeleton className="h-3 w-3/5 rounded-sm" />
-    </div>
-  );
-}
 
 interface SourceCodeWorkerPoolStats {
   managerState: "waiting" | "initializing" | "initialized";
@@ -76,15 +53,9 @@ const SOURCE_GAP_BLOCK_PX = 16;
 const SOURCE_VIEW_STYLE = {
   "--diffs-font-size": "12px",
   "--diffs-line-height": `${SOURCE_LINE_HEIGHT_PX}px`,
-  // Pierre paints its theme bg inside this gap, so the top breathing room of
-  // the code body lives on Pierre's bg — not on the panel's bg-background.
-  // Without this, the gap above Pierre would show a visible bg-color seam.
   "--diffs-gap-block": `${SOURCE_GAP_BLOCK_PX}px`,
 } as CSSProperties;
 
-// Pierre's virtualizer estimates row positions from these before it measures
-// them; they mirror the CSS variables above so the first layout guess is exact
-// in `scroll` overflow mode (fixed-height rows) and close in `wrap` mode.
 const SOURCE_VIRTUAL_FILE_METRICS: VirtualFileMetrics = {
   hunkLineCount: 50,
   lineHeight: SOURCE_LINE_HEIGHT_PX,
@@ -94,8 +65,6 @@ const SOURCE_VIRTUAL_FILE_METRICS: VirtualFileMetrics = {
 
 function getTargetRoots(container: HTMLElement): ParentNode[] {
   const roots: ParentNode[] = [container];
-  // Pierre owns its rendered line elements inside an open shadow root, which
-  // normal descendant queries on the React wrapper cannot cross.
   for (const pierreContainer of container.querySelectorAll<HTMLElement>(
     DIFFS_TAG_NAME,
   )) {
@@ -142,22 +111,10 @@ function findTargetLine(
   return null;
 }
 
-function findVirtualizedViewport(
-  container: HTMLElement,
-): HTMLElement | null {
-  return container.querySelector<HTMLElement>(
-    "[data-bb-source-code-viewport]",
-  );
+function findVirtualizedViewport(container: HTMLElement): HTMLElement | null {
+  return container.querySelector<HTMLElement>("[data-bb-source-code-viewport]");
 }
 
-/**
- * Nudge the virtualized code viewport toward `lineNumber` when that row is not
- * realized yet. With rendered rows in hand the distance is measured from the
- * nearest one (rows are at least one line tall, so the step never overshoots
- * in `wrap` mode); with none rendered the offset is estimated from the fixed
- * line metrics. Each call moves at most to the estimate; the caller retries on
- * the next frame once pierre has rendered the new window.
- */
 function approachVirtualizedTargetLine(
   container: HTMLElement,
   lineNumber: number,
@@ -169,8 +126,7 @@ function approachVirtualizedTargetLine(
   const renderedBounds = getRenderedLineBounds(container);
   if (renderedBounds === null) {
     const estimatedTop =
-      SOURCE_GAP_BLOCK_PX +
-      (lineNumber - 1) * SOURCE_LINE_HEIGHT_PX;
+      SOURCE_GAP_BLOCK_PX + (lineNumber - 1) * SOURCE_LINE_HEIGHT_PX;
     viewport.scrollTop = Math.max(0, estimatedTop - centerOffset);
     return;
   }
@@ -242,8 +198,6 @@ function scrollTargetLine(container: HTMLElement, line: HTMLElement) {
   const viewportRect = viewport.getBoundingClientRect();
   const lineCenter = lineRect.top + lineRect.height / 2;
   const viewportCenter = viewportRect.top + viewportRect.height / 2;
-  // Adjust only the vertical scroll offset. `scrollIntoView()` can also move
-  // the horizontal axis when a long source line extends beyond the viewport.
   viewport.scrollTop += lineCenter - viewportCenter;
 }
 
@@ -297,8 +251,6 @@ function BbSourceCode({
   const preferredTheme = usePreferredTheme();
   const codeTheme = useResolvedCodeThemePair();
   const containerRef = useRef<HTMLDivElement>(null);
-  // `PierreFile` captures the worker pool when it creates its instance, so
-  // wait for the workspace to build the pool before the first render.
   const isWorkerPoolReady = useRequirePierreWorkerPool();
   const workerPool = usePierreWorkerPool();
   const lastWorkerPoolStatsKeyRef = useRef<string | null>(null);
@@ -306,13 +258,7 @@ function BbSourceCode({
     useState<SourceCodeWorkerPoolStats | null>(null);
   const [, rerenderAfterWorkerPoolChange] = useState(0);
   const fileIdentity = fileCacheKey;
-  const truncation = useMemo(
-    () => truncateSourceCode(content),
-    [content],
-  );
-  // Which file the user asked to see in full. Keyed by identity rather than a
-  // boolean so opening a different large file goes back to the capped view
-  // without an effect resetting state.
+  const truncation = useMemo(() => truncateSourceCode(content), [content]);
   const [fullFileRequestedFor, setFullFileRequestedFor] = useState<
     string | null
   >(null);
@@ -370,8 +316,6 @@ function BbSourceCode({
   const targetLineNumber = scrollToHighlightedLines
     ? (selectedLines?.start ?? null)
     : null;
-  // A deep link past the capped prefix is an implicit request for the whole
-  // file: the target line has to exist in the DOM to be scrolled to.
   const showsFullFile =
     truncation === null ||
     fullFileRequestedFor === fileIdentity ||
@@ -383,23 +327,14 @@ function BbSourceCode({
     }
     return {
       ...file,
-      // The worker highlight cache is keyed by `cacheKey`; the capped prefix
-      // must not collide with the full file's entry.
       cacheKey: `${fileCacheKey}:head`,
       contents: truncation.contents,
     };
   }, [file, fileCacheKey, showsFullFile, truncation]);
-  // Pierre's virtualized file instance keeps the contents it was hydrated
-  // with (`VirtualizedFile.render` ignores a later `file`), so a content swap
-  // — the capped prefix giving way to the full file, or a refetch — needs a
-  // fresh mount. Callers that supply a `cacheKey` already fold the content
-  // hash into it.
   const renderedFileMountKey =
     showsFullFile || truncation === null
       ? fileCacheKey
       : `${fileCacheKey}:head`;
-  // "Load full file" remounts pierre with the whole file; carry the reader's
-  // scroll offset across so the prefix they were looking at stays put.
   const pendingViewportScrollTopRef = useRef<number | null>(null);
   const handleLoadFullFile = () => {
     const viewport =
@@ -419,8 +354,6 @@ function BbSourceCode({
         : findVirtualizedViewport(containerRef.current);
     if (viewport === null) return;
     viewport.scrollTop = scrollTop;
-    // The virtualizer sizes the fresh instance on its next frame; reapply once
-    // that height exists so the offset is not clamped away.
     const frame = window.requestAnimationFrame(() => {
       viewport.scrollTop = scrollTop;
     });
@@ -456,12 +389,6 @@ function BbSourceCode({
     workerPool !== undefined &&
     workerPoolStats?.managerState !== "initialized" &&
     workerPoolStats?.workersFailed !== true;
-  // Pierre can mount an empty zero-height <pre> while its worker highlighter is
-  // still initializing, so the code view waits for pool readiness. After that
-  // a single mount is enough: pierre paints the plain-text AST first and
-  // repaints in place when the worker delivers the highlighted one. That
-  // repaint swaps the line elements, so the target-line effect below re-runs
-  // when the highlight cache entry for this file appears.
   const workerHighlightCacheState =
     workerPool?.getFileResultCache(renderedFile) !== undefined
       ? "highlighted"
@@ -472,10 +399,6 @@ function BbSourceCode({
     let animationFrame: number | null = null;
     let attempts = 0;
 
-    // Retry on the next frame (the target line may not be in the DOM yet). One
-    // rAF channel only: `scrollToLine` overwrites `animationFrame` on each
-    // reschedule, so at most one callback is ever pending and cleanup cancels
-    // it — no doubling or leaked stale callbacks marking the wrong line.
     function scheduleRetry() {
       animationFrame = window.requestAnimationFrame(scrollToLine);
     }
@@ -494,10 +417,6 @@ function BbSourceCode({
         return;
       }
 
-      // The virtualizer only realizes rows near the scroll window, so a
-      // target outside it is not in the DOM yet. Move the viewport toward the
-      // line's estimated offset and let pierre render that window before the
-      // next attempt.
       approachVirtualizedTargetLine(container, targetLineNumber);
       attempts += 1;
       if (attempts < TARGET_LINE_MAX_ATTEMPTS) {
@@ -523,7 +442,7 @@ function BbSourceCode({
   ]);
 
   if (shouldWaitForWorkerPool || !isWorkerPoolReady) {
-    return <BbSourceCodeSkeleton />;
+    return <SourceLoadingSkeleton />;
   }
 
   return (
@@ -561,13 +480,6 @@ function BbSourceCode({
 
 const TARGET_LINE_MAX_ATTEMPTS = 40;
 
-/**
- * The code view's own scroll container, registered as pierre's virtualizer
- * root so `PierreFile` mounts a `VirtualizedFile` that renders only the rows
- * near the viewport. This mirrors `@pierre/diffs/react`'s `<Virtualizer>`,
- * inlined so the scroller carries a ref and a data marker the target-line
- * scrolling can find without walking the tree by class name.
- */
 function SourceCodeViewport({ children }: { children: ReactNode }) {
   const [virtualizer] = useState(() =>
     typeof window === "undefined" ? undefined : new PierreVirtualizer(),

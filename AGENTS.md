@@ -1,77 +1,57 @@
 # Codebase Guidelines
 
-## Simplicity First
+## Task Completion
 
-- When renaming a domain concept, search project-wide for stale names in variables, files, query keys, constants, tests, and docs. TypeScript only catches type references.
+- Carry the requested change through implementation, relevant verification, and fixes for failures it causes. Continue authorized, reversible local work without asking for approval at each step; ask when a missing user decision blocks progress.
+- Match verification to the change. Once relevant checks pass, broaden or repeat them only for new changes, failures, or unresolved concerns.
+- Read the linked guidance when its topic applies to the task.
 
-## Types And Contracts
+## Code And Contracts
 
-- Validate and parse data at system boundaries, then pass typed values internally.
-- Avoid `unknown` and `as X` casts inside the system. Use them only at genuinely unknowable boundaries such as freeform tool input, then narrow immediately.
-- Keep one-off types near the code that uses them. Move types to a shared package only for a real cross-package contract.
-- Optional contract fields are allowed only when omission has real semantic meaning. Do not use optional or nullable fields to hide defaults.
-- If a field has a default, fill it in once at the server boundary and pass the explicit value through internal routes, commands, and persisted events.
-- Accepted-but-ignored route or command fields are forbidden. Delete them or implement them end to end.
-- Add or update route and command documentation only when behavior is non-obvious.
+- Code comments are forbidden, except for semantic tool directives and Plugin SDK declaration comments.
+- When renaming a domain concept, search project-wide for stale names in variables, files, query keys, constants, tests, and docs; TypeScript only catches type references.
+- Parse and validate data at system boundaries, then pass typed values internally. Restrict `unknown` and `as X` casts to genuinely unknowable boundaries and narrow immediately.
+- Keep one-off types local; share types only for real cross-package contracts.
+- Optional or nullable fields must represent meaningful absence. Fill defaults once at the server boundary and pass explicit values through internal routes, commands, and persisted events.
+- Delete accepted-but-ignored route or command fields, or implement them end to end. Document route and command behavior when it is non-obvious.
 
 ## Server And Daemon
 
-- The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior.
-- The host daemon owns host-local primitives, provider translation, runtime/session management, and workspace execution.
-- If the server needs host-local data, the daemon should return raw data and the server should assemble product behavior.
-- Do not move responsibility across the server/daemon boundary unless the current change requires it.
-- **Always increment `HOST_DAEMON_PROTOCOL_VERSION` when a change can alter anything sent between the server and host daemon.** This includes adding, removing, renaming, or changing the type, requiredness, default, or meaning of fields in session payloads, WebSocket messages, host RPC commands, or host RPC results. A shared TypeScript build passing is not evidence of wire compatibility: enrolled machines can still be running an older daemon. The version mismatch is what triggers their automatic update; without a bump, an old daemon may connect successfully and then enter an `invalid-message` reconnect loop. If compatibility with the previously shipped daemon has not been deliberately preserved and tested, bump the version.
+- The server owns product policy: defaults, instructions, manager behavior, tool lists, and thread behavior. The host daemon owns host-local primitives, provider translation, runtime/session management, and workspace execution.
+- Return raw host-local data from the daemon; assemble product behavior on the server. Move responsibility across this boundary only when the change requires it.
+- Increment `HOST_DAEMON_PROTOCOL_VERSION` for changes to server/daemon wire fields, including their types, requiredness, defaults, or meaning, unless compatibility with the previously shipped daemon is deliberately preserved and tested. This covers session payloads, WebSocket messages, and host RPC commands/results. Shared TypeScript builds do not verify compatibility with enrolled machines; the version bump triggers their update.
 
-## CLI, Guide, And Skill
+## CLI And Plugin API
 
-- When you add or change a `bb` CLI command, flag, or a user-facing configuration knob (env var, `.bb/` workspace file, settings field), update its discoverable surfaces in the same change. See [docs/cli-guide-and-skill.md](docs/cli-guide-and-skill.md) for which surfaces to update.
-- Every end-user feature must also be usable by agents through both the SDK and the `bb` CLI; ship and document those surfaces in the same change as the UI.
-
-## Plugin API
-
-- Any new public plugin API member (a `@get-bb/plugin-sdk/app` export, an `app.slots.*` method, or a `BbPluginApi` property) ships with an `experimental_` name prefix and an entry in [docs/api_to_audit.md](docs/api_to_audit.md) describing what it does and what to audit before stabilizing. Dropping the prefix is the deliberate stabilization step: audit the entry, rename project-wide, and remove it from the doc in the same change.
-- The Plugin Guide (the `plugin-api-docs` plugin, rendering `packages/plugin-api-map`) is bb's only plugin API documentation. A new surface needs a card in `packages/plugin-api-map/src/surfaces.ts` naming its SDK symbols in the same change; `packages/plugin-api-map/test/api-sync.test.ts` fails the build when the map and the SDK drift apart.
+- Every end-user feature must also be usable through the SDK and `bb` CLI; ship and document these surfaces with the UI.
+- For changes to CLI commands/flags or user-facing configuration (env vars, `.bb/` workspace files, settings), update the discoverable surfaces listed in [docs/cli-guide-and-skill.md](docs/cli-guide-and-skill.md).
+- New public plugin API members (`@get-bb/plugin-sdk/app` exports, `app.slots.*` methods, or `BbPluginApi` properties) require an `experimental_` prefix and an entry in [docs/api_to_audit.md](docs/api_to_audit.md) describing behavior and stabilization criteria. Stabilization includes the audit, a project-wide rename, and removal of the entry.
+- The Plugin Guide is the only plugin API documentation. Add new surfaces to `packages/plugin-api-map/src/surfaces.ts` with their SDK symbols.
 
 ## Data Access
 
-- Do not load all rows and filter in JavaScript when a targeted query with `WHERE` or `JOIN` is possible.
-- Add indexes only when they are required by the new or changed query.
-- Do not manually edit Drizzle snapshot JSON. Change the schema, then regenerate migrations/snapshots with Drizzle so the snapshot chain stays consistent.
-- Never mock the database in tests. Use in-memory SQLite via `createConnection(":memory:")` plus `migrate(db)`.
+- Use targeted `WHERE`/`JOIN` queries instead of loading all rows and filtering in JavaScript. Add indexes only when required by the query.
+- Change Drizzle schemas and regenerate migrations/snapshots; never edit snapshot JSON manually.
+- Never mock the database in tests. Use `createConnection(":memory:")` and `migrate(db)`.
 
 ## UI
 
-- Prefer sanctioned typography tokens over arbitrary `text-[Npx]` classes.
-- Derive theme color tokens from the `--canvas`/`--ink` anchors (`color-mix(in oklch, var(--ink) N%, var(--canvas))`) or from another derived token — never hand-set an `oklch(L 0 0)` literal. Achromatic literals don't follow custom palettes (Nord, Dracula, …), which re-anchor only `--canvas`/`--ink`, so a hardcoded token strands a neutral-gray element in an otherwise tinted UI. Mix opaque steps `in oklch`; mix translucent steps (a `transparent` pole) `in oklab` so the hue survives. `apps/app/src/components/ui/theme.css` is the source of truth and `theme.test.ts` guards it.
-- Never scope styles with the CSS `@scope` at-rule. WebKit resolves scope containment per element per scoped rule with no selector bucketing, so a rule set inside `@scope` costs `elements × rules` on every style recalculation. Measured on a 2,635-element page: one plugin's Tailwind utilities layer inside `@scope` took 306ms per recalculation, 7ms after rewriting to a `:where()` prefix, against a 6ms floor for the whole document. Blink shows none of it, so this is invisible in Chrome and dominant in Safari. To confine rules to a subtree, prefix each selector with a zero-specificity `:where(<roots>) ` arm plus a `:where(<roots>)` compound arm — `packages/plugin-build/src/scope-plugin-utilities.ts` does this for every plugin's compiled stylesheet and explains why both arms are required. When style recalculation is slow, bisect it: disable stylesheets one at a time and time `getComputedStyle` after invalidating a custom property on `:root`.
-- Use the shared persistent responsive drawer for every compact slide-out menu, picker, popover, and dialog. Do not use modal drawer primitives that add `inert` or `aria-hidden` to the app root: iOS Safari can recalculate styles for the full app tree and stall the interaction. Start the drawer transform before heavy content, realize that content after two animation frames with a timeout fallback, and retain it after the first open. Verify representative drawers in iOS Simulator Safari and protect the app-root and deferred-realization behavior with tests.
+- Use sanctioned typography tokens instead of arbitrary `text-[Npx]` classes.
+- Derive theme colors from `--canvas`/`--ink` or other derived tokens; never use achromatic `oklch(L 0 0)` literals. Mix opaque steps in `oklch` and translucent steps in `oklab`. See `apps/app/src/components/ui/theme.css` and `theme.test.ts`.
+- Never use CSS `@scope`; it causes severe WebKit style-recalculation costs. Confine styles with zero-specificity `:where(<roots>)` descendant and compound selector arms, as implemented in `packages/plugin-build/src/scope-plugin-utilities.ts`.
+- Use the shared persistent responsive drawer for compact slide-out menus, pickers, popovers, and dialogs. Avoid modal primitives that add `inert` or `aria-hidden` to the app root. Start the transform before heavy content; realize content after two animation frames with a timeout fallback, then retain it. Verify representative drawers in iOS Simulator Safari and test app-root and deferred-realization behavior.
 
-## Build And Typecheck
+## Build And Test
 
-- Always use Turbo when building and typechecking: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Turbo ensures upstream `^build` dependencies run first.
-- Typecheck with `pnpm exec turbo run typecheck --filter=@bb/<pkg>`.
-- Do not run package scripts directly, such as `pnpm --filter @bb/foo test`, or raw `npx tsc --noEmit` unless you are deliberately bypassing repo orchestration for investigation.
-- Generated modules are not committed: `packages/templates/src/generated/`, `packages/plugin-build/src/generated/`, and `packages/plugin-sdk/bundled-types/` are gitignored. Turbo tasks (`@bb/templates#generate:*`, `@bb/plugin-build#generate`, `@get-bb/plugin-sdk#build:types`) produce them before every dependent build, typecheck, and test task, and `pnpm install` runs the cheap ones. If your editor cannot resolve `@get-bb/plugin-sdk` inside a plugin, run `pnpm exec turbo run build:types --filter=@get-bb/plugin-sdk` once. Never commit a generated module and never add a `--check` mode for one; when you add a generated module, add a turbo task with explicit `inputs`/`outputs` and edges from its consumers.
+- Use Turbo for builds, typechecks, and tests so upstream dependencies run first: `pnpm exec turbo run <task> --filter=@bb/<pkg>`. Use the package's actual name for other scopes. Bypass orchestration only for deliberate investigation; do not invoke package scripts or raw `tsc` routinely.
+- Generated modules are gitignored: `packages/templates/src/generated/`, `packages/plugin-build/src/generated/`, and `packages/plugin-sdk/bundled-types/`. Never commit them or add a `--check` mode. New generated modules need Turbo tasks with explicit inputs, outputs, and consumer dependencies.
+- If a plugin cannot resolve `@get-bb/plugin-sdk`, run `pnpm exec turbo run build:types --filter=@get-bb/plugin-sdk`.
+- Test plausible failure modes; avoid trivial getters/setters and framework wiring. Pipe slow test output to a file and inspect it.
+- Build Vitest projects with `sharedWorkerProjects` from `vitest.shared.ts`. Node tests share workers (`isolate: false`); DOM tests and files/helpers that mutate worker-global state receive isolated workers. Restore any global state a test changes.
 
-## Testing
+## Issues, Pull Requests, And Debugging
 
-- Only write high quality tests that verify where there could be potential bugs. Avoid testing trivial getters/setters, framework wiring, or other code that is unlikely to break.
-- Pipe slow test output to a file, then read the file. Example: `pnpm exec turbo run test --filter=@bb/integration-tests --force > /tmp/test-out.txt 2>&1`.
-- Package `vitest.config.ts` files build their `projects` with `sharedWorkerProjects` from `vitest.shared.ts`. It runs node-environment test files in shared workers (`isolate: false`) and gives a file its own worker when it runs in a DOM environment (`jsdom`) or when the file, or a test helper it imports, mutates worker-global state (`vi.mock`, `vi.stubGlobal`, `process.env`, `globalThis.*` assignments, `Object.defineProperty` on a global). Re-importing the module graph per file was 80–90% of the big suites' CPU. Restore what a test changes anyway; the scan is a safety net, not a license.
-
-## GitHub Issues And Pull Requests
-
-- Follow [docs/filing-issues.md](docs/filing-issues.md) when you file an issue. Reproduce first; give versions, minimal copy-pasteable steps, expected vs actual output pasted verbatim, evidence with commit permalinks, and what you ruled out. Use the issue form's sections. Do not file from a single symptom or log line, and do not open a duplicate — add evidence to the existing issue instead.
-- Follow `.github/PULL_REQUEST_TEMPLATE.md` when you open a pull request: what was wrong (root cause), what changed, how you verified (tests that fail before and pass after), `Fixes #N`.
-- When an agent creates a GitHub issue or pull request, add this line at the end of the body:
-
-  ```
-  > AGENT GENERATED
-  ```
-
-- Add this line to each new issue and pull request. It shows the readers that an agent made the content.
-
-## Debugging And QA
-
-- Do not assume. Inspect logs, query the database, call server APIs, or use the CLI to observe real state.
-- See [docs/debugging-and-qa.md](docs/debugging-and-qa.md) for dev ports/data dirs, entity-ID lookups, and the `scripts/bb-dev-app` local dev QA launcher.
+- When filing issues, follow [docs/filing-issues.md](docs/filing-issues.md): reproduce first, check for duplicates, and include versions, copy-pasteable steps, verbatim expected/actual output, commit-permalink evidence, and what you ruled out. Add evidence to an existing issue when applicable.
+- Use [.github/PULL_REQUEST_TEMPLATE.md](.github/PULL_REQUEST_TEMPLATE.md): root cause, change, verification that demonstrates the fix, and `Fixes #N` when applicable.
+- End every agent-created issue and PR body with `> AGENT GENERATED`.
+- Ground debugging in observed state: logs, database queries, server APIs, or CLI output. For dev ports, data directories, entity IDs, and the local QA launcher, see [docs/debugging-and-qa.md](docs/debugging-and-qa.md).

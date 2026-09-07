@@ -5,9 +5,6 @@ import { newThreadEnvironmentArgsToSeed } from "./new-thread-environment-seed";
 
 const PROJECT_ID = "proj_1";
 
-// Seeds a composer with a previously submitted environment and resolves the
-// resulting untouched selections back into environment args — the mapping half
-// of the composer's round-trip guarantee.
 function roundTrip(
   environment: CreateThreadEnvironmentArgs,
 ): CreateThreadEnvironmentArgs | null {
@@ -15,8 +12,8 @@ function roundTrip(
   expect(seed).not.toBeNull();
   if (seed === null) return null;
   return resolveRootComposeThreadEnvironment({
-    defaultBranch: "main",
-    defaultWorktreeBaseBranch: null,
+    defaultBranch: undefined,
+    defaultWorktreeBaseBranch: undefined,
     environmentValue: seed.selectionValue,
     projectId: PROJECT_ID,
     selectedBranch: seed.branch,
@@ -99,9 +96,6 @@ describe("newThreadEnvironmentArgsToSeed round trip", () => {
     };
     const seed = newThreadEnvironmentArgsToSeed(environment);
     expect(seed).toEqual({ selectionValue: "host:host_1:local", branch: null });
-    // The personal workspace only resolves for the personal project; the
-    // resolver derives it from the project id, so this checks the host
-    // selection value alone.
   });
 
   it("documented limits: unrepresentable variants seed nothing", () => {
@@ -122,8 +116,6 @@ describe("newThreadEnvironmentArgsToSeed round trip", () => {
       hostId: "host_1",
       workspace: { type: "unmanaged", path: "/somewhere/else" },
     });
-    // The seed keeps host and branch; the resolved environment submits
-    // path: null (the host's configured checkout).
     expect(seed).toEqual({ selectionValue: "host:host_1:local", branch: null });
   });
 });

@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-// Frontend tests for the inline-vis messageDirective slot.
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
@@ -145,8 +144,6 @@ describe("InlineVisDirective", () => {
       }
       return el;
     });
-    // The loader must occupy the final preview height so the bottom-anchored
-    // timeline does not scroll when the iframe replaces it.
     expect(loading.style.height).toBe("480px");
     expect(
       slot.getByRole("status", { name: "Loading visualization demo.html" }),
@@ -167,8 +164,6 @@ describe("InlineVisDirective", () => {
     expect(iframe.style.height).toBe("480px");
     expect(slot.queryByRole("status")).toBeNull();
 
-    // Same card, same header geometry: the loaded header only swaps the
-    // placeholder spacer for the same-sized open-in-sidebar button.
     const readyCard = iframe.parentElement!;
     expect(readyCard.className).toBe(loadingCard.className);
     const readyHeader = readyCard.firstElementChild!;

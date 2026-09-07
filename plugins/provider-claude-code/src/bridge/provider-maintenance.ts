@@ -252,28 +252,39 @@ async function readKeychainCredentials(): Promise<string | null> {
         timeout: 10_000,
       });
       if (stdout.trim()) return stdout.trim();
-    } catch {
-      // Fall through to the next keychain form, then the credentials file.
-    }
+    } catch {}
+  }
+  return null;
+}
+
+function parseCredentials(raw: string): ClaudeCredentials | null {
+  const trimmed = raw.trim();
+  const candidates = [trimmed];
+  if (/^(?:[0-9a-f]{2})+$/iu.test(trimmed)) {
+    candidates.push(Buffer.from(trimmed, "hex").toString("utf8"));
+  }
+  for (const candidate of candidates) {
+    try {
+      const parsed = claudeCredentialsSchema.safeParse(JSON.parse(candidate));
+      if (parsed.success) return parsed.data.claudeAiOauth;
+    } catch {}
   }
   return null;
 }
 
 async function readCredentials(): Promise<ClaudeCredentials | null> {
-  let raw = await readKeychainCredentials();
-  if (raw === null) {
-    try {
-      raw = await fs.readFile(
-        path.join(os.homedir(), ".claude", ".credentials.json"),
-        "utf8",
-      );
-    } catch {
-      return null;
-    }
+  const keychainCredentials = await readKeychainCredentials();
+  if (keychainCredentials !== null) {
+    const parsed = parseCredentials(keychainCredentials);
+    if (parsed !== null) return parsed;
   }
   try {
-    const parsed = claudeCredentialsSchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data.claudeAiOauth : null;
+    return parseCredentials(
+      await fs.readFile(
+        path.join(os.homedir(), ".claude", ".credentials.json"),
+        "utf8",
+      ),
+    );
   } catch {
     return null;
   }
@@ -455,9 +466,7 @@ function normalizeUsage(
     usageWindow(parsed.data.five_hour, "Current session"),
     usageWindow(parsed.data.seven_day, "Weekly limit"),
     ...scopedWindows(parsed.data.limits),
-  ].filter(
-    (window): window is ProviderUsageWindow => window !== null,
-  );
+  ].filter((window): window is ProviderUsageWindow => window !== null);
   return {
     status: "ok",
     accountEmail: email,
@@ -503,7 +512,7 @@ export async function getClaudeProviderUsage(): Promise<ProviderUsageResult> {
           status: "error",
           message:
             response.status === 429
-              ? "Claude usage is rate limited right now. Try again shortly."
+              ? "Anthropic temporarily throttled this usage check. This does not mean your Claude limit is exhausted. Try again later."
               : `Claude usage request failed (HTTP ${response.status}).`,
           ...known,
         },

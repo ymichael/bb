@@ -145,9 +145,6 @@ const baseModeConfig: NewThreadModeConfig = {
   permission: basePermission,
 };
 
-// Match production: RootComposeView wraps the prompt area in PageShell which
-// caps content at 760px. Without this constraint the env-permission strip's
-// justify-between drifts the permission picker far to the right.
 interface PromptStageProps {
   children: React.ReactNode;
 }

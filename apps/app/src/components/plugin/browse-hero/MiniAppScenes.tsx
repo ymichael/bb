@@ -10,21 +10,10 @@ import {
   neutral,
 } from "@/components/showcase-hero/showcase-tokens";
 
-/**
- * The interchangeable interiors of the mini bb window. Each scene is a real
- * component built from theme tokens — not a screenshot — so it retints with the
- * palette, stays crisp at any DPI, and can never drift from the design system.
- *
- * Scenes are deliberately abstract: enough structure to read as "a board" or "a
- * dashboard" at a glance, with only the few words that carry meaning. They are
- * illustrations of what a plugin can render, not claims about a shipped plugin.
- */
-
 interface SceneProps {
   accentToken: string;
 }
 
-/** Board of threads, moved between columns by agents. */
 function KanbanScene({ accentToken }: SceneProps) {
   const columns = [
     { label: "Todo", cards: 3 },
@@ -80,7 +69,6 @@ function KanbanScene({ accentToken }: SceneProps) {
   );
 }
 
-/** Homepage metrics: stat tiles over a bar chart. */
 function DashboardScene({ accentToken }: SceneProps) {
   const bars = [42, 61, 38, 78, 55, 88, 70];
   const stats = [
@@ -138,7 +126,6 @@ function DashboardScene({ accentToken }: SceneProps) {
   );
 }
 
-/** A video edit with plainly named tracks, a playhead, and render status. */
 function VideoEditorScene({ accentToken }: SceneProps) {
   const tracks = [
     {
@@ -239,11 +226,6 @@ function VideoEditorScene({ accentToken }: SceneProps) {
   );
 }
 
-/**
- * A replaced thread list: the work you handed off, grouped by workstream with
- * live progress, and the one item waiting on you pulled to the surface — the
- * chief-of-staff job, not another list.
- */
 function ChiefOfStaffScene({ accentToken }: SceneProps) {
   const lanes = [
     { worktree: "feat/billing", agents: 4, progress: 72, blocked: false },
@@ -289,8 +271,7 @@ function ChiefOfStaffScene({ accentToken }: SceneProps) {
               </span>
             )}
           </div>
-          {/* Per-agent progress: the parallelism is the point, so each agent
-              gets its own track rather than one aggregate bar. */}
+          {}
           <div className="flex items-center gap-0.5">
             {Array.from({ length: lane.agents }, (_, index) => (
               <div
@@ -317,7 +298,6 @@ function ChiefOfStaffScene({ accentToken }: SceneProps) {
   );
 }
 
-/** One product brief becoming several clearly named working prototypes. */
 function PrototypingLabScene({ accentToken }: SceneProps) {
   const prototypes = [
     { name: "Guided", state: "ready" },
@@ -414,10 +394,6 @@ function PrototypingLabScene({ accentToken }: SceneProps) {
   );
 }
 
-/**
- * A triage inbox: incoming reports with kind chips, one clustered duplicate
- * count, and the handoff into a fix thread — intake becoming work.
- */
 function InboxScene({ accentToken }: SceneProps) {
   const rows = [
     { width: "76%", kind: "bug", cluster: "×4", active: true },
@@ -493,7 +469,6 @@ function InboxScene({ accentToken }: SceneProps) {
   );
 }
 
-/** Scene renderers keyed by archetype id. */
 export const MINI_APP_SCENES: ShowcaseScenes = {
   "kanban-board": KanbanScene,
   "live-dashboard": DashboardScene,

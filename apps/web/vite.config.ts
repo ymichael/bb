@@ -14,10 +14,6 @@ import { resolveSiteOrigin } from "./src/server/site-origin.js";
 
 export default defineConfig(({ command }) => {
   const cloudDev = resolveCloudDevViteSettings(command, process.env);
-  // Read APP_URL back out of the wrangler env this build targets (wrangler's
-  // own reader handles the JSONC and the production env's inheritance), so the
-  // unfurl tags advertise the deployment they actually ship to. Cloud dev
-  // overrides it with the tunnel URL, same as every other var.
   const siteOrigin = resolveSiteOrigin(
     cloudDev?.vars.APP_URL ??
       unstable_readConfig({
@@ -45,8 +41,6 @@ export default defineConfig(({ command }) => {
     resolve: {
       alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
     },
-    // Dev binds all interfaces so the server is reachable over the tailnet
-    // (see the dev script's --host 0.0.0.0); allow Tailscale MagicDNS names.
     server: {
       allowedHosts: [".localhost", ".ts.net"],
     },
@@ -54,7 +48,10 @@ export default defineConfig(({ command }) => {
       cloudflare(cloudflareConfig),
       tailwindcss(),
       tanstackStart({
+        server: { entry: "server-entry.ts" },
         router: {
+          quoteStyle: "double",
+          semicolons: true,
           routeTreeFileHeader: [
             "/* oxlint-disable */",
             "// @ts-nocheck",

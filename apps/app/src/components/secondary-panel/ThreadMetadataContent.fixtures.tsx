@@ -9,8 +9,6 @@ import {
 } from "../../../.ladle/story-fixtures";
 import type { ThreadMetadataContentProps } from "./ThreadMetadataContent";
 
-// Re-export the shared builders so per-row stories in this folder can import
-// from one place.
 export { makeEnvironment, makeThread, makeWorkspaceStatus };
 
 const noop = () => {};

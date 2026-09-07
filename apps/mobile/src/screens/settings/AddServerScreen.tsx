@@ -31,17 +31,8 @@ function defaultLabel(serverUrl: string): string {
 const URL_HELP =
   "A LAN address, a Tailscale Serve URL, or http://127.0.0.1:<port> in the simulator.";
 
-/**
- * "Add server" as a grouped form: the bb connect entry (pairing code / QR →
- * `/connect`) in its own group, then the direct URL fields as cells — URL
- * entry with live validation, the `/health` + `/system/config` probe, the
- * plain-http warning the plan requires for non-loopback hosts as the
- * group's footer — and the Connect button.
- */
 export function AddServerScreen() {
   const router = useRouter();
-  // A deep link to a server the phone does not know arrives here with the
-  // origin prefilled and the in-app path to open once the server is added.
   const params = useLocalSearchParams<{ serverUrl?: string; next?: string }>();
   const colors = useBadgeColors();
   const { profiles, addProfile, setActiveProfile } = useProfiles();
@@ -100,7 +91,7 @@ export function AddServerScreen() {
 
   return (
     <>
-      {/* The first-run heading lives in the header; the body has no title. */}
+      {}
       <Stack.Screen
         options={{ title: firstRun ? "Connect to a bb server" : "Add server" }}
       />

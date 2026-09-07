@@ -439,5 +439,4 @@ describe("thread event appends", () => {
       await harness.cleanup();
     }
   });
-
 });

@@ -135,7 +135,6 @@ describe("server target store", () => {
       },
     });
 
-    // Sync refresh updates the ref by handle without switching the target.
     expect(await store.setTarget("builtin")).toBe(true);
     expect(
       await store.refreshConnectServer({

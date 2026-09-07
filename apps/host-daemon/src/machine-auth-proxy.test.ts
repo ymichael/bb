@@ -213,10 +213,6 @@ describe("startMachineAuthProxy", () => {
     expect(upstreamRequests).toBe(0);
   });
 
-  // The in-app browser can now reach any unreserved loopback port, and this
-  // proxy's port is chosen at random so no reserved list can name it. A browsed
-  // page must not be able to borrow the machine credential with a blind
-  // `no-cors` request, whose response it cannot read but whose effect lands.
   it("rejects browser-originated requests without reaching upstream", async () => {
     let upstreamRequests = 0;
     const upstream = http.createServer((_request, response) => {
@@ -231,9 +227,7 @@ describe("startMachineAuthProxy", () => {
     proxies.push(proxy);
 
     const browserHeaders: Array<Record<string, string>> = [
-      // A blind cross-origin POST: no preflight, and the effect still lands.
       { origin: "http://127.0.0.1:3009", "content-type": "text/plain" },
-      // A blind `no-cors` GET carries no Origin, but Chromium still marks it.
       { "sec-fetch-site": "cross-site" },
     ];
     for (const headers of browserHeaders) {
@@ -246,8 +240,6 @@ describe("startMachineAuthProxy", () => {
     }
     expect(upstreamRequests).toBe(0);
 
-    // A runtime process using Node's own `fetch` still gets through. Node sends
-    // `sec-fetch-mode: cors`, so that header must not be a discriminator.
     const allowed = await fetch(`${proxy.serverUrl}/api/v1/threads`, {
       method: "POST",
       body: "{}",
@@ -290,11 +282,6 @@ describe("startMachineAuthProxy", () => {
     expect(upstreamUpgrades).toBe(0);
   });
 
-  // A page on a public hostname that DNS-rebinds to 127.0.0.1 reaches this
-  // socket with that name in `Host`, and Chromium sends no `Origin` or
-  // `Sec-Fetch-*` for a `no-cors` GET to a non-trustworthy URL — so the header
-  // check alone cannot see it. Verified in Electron with
-  // `--host-resolver-rules="MAP rebind.example 127.0.0.1"`.
   it("rejects a rebound public Host without reaching upstream", async () => {
     let upstreamRequests = 0;
     const upstream = http.createServer((_request, response) => {
@@ -325,13 +312,10 @@ describe("startMachineAuthProxy", () => {
       });
     }
 
-    // No Origin, no Sec-Fetch-Site: only the Host header gives it away.
     expect(await statusForHost(`rebind.example:${proxyUrl.port}`)).toBe(403);
-    // A mismatched port on a loopback name is not this proxy either.
     expect(await statusForHost("127.0.0.1:1")).toBe(403);
     expect(upstreamRequests).toBe(0);
 
-    // The authorities a real runtime client sends still pass.
     for (const host of [
       `127.0.0.1:${proxyUrl.port}`,
       `localhost:${proxyUrl.port}`,

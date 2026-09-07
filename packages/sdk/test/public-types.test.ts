@@ -221,6 +221,7 @@ interface NodeSurface {
 }
 
 type ExpectedBbSdkKey =
+  | "experimental_desktopBrowsers"
   | "environments"
   | "files"
   | "guide"
@@ -253,7 +254,6 @@ type ExpectedEnvironmentsKey =
   | "mergePullRequest"
   | "paths"
   | "pullRequest"
-  | "squashMerge"
   | "status"
   | "update";
 
@@ -354,9 +354,11 @@ type ExpectedThreadsKey =
   | "archiveAll"
   | "cancelPlan"
   | "childSummary"
+  | "clearContext"
   | "clearGoal"
   | "compact"
   | "conversationOutline"
+  | "count"
   | "defaultExecutionOptions"
   | "delete"
   | "editMessage"
@@ -365,6 +367,7 @@ type ExpectedThreadsKey =
   | "get"
   | "interactions"
   | "list"
+  | "listRunning"
   | "markRead"
   | "markUnread"
   | "open"
@@ -372,9 +375,11 @@ type ExpectedThreadsKey =
   | "paneAction"
   | "pin"
   | "promptHistory"
+  | "queue"
   | "queuedMessages"
   | "reorderPinned"
   | "resolveMentions"
+  | "retry"
   | "search"
   | "send"
   | "spawn"
@@ -391,6 +396,12 @@ type ExpectedThreadsKey =
   | "wait";
 
 type ExpectedThreadEventsKey = "list" | "wait";
+/**
+ * The cross-thread queue area answers exactly one question — what is queued
+ * right now — so it has exactly one method. A row's own operations (send-now,
+ * edit, reorder, delete) live on `queuedMessages`.
+ */
+type ExpectedThreadQueueKey = "list";
 type ExpectedThreadInteractionsKey =
   | "cancel"
   | "get"
@@ -432,8 +443,6 @@ describe("SDK public type entrypoints", () => {
   });
 
   it("keeps the local guide area off the browser SDK instance", () => {
-    // The guide bundles the generated templates; the browser factory must not
-    // attach it so those bytes stay out of the web app's boot chunk.
     expectTypeOf<keyof BrowserRuntimeBbSdk>().toEqualTypeOf<
       Exclude<ExpectedBbSdkKey, "guide">
     >();
@@ -542,6 +551,9 @@ describe("SDK public type entrypoints", () => {
     expectTypeOf<
       keyof RootBbSdk["threads"]["events"]
     >().toEqualTypeOf<ExpectedThreadEventsKey>();
+    expectTypeOf<
+      keyof RootBbSdk["threads"]["queue"]
+    >().toEqualTypeOf<ExpectedThreadQueueKey>();
     expectTypeOf<
       keyof RootBbSdk["threads"]["interactions"]
     >().toEqualTypeOf<ExpectedThreadInteractionsKey>();

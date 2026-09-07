@@ -1,11 +1,11 @@
 ---
 name: secrets
-description: Securely request API keys, access tokens, passwords, webhook secrets, or other credentials from the user and write them to a dotenv file without exposing their values to the agent.
+description: "Request user-supplied credentials securely into a dotenv file without exposing their values to the agent."
 ---
 
 # Request secrets securely
 
-Use `bb secret request` whenever work needs a credential. Do not ask the user to paste a secret into chat.
+Use `bb secret request` when the user needs to supply a credential. Do not ask the user to paste a secret into chat.
 
 Batch every currently known variable into one request. Inspect documentation or `.env.example` to identify variable names, but do not read or print an existing secret-bearing env file.
 

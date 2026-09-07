@@ -72,8 +72,6 @@ describe("resolveThreadExecutionOverrideUpdate", () => {
   });
 
   it("reconciles an incompatible stored reasoning level on a model-only change", () => {
-    // Switching to Haiku (supports only "low") with a stored "max" override
-    // reconciles down to the closest supported level rather than failing.
     expect(
       resolveThreadExecutionOverrideUpdate(registry, {
         existing: {
@@ -125,8 +123,6 @@ describe("resolveThreadExecutionOverrideUpdate", () => {
   });
 
   it("validates a reasoning-only change against the fallback (next-turn) model", () => {
-    // No model override or model in the patch → validate against the model the
-    // next turn would otherwise use (fallbackModel = Haiku, supports only low).
     expect(() =>
       resolveThreadExecutionOverrideUpdate(registry, {
         existing: EMPTY,
@@ -167,9 +163,6 @@ describe("resolveThreadExecutionOverrideUpdate", () => {
   });
 
   it("reconciles a stored level the unchanged model no longer advertises", () => {
-    // Pi reports provider-verified thinking levels, so a model that offered
-    // "medium" yesterday can offer only "high"/"max" today. Threads that
-    // already stored "medium" must not keep sending it.
     const narrowedOpus = availableModelFixture({
       model: "claude-opus-4-8",
       reasoningLevels: ["high", "max"],

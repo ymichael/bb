@@ -1,0 +1,42 @@
+{
+  "name": "bb-plugin-concurrency-limit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Control the number of concurrent threads that are running in bb",
+  "engines": {
+    "bb": ">=0.0"
+  },
+  "bb": {
+    "name": "Concurrency limit",
+    "description": "Control the number of concurrent threads that are running in bb",
+    "branding": {
+      "icon": "Limitation"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx",
+    "host": "./host.ts"
+  },
+  "keywords": [
+    "bb-plugin"
+  ],
+  "scripts": {
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@bb/shared-ui": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "jsdom": "^29.0.1",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}

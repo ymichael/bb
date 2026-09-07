@@ -7,7 +7,6 @@ import {
   type BbSourceCodeProps,
 } from "./code-rendering";
 
-/** Shared by the mount and the host's crash check. */
 const SOURCE_CODE_RENDERER_SLOT_KIND = "sourceCodeRenderer";
 
 const BbSourceCode = lazy(() => import("./BbSourceCode"));
@@ -18,19 +17,9 @@ interface SourceCodeHostProps extends Omit<
 > {
   overflow?: BbSourceCodeProps["overflow"];
   highlightedLines?: BbSourceCodeProps["highlightedLines"];
-  /** Rendered while BB's renderer chunk loads. */
   fallback?: ReactNode;
 }
 
-/**
- * The host boundary for source rendering (plugin design: exclusive replacement
- * surfaces). BB's native file preview and every plugin that calls
- * `experimental_SourceCode` render through here, so one
- * `experimental_sourceCodeRenderer` registration replaces them all at once.
- *
- * BB's own renderer sits behind `lazy()`; a replacement that never delegates
- * never downloads it.
- */
 export function SourceCodeHost({
   content,
   path,

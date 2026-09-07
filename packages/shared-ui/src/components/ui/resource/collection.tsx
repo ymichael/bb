@@ -14,17 +14,6 @@ export interface ResourceCollectionMode<Mode extends string> {
   accessibleLabel?: string;
 }
 
-/**
- * A resource collection with multiple projections of the same domain.
- *
- * Modes are views, not new resources: the active view owns the body and its
- * contextual actions while collection identity and description stay stable.
- */
-/**
- * Either a tabbed collection (all three mode props together) or a single-view
- * one (none of them) — the two shapes are the only constructible states, so a
- * tablist can never render keyboard-dead (no active tab) or with no-op tabs.
- */
 type ResourceCollectionModeProps<Mode extends string> =
   | { modes?: undefined; activeMode?: undefined; onModeChange?: undefined }
   | {
@@ -49,27 +38,16 @@ export function ResourceCollectionPage<Mode extends string>({
   actions?: ReactNode;
   children: ReactNode;
   className?: string;
-  /**
-   * Applied inside each header band (description, tabs/actions). Full-bleed
-   * pages use it to re-center the bands onto the content column while the
-   * scrolling child spans the whole pane.
-   */
   bandClassName?: string;
 } & ResourceCollectionModeProps<Mode>) {
   const modeList = modes ?? [];
   const hasModes = modeList.length > 0;
-  // The union ties onModeChange to modes, but destructuring drops that link
-  // for the narrower; the fallback is unreachable by construction.
   const changeMode = onModeChange ?? (() => {});
   const activeTabId = hasModes ? `${id}-${activeMode}-tab` : undefined;
   const activePanelId = hasModes ? `${id}-${activeMode}-panel` : undefined;
   return (
     <div className={cn("flex h-full min-h-0 flex-col gap-5", className)}>
-      {/* Every band in the collection carries the same pr-3 scrollbar gutter as
-          the results below, so description, tabs, toolbar, and rows all share
-          one content width. The description keeps its own line; pages without
-          mode tabs put their create control in the toolbar row instead of
-          spending a band on it. */}
+      {}
       <div className="pr-3">
         <div className={bandClassName}>
           <ResourceTabDescription>{description}</ResourceTabDescription>
@@ -161,11 +139,6 @@ export function ResourceCollectionPage<Mode extends string>({
   );
 }
 
-/**
- * One bounded collection body shared by Installed and Browse projections.
- * The toolbar and pagination remain stable while this component owns the
- * collection's only scrollable region.
- */
 export function ResourceCollectionViewport({
   toolbar,
   children,
@@ -183,11 +156,6 @@ export function ResourceCollectionViewport({
   viewportRef?: Ref<HTMLDivElement>;
   className?: string;
   contentClassName?: string;
-  /**
-   * Applied inside the toolbar and footer bands (and by callers to their
-   * scrolled content). Full-bleed pages use it to re-center each band onto
-   * the content column while the scroller itself spans the whole pane.
-   */
   bandClassName?: string;
 }) {
   return (
@@ -195,9 +163,7 @@ export function ResourceCollectionViewport({
       className={cn("flex h-full min-h-0 flex-col gap-5", className)}
       data-resource-collection-viewport
     >
-      {/* Every band carries the same pr-3 right gutter as the scroll viewport
-          below (12px gutter, 8px scrollbar, 4px clearance), so the toolbar,
-          results, and footer all end on the same content edge. */}
+      {}
       {toolbar ? (
         <div className="shrink-0 pr-3">
           <div className={bandClassName}>{toolbar}</div>
@@ -253,7 +219,6 @@ export function ResourceOverviewSection({
   );
 }
 
-/** Responsive browse projection shared by resource collection pages. */
 export function ResourceBrowseGrid({
   children,
   className,
@@ -379,18 +344,22 @@ export function ResourceOverviewPage({
 export function ResourceSourceShelf({
   label,
   attribution,
+  description,
   leading,
   browseAction,
   scrollOverlay,
   contentMode = "rail",
+  contentSurface = "recessed",
   children,
 }: {
   label: ReactNode;
   attribution?: ReactNode;
+  description?: ReactNode;
   leading?: ReactNode;
   browseAction?: ReactNode;
   scrollOverlay?: ReactNode;
   contentMode?: "rail" | "panel";
+  contentSurface?: "recessed" | "plain";
   children: ReactNode;
 }) {
   return (
@@ -409,13 +378,31 @@ export function ResourceSourceShelf({
             </span>
           ) : null}
         </div>
-        {browseAction ? (
+        {browseAction && description === undefined ? (
           <div className="ml-auto shrink-0 text-xs text-muted-foreground">
             {browseAction}
           </div>
         ) : null}
       </div>
-      <div className="rounded-lg bg-surface-recessed/70 p-[var(--resource-source-shelf-inset)]">
+      {description === undefined ? null : (
+        <div className="flex min-w-0 items-center gap-3 px-[var(--resource-source-shelf-inset)]">
+          <p className="min-w-0 max-w-2xl text-xs leading-relaxed text-muted-foreground">
+            {description}
+          </p>
+          {browseAction ? (
+            <div className="ml-auto shrink-0 text-xs text-muted-foreground">
+              {browseAction}
+            </div>
+          ) : null}
+        </div>
+      )}
+      <div
+        className={cn(
+          contentSurface === "recessed"
+            ? "rounded-lg bg-surface-recessed/70 p-[var(--resource-source-shelf-inset)]"
+            : "px-[var(--resource-source-shelf-inset)]",
+        )}
+      >
         {contentMode === "panel" ? (
           children
         ) : (
@@ -487,25 +474,23 @@ export function ResourceSourceItem({
 type ResourceBrowseCardProps = {
   className?: string;
   leading?: ReactNode;
+  leadingClassName?: string;
   title: ReactNode;
   description?: ReactNode;
   descriptionLines?: 2 | 3;
   byline?: ReactNode;
   headerAction?: ReactNode;
   footerMeta?: ReactNode;
-  /**
-   * Keep the full-card pointer target out of the tab order when a header action
-   * already exposes the exact same operation to keyboard users.
-   */
   pointerOnlyOpen?: boolean;
 } & (
-  | { openLabel: string; onOpen: () => void }
+  | { openLabel: string; onOpen: (trigger: HTMLButtonElement) => void }
   | { openLabel?: undefined; onOpen?: undefined }
 );
 
 export function ResourceBrowseCard({
   className,
   leading,
+  leadingClassName,
   title,
   description,
   descriptionLines = 2,
@@ -523,7 +508,7 @@ export function ResourceBrowseCard({
       className={cn(
         "group relative grid min-h-28 w-full grid-cols-[minmax(0,1fr)_auto] grid-rows-[auto_1fr_auto] gap-2 rounded-lg border border-border bg-card p-3 text-left",
         onOpen &&
-          "transition-[border-color,box-shadow] duration-150 hover:border-foreground/20 hover:shadow-xs",
+          "transition-[border-color,box-shadow,background-color] duration-150 hover:border-foreground/30 hover:bg-[color-mix(in_oklab,var(--ink)_2.5%,transparent)] hover:shadow-sm",
         className,
       )}
     >
@@ -534,13 +519,18 @@ export function ResourceBrowseCard({
           aria-hidden={pointerOnlyOpen || undefined}
           tabIndex={pointerOnlyOpen ? -1 : undefined}
           data-resource-card-pointer-action={pointerOnlyOpen ? "" : undefined}
-          onClick={onOpen}
+          onClick={(event) => onOpen(event.currentTarget)}
           className="absolute inset-0 cursor-pointer rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
         />
       ) : null}
       {hasLeading ? (
         <span className="pointer-events-none relative col-start-1 row-start-1 flex min-w-0 items-center">
-          <span className="flex size-6 shrink-0 items-center justify-center">
+          <span
+            className={cn(
+              "flex size-6 shrink-0 items-center justify-center",
+              leadingClassName,
+            )}
+          >
             {leading}
           </span>
           <span className="ml-3 min-w-0 flex-1">{renderTitle()}</span>
@@ -569,12 +559,12 @@ export function ResourceBrowseCard({
         </span>
       ) : null}
       {byline ? (
-        <span className="pointer-events-none relative col-start-1 row-start-3 flex min-h-4 min-w-0 items-center text-left text-xs text-subtle-foreground">
+        <span className="pointer-events-none relative col-start-1 row-start-3 mt-1.5 flex min-h-4 min-w-0 items-center text-left text-xs text-subtle-foreground">
           <span className="block min-w-0 truncate">{byline}</span>
         </span>
       ) : null}
       {footerMeta ? (
-        <span className="pointer-events-none relative col-start-2 row-start-3 flex min-h-4 items-center justify-end text-right">
+        <span className="pointer-events-none relative col-start-2 row-start-3 mt-1.5 flex min-h-4 min-w-0 items-center justify-end text-right">
           {footerMeta}
         </span>
       ) : null}

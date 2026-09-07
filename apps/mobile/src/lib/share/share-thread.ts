@@ -1,25 +1,15 @@
 import { Platform, Share } from "react-native";
 
-/**
- * Outbound sharing: the thread's web URL through the OS share sheet
- * (`Share.share`). Pure content builder + a thin adapter.
- */
-
 export interface ThreadShareContent {
   title: string;
   url: string;
 }
 
 export interface SharePayload {
-  /** `Share.share` content: iOS shares `url` natively; Android needs `message`. */
   content: { title: string; url: string } | { title: string; message: string };
   options: { dialogTitle: string; subject: string };
 }
 
-/**
- * iOS accepts a real `url` item (apps like Messages / Notes render it as a
- * link); Android's `Share.share` only reads `message`, so the URL goes there.
- */
 function buildSharePayload(
   platform: "ios" | "android" | "web" | "windows" | "macos",
   { title, url }: ThreadShareContent,
@@ -36,7 +26,6 @@ function buildSharePayload(
 
 export type ShareOutcome = "shared" | "dismissed";
 
-/** Present the OS share sheet for a thread link. Rejects on a platform error. */
 export async function shareThreadLink(
   content: ThreadShareContent,
 ): Promise<ShareOutcome> {

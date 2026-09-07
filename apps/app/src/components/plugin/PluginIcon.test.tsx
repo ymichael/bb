@@ -126,14 +126,12 @@ it("resolves every named branding.icon the shipped plugins declare", async () =>
       await readFile(join(pluginsDir, entry.name, "package.json"), "utf8"),
     );
     const icon = manifest.bb?.branding?.icon;
-    // Path-shaped icons are plugin-owned SVG assets, not host glyph names.
     if (icon === undefined || icon.startsWith("./")) continue;
     declared.push([entry.name, icon]);
   }
 
   expect(declared.length).toBeGreaterThan(0);
-  // A typo silently falls back to Zap, so a deliberate icon must round-trip.
-  expect(
-    declared.filter(([, icon]) => pluginIconName(icon) !== icon),
-  ).toEqual([]);
+  expect(declared.filter(([, icon]) => pluginIconName(icon) !== icon)).toEqual(
+    [],
+  );
 });

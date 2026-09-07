@@ -2,6 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useLocalPathPicker } from "./useLocalPathPicker";
 
@@ -33,24 +34,17 @@ vi.mock("@/lib/sdk", () => ({
   sdk: { hosts: { pickFolder: mocks.pickFolder } },
 }));
 
-const atum: Host = {
+const atum = makeHost({
   id: "host_atum",
   name: "atum",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: null,
-  maxPermissionMode: "full",
-  lastRejectedProtocolVersion: null,
-  createdAt: 0,
-  updatedAt: 0,
-};
+});
 
 function host(
   id: string,
   name: string,
   status: Host["status"] = "connected",
 ): Host {
-  return { ...atum, id, name, status };
+  return makeHost({ ...atum, id, name, status });
 }
 
 beforeEach(() => {
@@ -67,9 +61,6 @@ afterEach(() => {
 });
 
 describe("useLocalPathPicker", () => {
-  // The dialog reports the machine it actually resolved a path on. An explicit
-  // null means "no machine selected" and must not silently fall back to the
-  // primary host — the create would land on the wrong machine.
   it("drops a submit that carries no machine", () => {
     const submit = vi.fn();
     const { result } = renderHook(() =>
@@ -120,11 +111,6 @@ describe("useLocalPathPicker", () => {
   });
 });
 
-/**
- * Choosing between the native folder picker and the in-app dialog. This lived
- * in `useQuickCreateProject` until a second caller needed the same behavior; it
- * is shared here so every path-entry caller agrees.
- */
 describe("useLocalPathPicker openPathEntry", () => {
   it("opens the dialog instead of the native picker when several machines exist", () => {
     mocks.hosts = [atum, host("host_thoth", "Thoth")];

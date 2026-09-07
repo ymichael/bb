@@ -147,15 +147,12 @@ export function RegistrySkillsBrowsePage({
 }: {
   skills: readonly RegistrySkill[];
   pendingSkillIds: ReadonlySet<string>;
-  /** Cards with no resolved lifetime install count; they show none. */
   unknownInstallSkillIds: ReadonlySet<string>;
   isLoading: boolean;
-  /** A further page is on its way; already-loaded cards stay put. */
   loadingMore: boolean;
   hasMore: boolean;
   hasError: boolean;
   query: string;
-  /** The page's create control, rendered at the toolbar row's right edge. */
   action?: ReactNode;
   onRetry?: () => void;
   onQueryChange: (query: string) => void;
@@ -219,8 +216,6 @@ export function RegistrySkillsBrowsePage({
               )}
             </ResourceBrowseGrid>
             {hasError ? (
-              // A later page failed. The cards already on screen are fine —
-              // keep them and scope the error to the load that broke.
               <ResourceListState
                 state="error"
                 message="Couldn't load more from skills.sh."

@@ -9,12 +9,7 @@ import {
 
 const NO_LINK = "__none__";
 
-/**
- * UI state for the linked-bb-project picker. Shared by NewProjectDialog and
- * the detail rail.
- */
 export interface BbProjectLinkState {
-  /** bb project id chosen from the Select. */
   selection: string | null;
 }
 
@@ -22,14 +17,12 @@ export function emptyBbProjectLinkState(): BbProjectLinkState {
   return { selection: null };
 }
 
-/** Preserve an existing link even when its project is no longer discoverable. */
 export function bbProjectLinkStateFor(
   linkedBbProjectId: string | null,
 ): BbProjectLinkState {
   return { selection: linkedBbProjectId };
 }
 
-/** The bb project id the state resolves to; "" means not linked. */
 export function resolveBbProjectLink(state: BbProjectLinkState): string {
   return state.selection ?? "";
 }
@@ -43,7 +36,6 @@ export function BbProjectLinkPicker({
   state: BbProjectLinkState;
   onStateChange: (state: BbProjectLinkState) => void;
   bbProjects: readonly BbProjectOption[];
-  /** Label for the "no link" Select item (the rail shows "Unlink"). */
   noneLabel?: string;
 }) {
   const unavailableSelection =

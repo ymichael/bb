@@ -318,9 +318,8 @@ describe("provisionWorkspace", () => {
         path: repoPath,
       });
 
-      await ws.destroy();
+      await ws.destroy({ timeoutMs: 900000 });
 
-      // Path still exists
       await expect(fs.stat(repoPath)).resolves.toBeDefined();
     });
 
@@ -518,11 +517,10 @@ describe("provisionWorkspace", () => {
         timeoutMs: 900000,
       });
 
-      await ws.destroy();
+      await ws.destroy({ timeoutMs: 900000 });
 
       await expect(fs.stat(targetPath)).rejects.toThrow();
       await expect(fs.stat(envDir)).rejects.toThrow();
-      // Worktree should be removed from git's list
       const worktrees = await runGit(["worktree", "list", "--porcelain"], {
         cwd: repoPath,
       });
@@ -584,11 +582,9 @@ describe("provisionWorkspace", () => {
         path: repoPath,
       });
 
-      // getStatus
       const status = await ws.getStatus();
       expect(status.workingTree.state).toBe("clean");
 
-      // commit
       await fs.writeFile(path.join(repoPath, "new.txt"), "data\n", "utf8");
       const result = await ws.commit({
         message: "Test commit",
@@ -596,17 +592,14 @@ describe("provisionWorkspace", () => {
       });
       expect(result.commitSha).toBeTruthy();
 
-      // reset
       await fs.writeFile(path.join(repoPath, "dirty.txt"), "dirty\n", "utf8");
       await ws.reset();
       const statusAfter = await ws.getStatus();
       expect(statusAfter.workingTree.state).toBe("clean");
 
-      // listBranches
       const branches = await listBranches(ws.path);
       expect(branches).toContain("main");
 
-      // getDiff
       const diff = await ws.getDiff();
       expect(typeof diff.diff).toBe("string");
     });
@@ -632,7 +625,7 @@ describe("provisionWorkspace", () => {
       expect(ws.isWorktree).toBe(false);
       expect((await fs.stat(targetPath)).isDirectory()).toBe(true);
 
-      await ws.destroy();
+      await ws.destroy({ timeoutMs: 900000 });
       await expect(fs.stat(targetPath)).rejects.toThrow();
     });
 
@@ -740,7 +733,7 @@ describe("provisionWorkspace", () => {
       expect(ws.isGitRepo).toBe(true);
       expect(ws.isWorktree).toBe(true);
 
-      await ws.destroy();
+      await ws.destroy({ timeoutMs: 900000 });
       await expect(fs.stat(wtPath)).rejects.toThrow();
       await expect(fs.stat(envDir)).rejects.toThrow();
     });

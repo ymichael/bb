@@ -1,8 +1,3 @@
-/**
- * Minimal in-memory socket satisfying the hub's structural `HubSocket`
- * contract. Records sent payloads and close calls so tests assert delivered
- * messages instead of call sequences.
- */
 interface MockHubSocket {
   closed: Array<{ code?: number; reason?: string }>;
   messages: string[];

@@ -15,8 +15,6 @@ function storedDraft(text: string): string {
   return JSON.stringify({ text, attachments: [] });
 }
 
-// Each test uses a unique projectId so the module-level draft cache/subscriber
-// maps (keyed by storage key) never collide across tests.
 let scopeCounter = 0;
 function uniqueScope() {
   scopeCounter += 1;
@@ -107,7 +105,6 @@ describe("usePromptDraftStorage", () => {
       setItem.mockRestore();
     }
 
-    // Storage still holds the old draft, but readers see the newer one.
     expect(window.localStorage.getItem(result.current.storageKey)).toBe(
       storedDraft("small"),
     );
@@ -191,14 +188,9 @@ describe("usePromptDraftStorage", () => {
     const presenceReads = () =>
       getItem.mock.calls.filter(([key]) => String(key).includes(projectId))
         .length;
-    // The sidebar re-renders for unrelated reasons constantly; the presence
-    // snapshot must come from the cache, not 30 localStorage reads.
     rerender();
     expect(presenceReads()).toBe(0);
 
-    // A keystroke in an already-present draft: presence did not flip, so the
-    // batch subscriber is not notified (no sidebar render) and only the edited
-    // key is consulted.
     const rendersBefore = batchRenders;
     act(() => {
       composer.setDraft({
@@ -210,7 +202,6 @@ describe("usePromptDraftStorage", () => {
     expect(presenceReads()).toBeLessThanOrEqual(1);
     expect(batchRenders).toBe(rendersBefore);
 
-    // Clearing flips presence: one notification, one render, one read.
     act(() => {
       composer.setDraft({ text: "", mentions: [], attachments: [] });
     });
@@ -317,7 +308,6 @@ describe("usePromptDraftStorage addQuote", () => {
 
     act(() => result.current.addQuote("  ship it  "));
 
-    // Blockquote-prefixed, with a trailing newline so the reply sits below it.
     expect(result.current.text).toBe("> ship it\n");
     expect(window.localStorage.length).toBe(1);
     expect(

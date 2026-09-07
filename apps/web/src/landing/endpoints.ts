@@ -1,7 +1,3 @@
-// First-party HTTP endpoints for the marketing page, ported from the old
-// standalone landing worker (apps/landing/src/worker.ts). Routing now lives in
-// TanStack server routes (routes/download.macos.tsx, routes/api.subscribe.tsx);
-// this module keeps the framework-free request/response logic testable.
 import {
   DOWNLOAD_MACOS_FALLBACK_URL,
   DOWNLOAD_MACOS_RELEASE_ASSET_BASE_URL,
@@ -17,22 +13,19 @@ const MAX_URL_PROPERTY_LENGTH = 2048;
 const RESEND_CONTACTS_URL = "https://api.resend.com/audiences";
 const MAX_EMAIL_LENGTH = 254;
 const MACOS_INSTALLER_EXTENSION = ".dmg";
-// Permissive single-line email shape; Resend does the authoritative validation.
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 type DownloadPlacement = CtaPlacement | "direct";
 
 type MarketingEnv = {
   LANDING_POSTHOG_KEY?: string;
-  // Set in production via wrangler secret / vars; unset on forks and local dev,
-  // where /api/subscribe reports that signup is not configured.
   RESEND_API_KEY?: string;
   RESEND_AUDIENCE_ID?: string;
 };
 
 type DownloadEventProperties = {
-  "$current_url": string;
-  "$referrer"?: string;
+  $current_url: string;
+  $referrer?: string;
   download_target: typeof DOWNLOAD_TARGET;
   placement: DownloadPlacement;
   tracking_source: typeof TRACKING_SOURCE;
@@ -76,13 +69,14 @@ export async function handleDownloadMacos(
 
 function jsonResponse(body: object, status: number): Response {
   return new Response(JSON.stringify(body), {
-    headers: { "Cache-Control": "no-store", "content-type": "application/json" },
+    headers: {
+      "Cache-Control": "no-store",
+      "content-type": "application/json",
+    },
     status,
   });
 }
 
-// Adds the submitted email to the bb marketing audience in Resend. Same-origin
-// only (the form lives on this site), so no CORS handling is needed.
 export async function handleSubscribe(
   request: Request,
   env: MarketingEnv,
@@ -116,9 +110,6 @@ export async function handleSubscribe(
     return jsonResponse({ error: "Could not reach the signup service." }, 502);
   }
 
-  // Resend returns 2xx for new contacts and, for an already-subscribed email,
-  // either 2xx or an "already exists" error — both mean the visitor is on the
-  // list, so treat them as success.
   if (resendResponse.ok || (await isAlreadySubscribed(resendResponse))) {
     return jsonResponse({ ok: true }, 200);
   }
@@ -213,9 +204,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
-async function trackDownloadClick(
-  args: TrackDownloadClickArgs,
-): Promise<void> {
+async function trackDownloadClick(args: TrackDownloadClickArgs): Promise<void> {
   if (!args.postHogKey) {
     return;
   }
@@ -285,7 +274,9 @@ function parseDownloadPlacement(
   }
 }
 
-function readReferrerSearchParams(referrer: string | null): URLSearchParams | null {
+function readReferrerSearchParams(
+  referrer: string | null,
+): URLSearchParams | null {
   if (!referrer) {
     return null;
   }

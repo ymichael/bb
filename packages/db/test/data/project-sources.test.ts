@@ -292,7 +292,6 @@ describe("project-sources", () => {
       path: "/tmp/code-2",
     });
 
-    // The initial source from setup is the default; delete it
     const initialDefault = getDefaultProjectSource(db, project.id)!;
     expect(deleteProjectSource(db, noopNotifier, initialDefault.id)).toBe(true);
     expect(getDefaultProjectSource(db, project.id)?.id).toBe(second.id);

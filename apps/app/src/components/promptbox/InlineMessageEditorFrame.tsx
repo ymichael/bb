@@ -13,7 +13,6 @@ interface InlineMessageEditorFrameProps {
   variant?: "embedded" | "cap";
 }
 
-/** Shared chrome for compact editors shown inline with a message. */
 export function InlineMessageEditorFrame({
   cancelLabel,
   children,

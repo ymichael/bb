@@ -6,10 +6,12 @@ import { describe, expect, it } from "vitest";
 import { apiJsonCompression } from "../../src/api-response-compression.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-const LARGE_PAYLOAD = { rows: Array.from({ length: 200 }, (_, index) => ({
-  id: `row-${index}`,
-  title: `Thread ${index} with a reasonably long title for compression`,
-})) };
+const LARGE_PAYLOAD = {
+  rows: Array.from({ length: 200 }, (_, index) => ({
+    id: `row-${index}`,
+    title: `Thread ${index} with a reasonably long title for compression`,
+  })),
+};
 const SMALL_PAYLOAD = { ok: true };
 
 function createHarnessApp(): Hono {
@@ -23,8 +25,6 @@ function createHarnessApp(): Hono {
   );
   app.get("/api/v1/large", (context) => context.json(LARGE_PAYLOAD));
   app.get("/api/v1/small", (context) => context.json(SMALL_PAYLOAD));
-  // Hono's `/http/*` also answers the bare `/http` path, as the real plugin
-  // wire route does.
   app.get("/api/v1/plugins/demo/http/*", () => {
     let pushed = false;
     const body = new ReadableStream<Uint8Array>({
@@ -105,7 +105,6 @@ describe("API JSON compression", () => {
       const response = await app.request(path, {
         headers: { "accept-encoding": "gzip, br" },
       });
-      // The streaming fallback keeps these gzip-only without a length.
       expect(response.headers.get("content-encoding")).toBe("gzip");
       expect(response.headers.has("content-length")).toBe(false);
       const bytes = Buffer.from(await response.arrayBuffer());

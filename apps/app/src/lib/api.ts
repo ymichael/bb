@@ -1,4 +1,3 @@
-// Legacy raw-HTTP escape hatch. New call sites must use @/lib/sdk.
 import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import type { SystemVoiceTranscriptionResponse } from "@bb/server-contract";
 import { apiClient, toRelativeUrl } from "./api-server";
@@ -67,9 +66,7 @@ function deriveHttpErrorMessage(
       if (message) {
         return message;
       }
-    } catch {
-      // Fall through to non-JSON handling.
-    }
+    } catch {}
   }
   if (HTML_DOCUMENT_PATTERN.test(normalized)) {
     if (status === 401 || status === 403) {

@@ -4,42 +4,21 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import {
-  EMPTY_PLUGIN_UPDATE_STATE,
-  type PluginListItem,
-} from "@/hooks/queries/plugin-settings-queries";
+import { type PluginListItem } from "@/hooks/queries/plugin-settings-queries";
 import { InstalledPluginRow } from "./InstalledPluginsTab";
+import { makePluginListItem } from "@/test/fixtures/plugins";
 
 function plugin(overrides: Partial<PluginListItem> = {}): PluginListItem {
-  return {
+  return makePluginListItem({
     id: "notify",
     source: "path:/tmp/bb-plugin-notify",
     rootDir: "/tmp/bb-plugin-notify",
     version: "0.2.1",
-    enabled: true,
-    status: "running",
-    statusDetail: null,
     description: "Desktop notifications when a thread needs you.",
     name: "Notify",
-    icon: null,
-    compactIconUrl: null,
-    logoUrl: null,
-    logoDarkUrl: null,
-    hasSettings: false,
-    provenance: "direct",
-    isOrphanedBuiltin: false,
-    catalogEntryId: null,
-    publisherLabel: null,
     sourceDisplay: "path · /tmp/bb-plugin-notify",
-    updateState: EMPTY_PLUGIN_UPDATE_STATE,
-    handlerStats: { count: 0, totalMs: 0, maxMs: 0, errorCount: 0 },
-    services: [],
-    schedules: [],
-    cliCommand: null,
-    capabilities: [],
-    app: { hasApp: false, bundle: null },
     ...overrides,
-  };
+  });
 }
 
 function renderRow(item: PluginListItem) {
@@ -72,7 +51,6 @@ describe("InstalledPluginRow", () => {
     expect(
       screen.getByText("requires bb >=0.38.0 <0.39.0, this is 0.39.0"),
     ).toBeTruthy();
-    // The switch stays "on" (the user enabled it) but says so honestly.
     expect(
       screen
         .getByRole("switch", {

@@ -1,8 +1,7 @@
 import type { RefObject } from "react";
 import { RenameDialog, RenameDialogContent } from "./RenameDialog";
 
-export const THREAD_RENAME_DIALOG_SHELL_CLASS =
-  "max-w-[24rem] sm:gap-3 sm:p-5";
+export const THREAD_RENAME_DIALOG_SHELL_CLASS = "max-w-[24rem] sm:gap-3 sm:p-5";
 
 export interface ThreadRenameDialogTarget {
   id: string;

@@ -129,14 +129,21 @@ const testRpcCursorByHost = new Map<string, number>();
 interface RegisterTestHostRpcCaptureArgs {
   hostId: string;
   sessionId: string;
-  /** Checkout the fake daemon reports for `host.list_branches`. */
-  listBranchesResult?: HostDaemonOnlineRpcResult<"host.list_branches">;
-  onListBranches?: (
-    command: Extract<HostDaemonRpcCommand, { type: "host.list_branches" }>,
+  queueBranchOptions?: boolean;
+  gitBranchOptionsResult?: HostDaemonOnlineRpcResult<"host.list_branch_options">;
+  onListBranchOptions?: (
+    command: Extract<
+      HostDaemonRpcCommand,
+      { type: "host.list_branch_options" }
+    >,
+  ) => void;
+  gitSourceInspectionResult?: HostDaemonOnlineRpcResult<"host.inspect_git_source">;
+  onInspectGitSource?: (
+    command: Extract<HostDaemonRpcCommand, { type: "host.inspect_git_source" }>,
   ) => void;
 }
 
-interface TestHostRpcSocket {
+export interface TestHostRpcSocket {
   close(code?: number, reason?: string): void;
   send(data: string): void;
 }
@@ -264,12 +271,8 @@ function respondToProviderModelListCommand(
   return true;
 }
 
-function buildDefaultBranchListResult(
-  selectedBranch: string | undefined,
-): HostDaemonOnlineRpcResult<"host.list_branches"> {
+function buildDefaultGitSourceInspectionResult(): HostDaemonOnlineRpcResult<"host.inspect_git_source"> {
   return {
-    branches: ["main"],
-    branchesTruncated: false,
     checkout: {
       kind: "branch",
       branchName: "main",
@@ -280,6 +283,15 @@ function buildDefaultBranchListResult(
     hasUncommittedChanges: false,
     operation: { kind: "none" },
     originDefaultBranch: "origin/main",
+  };
+}
+
+function buildDefaultGitBranchOptionsResult(
+  selectedBranch: string | undefined,
+): HostDaemonOnlineRpcResult<"host.list_branch_options"> {
+  return {
+    branches: ["main"],
+    branchesTruncated: false,
     remoteBranches: ["origin/main"],
     remoteBranchesTruncated: false,
     selectedBranch: selectedBranch
@@ -340,10 +352,15 @@ function nextTestRpcCursor(
   return nextCursor;
 }
 
+/**
+ * Registers the capturing daemon socket for a host and returns it, so a test
+ * that reconnects a host can hand the same socket to the real
+ * `onDaemonSocketOpen` instead of replacing the capture with a stub.
+ */
 export function registerTestHostRpcCapture(
   deps: Pick<TestAppHarness, "db" | "hub">,
   args: RegisterTestHostRpcCaptureArgs,
-): void {
+): TestHostRpcSocket {
   testRpcCursorByHost.delete(args.hostId);
   for (let index = pendingHostRpcRequests.length - 1; index >= 0; index -= 1) {
     const queued = pendingHostRpcRequests[index];
@@ -384,8 +401,11 @@ export function registerTestHostRpcCapture(
       if (respondToProviderModelListCommand(deps, args, message)) {
         return;
       }
-      if (command.type === "host.list_branches") {
-        args.onListBranches?.(command);
+      if (
+        command.type === "host.list_branch_options" &&
+        !args.queueBranchOptions
+      ) {
+        args.onListBranchOptions?.(command);
         deps.hub.recordHostOnlineRpcResponse({
           message: hostDaemonOnlineRpcResponseMessageSchema.parse({
             type: "host-rpc.response",
@@ -393,8 +413,24 @@ export function registerTestHostRpcCapture(
             commandType: command.type,
             ok: true,
             result:
-              args.listBranchesResult ??
-              buildDefaultBranchListResult(command.selectedBranch),
+              args.gitBranchOptionsResult ??
+              buildDefaultGitBranchOptionsResult(command.selectedBranch),
+          }),
+          sessionId: args.sessionId,
+        });
+        return;
+      }
+      if (command.type === "host.inspect_git_source") {
+        args.onInspectGitSource?.(command);
+        deps.hub.recordHostOnlineRpcResponse({
+          message: hostDaemonOnlineRpcResponseMessageSchema.parse({
+            type: "host-rpc.response",
+            requestId: message.requestId,
+            commandType: command.type,
+            ok: true,
+            result:
+              args.gitSourceInspectionResult ??
+              buildDefaultGitSourceInspectionResult(),
           }),
           sessionId: args.sessionId,
         });
@@ -423,6 +459,7 @@ export function registerTestHostRpcCapture(
     },
   };
   deps.hub.registerDaemon(args.sessionId, args.hostId, socket);
+  return socket;
 }
 
 function removePendingHostRpcRequest(requestId: string): void {

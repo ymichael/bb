@@ -18,8 +18,6 @@ describe("resolvePermissionModeSelection", () => {
   });
 
   it("falls back to full when auto is unsupported", () => {
-    // ACP advertises accept-edits/full only. Full is the product fallback when
-    // the provider has no native automatic reviewer.
     expect(
       resolvePermissionModeSelection({
         rawPermissionMode: "auto",

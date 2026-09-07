@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import { Button } from "../button";
 import { Icon, type IconName } from "../icon";
 import {
@@ -21,15 +21,6 @@ function withTooltip(control: ReactNode, tooltip: ReactNode | undefined) {
   );
 }
 
-/**
- * Short scalar facts about a resource — version, install date, and the like.
- *
- * These read as a quiet metadata run rather than a table. The facts a detail
- * page actually carries are one to three short values, and a bordered grid with
- * filled label cells outweighs that content; the section heading already
- * supplies the hierarchy. A fact that needs its own tone or action is not a
- * peer of these — render it beside the list, not inside it.
- */
 export function ResourceDetailFacts({
   children,
   className,
@@ -55,8 +46,7 @@ export function ResourceDetailFact({
 }) {
   return (
     <div className="min-w-0">
-      {/* Leading stays snug rather than none: a value long enough to wrap on a
-          narrow page would otherwise collide with its own second line. */}
+      {}
       <dt className="text-xs leading-snug text-muted-foreground">{label}</dt>
       <dd
         className={cn(
@@ -70,7 +60,6 @@ export function ResourceDetailFact({
   );
 }
 
-/** Passive lifecycle status for states that are observed, not changed here. */
 export function ResourceLifecycleStatus({
   label,
   tooltip,
@@ -102,7 +91,6 @@ export function ResourceLifecycleStatus({
   return withTooltip(status, tooltip);
 }
 
-/** Canonical action for a resource that can be added from a browse surface. */
 export function ResourceInstallControl({
   accessibleLabel,
   label = "Install",
@@ -112,6 +100,7 @@ export function ResourceInstallControl({
   disabled = false,
   presentation = "label",
   tooltip,
+  count,
   className,
   onAction,
 }: {
@@ -121,11 +110,13 @@ export function ResourceInstallControl({
   pendingLabel?: string;
   pending?: boolean;
   disabled?: boolean;
-  presentation?: "label" | "icon";
+  presentation?: "label" | "icon" | "compact";
   tooltip?: ReactNode;
+  count?: { display: string; accessibleLabel: string };
   className?: string;
   onAction: () => void;
 }) {
+  const countId = useId();
   const control = (
     <Button
       type="button"
@@ -133,12 +124,17 @@ export function ResourceInstallControl({
       size="sm"
       className={cn(
         "h-7 shrink-0 justify-center text-xs",
-        presentation === "icon" ? "w-7 px-0" : "min-w-20 px-2.5",
+        presentation === "label"
+          ? "min-w-20 px-2.5"
+          : presentation === "icon"
+            ? "w-7 px-0"
+            : "min-w-7 gap-1.5 px-2",
         className,
       )}
       disabled={disabled || pending}
       aria-busy={pending}
       aria-label={accessibleLabel}
+      aria-describedby={count === undefined ? undefined : countId}
       onClick={onAction}
     >
       {pending ? (
@@ -152,17 +148,20 @@ export function ResourceInstallControl({
           {presentation === "label" ? label : null}
         </span>
       )}
+      {count === undefined ? null : (
+        <span
+          id={countId}
+          aria-label={count.accessibleLabel}
+          className="shrink-0 whitespace-nowrap text-2xs text-subtle-foreground"
+        >
+          {count.display}
+        </span>
+      )}
     </Button>
   );
-  return withTooltip(control, presentation === "icon" ? tooltip : undefined);
+  return withTooltip(control, presentation === "label" ? undefined : tooltip);
 }
 
-/**
- * Canonical installed state for browse and detail surfaces.
- *
- * With an action it shows the installed or provenance treatment at rest, then
- * reveals the destructive uninstall affordance only while hovered or focused.
- */
 export function ResourceInstalledControl({
   accessibleLabel,
   label = "Installed",
@@ -173,6 +172,7 @@ export function ResourceInstalledControl({
   pending = false,
   presentation = "label",
   tooltip,
+  count,
   className,
   onAction,
 }: {
@@ -183,15 +183,24 @@ export function ResourceInstalledControl({
   actionLabel?: string;
   pendingLabel?: string;
   pending?: boolean;
-  presentation?: "label" | "icon";
+  presentation?: "label" | "icon" | "compact";
   tooltip?: ReactNode;
+  count?: { display: string; accessibleLabel: string };
   className?: string;
   onAction?: () => void;
 }) {
   const installedContent = (
     <span className="inline-flex items-center gap-1">
       <Icon name={icon} className="size-3.5" aria-hidden />
-      {presentation === "label" ? label : null}
+      {presentation === "icon" ? null : label}
+      {count === undefined ? null : (
+        <span
+          aria-label={count.accessibleLabel}
+          className="shrink-0 whitespace-nowrap text-2xs text-subtle-foreground"
+        >
+          {count.display}
+        </span>
+      )}
     </span>
   );
 
@@ -200,18 +209,25 @@ export function ResourceInstalledControl({
       <span
         aria-label={accessibleLabel}
         tabIndex={
-          presentation === "icon" && tooltip !== undefined ? 0 : undefined
+          presentation !== "label" && tooltip !== undefined ? 0 : undefined
         }
         className={cn(
-          "inline-flex h-7 shrink-0 items-center justify-center rounded-md border border-success/30 bg-success/10 text-xs font-medium text-[color:color-mix(in_oklab,var(--success)_72%,var(--ink))]",
-          presentation === "icon" ? "w-7 px-0" : "min-w-20 px-2",
+          "inline-flex h-7 shrink-0 items-center justify-center rounded-md border text-xs font-medium",
+          appearance === "installed"
+            ? "border-success/30 bg-success/10 text-[color:color-mix(in_oklab,var(--success)_72%,var(--ink))]"
+            : "border-border/70 bg-transparent text-muted-foreground",
+          presentation === "label"
+            ? "min-w-20 px-2"
+            : presentation === "icon"
+              ? "w-7 px-0"
+              : "min-w-7 px-2",
           className,
         )}
       >
         {installedContent}
       </span>
     );
-    return withTooltip(status, presentation === "icon" ? tooltip : undefined);
+    return withTooltip(status, presentation === "label" ? undefined : tooltip);
   }
 
   const control = (
@@ -224,7 +240,11 @@ export function ResourceInstalledControl({
         appearance === "installed"
           ? "border-success/30 bg-success/10 text-[color:color-mix(in_oklab,var(--success)_72%,var(--ink))]"
           : "border-border/70 bg-transparent text-muted-foreground",
-        presentation === "icon" ? "w-7 px-0" : "min-w-20 px-2",
+        presentation === "label"
+          ? "min-w-20 px-2"
+          : presentation === "icon"
+            ? "w-7 px-0"
+            : "min-w-7 px-2",
         className,
       )}
       disabled={pending}
@@ -249,5 +269,5 @@ export function ResourceInstalledControl({
       )}
     </Button>
   );
-  return withTooltip(control, presentation === "icon" ? tooltip : undefined);
+  return withTooltip(control, presentation === "label" ? undefined : tooltip);
 }

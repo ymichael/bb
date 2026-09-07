@@ -7,10 +7,7 @@ import type {
   TaskStatus,
   TaskThread,
 } from "../../shared/contract.js";
-import {
-  TASK_PRIORITIES,
-  TASK_STATUSES,
-} from "../../shared/contract.js";
+import { TASK_PRIORITIES, TASK_STATUSES } from "../../shared/contract.js";
 import type { Preset } from "../../shared/contract.js";
 import { useTasksQuery, useTasksRpc } from "../../shell/data.js";
 import {
@@ -50,11 +47,7 @@ import {
   CommandItem,
   CommandList,
 } from "@bb/shared-ui/command";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@bb/shared-ui/popover";
+import { Popover, PopoverContent, PopoverTrigger } from "@bb/shared-ui/popover";
 import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 
@@ -105,10 +98,7 @@ function StatusMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start">
         {TASK_STATUSES.map((status) => (
-          <DropdownMenuItem
-            key={status}
-            onSelect={() => onUpdate({ status })}
-          >
+          <DropdownMenuItem key={status} onSelect={() => onUpdate({ status })}>
             <StatusIcon status={status} />
             {STATUS_LABELS[status]}
             {status === task.status ? (
@@ -240,9 +230,6 @@ function LabelsMenu({
     onUpdate({ labelIds: next });
   };
 
-  // Inline label creation: from the query when it matches nothing, or from
-  // the "New label" row when the project has no labels yet. The created
-  // label is attached to the task right away.
   const createLabel = async (name: string) => {
     if (!name || creating) return;
     setCreating(true);
@@ -302,8 +289,7 @@ function LabelsMenu({
                 </CommandItem>
               </CommandGroup>
             ) : null}
-            {/* Rendered only when labels exist: an empty cmdk group still
-                paints its p-1 padding, leaving a dead band under "New label…". */}
+            {}
             {labelList.length > 0 ? (
               <CommandGroup>
                 {labelList.map((label) => (
@@ -332,12 +318,6 @@ function LabelsMenu({
   );
 }
 
-/**
- * Editable "Dispatch target" row: shows the linked bb project (or an invite
- * to link one) and opens a picker that saves via updateProject. The rail's
- * project data is subscribed to projects:changed, so the row refreshes as
- * soon as the save publishes.
- */
 function DispatchTargetMenu({
   project,
   bbProjects,
@@ -444,7 +424,6 @@ function DispatchTargetMenu({
 const RAIL_ROW_CLASS =
   "-mx-1.5 flex w-[calc(100%+0.75rem)] items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-state-hover";
 
-/** Right-hand properties rail (hidden below the container breakpoint). */
 export function PropertiesRail({
   task,
   project,
@@ -463,8 +442,6 @@ export function PropertiesRail({
     task.labelIds.includes(label.id),
   );
   const active = threads.filter(isActiveThread);
-  // Fetched unconditionally: the picker needs the workspace list even when
-  // the project is not linked yet.
   const bbProjects = useTasksQuery(
     async (query) => (await query.call("listBbProjects")).bbProjects,
     ["projects:changed"],
@@ -474,13 +451,21 @@ export function PropertiesRail({
       <h2 className="mb-1.5 text-xs font-semibold text-muted-foreground">
         Properties
       </h2>
-      <StatusMenu task={task} onUpdate={onUpdate} triggerClassName={RAIL_ROW_CLASS} />
+      <StatusMenu
+        task={task}
+        onUpdate={onUpdate}
+        triggerClassName={RAIL_ROW_CLASS}
+      />
       <PriorityMenu
         task={task}
         onUpdate={onUpdate}
         triggerClassName={RAIL_ROW_CLASS}
       />
-      <DueDateMenu task={task} onUpdate={onUpdate} triggerClassName={RAIL_ROW_CLASS} />
+      <DueDateMenu
+        task={task}
+        onUpdate={onUpdate}
+        triggerClassName={RAIL_ROW_CLASS}
+      />
 
       <div className="mb-1 mt-3 text-2xs font-semibold text-muted-foreground">
         Labels
@@ -567,9 +552,6 @@ export function PropertiesRail({
 const CHIP_CLASS =
   "inline-flex items-center gap-1.5 rounded-md border border-border bg-secondary px-2.5 py-0.5 text-xs text-foreground hover:border-input";
 
-/** Compact property chips shown under the title when the rail is hidden.
- *  Carries the task's single DispatchControl on narrow layouts, so it also
- *  needs the rail's presets/onError wiring. */
 export function InlineProperties({
   task,
   labels,
@@ -587,9 +569,21 @@ export function InlineProperties({
   );
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
-      <StatusMenu task={task} onUpdate={onUpdate} triggerClassName={CHIP_CLASS} />
-      <PriorityMenu task={task} onUpdate={onUpdate} triggerClassName={CHIP_CLASS} />
-      <DueDateMenu task={task} onUpdate={onUpdate} triggerClassName={CHIP_CLASS} />
+      <StatusMenu
+        task={task}
+        onUpdate={onUpdate}
+        triggerClassName={CHIP_CLASS}
+      />
+      <PriorityMenu
+        task={task}
+        onUpdate={onUpdate}
+        triggerClassName={CHIP_CLASS}
+      />
+      <DueDateMenu
+        task={task}
+        onUpdate={onUpdate}
+        triggerClassName={CHIP_CLASS}
+      />
       {taskLabels.map((label) => (
         <LabelChip key={label.id} label={label} />
       ))}

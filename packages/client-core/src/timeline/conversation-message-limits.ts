@@ -2,8 +2,6 @@ import { isRawThreadId } from "@bb/domain";
 
 export const USER_MESSAGE_CHAR_CAP = 4096;
 
-// Generated rows are collapsed by default, so keep their initial Markdown
-// parse under the same bounded budget as collapsed authored messages.
 export const GENERATED_MESSAGE_COLLAPSED_PREVIEW_CHAR_CAP =
   USER_MESSAGE_CHAR_CAP;
 
@@ -49,11 +47,6 @@ function cappedMarkdownPreview(text: string): BoundedMarkdownPreview {
   };
 }
 
-/**
- * Bounds Markdown before parsing without manufacturing a complete token at the
- * cut. If the cap bisects a token, retreat to whitespace; a single unbroken
- * token stays plain text until the user explicitly expands it.
- */
 export function boundedMarkdownPreview(
   text: string,
   cap: number,
@@ -86,7 +79,6 @@ function isEscapedBacktick(text: string, index: number): boolean {
   return slashCount % 2 === 1;
 }
 
-/** Closes a code span cut by a preview cap without adding visible text. */
 export function closeUnterminatedMarkdownCodeSpan(text: string): string {
   let openDelimiterLength = 0;
   for (let index = 0; index < text.length; index++) {

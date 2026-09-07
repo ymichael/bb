@@ -6,12 +6,6 @@ import {
 
 interface PromptModeInput {
   mentionRanges: readonly PromptTextMention[];
-  /**
-   * The selected provider's declared `strings.planModeCopy`, or undefined
-   * when it declares none (or no provider is selected). Plan mode changes
-   * the permission display only for a provider that says so: the copy is the
-   * declaration, so no provider is named here.
-   */
   planModeCopy: string | undefined;
   value: string;
 }
@@ -23,7 +17,9 @@ interface PermissionDisplayOverride {
   title?: string;
 }
 
-function planPermissionDisplay(planModeCopy: string): PermissionDisplayOverride {
+function planPermissionDisplay(
+  planModeCopy: string,
+): PermissionDisplayOverride {
   return {
     label: "Plan Mode",
     compactLabel: "Plan",

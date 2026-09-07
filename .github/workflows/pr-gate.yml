@@ -1,0 +1,57 @@
+name: PR Gate
+on:
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+jobs:
+  gate:
+    name: Check contributor approval
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout base branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ github.base_ref }}
+          sparse-checkout: .github/APPROVED_CONTRIBUTORS
+          sparse-checkout-cone-mode: false
+      - name: Check approval and close unapproved PRs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_ASSOCIATION: ${{ github.event.pull_request.author_association }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DISCORD_INVITE_URL: https://discord.gg/kvBU6tJhcJ
+        run: |
+          trusted=""
+          if [ "$PR_ASSOCIATION" = "OWNER" ] || [ "$PR_ASSOCIATION" = "MEMBER" ] || [ "$PR_ASSOCIATION" = "COLLABORATOR" ]; then
+            trusted="yes"
+          fi
+          if [ -z "$trusted" ] && [ -f ".github/APPROVED_CONTRIBUTORS" ]; then
+            lowered_author="$(printf '%s' "$PR_AUTHOR" | tr '[:upper:]' '[:lower:]')"
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              trimmed="$(printf '%s' "$entry" | tr -d '[:space:]')"
+              if [ -z "$trimmed" ]; then
+                continue
+              fi
+              lowered_entry="$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')"
+              if [ "$lowered_entry" = "$lowered_author" ]; then
+                trusted="yes"
+                break
+              fi
+            done < ".github/APPROVED_CONTRIBUTORS"
+          fi
+          if [ -n "$trusted" ]; then
+            gh pr edit "$PR_NUMBER" --remove-label "needs-approval" --repo "$GITHUB_REPOSITORY" || true
+            exit 0
+          fi
+          note="Thanks @$PR_AUTHOR for the PR. This repo needs approval before a PR. Join the #contributors channel in Discord ($DISCORD_INVITE_URL) and explain what you want to open a PR for and why. A maintainer then adds you to the allow list. This PR now closes on its own. Reopen it or open a new one after approval."
+          gh pr comment "$PR_NUMBER" --body "$note" --repo "$GITHUB_REPOSITORY"
+          gh pr edit "$PR_NUMBER" --add-label "needs-approval" --repo "$GITHUB_REPOSITORY" || true
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY"

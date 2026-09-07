@@ -20,15 +20,6 @@ import { PluginReplacementSlot } from "./PluginReplacementSlot";
 import { deprecatedOriginalAlias } from "@/lib/plugin-sdk-deprecated-aliases";
 import { resolveReplacement } from "@/lib/plugin-slot-resolvers";
 
-/**
- * Plugin panel-action slots (plugin design §5.2): surface-specific rows in
- * the secondary panel's new-tab Actions list. Activating one runs the
- * plugin's `run` (contained: a throw/rejection is logged and never breaks the
- * launcher), whose `openPanel` opens closable file-strip tabs rendering the
- * action's component with persisted JSON params.
- */
-
-/** Host-side open request produced by an action's `openPanel`. */
 export interface OpenPluginPanelArgs {
   pluginId: string;
   actionId: string;
@@ -38,12 +29,9 @@ export interface OpenPluginPanelArgs {
 
 type OpenPluginPanelHandler = (args: OpenPluginPanelArgs) => void;
 
-/** One launcher row for a plugin action, ready to render + invoke. */
 export interface PluginPanelActionEntry {
-  /** Launcher row id, unique across plugins. */
   id: string;
   pluginId: string;
-  /** Named-icon hint (used only when the plugin ships no logo). */
   icon: string | null;
   title: string;
   onSelect: () => void;
@@ -55,18 +43,10 @@ function describeError(error: unknown): string {
 
 interface PanelActionOpenPanelArgs {
   action: { pluginId: string; id: string; title: string };
-  /** Slot name as it appears in log lines. */
   slot: string;
   openPluginPanel: OpenPluginPanelHandler;
 }
 
-/**
- * The `openPanel` handed to a panel action's `run`. A declined open — here
- * only non-JSON `params`, since the launcher lives in the panel the action
- * opens into — is logged and reported as `false` rather than thrown: `run`
- * errors are contained below, so a throw would be invisible to any plugin
- * that did not wrap the call itself.
- */
 function createPanelActionOpenPanel({
   action,
   slot,
@@ -160,10 +140,6 @@ function runPluginNewThreadPanelAction({
   }
 }
 
-/**
- * Every registered plugin action as a launcher entry for the given thread.
- * Empty outside a thread context (actions are thread-scoped).
- */
 export function usePluginPanelActions({
   openPluginPanel,
   threadId,
@@ -187,7 +163,6 @@ export function usePluginPanelActions({
   }, [openPluginPanel, threadId, threadPanelActions]);
 }
 
-/** Every registered root New thread action as a launcher entry. */
 export function usePluginNewThreadPanelActions({
   openPluginPanel,
   projectId,
@@ -218,11 +193,6 @@ type PluginPanelSurfaceContext =
   | { kind: "thread"; threadId: string }
   | { kind: "new-thread"; projectId: string | null };
 
-/**
- * The content region of an open plugin panel tab. A persisted tab can
- * outlive its plugin (disabled/removed) or render before plugin frontends
- * finish loading — those degrade to a placeholder instead of crashing.
- */
 export function PluginPanelTabContent({
   tab,
   context,
@@ -230,7 +200,6 @@ export function PluginPanelTabContent({
 }: {
   tab: PluginPanelFixedPanelTab;
   context: PluginPanelSurfaceContext;
-  /** The view's real native file-preview node, with its live actions bound. */
   fileOpenerOriginal?: ReactNode;
 }) {
   const openerId = fileOpenerIdFromActionId(tab.actionId);
@@ -274,8 +243,6 @@ function ThreadActionTabContent({
       (candidate) =>
         candidate.pluginId === tab.pluginId && candidate.id === tab.actionId,
     ) ?? null;
-  // Parsed once per persisted payload, so the component sees a stable params
-  // identity across unrelated re-renders.
   const params = useMemo(
     () => parsePersistedPluginPanelParams(tab.paramsJson),
     [tab.paramsJson],
@@ -285,16 +252,12 @@ function ThreadActionTabContent({
     <div
       className={
         action.layout === "flush"
-          ? // App-like content (e.g. an embedded ThreadChat) owns its own
-            // layout and scrolling; the host only provides a definite height.
-            "h-full min-h-0 flex-1 overflow-hidden"
+          ? "h-full min-h-0 flex-1 overflow-hidden"
           : "h-full min-h-0 flex-1 overflow-y-auto p-4"
       }
       data-testid="plugin-panel-tab-content"
     >
       <PluginSlotMount
-        // Generation in the key: a P3.4 reload remounts the slot (fresh
-        // error-boundary state).
         key={`thread/${action.pluginId}/${action.id}/${action.generation}`}
         pluginId={action.pluginId}
         slotKind="threadPanelAction"
@@ -345,11 +308,6 @@ function NewThreadActionTabContent({
   );
 }
 
-/**
- * A file diverted to a plugin `fileOpener` (see file-opener-tabs.ts). Same
- * degrade rules as action tabs: missing opener/plugin or unparsable params
- * render a placeholder, never a crash.
- */
 function FileOpenerTabContent({
   openerId,
   original,
@@ -384,10 +342,6 @@ function FileOpenerTabContent({
     >
       {(opener, BoundOriginal) => (
         <div
-          // `h-full` matters: the region this mounts into is a block box, so
-          // `flex-1` alone leaves the wrapper at content height and an opener
-          // that sizes itself with `flex-1` collapses to nothing. Same shape
-          // as the action-tab wrapper above.
           className="flex h-full min-h-0 flex-1 flex-col overflow-hidden"
           data-testid="plugin-file-opener-tab-content"
         >

@@ -6,31 +6,14 @@ import {
   type LinkResolution,
 } from "../links/incoming-link";
 
-/**
- * Deep-link resolution while the WebView shell is on.
- *
- * The page owns almost every surface, so a link resolves to one shell route
- * carrying a *web* path. Only the screens the shell keeps stay native: connect
- * enrolment, the server list, and the developer routes.
- */
-
-/** The shell route. One screen, parameterised by profile and page path. */
 export const SHELL_ROUTE_PATH = "/webview";
 
-/**
- * Scheme paths that must not go to the page, because the shell owns them.
- *
- * `/settings/device` is the escape hatch: it holds the switch that turns the
- * shell off and the actions that recover a wedged page, so it can never be
- * something the page renders. Three entry points reach it — a row in the
- * page's Settings, the shell's load-failure screen, and the Home Screen quick
- * action — and only the first needs a working page.
- */
 const NATIVE_ONLY_PREFIXES = [
   "/connect",
   "/settings/servers",
   "/settings/machines",
   "/settings/device",
+  "/settings/notifications",
 ] as const;
 
 export function isNativeOnlyShellPath(path: string): boolean {
@@ -41,9 +24,7 @@ export function isNativeOnlyShellPath(path: string): boolean {
 }
 
 export interface ShellHrefParams {
-  /** Null keeps whichever profile is active. */
   profileId: string | null;
-  /** A page path such as "/" or "/threads/thr_1?tab=diff". */
   path: string;
 }
 
@@ -61,11 +42,6 @@ export interface ResolveShellLinkContext {
   developerRoutesEnabled: boolean;
 }
 
-/**
- * Map an incoming URL onto a shell navigation. Mirrors `resolveIncomingLink`
- * and returns the same shape, so `+native-intent.tsx` can pick a resolver and
- * treat the result identically.
- */
 export function resolveShellIncomingLink(
   url: string,
   context: ResolveShellLinkContext,
@@ -76,8 +52,6 @@ export function resolveShellIncomingLink(
       return { kind: "passthrough" };
     case "scheme": {
       if (isDeveloperRoutePath(link.path)) {
-        // Dev builds keep their native diagnostic screens; a release bundle
-        // has no such route, so send it home rather than to a blank page.
         return {
           kind: "navigate",
           path: context.developerRoutesEnabled ? link.path : "/",
@@ -113,8 +87,6 @@ export function resolveShellIncomingLink(
       return {
         kind: "navigate",
         path: shellHref({
-          // Name the profile explicitly when the link switches servers, so the
-          // screen cannot render the previous profile for a frame.
           profileId: switching ? match.profile.id : null,
           path: `${match.pathname}${link.search}`,
         }),

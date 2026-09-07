@@ -15,8 +15,6 @@ export function toHostDaemonProcessEnv(
     if (value === undefined) {
       continue;
     }
-    // Env values must be strings; booleans serialize to the form
-    // parseBooleanEnvValue accepts on the way back in.
     env[key] = typeof value === "boolean" ? (value ? "1" : "0") : value;
   }
   return env;

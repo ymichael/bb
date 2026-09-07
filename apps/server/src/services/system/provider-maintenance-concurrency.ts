@@ -1,10 +1,5 @@
 const PROVIDER_MAINTENANCE_CONCURRENCY = 3;
 
-/**
- * Provider maintenance calls can verify artifacts and start bridge workers.
- * Keep a large plugin roster from doing all of that host-local work at once
- * while preserving registry order in the response.
- */
 export async function mapProviderMaintenanceRequests<TValue, TResult>(
   values: readonly TValue[],
   request: (value: TValue, index: number) => Promise<TResult>,

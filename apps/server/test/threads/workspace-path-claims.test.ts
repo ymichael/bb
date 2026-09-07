@@ -32,8 +32,6 @@ describe("unmanagedAttachRefusal", () => {
         path: "/tmp/other",
       });
 
-      // A disconnected host leaves dataDir null. The row-based checks must
-      // still run; only the workspace-root check degrades.
       expect(
         unmanagedAttachRefusal(harness.deps.db, {
           checksOutBranch: false,
@@ -134,7 +132,6 @@ describe("unmanagedAttachRefusal", () => {
           path: sharedPath,
           projectId: project.id,
         };
-        // Sharing a directory is allowed; only rewriting the tree is not.
         expect(
           unmanagedAttachRefusal(harness.deps.db, {
             ...args,

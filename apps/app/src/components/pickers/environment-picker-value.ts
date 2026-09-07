@@ -8,12 +8,9 @@ interface ParsedHostEnvironmentValue {
 
 interface ParsedReuseEnvironmentValue {
   type: "reuse";
-  /** Null when the user has picked Reuse mode but hasn't chosen a specific
-   * worktree yet. Submit is gated on a non-null id by the resolver. */
   environmentId: string | null;
 }
 
-/** Bare reuse value — env mode set, specific worktree not chosen yet. */
 export const REUSE_VALUE_WITHOUT_ENVIRONMENT = "reuse";
 
 export type ParsedEnvironmentValue =

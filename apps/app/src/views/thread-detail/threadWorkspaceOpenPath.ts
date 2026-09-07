@@ -28,12 +28,6 @@ interface BuildOpenInEditorHandlerArgs {
   }) => Promise<boolean>;
 }
 
-/**
- * Build the file-preview header's "open in editor" callback, gated on the
- * thread's environment being local and an editor being configured. Returns
- * `undefined` when either gate isn't satisfied so the icon hides instead of
- * surfacing a no-op button.
- */
 export function buildOpenInEditorHandler(
   args: BuildOpenInEditorHandlerArgs,
 ): ((relativePath: string) => void) | undefined {

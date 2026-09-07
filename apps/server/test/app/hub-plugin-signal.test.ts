@@ -7,8 +7,6 @@ describe("NotificationHub.notifyPluginSignal", () => {
     const hub = new NotificationHub();
     const first = createMockHubSocket();
     const second = createMockHubSocket();
-    // V1 has no per-channel subscriptions: the signal reaches every client
-    // regardless of what they subscribed to.
     hub.subscribe(first, { kind: "thread-detail", threadId: "thr_1" });
     hub.subscribe(second, { kind: "system" });
 

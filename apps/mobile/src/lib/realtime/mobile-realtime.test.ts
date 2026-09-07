@@ -55,11 +55,9 @@ describe("createMobileRealtime", () => {
       type: "unsubscribe",
       target: THREAD_TARGET,
     });
-    // Unknown target is a no-op.
     realtime.unsubscribe(THREAD_TARGET);
     expect(socket.sentMessages()).toHaveLength(3);
 
-    // Subscribing while open sends immediately.
     realtime.subscribe({ kind: "system" });
     expect(socket.sentMessages().at(-1)).toEqual({
       type: "subscribe",
@@ -84,20 +82,17 @@ describe("createMobileRealtime", () => {
     expect(realtime.getConnectionState()).toBe("reconnecting");
     expect(factory.sockets).toHaveLength(1);
 
-    // First retry after 1s.
     vi.advanceTimersByTime(999);
     expect(factory.sockets).toHaveLength(1);
     vi.advanceTimersByTime(1);
     expect(factory.sockets).toHaveLength(2);
 
-    // Second failure: 1.5s.
     factory.latest().drop();
     vi.advanceTimersByTime(1499);
     expect(factory.sockets).toHaveLength(2);
     vi.advanceTimersByTime(1);
     expect(factory.sockets).toHaveLength(3);
 
-    // Third failure: 2.25s.
     factory.latest().drop();
     vi.advanceTimersByTime(2250);
     expect(factory.sockets).toHaveLength(4);
@@ -109,7 +104,6 @@ describe("createMobileRealtime", () => {
     ]);
     expect(states).toEqual(["connected", "reconnecting", "connected"]);
 
-    // Backoff resets after a successful connection.
     factory.latest().drop();
     vi.advanceTimersByTime(1000);
     expect(factory.sockets).toHaveLength(5);
@@ -129,8 +123,6 @@ describe("createMobileRealtime", () => {
     const failures: { message: string | null; authRejected: boolean }[] = [];
     realtime.onConnectFailed((event) => failures.push(event));
     realtime.connect();
-    // iOS wording (SocketRocket) for a gate that refused the session cookie
-    // on /ws, delivered as the close reason like React Native 0.86 does.
     factory.latest().reject("Received bad response code from server: 401.");
     expect(failures).toEqual([
       {
@@ -139,7 +131,6 @@ describe("createMobileRealtime", () => {
       },
     ]);
     vi.advanceTimersByTime(1000);
-    // Android wording, delivered on the error event (older React Native).
     factory
       .latest()
       .reject("Expected HTTP 101 response but was '401 Unauthorized'", true);
@@ -148,18 +139,14 @@ describe("createMobileRealtime", () => {
       authRejected: true,
     });
     vi.advanceTimersByTime(1500);
-    // Plain connection refusal: reported, not an auth rejection.
     factory.latest().drop();
     expect(failures[2]).toEqual({ message: null, authRejected: false });
     vi.advanceTimersByTime(2250);
-    // Stalled handshake counts as a failed attempt too.
     vi.advanceTimersByTime(5000);
     expect(failures[3]).toEqual({
       message: "handshake timeout",
       authRejected: false,
     });
-    // A socket that opened and later dropped is a lost connection, not a
-    // failed attempt.
     vi.advanceTimersByTime(4000);
     factory.latest().open();
     factory.latest().drop();
@@ -176,7 +163,6 @@ describe("createMobileRealtime", () => {
     expect(realtime.getConnectionState()).toBe("connecting");
     vi.advanceTimersByTime(1000);
     expect(factory.sockets).toHaveLength(2);
-    // The abandoned socket opening late must not be adopted.
     first.open();
     expect(realtime.getConnectionState()).toBe("connecting");
   });
@@ -196,7 +182,6 @@ describe("createMobileRealtime", () => {
     vi.advanceTimersByTime(60_000);
     expect(factory.sockets).toHaveLength(1);
 
-    // Subscriptions changed while suspended are remembered.
     realtime.subscribe(LIST_TARGET);
     realtime.unsubscribe(THREAD_TARGET);
 
@@ -377,7 +362,6 @@ describe("createMobileRealtime", () => {
       expect(factory.sockets).toHaveLength(1);
       expect(realtime.getConnectionState()).toBe("connected");
 
-      // Next interval: pings again.
       vi.advanceTimersByTime(
         REALTIME_PING_INTERVAL_MS - REALTIME_PONG_TIMEOUT_MS,
       );
@@ -421,12 +405,10 @@ describe("createMobileRealtime", () => {
       vi.advanceTimersByTime(REALTIME_PONG_TIMEOUT_MS - 1);
       expect(factory.sockets).toHaveLength(1);
       vi.advanceTimersByTime(1);
-      // Reconnects at once: no backoff wait.
       expect(first.closes).toHaveLength(1);
       expect(factory.sockets).toHaveLength(2);
       expect(realtime.getConnectionState()).toBe("reconnecting");
 
-      // The abandoned socket's late frames are ignored.
       first.receive(JSON.stringify({ type: "pong" }));
       factory.latest().open();
       expect(events).toEqual([
@@ -503,7 +485,6 @@ describe("createMobileRealtime", () => {
       vi.advanceTimersByTime(REALTIME_PONG_TIMEOUT_MS);
       expect(factory.sockets).toHaveLength(1);
 
-      // Closed and waiting out its backoff: the foreground event retries now.
       socket.drop();
       expect(factory.sockets).toHaveLength(1);
       vi.advanceTimersByTime(1000);
@@ -512,7 +493,6 @@ describe("createMobileRealtime", () => {
       expect(factory.sockets).toHaveLength(2);
       realtime.resume();
       expect(factory.sockets).toHaveLength(3);
-      // An attempt already in flight is left alone.
       realtime.resume();
       expect(factory.sockets).toHaveLength(3);
     });

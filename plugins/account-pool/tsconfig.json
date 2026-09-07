@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "esModuleInterop": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["node", "vitest/globals"],
+    "jsx": "react-jsx",
+    "paths": {
+      "@get-bb/plugin-sdk": [
+        "../../packages/plugin-sdk/bundled-types/bb-plugin-sdk.d.ts"
+      ],
+      "@get-bb/plugin-sdk/testing": [
+        "../../packages/plugin-sdk/bundled-types/bb-plugin-sdk-testing.d.ts"
+      ],
+      "@get-bb/plugin-sdk/app": [
+        "../../packages/plugin-sdk/bundled-types/bb-plugin-sdk-app.d.ts"
+      ],
+      "@get-bb/plugin-sdk/testing/app": [
+        "../../packages/plugin-sdk/bundled-types/bb-plugin-sdk-testing-app.d.ts"
+      ]
+    }
+  },
+  "include": ["src/**/*.ts", "app.tsx", "app.test.tsx"]
+}

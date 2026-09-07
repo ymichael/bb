@@ -26,8 +26,6 @@ describe("bridge-kit presentation", () => {
     expect(webSearchPresentation(undefined)).not.toHaveProperty("title");
   });
 
-  // The cap is the persisted schema's: a detail one character longer would
-  // fail validation at ingest and persist the row as provider/unhandled.
   it("caps the detail at the persisted presentation schema's limit", () => {
     const detail = presentationDetail(
       "d".repeat(THREAD_EVENT_ITEM_PRESENTATION_DETAIL_MAX_LENGTH + 50),

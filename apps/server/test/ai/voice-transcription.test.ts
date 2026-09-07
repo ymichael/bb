@@ -9,7 +9,10 @@ import {
   resolveVoiceTranscriptionEnabled,
   transcribeVoiceInput,
 } from "../../src/services/ai/voice-transcription.js";
-import { registerFakeAiService, type FakeAiServiceCall } from "../helpers/ai-services.js";
+import {
+  registerFakeAiService,
+  type FakeAiServiceCall,
+} from "../helpers/ai-services.js";
 import { seedHostSession } from "../helpers/seed.js";
 import {
   createTestAppHarness,
@@ -37,7 +40,6 @@ function emptyVoiceFile(): File {
   return new File([], "prompt.webm", { type: "audio/webm" });
 }
 
-/** A plugin-served `codex` voice service answering from `transcribe`. */
 async function createServiceTranscriptionHarness(
   transcribe: (
     input: ExperimentalAiVoiceTranscribeInput,
@@ -106,8 +108,6 @@ describe("voice transcription", () => {
     try {
       seedHostSession(harness.deps);
       registerFakeAiService(harness.deps.aiServices, { id: "openai" });
-      // Server-direct rule wins: no key, not enabled — a registered
-      // `openai` service never stands in for OpenAI.
       expect(resolveVoiceTranscriptionEnabled(harness.deps)).toBe(false);
     } finally {
       await harness.cleanup();
@@ -130,7 +130,8 @@ describe("voice transcription", () => {
         status: 400,
         body: {
           code: "invalid_request",
-          message: "Audio file exceeds the 5MB limit for plugin-served transcription",
+          message:
+            "Audio file exceeds the 5MB limit for plugin-served transcription",
         },
       });
       expect(harness.calls).toHaveLength(0);

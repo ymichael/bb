@@ -1,7 +1,6 @@
 import path from "node:path";
 import { updateEnvironmentMetadata } from "@bb/db";
 import {
-  type GitBranchRefClassification,
   resolveEnvironmentWorkspaceDisplayKind,
   type Environment,
   type ThreadPullRequest,
@@ -54,24 +53,10 @@ import {
 } from "./diff-tiering.js";
 
 const COMMIT_FALLBACK_MESSAGE = "bb: automated commit";
-const SQUASH_MERGE_FALLBACK_MESSAGE = "bb: squash merge";
-const PRE_MERGE_COMMIT_MESSAGE = "bb: pre-merge commit";
 
-/** Caps for diffs sent to the inference model for commit message generation. */
 const AI_MAX_DIFF_BYTES = 32_000;
 const AI_MAX_FILE_LIST_BYTES = 4_000;
 
-interface AssertSquashMergeTargetIsLocalArgs {
-  selectedBranch: GitBranchRefClassification | null;
-  targetBranch: string;
-}
-
-/**
- * Maps the daemon's typed `no_changes` failure (nothing to commit / nothing to
- * merge — e.g. a concurrent commit already captured the changes, or the branch
- * has no committed work) to a clean 409, instead of letting it surface as a
- * generic 502 git_command_failed.
- */
 async function mapNoChangesTo409<TResult>(
   conflictMessage: string,
   run: () => Promise<TResult>,
@@ -104,29 +89,6 @@ async function mapPullRequestActionFailureTo409<TResult>(
   }
 }
 
-function assertSquashMergeTargetIsLocal({
-  selectedBranch,
-  targetBranch,
-}: AssertSquashMergeTargetIsLocalArgs): void {
-  if (selectedBranch?.kind === "local") {
-    return;
-  }
-
-  if (selectedBranch?.kind === "remote") {
-    throw new ApiError(
-      409,
-      "invalid_request",
-      `Cannot squash merge into remote branch ${targetBranch}; select a local branch`,
-    );
-  }
-
-  throw new ApiError(
-    409,
-    "invalid_request",
-    `Target branch does not exist: ${targetBranch}`,
-  );
-}
-
 function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
   switch (query.target) {
     case "uncommitted":
@@ -153,11 +115,6 @@ function toWorkspaceDiffTarget(query: EnvironmentDiffQuery) {
   }
 }
 
-/**
- * Cache key for read-only workspace probes. The workspace context is part
- * of the key so a re-provisioned environment (new path or provision type)
- * never reads a probe of the previous checkout.
- */
 function workspaceReadCacheKey(target: WorkspaceCommandTarget): string {
   return JSON.stringify(target.workspaceContext);
 }
@@ -173,11 +130,6 @@ function isWorktreeEnvironment(environment: Environment): boolean {
   return resolveEnvironmentWorkspaceDisplayKind({ environment }) !== "other";
 }
 
-/**
- * PR lookup for action preconditions (ready/draft/merge). Both "absent" and
- * "unavailable" resolve to `null` here: either way there is no PR the action
- * can operate on, and the action's own 409 carries the user-facing message.
- */
 async function getPullRequestForWorkspaceTarget(
   deps: AppDeps,
   target: ReturnType<typeof requireWorkspaceCommandTarget>,
@@ -200,14 +152,14 @@ function assertCanMarkPullRequestReady(
   pullRequest: ThreadPullRequest | null,
 ): void {
   if (!pullRequest) {
-    throw new ApiError(409, "pull_request_unavailable", "No pull request found");
-  }
-  if (pullRequest.state !== "draft") {
     throw new ApiError(
       409,
-      "invalid_request",
-      "Pull request is not a draft",
+      "pull_request_unavailable",
+      "No pull request found",
     );
+  }
+  if (pullRequest.state !== "draft") {
+    throw new ApiError(409, "invalid_request", "Pull request is not a draft");
   }
 }
 
@@ -215,14 +167,14 @@ function assertCanConvertPullRequestToDraft(
   pullRequest: ThreadPullRequest | null,
 ): void {
   if (!pullRequest) {
-    throw new ApiError(409, "pull_request_unavailable", "No pull request found");
-  }
-  if (pullRequest.state !== "open") {
     throw new ApiError(
       409,
-      "invalid_request",
-      "Pull request is not open",
+      "pull_request_unavailable",
+      "No pull request found",
     );
+  }
+  if (pullRequest.state !== "open") {
+    throw new ApiError(409, "invalid_request", "Pull request is not open");
   }
 }
 
@@ -230,7 +182,11 @@ function assertCanMergePullRequest(
   pullRequest: ThreadPullRequest | null,
 ): void {
   if (!pullRequest) {
-    throw new ApiError(409, "pull_request_unavailable", "No pull request found");
+    throw new ApiError(
+      409,
+      "pull_request_unavailable",
+      "No pull request found",
+    );
   }
   if (
     pullRequest.state !== "open" ||
@@ -244,21 +200,6 @@ function assertCanMergePullRequest(
   }
 }
 
-/**
- * Pick the git ref to read for the requested side of a diff. Returns
- * `undefined` when the side should be read from the working tree (no ref —
- * `host.read_file` falls back to its disk-read path).
- *
- * Only `uncommitted` and `all` have a working-tree side; the others read
- * from refs on both sides. `branch_committed` and `all` use the merge-base
- * SHA the diff was computed against as their old side (passed in by the
- * client from `workspace.diff`'s response — reading from the branch tip
- * instead would diverge from the diff's hunk coordinates whenever the
- * branch has moved past the merge-base). `commit` uses the parent commit
- * (`<sha>^`); on a root commit that ref is missing, but the daemon's
- * `git cat-file` fallback already returns empty content for missing
- * objects, so we don't special-case the root-commit edge here.
- */
 function resolveDiffFileRef(
   query: EnvironmentDiffFileQuery,
 ): string | undefined {
@@ -278,17 +219,12 @@ function resolveDiffFileRef(
   }
 }
 
-/** Shared `not_applicable` body for the diff routes on non-git environments. */
 const NON_GIT_DIFF_NOT_APPLICABLE = {
   outcome: "not_applicable",
   reason: "non_git_environment",
   message: "Workspace diff is not available for non-git environments",
 } as const;
 
-/**
- * Resolve the workspace command target for a diff route, or `null` when the
- * environment is non-git (callers return {@link NON_GIT_DIFF_NOT_APPLICABLE}).
- */
 function resolveGitDiffWorkspaceTarget(deps: AppDeps, environmentId: string) {
   const environment = requireReadyEnvironment(deps.db, environmentId);
   if (!environment.isGitRepo) {
@@ -351,8 +287,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       });
     }
     const target = requireWorkspaceCommandTarget(environment);
-    // Reads share one daemon probe per environment and reuse it briefly;
-    // daemon environment events invalidate (see WorkspaceReadCaches).
     const result = await deps.workspaceReadCaches.status.read({
       environmentId: environment.id,
       hostId: target.hostId,
@@ -383,13 +317,10 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       context.req.param("id"),
     );
-    // A non-git environment has no branch and therefore no PR; skip the daemon.
     if (!environment.isGitRepo) {
       return context.json({ outcome: "absent" });
     }
     const target = requireWorkspaceCommandTarget(environment);
-    // `gh pr view` per read is expensive; reads share one daemon probe per
-    // environment and reuse it briefly (see WorkspaceReadCaches).
     const result = await deps.workspaceReadCaches.pullRequest.read({
       environmentId: environment.id,
       hostId: target.hostId,
@@ -456,10 +387,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
   });
 
   get(routes.diffFiles, async (context, query) => {
-    const target = resolveGitDiffWorkspaceTarget(
-      deps,
-      context.req.param("id"),
-    );
+    const target = resolveGitDiffWorkspaceTarget(deps, context.req.param("id"));
     if (target === null) {
       return context.json(NON_GIT_DIFF_NOT_APPLICABLE);
     }
@@ -481,10 +409,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       });
     }
     const files = result.files.map(rawDiffFileStatToEntry);
-    // Ship a small diff's `auto`-tier patches with the TOC so initial content
-    // paints in one round-trip (empty for large diffs — see
-    // selectInitialPatchPaths). A failed/unavailable patch fetch degrades to an
-    // empty list; the client then loads the first screen on demand.
     const initialPatchPaths = selectInitialPatchPaths(files);
     let initialPatches: DiffPatchEntry[] = [];
     if (initialPatchPaths.length > 0) {
@@ -515,10 +439,7 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
   });
 
   post(routes.diffPatch, async (context, payload) => {
-    const target = resolveGitDiffWorkspaceTarget(
-      deps,
-      context.req.param("id"),
-    );
+    const target = resolveGitDiffWorkspaceTarget(deps, context.req.param("id"));
     if (target === null) {
       return context.json(NON_GIT_DIFF_NOT_APPLICABLE);
     }
@@ -649,11 +570,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
       context.req.param("id"),
     );
 
-    // Every action below writes to the workspace (or its pull request), and
-    // the client refetches status / pull request as soon as the response
-    // lands. The daemon watcher event for the write arrives asynchronously,
-    // often after that refetch, so drop the cached reads here, whether the
-    // action succeeded or failed midway; a partial write may have landed.
     try {
       switch (payload.action) {
         case "commit": {
@@ -715,105 +631,6 @@ export function registerEnvironmentRoutes(app: Hono, deps: AppDeps): void {
             ok: true,
             action: "commit",
             message: `Created commit ${result.commitSha}`,
-            commitSha: result.commitSha,
-            commitSubject: result.commitSubject,
-          });
-        }
-        case "squash_merge": {
-          const target = requireWorkspaceCommandTarget(environment);
-          const { workspaceContext } = target;
-          const targetBranch = payload.options.mergeBaseBranch;
-
-          const statusResult = await callEnvironmentWorkspaceStatus(deps, {
-            environment,
-            target,
-          });
-          const workspaceStatus = requireAvailableWorkspaceStatus(statusResult);
-
-          const currentBranch = workspaceStatus.branch.currentBranch;
-          if (!currentBranch) {
-            throw new ApiError(
-              409,
-              "invalid_request",
-              "Cannot squash merge from a detached workspace",
-            );
-          }
-
-          const targetBranchResult = await callHostRetryableOnlineRpc(deps, {
-            hostId: environment.hostId,
-            timeoutMs: COMMAND_TIMEOUT_MS,
-            command: {
-              type: "host.list_branch_options",
-              path: environment.path,
-              selectedBranch: targetBranch,
-              limit: 1,
-              remoteRefresh: "none",
-            },
-          });
-          assertSquashMergeTargetIsLocal({
-            selectedBranch: targetBranchResult.selectedBranch,
-            targetBranch,
-          });
-
-          if (workspaceStatus.workingTree.hasUncommittedChanges) {
-            await runLiveCommandAndWait(deps, {
-              hostId: target.hostId,
-              timeoutMs: COMMAND_TIMEOUT_MS,
-              command: {
-                type: "workspace.commit",
-                environmentId: target.environmentId,
-                workspaceContext,
-                message: PRE_MERGE_COMMIT_MESSAGE,
-              },
-            });
-          }
-
-          const diffResult = await callHostRetryableOnlineRpc(deps, {
-            hostId: target.hostId,
-            timeoutMs: COMMAND_TIMEOUT_MS,
-            command: {
-              type: "workspace.diff",
-              environmentId: target.environmentId,
-              workspaceContext,
-              target: {
-                type: "branch_committed",
-                mergeBaseBranch: targetBranch,
-              },
-              maxDiffBytes: AI_MAX_DIFF_BYTES,
-              maxFileListBytes: AI_MAX_FILE_LIST_BYTES,
-              maxUntrackedFiles: WORKSPACE_DIFF_MAX_FILES,
-            },
-          });
-          const workspaceDiff = requireAvailableWorkspaceDiff(diffResult);
-
-          const aiMessage = await generateCommitMessage(deps, {
-            diffDescription: `squash merge of ${currentBranch} into ${targetBranch}`,
-            shortstat: workspaceDiff.shortstat,
-            files: workspaceDiff.files,
-            patch: workspaceDiff.diff,
-          });
-          const commitMessage = aiMessage ?? SQUASH_MERGE_FALLBACK_MESSAGE;
-
-          const result = await mapNoChangesTo409(
-            `No changes to merge into ${targetBranch}`,
-            () =>
-              runLiveCommandAndWait(deps, {
-                hostId: target.hostId,
-                timeoutMs: COMMAND_TIMEOUT_MS,
-                command: {
-                  type: "workspace.squash_merge",
-                  environmentId: target.environmentId,
-                  workspaceContext,
-                  targetBranch,
-                  commitMessage,
-                },
-              }),
-          );
-          return context.json({
-            ok: true,
-            action: "squash_merge",
-            merged: result.merged,
-            message: "Squash merge completed",
             commitSha: result.commitSha,
             commitSubject: result.commitSubject,
           });

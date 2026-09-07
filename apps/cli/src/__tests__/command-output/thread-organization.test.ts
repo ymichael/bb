@@ -125,6 +125,33 @@ describe("bb thread organization commands", () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it("reports when sending a queued message leaves it waiting", async () => {
+    const send = vi.fn(async () => ({
+      ok: true,
+      delivery: "queued",
+      queuedMessage: {
+        waitingOn: { kind: "provisioning" },
+        sendAt: null,
+      },
+    }));
+    stubServerApi({
+      "v1.threads.:id.queued-messages.:queuedMessageId.send.$post": send,
+    });
+
+    await runCommand(
+      ["thread", "queue", "send", "thread-1", "queued-1", "--mode", "steer"],
+      register,
+    );
+
+    expect(send).toHaveBeenCalledWith({
+      param: { id: "thread-1", queuedMessageId: "queued-1" },
+      json: { mode: "steer" },
+    });
+    expect(console.log).toHaveBeenCalledWith(
+      "Queued message queued-1 is still queued (waiting for the workspace)",
+    );
+  });
+
   it("reorders pinned threads with explicit neighbors", async () => {
     const reorder = vi.fn(async () => []);
     stubServerApi({ "v1.threads.:id.pin-order.$patch": reorder });

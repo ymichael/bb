@@ -231,8 +231,6 @@ describe("prompt command input helpers", () => {
     ).toEqual(input);
   });
 
-  // The CLI/SDK plan input must round-trip through the same selector the
-  // server keys plan mode on, and strip back to the bare request.
   it("builds plan command input the plan selector recognizes and strips", () => {
     const input = [createBuiltinPlanCommandTextInput("review the diff")];
 

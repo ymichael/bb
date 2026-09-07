@@ -43,9 +43,10 @@ import {
 import { requireThreadStoragePath } from "../../services/threads/thread-storage.js";
 import { toThreadQueuedMessage } from "../../services/threads/thread-queued-messages.js";
 import {
-  buildThreadConversationOutline,
+  buildThreadConversationOutlineProjectionKey,
   buildThreadTimelineWithProfile,
   buildTimelineTurnSummaryDetails,
+  loadThreadConversationOutline,
   THREAD_TIMELINE_DEFAULT_SEGMENT_LIMIT,
   THREAD_TIMELINE_SEGMENT_LIMIT_MAX,
 } from "../../services/threads/timeline.js";
@@ -296,24 +297,11 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     onValidationError: (msg) => new ApiError(400, "invalid_request", msg),
   });
   const routes = publicApiRoutes.threads;
-  // Both caches live for the server lifetime: registerThreadDataRoutes is
-  // called once at startup. The response cache skips the dominant build cost on
-  // warm/idle hits; the latest-rows cache lets a client that supplies
-  // `afterSequence` receive only the rows that changed (delta) instead of the
-  // whole window — the big streaming win.
   const timelineCache = createThreadTimelineCache();
   const timelineLatestRowsCache = createTimelineLatestRowsCache();
   const slowTimelineBuildLogger = createSlowThreadTimelineBuildLogger({
     logger: deps.logger,
   });
-  // The conversation outline reprojects the entire thread, so memoize it by
-  // the newest event that can affect the outline. Command output, reasoning,
-  // and usage events still advance maxSeq in the response but do not invalidate
-  // the expensive projection. The client also refreshes this full projection
-  // at turn boundaries and overlays the live timeline window while a turn
-  // streams. The key includes thread metadata that can affect grouping; add
-  // provider/env inputs if the outline ever surfaces them. A small LRU bounds
-  // memory across many viewed threads.
   const conversationOutlineCache = new Map<
     string,
     ThreadConversationOutlineResponse["items"]
@@ -333,10 +321,6 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     const includeProviderUnhandledOperations =
       deps.config.isDevelopment ||
       getAppSettings(deps.db).showUnhandledProviderEvents;
-    // Resolved once at server start. The timeline caches deliberately do NOT
-    // key on it: if this ever becomes per-request or per-thread, they must,
-    // because the same `maxSeq` names a different set of rows under a
-    // different budget and a client only echoes `afterSequence`.
     const eventBudget = deps.config.featureFlags.timelineWindowEventBudget;
     const keyArgs = {
       threadId: thread.id,
@@ -374,20 +358,12 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
           response,
           DEFAULT_MAX_INLINE_OUTPUT_CHARS,
         );
-        // The default window renders outputs collapsed; ship a preview and let
-        // the client read the whole output on expand. Nested-row consumers
-        // asked for the full inline projection.
         return includeNestedRows
           ? truncated
           : previewTimelineResponseOutputs(truncated);
       },
     );
 
-    // Delta: when the client tells us the revision it currently holds and we
-    // still hold the snapshot we sent at exactly that revision, return only the
-    // changed rows.
-    // Reprojecting the full window first keeps every collapse/eviction/finalize
-    // case correct by construction; the diff is the cheap part.
     const afterSequence = parseOptionalInteger(
       query.afterSequence,
       "afterSequence",
@@ -415,26 +391,28 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
       deps.db,
       { threadId: thread.id },
     );
+    const providerDisplayName = resolveThreadProviderDisplayName(
+      deps,
+      thread.providerId,
+    );
     const cacheKey = JSON.stringify([
       thread.id,
-      outlineSequence,
-      thread.status,
-      thread.title,
-      thread.titleFallback,
+      buildThreadConversationOutlineProjectionKey(
+        thread,
+        outlineSequence,
+        providerDisplayName,
+      ),
     ]);
     const cached = conversationOutlineCache.get(cacheKey);
     if (cached !== undefined) {
-      // Re-insert to mark most-recently-used.
       conversationOutlineCache.delete(cacheKey);
       conversationOutlineCache.set(cacheKey, cached);
       return context.json({ items: cached, maxSeq });
     }
-    const response = buildThreadConversationOutline(deps.db, thread, {
+    const response = loadThreadConversationOutline(deps.db, thread, {
       maxSeq,
-      providerDisplayName: resolveThreadProviderDisplayName(
-        deps,
-        thread.providerId,
-      ),
+      outlineSequence,
+      ...(providerDisplayName === undefined ? {} : { providerDisplayName }),
     });
     conversationOutlineCache.set(cacheKey, response.items);
     while (
@@ -569,9 +547,6 @@ export function registerThreadDataRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  // Generic iframe previews use path-shaped raw URLs so relative links resolve
-  // beside the HTML file. These routes never inject app bridge globals.
-  // `:filePath{.+}` matches across slashes; hono percent-decodes it once.
   get(routes.worktreeFile, async (context) =>
     serveThreadWorktreeRawFile(
       deps,

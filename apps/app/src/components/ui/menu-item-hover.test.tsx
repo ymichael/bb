@@ -2,7 +2,10 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { MenuHoverProvider, useMenuItemHover } from "@bb/shared-ui/menu-item-hover";
+import {
+  MenuHoverProvider,
+  useMenuItemHover,
+} from "@bb/shared-ui/menu-item-hover";
 
 function HoverItem({ label }: { label: string }) {
   const { hoverProps } = useMenuItemHover();
@@ -36,8 +39,6 @@ describe("menu persistent last-hovered", () => {
     expect(a.hasAttribute("data-last-hovered")).toBe(true);
     expect(b.hasAttribute("data-last-hovered")).toBe(false);
 
-    // The highlight stays on A even though the pointer never re-enters it
-    // (this is the persistence: a bare focus highlight would have cleared).
     fireEvent.pointerEnter(b);
     expect(a.hasAttribute("data-last-hovered")).toBe(false);
     expect(b.hasAttribute("data-last-hovered")).toBe(true);

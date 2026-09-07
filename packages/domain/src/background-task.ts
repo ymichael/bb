@@ -1,38 +1,20 @@
 import { z } from "zod";
 
-/**
- * Raw SDK task-type discriminants for the background tasks bb materializes as
- * timeline rows: dynamic workflows (the Workflow tool), backgrounded shell
- * commands (Bash with run_in_background), and backgrounded subagents. They
- * share the provider task event family (task_started / task_progress /
- * task_updated / task_notification). Other task types such as monitors share
- * the family too but are not materialized.
- */
 export const LOCAL_WORKFLOW_TASK_TYPE = "local_workflow";
 export const LOCAL_BASH_TASK_TYPE = "local_bash";
 export const LOCAL_AGENT_TASK_TYPE = "local_agent";
 export const LOCAL_SUBAGENT_TASK_TYPE = "local_subagent";
 
-/**
- * Whether a background task renders as a "background command" row rather than
- * a workflow or background agent row.
- */
 export function isBackgroundCommandTaskType(taskType: string): boolean {
   return taskType === LOCAL_BASH_TASK_TYPE;
 }
 
 export function isBackgroundAgentTaskType(taskType: string): boolean {
   return (
-    taskType === LOCAL_AGENT_TASK_TYPE ||
-    taskType === LOCAL_SUBAGENT_TASK_TYPE
+    taskType === LOCAL_AGENT_TASK_TYPE || taskType === LOCAL_SUBAGENT_TASK_TYPE
   );
 }
 
-/**
- * Provider-reported task lifecycle status: the union of the SDK's
- * task_updated patch statuses (pending/running/completed/failed/killed/paused)
- * and task_notification terminal statuses (completed/failed/stopped).
- */
 const backgroundTaskStatusValues = [
   "pending",
   "running",
@@ -45,13 +27,6 @@ const backgroundTaskStatusValues = [
 export const backgroundTaskStatusSchema = z.enum(backgroundTaskStatusValues);
 export type BackgroundTaskStatus = z.infer<typeof backgroundTaskStatusSchema>;
 
-/**
- * Normalized per-agent state persisted in workflow snapshots. Derived from the
- * provider's raw record state machine (start/progress/done/error + flags):
- * queued = started but no slot yet; skipped = user-skipped error. An
- * "interrupted" display state is derived at render time from a terminal task
- * with non-terminal agents — it is intentionally not persisted per agent.
- */
 const workflowAgentStateValues = [
   "queued",
   "running",
@@ -62,11 +37,6 @@ const workflowAgentStateValues = [
 const workflowAgentStateSchema = z.enum(workflowAgentStateValues);
 export type WorkflowAgentState = z.infer<typeof workflowAgentStateSchema>;
 
-/**
- * Whether an agent has reached a terminal state. The single source of truth
- * for "n/m agents" progress counts and for deriving the render-time
- * "interrupted" display state (a settled workflow with unsettled agents).
- */
 export function isSettledWorkflowAgentState(
   state: WorkflowAgentState,
 ): boolean {
@@ -82,7 +52,6 @@ export function isSettledWorkflowAgentState(
 }
 
 const workflowAgentSnapshotSchema = z.object({
-  /** 1-based agent counter; the stable identity for fold/replace semantics. */
   index: z.number().int().positive(),
   label: z.string(),
   state: workflowAgentStateSchema,
@@ -108,19 +77,12 @@ const workflowAgentSnapshotSchema = z.object({
 export type WorkflowAgentSnapshot = z.infer<typeof workflowAgentSnapshotSchema>;
 
 const workflowPhaseSnapshotSchema = z.object({
-  /** 1-based phase counter; meta.phases are seeded before any agent runs. */
   index: z.number().int().positive(),
   title: z.string(),
-  /** "child" marks a nested workflow() sub-run group. */
   kind: z.string().optional(),
 });
 export type WorkflowPhaseSnapshot = z.infer<typeof workflowPhaseSnapshotSchema>;
 
-/**
- * Full merged workflow state at a point in time. Providers emit progress as
- * delta batches; the adapter folds them by (record type, index) so every
- * persisted snapshot supersedes the previous one.
- */
 export const workflowProgressSnapshotSchema = z.object({
   phases: z.array(workflowPhaseSnapshotSchema),
   agents: z.array(workflowAgentSnapshotSchema),
@@ -136,11 +98,6 @@ export const backgroundTaskUsageSchema = z.object({
 });
 export type BackgroundTaskUsage = z.infer<typeof backgroundTaskUsageSchema>;
 
-/**
- * Canonical derivation from the provider-reported task status to the shared
- * item-status machinery: paused stays pending because a paused workflow is
- * resumable; stopped maps to interrupted (user/system stop, not a failure).
- */
 export function backgroundTaskItemStatus(
   taskStatus: BackgroundTaskStatus,
 ): "pending" | "completed" | "failed" | "interrupted" {
@@ -159,13 +116,6 @@ export function backgroundTaskItemStatus(
   }
 }
 
-/**
- * Whether the provider-reported status already describes a finished task.
- * Settle backstops (thread restart, daemon crash, lease expiry) must preserve
- * these statuses instead of rewriting them to "stopped": a workflow whose
- * completion patch arrived before its terminal notification is completed, not
- * interrupted.
- */
 export function isSettledBackgroundTaskStatus(
   taskStatus: BackgroundTaskStatus,
 ): boolean {

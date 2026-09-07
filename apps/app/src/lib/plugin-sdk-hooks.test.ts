@@ -121,7 +121,7 @@ describe("callPluginRpc", () => {
 });
 
 describe("fetchPluginSdkSettings", () => {
-  it("keeps string/boolean values and excludes secret markers by shape", async () => {
+  it("keeps primitive setting values and excludes secret markers by shape", async () => {
     const fetchImpl = vi.fn<FetchLike>(async () =>
       jsonResponse({
         ok: true,
@@ -130,13 +130,14 @@ describe("fetchPluginSdkSettings", () => {
           greeting: "hello",
           enabled: true,
           apiKey: { set: true },
-          weird: 42,
+          retries: 4,
         },
       }),
     );
     await expect(fetchPluginSdkSettings(fetchImpl, "demo")).resolves.toEqual({
       greeting: "hello",
       enabled: true,
+      retries: 4,
     });
     expect(fetchImpl).toHaveBeenCalledWith("/api/v1/plugins/demo/settings");
   });

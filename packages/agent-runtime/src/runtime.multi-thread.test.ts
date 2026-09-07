@@ -78,7 +78,6 @@ describe("createAgentRuntime multi-thread routing", () => {
       options: fullRuntimeOptions,
     });
 
-    // One bridge process serves both threads; each gets its own identity.
     expect(runtime.listRunningProviders()).toEqual(["fake"]);
     expect(r1.providerThreadId).not.toBe(r2.providerThreadId);
 
@@ -117,7 +116,6 @@ describe("createAgentRuntime multi-thread routing", () => {
       );
     expect(completedFor("t1")).toHaveLength(1);
     expect(completedFor("t2")).toHaveLength(1);
-    // Each thread's answer lands on its own thread, never on the sibling.
     await waitForThreadAgentMessageText({
       events,
       providerId: "fake",
@@ -193,7 +191,6 @@ describe("createAgentRuntime multi-thread routing", () => {
     });
 
     await runtime.stopThread({ threadId: "t1" });
-    // The shared bridge process outlives the stopped thread.
     expect(runtime.listRunningProviders()).toEqual([providerId]);
     expect(
       events.some(
@@ -255,8 +252,6 @@ describe("createAgentRuntime multi-thread routing", () => {
       threadId: "my-thread",
     });
 
-    // Every event carries the bb thread id, never the provider's, and every
-    // provider event carries the provider thread id the session reported.
     expect(events.length).toBeGreaterThan(0);
     for (const e of events) {
       expect(e.threadId).toBe("my-thread");
@@ -336,8 +331,6 @@ describe("createAgentRuntime multi-thread routing", () => {
     await runtime.shutdown();
   });
 
-  // ---- Multi-provider ----
-
   it("handles multiple providers in a single runtime", async () => {
     const events: ThreadEvent[] = [];
     const runtime = createAgentRuntime({
@@ -348,8 +341,6 @@ describe("createAgentRuntime multi-thread routing", () => {
         success: true,
       }),
     });
-    // Two providers, two bridge launches (distinct artifact digests), two
-    // bridge processes.
     const launchA = createScriptedEchoLaunch({
       pluginId: "provider-a",
       digest: "provider-a",
@@ -415,10 +406,7 @@ describe("createAgentRuntime multi-thread routing", () => {
     await runtime.shutdown();
   });
 
-  // ---- Resume across runtimes ----
-
   it("resumes across runtime instances", async () => {
-    // Runtime 1: start a thread
     const events1: ThreadEvent[] = [];
     const runtime1 = createScriptedEchoRuntime({
       runtime: { workspacePath: tmpDir, onEvent: (e) => events1.push(e) },
@@ -445,7 +433,6 @@ describe("createAgentRuntime multi-thread routing", () => {
     });
     await runtime1.shutdown();
 
-    // Runtime 2: resume the thread under the first runtime's provider identity
     const events2: ThreadEvent[] = [];
     const runtime2 = createScriptedEchoRuntime({
       runtime: { workspacePath: tmpDir, onEvent: (e) => events2.push(e) },

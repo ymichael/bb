@@ -25,10 +25,6 @@ type OptionalJsonValue = JsonValue | null | undefined;
 
 const OPENAI_TRANSCRIPTION_PROVIDER = "openai";
 const VOICE_TRANSCRIPTION_MAX_BYTES = 25 * 1024 * 1024;
-/**
- * A plugin-served transcription travels as base64 inside one host RPC call,
- * whose JSON payload is capped at 8 MiB; this is the audio size that fits.
- */
 const AI_SERVICE_VOICE_MAX_BYTES = 5 * 1024 * 1024;
 const voiceTranscriptionSchema = Type.Object({ text: Type.String() });
 
@@ -60,7 +56,6 @@ export function resolveVoiceTranscriptionEnabled(
   deps: LoggedWorkSessionDeps,
 ): boolean {
   const modelInfo = parseTranscriptionModel(deps.config.transcriptionModel);
-  // Server-direct first, the same order `transcribeVoiceInput` routes in.
   if (modelInfo.provider === OPENAI_TRANSCRIPTION_PROVIDER) {
     return deps.config.openAiApiKey.length > 0;
   }
@@ -180,14 +175,17 @@ async function transcribeWithAiService(
     throw buildTranscriptionUnavailableError();
   }
   if (
-    (transcription instanceof AiServiceCallError && transcription.code === "timeout") ||
-    (transcription instanceof ApiError && transcription.body.code === "command_timeout")
+    (transcription instanceof AiServiceCallError &&
+      transcription.code === "timeout") ||
+    (transcription instanceof ApiError &&
+      transcription.body.code === "command_timeout")
   ) {
     throw buildTranscriptionTimeoutError();
   }
   if (
     transcription instanceof AiServiceCallError &&
-    (transcription.code === "rate_limited" || transcription.code === "service_unavailable")
+    (transcription.code === "rate_limited" ||
+      transcription.code === "service_unavailable")
   ) {
     throw buildTranscriptionUnavailableError();
   }
@@ -275,7 +273,6 @@ export async function transcribeVoiceInput(
   }
 
   const modelInfo = parseTranscriptionModel(deps.config.transcriptionModel);
-  // Server-direct first: a plugin cannot take over `openai/*` traffic.
   if (modelInfo.provider === OPENAI_TRANSCRIPTION_PROVIDER) {
     return transcribeWithOpenAi(deps, modelInfo, args);
   }

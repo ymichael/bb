@@ -4,15 +4,8 @@ import {
   serverUrlForHandle,
 } from "@bb/connect-client";
 
-/** Where `redeemMachineCredential` is called when nothing names another apex. */
 export const DEFAULT_CONNECT_APEX_URL = "https://getbb.app";
 
-/**
- * What a pairing QR code / deep link / pasted payload carries. Only `code`
- * is required: the apex echoes the paired server in the redeem response, so
- * `serverUrl` is a hint (it derives the apex for self-hosted gates and
- * pre-fills the form), and `expiresAt` is only shown to the user.
- */
 export interface ConnectPairingInput {
   code: string;
   serverUrl: string | null;
@@ -22,7 +15,6 @@ export interface ConnectPairingInput {
 
 const CODE_PATTERN = /^[A-Z0-9][A-Z0-9-]{3,63}$/u;
 
-/** Codes are case-insensitive on the apex (`code.trim().toUpperCase()`). */
 function normalizeConnectCode(raw: string): string {
   return raw.trim().toUpperCase();
 }
@@ -67,16 +59,6 @@ function fromRecord(
   };
 }
 
-/**
- * Parse whatever a QR scan, a deep link, or the clipboard produced:
- * - the `MobilePairingPayload` JSON the connect plugin encodes (web "Add
- *   mobile device" QR / `bb connect machine-code --json`), or a looser JSON
- *   object that at least carries `code`,
- * - a URL with those fields as query params (`bb://connect?code=…`,
- *   `https://getbb.app/…?code=…`),
- * - a bare code (`ABCD-EFGH`).
- * Returns null for anything else (the scanner keeps looking).
- */
 export function parseConnectPairingPayload(
   raw: string,
 ): ConnectPairingInput | null {
@@ -127,12 +109,7 @@ export function parseConnectPairingPayload(
 
 export interface EnrollmentTargetInput {
   code: string;
-  /**
-   * What the user typed for the server: a handle (`bee`), a server URL
-   * (`https://bee.getbb.app`), or nothing. Only used to derive the apex.
-   */
   server: string;
-  /** Explicit apex override (advanced / self-hosted); empty = derive. */
   apexUrl: string;
 }
 
@@ -141,16 +118,10 @@ export type EnrollmentTarget =
       ok: true;
       code: string;
       apexUrl: string;
-      /** `https://<handle>.<apex>` when the server was named, for the UI. */
       serverUrl: string | null;
     }
   | { ok: false; field: "code" | "server" | "apexUrl"; message: string };
 
-/**
- * Turn the manual-entry form into the redeem call's arguments. The apex is,
- * in order: the explicit override, the apex derived from a server URL
- * (`https://bee.getbb.app` → `https://getbb.app`), or `https://getbb.app`.
- */
 export function resolveEnrollmentTarget(
   input: EnrollmentTargetInput,
 ): EnrollmentTarget {

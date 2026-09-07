@@ -10,11 +10,6 @@ const repoRoot = resolve(
   "..",
 );
 
-/**
- * The version `bb --version` must print when the CLI runs from this
- * workspace: version.ts walks up from its own location to
- * packages/bb-app/package.json.
- */
 export async function readBbAppVersion(): Promise<string> {
   const packageJson: unknown = JSON.parse(
     await readFile(

@@ -9,6 +9,7 @@ import {
   defaultAppSettings,
   type AppSettings,
 } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import type {
   ProviderUsage,
   WorkspaceOpenTarget,
@@ -167,28 +168,20 @@ const usageFixture: {
 };
 
 const usageHosts: Host[] = [
-  {
+  makeHost({
     id: "host-macbook",
     name: "MacBook Pro",
-    type: "persistent",
-    status: "connected",
     lastSeenAt: Date.now(),
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 1,
-  },
-  {
+  }),
+  makeHost({
     id: "host-studio",
     name: "Mac Studio",
-    type: "persistent",
-    status: "connected",
     lastSeenAt: Date.now(),
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 1,
-  },
+  }),
 ];
 
 function useSettingsStoryState() {
@@ -206,6 +199,9 @@ function useSettingsStoryState() {
   const [steerActiveThreadOnEnter, setSteerActiveThreadOnEnter] =
     useState(false);
   const [streamerMode, setStreamerMode] = useState(false);
+  const [managedBranchPrefix, setManagedBranchPrefix] = useState(
+    defaultAppSettings.managedBranchPrefix,
+  );
   const [showUnhandledProviderEvents, setShowUnhandledProviderEvents] =
     useState(false);
   const [preferredAudioInputDeviceId, setPreferredAudioInputDeviceId] =
@@ -222,6 +218,7 @@ function useSettingsStoryState() {
     directoryTargetId,
     experiments,
     fileTargetId,
+    managedBranchPrefix,
     navigateToThreadAfterCreate,
     openLinksInAppBrowser,
     preferredAudioInputDeviceId,
@@ -234,6 +231,7 @@ function useSettingsStoryState() {
     setDirectoryTargetId,
     setExperiments,
     setFileTargetId,
+    setManagedBranchPrefix,
     setNavigateToThreadAfterCreate,
     setOpenLinksInAppBrowser,
     setPreferredAudioInputDeviceId,
@@ -274,6 +272,9 @@ function GeneralSettingsStory({
     <>
       <GeneralSettingsSection
         desktopBrowserAvailable={desktopBrowserAvailable}
+        managedBranchPrefix={state.managedBranchPrefix}
+        managedBranchPrefixDisabled={false}
+        onManagedBranchPrefixChange={state.setManagedBranchPrefix}
         navigateToThreadAfterCreate={state.navigateToThreadAfterCreate}
         onNavigateToThreadAfterCreateChange={
           state.setNavigateToThreadAfterCreate
@@ -357,7 +358,9 @@ function ExperimentsStory() {
       disabled={false}
       editMessagesEnabled={state.experiments.editMessages}
       mobileAppEnabled={state.experiments.mobileApp}
-      providerSessionReapingEnabled={state.experiments.providerSessionReaping}
+      sidebarProgressiveDisclosureEnabled={
+        state.experiments.sidebarProgressiveDisclosure
+      }
       timelineWindowingEnabled={state.experiments.timelineWindowing}
       onChangelogPreviewEnabledChange={(enabled) =>
         state.setExperiments((current) => ({
@@ -377,10 +380,10 @@ function ExperimentsStory() {
           mobileApp: enabled,
         }))
       }
-      onProviderSessionReapingEnabledChange={(enabled) =>
+      onSidebarProgressiveDisclosureEnabledChange={(enabled) =>
         state.setExperiments((current) => ({
           ...current,
-          providerSessionReaping: enabled,
+          sidebarProgressiveDisclosure: enabled,
         }))
       }
       onTimelineWindowingEnabledChange={(enabled) =>
@@ -471,7 +474,6 @@ function SettingsStoryContent({ route }: { route: SettingsStoryRoute }) {
   }
 }
 
-/** One chrome-wrapped story with real navigation between Settings subpages. */
 export function FullPage() {
   const navigate = useNavigate();
   const route = useSettingsStoryRoute();

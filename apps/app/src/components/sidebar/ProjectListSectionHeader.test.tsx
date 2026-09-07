@@ -146,6 +146,44 @@ describe("TopLevelSidebarSection", () => {
     ).not.toBe(0);
   });
 
+  it("keeps collapsed activity inside the trailing controls slot", () => {
+    render(
+      <TopLevelSidebarSection
+        label="TODO"
+        actions={
+          <>
+            <button type="button">Display</button>
+            <button type="button">Actions</button>
+            <button type="button">New thread</button>
+          </>
+        }
+        actionsAlwaysVisible
+        actionsMobileAlways
+        collapsedActivity={{
+          ...NO_COLLAPSED_CHILD_ACTIVITY,
+          working: true,
+          runtimeWorking: true,
+        }}
+        collapseControl={{ isCollapsed: true, onToggleCollapsed: vi.fn() }}
+      >
+        <div>Active thread</div>
+      </TopLevelSidebarSection>,
+    );
+
+    const indicator = screen.getByLabelText("Thread working");
+    const activitySlot = indicator.closest(
+      "[data-sidebar-collapsed-activity-edge]",
+    );
+    const trailingControls = activitySlot?.parentElement;
+
+    expect(
+      trailingControls?.hasAttribute("data-sidebar-trailing-controls"),
+    ).toBe(true);
+    expect(trailingControls?.className).toContain("relative");
+    expect(activitySlot?.className).toContain("max-md:static");
+    expect(screen.queryByText("Active thread")).toBeNull();
+  });
+
   it("rolls a hidden split thread up to a collapsed top-level section", () => {
     const store = createStore();
     store.set(splitLayoutAtom, {

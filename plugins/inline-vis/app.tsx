@@ -1,7 +1,3 @@
-// bb-plugin-inline-vis frontend — assistant message directive that previews
-// a workspace HTML file through the same path-shaped, sandboxed iframe route
-// as bb's sidebar HTML preview. Scripts, relative assets, and normal web
-// resources work inside an opaque origin that cannot access the host page.
 import { useEffect, useState, type ReactNode } from "react";
 import { Icon } from "@bb/shared-ui/icon";
 import { Skeleton } from "@bb/shared-ui/skeleton";
@@ -43,9 +39,6 @@ function parsePreviewHeight(value: string | undefined): number | null {
     : null;
 }
 
-// Shared card chrome for the loading and ready states. Both states must render
-// identical geometry: the thread timeline is bottom-anchored, so any height
-// change when the iframe replaces the loader scrolls earlier content away.
 function PreviewCard({
   file,
   action,
@@ -214,8 +207,6 @@ function InlineVisDirective({
       <iframe
         title={`inline-vis: ${state.file}`}
         src={previewUrl}
-        // Scripts run, but without allow-same-origin they get an opaque origin
-        // and cannot access the bb page, its cookies/storage, forms, or popups.
         sandbox="allow-scripts"
         style={{ height: previewHeight ?? DEFAULT_HEIGHT_PX }}
         className="block w-full border-0 bg-background"

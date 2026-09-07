@@ -65,8 +65,6 @@ describe("usePaneContentSplitIndicator", () => {
     expect(result.current.isOpenInSplit).toBe(false);
     const settled = renderCount();
 
-    // Thread navigation on a phone still reconciles the layout atom; rows must
-    // not pay a render for a change they can never show.
     act(() => {
       store.set(splitLayoutAtom, twoPanes("pane-2"));
     });

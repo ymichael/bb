@@ -5,7 +5,7 @@ import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it } from "vitest";
 import { threadsQueryKey } from "@/hooks/queries/query-keys";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { useSenderThreadMetadataById } from "./useSenderThreadMetadataById";
 
 function renderMetadataHook(queryClient: QueryClient) {
@@ -17,8 +17,6 @@ function renderMetadataHook(queryClient: QueryClient) {
   return renderHook(() => useSenderThreadMetadataById(), { wrapper: Wrapper });
 }
 
-// The query cache notifies through notifyManager's scheduler (a macrotask),
-// so cache writes only reach the hook's state after a timer tick.
 function flushCacheNotifications(): Promise<void> {
   return act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
 }
@@ -38,9 +36,6 @@ describe("useSenderThreadMetadataById", () => {
     expect(initial.get("thr_sender")?.title).toBe("Sender thread");
     expect(initial.get("thr_sender")?.projectId).toBe("proj_test");
 
-    // A fresh array with equal entries fires an "updated" cache event; the
-    // rebuilt map is value-equal, so the hook must keep the old reference or
-    // every memoized timeline row re-renders on every realtime event.
     await act(async () => {
       queryClient.setQueryData(threadsQueryKey(), [
         makeThreadListEntry({ id: "thr_sender", title: "Sender thread" }),

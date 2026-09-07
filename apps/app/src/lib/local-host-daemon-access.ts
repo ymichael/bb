@@ -37,9 +37,6 @@ export function getBrowserLocalNetworkPermissionQuery(): LocalNetworkPermissionQ
     return null;
   }
 
-  // Local Network Access permission names are newer than the DOM typings used
-  // by some supported browsers. Narrow this browser boundary once, then keep
-  // the rest of the app on the explicit local contract above.
   return navigator.permissions as unknown as LocalNetworkPermissionQuery;
 }
 
@@ -54,11 +51,7 @@ async function queryLoopbackPermissionState(
     try {
       const result = await permissions.query({ name });
       return result.state;
-    } catch {
-      // Chrome 142–144 only knows the original permission name. Chrome 145+
-      // supports the loopback-specific name and retains the old name as an
-      // alias, so only fall back when the newer query is unsupported.
-    }
+    } catch {}
   }
 
   return "unsupported";

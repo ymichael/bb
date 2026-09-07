@@ -17,7 +17,6 @@ const directUnmanagedIntentSchema = z.object({
   type: z.literal("direct-unmanaged"),
   hostId: z.string().min(1),
   path: z.string().min(1),
-  /** Pre-thread checkout requested for the unmanaged workspace, if any. */
   branch: unmanagedBranchSpecSchema.optional(),
 });
 
@@ -48,17 +47,24 @@ const reuseIntentSchema = z.object({
   environmentId: z.string().min(1),
 });
 
-const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion("type", [
-  directUnmanagedIntentSchema,
-  checkoutUnmanagedIntentSchema,
-  directManagedIntentSchema,
-  directPersonalIntentSchema,
-  reuseIntentSchema,
-]);
+/**
+ * Exported so a queued thread-start can persist the intent it resolved at
+ * create time and rebuild this context when its wait clears, possibly after a
+ * restart. Nothing else should construct one by hand.
+ */
+export const threadProvisionEnvironmentIntentSchema = z.discriminatedUnion(
+  "type",
+  [
+    directUnmanagedIntentSchema,
+    checkoutUnmanagedIntentSchema,
+    directManagedIntentSchema,
+    directPersonalIntentSchema,
+    reuseIntentSchema,
+  ],
+);
 
-const threadForkDescriptorSchema = z.object({
+export const threadForkDescriptorSchema = z.object({
   sourceProviderThreadId: z.string().min(1),
-  // The provider checkpoint the clone retains through; absent clones the tip.
   sourceProviderCheckpointId: z.string().min(1).optional(),
 });
 
@@ -67,18 +73,10 @@ const threadProvisionCommonPayloadSchema = z.object({
   clientRequestId: clientTurnRequestIdSchema,
   environmentIntent: threadProvisionEnvironmentIntentSchema,
   execution: resolvedThreadExecutionOptionsSchema,
-  // Non-null ⇒ provision this thread by cloning the source provider session at
-  // its branch point (native fork) instead of starting a fresh session. null ⇒
-  // not a fork. Only populated for forkable forks; the server gates on
-  // originKind/provider capability/source session/host at create time.
   fork: threadForkDescriptorSchema.nullable().default(null),
   input: z.array(promptInputSchema),
   inputGroups: z.array(z.array(promptInputSchema).min(1)).min(1).optional(),
   titleProvided: z.boolean(),
-  // When true the thread-start turn is persisted/displayed but no provider run
-  // is dispatched — the started agent waits for the user's first message (fork
-  // and side-chat anchors). The thread lands in `idle` once the workspace is
-  // ready. Defaults false (a normal start dispatches immediately).
   seedWithoutRun: z.boolean().default(false),
 });
 
@@ -166,9 +164,6 @@ type ThreadProvisionWorkspaceReadyContext = ThreadProvisionContext & {
   state: ThreadProvisioningState & {
     environmentId: string;
     stage: "workspace-ready";
-    // null ⇒ reaching workspace-ready appended no `system/thread-provisioning`
-    // row because nothing was provisioned (the thread attached to an
-    // already-ready environment). See `hasProvisioningTimelineRow`.
     workspaceReadyEventSequence: number | null;
   };
 };
@@ -305,16 +300,6 @@ function isWorkspaceReadyContext(
   );
 }
 
-/**
- * True when this provisioning run has already appended at least one
- * `system/thread-provisioning` row to the thread timeline.
- *
- * A start that attaches to an already-ready environment provisions nothing and
- * emits no row. Terminal rows (`completed`, `cancelled`) must be suppressed for
- * those runs too — the client keys every provisioning event into a single
- * operation row, so a lone terminal event would surface as "Provisioned thread"
- * for a start that never provisioned anything.
- */
 export function hasProvisioningTimelineRow(
   context: ThreadProvisionContext,
 ): boolean {
@@ -455,7 +440,6 @@ export function createReprovisioningContext(
       },
       clientRequestId: args.clientRequestId,
       execution: args.execution,
-      // Reprovision is a new turn on an existing thread, never a fork.
       fork: null,
       input: args.input,
       ...(args.inputGroups !== undefined

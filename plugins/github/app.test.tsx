@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { describe, expect, it } from "vitest";
+import { act } from "react";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
 const app = await loadPluginApp(() => import("./app"));
@@ -139,16 +140,27 @@ describe("GitHub app navigation", () => {
       },
     );
 
-    await slot.findByText("Navigation fix");
-    expect(slot.queryByRole("link", { name: "removed.ts" })).toBeNull();
-    expect(slot.getByRole("link", { name: "modified.ts" })).toBeDefined();
+    await act(async () => {});
+    const removedFile = slot.getByText("removed.ts");
+    const modifiedFile = slot.getByText("modified.ts");
+    expect(removedFile.closest("a")).toBeNull();
+    expect(modifiedFile.closest("a")?.getAttribute("href")).toBe(
+      "./modified.ts",
+    );
 
-    slot.getByRole("button", { name: "Expand removed.ts diff" }).click();
-    const diff = await slot.findByTestId("bb-diff");
+    const diffToggle = removedFile.parentElement?.querySelector("button");
+    if (!(diffToggle instanceof HTMLButtonElement)) {
+      throw new Error("removed file diff toggle was not rendered");
+    }
+    expect(diffToggle.getAttribute("aria-label")).toBe(
+      "Expand removed.ts diff",
+    );
+    await act(async () => diffToggle.click());
+    const diff = slot.getByTestId("bb-diff");
     expect(diff.getAttribute("data-path")).toBe("removed.ts");
-    expect(
-      slot.getByRole("button", { name: "Collapse removed.ts diff" }),
-    ).toBeDefined();
+    expect(diffToggle.getAttribute("aria-label")).toBe(
+      "Collapse removed.ts diff",
+    );
     slot.lifecycle.unmount();
   });
 });

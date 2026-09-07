@@ -29,8 +29,6 @@ describe("project execution defaults persistence", () => {
         path: "/tmp/reuse-defaults-environment",
       });
 
-      // Seed a known default — anything that mutates this table during
-      // submission would be visible by comparing to this baseline.
       upsertProjectExecutionDefaults(harness.db, {
         projectId: project.id,
         providerId: "codex",
@@ -102,9 +100,6 @@ describe("project execution defaults persistence", () => {
         },
       });
 
-      // Sanity: host-mode submissions still update project defaults — proves
-      // the reuse-only carve-out above isn't accidentally turning the whole
-      // persistence path off.
       expect(
         getProjectExecutionDefaults(harness.db, {
           projectId: project.id,
@@ -151,8 +146,6 @@ describe("project execution defaults persistence", () => {
         serviceTier: "default",
       });
 
-      // A fork (a side chat, say) inherits a model the user never picked in
-      // the composer; creating it must not reshape the project's defaults.
       await createThreadFromRequest(harness.deps, {
         origin: "app",
         originKind: "fork",

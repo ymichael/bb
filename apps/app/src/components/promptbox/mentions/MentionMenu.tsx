@@ -21,30 +21,40 @@ import { PluginIcon } from "@/components/plugin/PluginIcon";
 import { Icon } from "@bb/shared-ui/icon";
 import { TruncateStart } from "@/components/ui/truncate-start.js";
 import { cn } from "@bb/shared-ui/lib/utils";
-import type {
-  ComposerCommandSuggestion,
-  PromptMentionSuggestion,
-  TypeaheadMenuState,
+import {
+  EMPTY_ORDERED_MENTION_SUGGESTIONS,
+  type ComposerCommandSuggestion,
+  type OrderedMentionSuggestions,
+  type PromptMentionSuggestion,
+  type TypeaheadMenuState,
 } from "@bb/client-core";
 
-/**
- * A row the menu can render — an `@`-mention suggestion or a command
- * suggestion (provider or plugin). They share a discriminant-free union via
- * their own `kind` field (`path`/`thread` vs `command`), so
- * the composer's apply path can branch by kind without a separate callback
- * per menu mode.
- */
 export type TypeaheadSuggestion =
   | PromptMentionSuggestion
   | ComposerCommandSuggestion;
 
 interface MentionMenuProps {
   state: TypeaheadMenuState;
-  /** Currently-highlighted index in the results list (for keyboard nav). */
   selectedIndex: number;
   onApply: (item: TypeaheadSuggestion) => void;
   onDismiss?: () => void;
   onCommandLoadMore?: () => void;
+}
+
+interface MentionResultsProps {
+  results: OrderedMentionSuggestions;
+  selectedIndex: number;
+  onApply: (item: TypeaheadSuggestion) => void;
+  onDismiss?: () => void;
+  itemRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
+}
+
+interface CommandResultsProps {
+  suggestions: readonly ComposerCommandSuggestion[];
+  selectedIndex: number;
+  onApply: (item: TypeaheadSuggestion) => void;
+  onDismiss?: () => void;
+  itemRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
 }
 
 interface MenuSectionItem<TItem> {
@@ -58,12 +68,6 @@ interface MenuSection<TKind extends string, TItem> {
   items: MenuSectionItem<TItem>[];
 }
 
-/**
- * Groups a flat suggestion list into sections without changing its section
- * order. The same flat list drives keyboard navigation, so rendering must
- * preserve the first occurrence of every section instead of applying a second
- * visual-only order.
- */
 function groupSections<TKind extends string, TItem>(args: {
   suggestions: readonly TItem[];
   sectionKind: (item: TItem) => TKind;
@@ -88,90 +92,11 @@ function groupSections<TKind extends string, TItem>(args: {
   return [...sectionsByKind.values()];
 }
 
-type PathMentionSectionKind = "workspace" | "thread-storage";
-// Plugin providers each get their own section, labeled by the provider
-// (plugin design §4.9); the section kind embeds pluginId + providerId so
-// identically-labeled providers from different plugins never merge.
-type PluginMentionSectionKind = `plugin:${string}`;
-type MentionSectionKind =
-  | "threads"
-  | "projects"
-  | "sections"
-  | PathMentionSectionKind
-  | PluginMentionSectionKind;
 type PathMentionSuggestion = Extract<PromptMentionSuggestion, { kind: "path" }>;
 type SecondaryContextKind = "path" | "project";
 
-function getPluginSectionKind(
-  item: Extract<PromptMentionSuggestion, { kind: "plugin" }>,
-): PluginMentionSectionKind {
-  // Provider ids exclude ":" (enforced at registration), so this composite
-  // is unambiguous.
-  return `plugin:${item.pluginId}:${item.providerId}`;
-}
-
-/** Display label per plugin section kind (first row wins per provider). */
-function getPluginSectionLabels(
-  suggestions: readonly PromptMentionSuggestion[],
-): Map<PluginMentionSectionKind, string> {
-  const labels = new Map<PluginMentionSectionKind, string>();
-  for (const item of suggestions) {
-    if (item.kind !== "plugin") continue;
-    const kind = getPluginSectionKind(item);
-    if (!labels.has(kind)) {
-      labels.set(kind, item.providerLabel);
-    }
-  }
-  return labels;
-}
-
-function getMentionSectionKind(
-  item: PromptMentionSuggestion,
-): MentionSectionKind {
-  if (item.kind === "thread") {
-    return "threads";
-  }
-  if (item.kind === "project") {
-    return "projects";
-  }
-  if (item.kind === "section") {
-    return "sections";
-  }
-  if (item.kind === "plugin") {
-    return getPluginSectionKind(item);
-  }
-  return getPathSectionKind(item);
-}
-
-function getPathSectionKind(
-  item: PathMentionSuggestion,
-): PathMentionSectionKind {
-  return item.source === "thread-storage" ? "thread-storage" : "workspace";
-}
-
-function getMentionSectionLabel(
-  kind: MentionSectionKind,
-  pluginSectionLabels: ReadonlyMap<PluginMentionSectionKind, string>,
-): string {
-  if (kind === "threads") {
-    return "Threads";
-  }
-  if (kind === "projects") {
-    return "Projects";
-  }
-  if (kind === "sections") {
-    return "Sections";
-  }
-  if (kind === "workspace" || kind === "thread-storage") {
-    return getPathSectionLabel(kind);
-  }
-  // Plugin sections display the provider's label; the kind itself is the
-  // pluginId + providerId identity, never shown.
-  return pluginSectionLabels.get(kind) ?? kind.slice("plugin:".length);
-}
-
-function getPathSectionLabel(kind: PathMentionSectionKind): string {
-  if (kind === "thread-storage") {
+function getPathSectionLabel(item: PathMentionSuggestion): string {
+  if (item.source === "thread-storage") {
     return "Thread storage";
   }
   return "Workspace";
@@ -195,31 +120,31 @@ function getMentionTitle(item: PromptMentionSuggestion): string {
     return `${item.providerLabel}: ${item.title}`;
   }
 
-  return `${getPathSectionLabel(getPathSectionKind(item))}: ${item.path}`;
+  return `${getPathSectionLabel(item)}: ${item.path}`;
 }
 
-function getMentionKey(item: PromptMentionSuggestion, index: number): string {
+function getMentionKey(item: PromptMentionSuggestion): string {
   if (item.kind === "path") {
-    return `${item.kind}-${item.source}-${item.entryKind}-${item.path}-${index}`;
+    return JSON.stringify([item.kind, item.source, item.entryKind, item.path]);
   }
   if (item.kind === "plugin") {
-    return `${item.kind}-${item.pluginId}-${item.itemId}-${index}`;
+    return JSON.stringify([
+      item.kind,
+      item.pluginId,
+      item.providerId,
+      item.itemId,
+    ]);
   }
-  return `${item.kind}-${item.path}-${index}`;
+  if (item.kind === "thread") {
+    return JSON.stringify([item.kind, item.threadId]);
+  }
+  if (item.kind === "project") {
+    return JSON.stringify([item.kind, item.projectId]);
+  }
+  return JSON.stringify([item.kind, item.sectionId]);
 }
 
-// Command sections use the shared `providerCommandSection` mapping from
-// @bb/server-contract. PromptBoxInternal runs `orderCommandSuggestions` — which
-// hoists exact name matches and hands back contiguous sections — before that
-// same array reaches rendering, keyboard navigation, and apply; the menu only
-// adds human-readable labels.
 type CommandSectionKind = ProviderCommandSection;
-
-function getCommandSectionKind(
-  item: ComposerCommandSuggestion,
-): CommandSectionKind {
-  return providerCommandSection(item);
-}
 
 function getCommandSectionLabel(kind: CommandSectionKind): string {
   if (kind === "agent-command") {
@@ -231,12 +156,6 @@ function getCommandSectionLabel(kind: CommandSectionKind): string {
   return kind === "project-command" ? "Project commands" : "User commands";
 }
 
-// Rows share one icon box; plugin rows show the plugin's logo when it ships
-// one (falling back to the generic bolt), everything else a named icon. Skills
-// deliberately do NOT show the thread's agent-provider logo: that logo is a
-// property of the composer, not of where the skill was discovered, so painting
-// it on every non-plugin skill mislabels bb-owned skills (`~/.bb/skills`, bb
-// built-ins) as provider-native ones.
 const ROW_ICON_CLASS = "size-3.5 shrink-0 text-muted-foreground";
 
 function getCommandIcon(item: ComposerCommandSuggestion): ReactNode {
@@ -277,11 +196,20 @@ function getMentionIcon(item: PromptMentionSuggestion): ReactNode {
   );
 }
 
-function getCommandKey(item: ComposerCommandSuggestion, index: number): string {
-  return `command-${item.source}-${item.origin}-${item.name}-${index}`;
+function getCommandKey(item: ComposerCommandSuggestion): string {
+  return JSON.stringify([
+    item.kind,
+    item.source,
+    item.origin,
+    item.pluginId ?? null,
+    item.name,
+  ]);
 }
 
-/** Muted, end-truncated trailing text (project name, command description/hint). */
+export function typeaheadSuggestionKey(item: TypeaheadSuggestion): string {
+  return item.kind === "command" ? getCommandKey(item) : getMentionKey(item);
+}
+
 function MutedTrailing({ children }: { children: string }) {
   return (
     <span className="truncate text-subtle-foreground [flex-shrink:9999]">
@@ -290,7 +218,6 @@ function MutedTrailing({ children }: { children: string }) {
   );
 }
 
-/** Muted, start-truncated trailing path (mention directory). */
 function MutedTrailingPath({ children }: { children: string }) {
   return (
     <TruncateStart className="text-subtle-foreground [flex-shrink:9999]">
@@ -304,8 +231,6 @@ interface SuggestionRowProps {
   selectedIndex: number;
   icon: ReactNode;
   primary: string;
-  /** Muted context rendered after the primary label (mention dir / project, or
-   * command description + argument hint). */
   trailing: ReactNode;
   title: string;
   rowKey: string;
@@ -336,8 +261,6 @@ function SuggestionRow({
         event.preventDefault();
         onApply();
       }}
-      // scroll-mt-7 keeps the row from being scrolled underneath the sticky
-      // section header.
       className={cn(
         "w-full scroll-mt-7 rounded px-2 py-1.5 text-left text-xs",
         isSelected ? "bg-state-active text-foreground" : "hover:bg-state-hover",
@@ -415,28 +338,13 @@ function MenuSectionHeader({
 }
 
 function MentionResults({
-  suggestions,
+  results,
   selectedIndex,
   onApply,
   onDismiss,
   itemRefs,
-}: {
-  suggestions: readonly PromptMentionSuggestion[];
-  selectedIndex: number;
-  onApply: (item: TypeaheadSuggestion) => void;
-  onDismiss?: () => void;
-  itemRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
-}) {
-  const sections = useMemo(() => {
-    const pluginSectionLabels = getPluginSectionLabels(suggestions);
-    return groupSections({
-      suggestions,
-      sectionKind: getMentionSectionKind,
-      sectionLabel: (kind) => getMentionSectionLabel(kind, pluginSectionLabels),
-    });
-  }, [suggestions]);
-
-  if (sections.length === 0) {
+}: MentionResultsProps) {
+  if (results.groups.length === 0) {
     return (
       <MenuStatusRow onDismiss={onDismiss} className="text-muted-foreground">
         No matching mentions
@@ -446,14 +354,15 @@ function MentionResults({
 
   return (
     <div className="pb-1">
-      {sections.map((section, sectionIndex) => (
-        <div key={section.kind}>
+      {results.groups.map((group, groupIndex) => (
+        <div key={group.key}>
           <MenuSectionHeader
-            label={section.label}
-            onDismiss={sectionIndex === 0 ? onDismiss : undefined}
+            label={group.label}
+            onDismiss={groupIndex === 0 ? onDismiss : undefined}
           />
           <div className="flex flex-col gap-px px-1">
-            {section.items.map(({ item, index }) => {
+            {group.suggestions.map((item, itemIndex) => {
+              const index = group.startIndex + itemIndex;
               let primary: string;
               let secondaryContext: string | null = null;
               let secondaryContextKind: SecondaryContextKind | null = null;
@@ -481,7 +390,7 @@ function MentionResults({
 
               return (
                 <SuggestionRow
-                  key={getMentionKey(item, index)}
+                  key={getMentionKey(item)}
                   index={index}
                   selectedIndex={selectedIndex}
                   icon={getMentionIcon(item)}
@@ -495,7 +404,7 @@ function MentionResults({
                     )
                   }
                   title={getMentionTitle(item)}
-                  rowKey={getMentionKey(item, index)}
+                  rowKey={getMentionKey(item)}
                   onApply={() => onApply(item)}
                   itemRefs={itemRefs}
                 />
@@ -514,25 +423,17 @@ function CommandResults({
   onApply,
   onDismiss,
   itemRefs,
-}: {
-  suggestions: readonly ComposerCommandSuggestion[];
-  selectedIndex: number;
-  onApply: (item: TypeaheadSuggestion) => void;
-  onDismiss?: () => void;
-  itemRefs: React.MutableRefObject<Array<HTMLButtonElement | null>>;
-}) {
+}: CommandResultsProps) {
   const sections = useMemo(
     () =>
       groupSections({
         suggestions,
-        sectionKind: getCommandSectionKind,
+        sectionKind: providerCommandSection,
         sectionLabel: getCommandSectionLabel,
       }),
     [suggestions],
   );
 
-  // The composer suppresses opening the menu on a loaded-empty result, so an
-  // empty command list is only a transient render. Nothing to show.
   if (sections.length === 0) {
     return null;
   }
@@ -548,13 +449,11 @@ function CommandResults({
           <div className="flex flex-col gap-px px-1">
             {section.items.map(({ item, index }) => (
               <SuggestionRow
-                key={getCommandKey(item, index)}
+                key={getCommandKey(item)}
                 index={index}
                 selectedIndex={selectedIndex}
                 icon={getCommandIcon(item)}
                 primary={item.name}
-                // description sits inline after the name (muted); argumentHint
-                // trails it, further muted, so the name stays the anchor.
                 trailing={
                   <>
                     {item.description !== null ? (
@@ -568,7 +467,7 @@ function CommandResults({
                   </>
                 }
                 title={item.description ?? item.name}
-                rowKey={getCommandKey(item, index)}
+                rowKey={getCommandKey(item)}
                 onApply={() => onApply(item)}
                 itemRefs={itemRefs}
               />
@@ -578,6 +477,29 @@ function CommandResults({
       ))}
     </div>
   );
+}
+
+function typeaheadResultsLength(state: TypeaheadMenuState): number {
+  if (state.trigger === "mention") {
+    return state.state.kind === "results"
+      ? state.state.results.suggestions.length
+      : 0;
+  }
+  return state.state.kind === "results" ? state.state.suggestions.length : 0;
+}
+
+function mentionResults(state: TypeaheadMenuState): OrderedMentionSuggestions {
+  return state.trigger === "mention" && state.state.kind === "results"
+    ? state.state.results
+    : EMPTY_ORDERED_MENTION_SUGGESTIONS;
+}
+
+function commandSuggestions(
+  state: TypeaheadMenuState,
+): readonly ComposerCommandSuggestion[] {
+  return state.trigger === "command" && state.state.kind === "results"
+    ? state.state.suggestions
+    : [];
 }
 
 export function MentionMenu({
@@ -609,15 +531,12 @@ export function MentionMenu({
   );
 
   const innerState = state.state;
-  const resultsLength =
-    innerState.kind === "results" ? innerState.suggestions.length : 0;
+  const resultsLength = typeaheadResultsLength(state);
 
-  // Trim refs when the result list shortens so stale entries don't survive.
   useEffect(() => {
     itemRefs.current = itemRefs.current.slice(0, resultsLength);
   }, [resultsLength]);
 
-  // Keep the highlighted row visible as the user arrows through the list.
   useEffect(() => {
     if (resultsLength === 0) return;
     const selectedItem = itemRefs.current[selectedIndex];
@@ -655,9 +574,7 @@ export function MentionMenu({
           </MenuStatusRow>
         ) : state.trigger === "command" ? (
           <CommandResults
-            suggestions={
-              state.state.kind === "results" ? state.state.suggestions : []
-            }
+            suggestions={commandSuggestions(state)}
             selectedIndex={selectedIndex}
             onApply={onApply}
             itemRefs={itemRefs}
@@ -665,9 +582,7 @@ export function MentionMenu({
           />
         ) : (
           <MentionResults
-            suggestions={
-              state.state.kind === "results" ? state.state.suggestions : []
-            }
+            results={mentionResults(state)}
             selectedIndex={selectedIndex}
             onApply={onApply}
             itemRefs={itemRefs}

@@ -17,6 +17,7 @@ import {
   providerListCacheKey,
   writeCachedProviderList,
 } from "@/lib/provider-list-cache";
+import { makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 
 const PROJECT_ID = "proj_prompt_defaults";
 const GLOBAL_PROVIDER_ID = "global-provider";
@@ -51,11 +52,6 @@ function readyProviderStates(providerId: string): SystemProviderStatesResponse {
   };
 }
 
-/**
- * Puts one provider's declared catalog scope in the cache. Routing reads the
- * scope from a roster, so a test that asserts on routing must declare it the
- * way a plugin would rather than rely on the provider's id.
- */
 function seedDeclaredCatalogScope(
   queryClient: QueryClient,
   providerId: string,
@@ -81,14 +77,12 @@ function seedDeclaredCatalogScope(
   );
 }
 
-/** A last-known provider list that includes codex beside the fixture provider. */
 function rememberedProviders() {
   const base = executionOptionsResponse().providers;
   const template = base[0];
   if (template === undefined) {
     throw new Error("execution-options fixture has no provider");
   }
-  // The mark is the plugin's declared logo, served by the host.
   return [
     {
       ...template,
@@ -103,12 +97,10 @@ function rememberedProviders() {
 function executionOptionsResponse(): SystemExecutionOptionsResponse {
   return {
     providers: [
-      {
+      makeProviderInfo({
         id: GLOBAL_PROVIDER_ID,
-        pluginId: `provider-${GLOBAL_PROVIDER_ID}`,
         displayName: "Global Provider",
         logoUrl: null,
-        available: true,
         maintenance: { health: true, usage: true, installation: false },
         composerActions: [
           { kind: "skills", trigger: "/" },
@@ -127,13 +119,11 @@ function executionOptionsResponse(): SystemExecutionOptionsResponse {
           modelCatalogScope: "workspace",
           permissionModes: ["accept-edits", "auto", "full"],
         },
-      },
-      {
+      }),
+      makeProviderInfo({
         id: PROJECT_PROVIDER_ID,
-        pluginId: `provider-${PROJECT_PROVIDER_ID}`,
         displayName: "Project Provider",
         logoUrl: null,
-        available: true,
         maintenance: { health: true, usage: true, installation: false },
         composerActions: [{ kind: "skills", trigger: "/" }],
         capabilities: {
@@ -146,7 +136,7 @@ function executionOptionsResponse(): SystemExecutionOptionsResponse {
           modelCatalogScope: "workspace",
           permissionModes: ["accept-edits", "auto", "full"],
         },
-      },
+      }),
     ],
     models: [
       {
@@ -221,12 +211,10 @@ function providerExecutionOptionsResponse(
 function claudeExecutionOptionsResponse(): SystemExecutionOptionsResponse {
   return {
     providers: [
-      {
+      makeProviderInfo({
         id: "claude-code",
-        pluginId: "provider-claude-code",
         displayName: "Claude Code",
         logoUrl: null,
-        available: true,
         maintenance: { health: true, usage: true, installation: false },
         composerActions: [],
         capabilities: {
@@ -239,7 +227,7 @@ function claudeExecutionOptionsResponse(): SystemExecutionOptionsResponse {
           modelCatalogScope: "workspace",
           permissionModes: ["accept-edits", "auto", "full"],
         },
-      },
+      }),
     ],
     models: [
       {
@@ -307,8 +295,6 @@ afterEach(() => {
 describe("useThreadCreationOptions", () => {
   it("keeps the selected remembered provider branded while models load", () => {
     window.localStorage.setItem("bb.promptbox.provider", "codex");
-    // The app vendors no roster: the provider list this routing last
-    // reported is what paints the picker before the probe returns.
     writeCachedProviderList(
       providerListCacheKey({ environmentId: null, hostId: null }),
       rememberedProviders(),
@@ -412,6 +398,78 @@ describe("useThreadCreationOptions", () => {
     await waitFor(() => {
       expect(result.current.selectedModel).toBe("project-default");
       expect(result.current.reasoningLevel).toBe("medium");
+    });
+  });
+
+  it("persists the reconciled reasoning level when switching to a shorter model ladder", async () => {
+    const response = executionOptionsResponse();
+    vi.mocked(sdk.system.executionOptions).mockResolvedValue({
+      ...response,
+      models: [
+        {
+          id: "wide-model",
+          model: "wide-model",
+          displayName: "Wide Model",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+            { reasoningEffort: "xhigh", description: "" },
+            { reasoningEffort: "max", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: true,
+        },
+        {
+          id: "short-model",
+          model: "short-model",
+          displayName: "Short Model",
+          description: "",
+          supportedReasoningEfforts: [
+            { reasoningEffort: "low", description: "" },
+            { reasoningEffort: "medium", description: "" },
+            { reasoningEffort: "high", description: "" },
+          ],
+          defaultReasoningEffort: "medium",
+          isDefault: false,
+        },
+      ],
+    });
+    const { result } = renderHook(
+      () =>
+        useThreadCreationOptions({
+          scope: "new-thread",
+          initialProviderId: GLOBAL_PROVIDER_ID,
+          initialModel: "wide-model",
+          initialReasoningLevel: "max",
+        }),
+      { wrapper: createQueryClientTestHarness().wrapper },
+    );
+
+    await waitFor(() => {
+      expect(result.current.selectedModel).toBe("wide-model");
+      expect(result.current.reasoningLevel).toBe("max");
+    });
+
+    act(() => {
+      result.current.setSelectedModel("short-model");
+    });
+
+    await waitFor(() => {
+      expect(result.current.selectedModel).toBe("short-model");
+      expect(result.current.reasoningLevel).toBe("high");
+      expect(result.current.executionInputSources.reasoningLevel).toBe(
+        "client-preference",
+      );
+    });
+
+    act(() => {
+      result.current.setSelectedModel("wide-model");
+    });
+
+    await waitFor(() => {
+      expect(result.current.reasoningLevel).toBe("high");
     });
   });
 
@@ -711,7 +769,6 @@ describe("useThreadCreationOptions", () => {
       expect(result.current.selectedModel).toBe("global-model");
       expect(result.current.serviceTier).toBe("default");
       expect(result.current.reasoningLevel).toBe("high");
-      // Stored legacy "workspace-write" migrates to "accept-edits" on read.
       expect(result.current.permissionMode).toBe("accept-edits");
       expect(result.current.environmentSelectionValue).toBe(
         "host:project-host:local",
@@ -753,7 +810,6 @@ describe("useThreadCreationOptions", () => {
         ["auto", false],
         ["full", true],
       ]);
-      // A stored Full Access preference shows as the mode that will run.
       expect(result.current.permissionMode).toBe("auto");
     });
     expect(
@@ -764,8 +820,6 @@ describe("useThreadCreationOptions", () => {
   });
 
   it("uses the cached machine limit before the routed answer lands", async () => {
-    // The composer must not offer a mode the machine has already ruled out,
-    // even for the render before /system/execution-options answers.
     let resolveExecutionOptions: (
       value: SystemExecutionOptionsResponse,
     ) => void;
@@ -869,9 +923,6 @@ describe("useThreadCreationOptions", () => {
   });
 
   it("re-routes to the host once the first probe's own roster declares host scope", async () => {
-    // The cold path, and the only one a component-local surface has: nothing
-    // fetches a provider list, so the scope can be learned only from the
-    // execution-options response this hook itself asked for.
     const hostScoped = executionOptionsResponse();
     const [provider] = hostScoped.providers;
     if (provider === undefined) throw new Error("fixture has no provider");
@@ -897,13 +948,11 @@ describe("useThreadCreationOptions", () => {
       { wrapper },
     );
 
-    // First read: scope unknown, so the workspace-safe route wins.
     await waitFor(() => {
       expect(sdk.system.executionOptions).toHaveBeenCalledWith(
         expect.objectContaining({ environmentId: "env_follow_up" }),
       );
     });
-    // That answer taught it the scope; the next read shares the host key.
     await waitFor(() => {
       expect(result.current.executionOptionsRouting).toEqual({
         hostId: "host_follow_up",
@@ -1071,9 +1120,6 @@ describe("useThreadCreationOptions", () => {
       { wrapper },
     );
 
-    // No vendored catalog: the picker has no rows until the probe returns,
-    // and an empty pending list is never proof that the stored model was
-    // retired, so the selection survives.
     expect(result.current.modelOptions).toEqual([]);
     expect(result.current.selectedModel).toBe("claude-mythos-5");
     expect(result.current.executionInputSources.model).toBeUndefined();
@@ -1082,7 +1128,6 @@ describe("useThreadCreationOptions", () => {
       resolveOptions(claudeExecutionOptionsResponse());
     });
 
-    // Once discovery succeeds, absence is definitive and recovery is explicit.
     await waitFor(() => {
       expect(result.current.selectedModel).toBe("claude-opus-4-8[1m]");
       expect(result.current.executionInputSources.model).toBe("explicit");
@@ -1094,7 +1139,6 @@ describe("useThreadCreationOptions", () => {
       claudeExecutionOptionsResponse(),
     );
 
-    // A first successful probe records this account's catalog.
     const first = renderHook(
       () =>
         useThreadCreationOptions(
@@ -1109,8 +1153,6 @@ describe("useThreadCreationOptions", () => {
     });
     first.unmount();
 
-    // A cold client (page reload) with the probe still in flight: the preloaded
-    // rows are the account's real ids, not generic aliases.
     let resolveOptions: (
       value: SystemExecutionOptionsResponse,
     ) => void = () => {};
@@ -1138,8 +1180,6 @@ describe("useThreadCreationOptions", () => {
       resolveOptions(claudeExecutionOptionsResponse());
     });
 
-    // The authoritative rows carry the same ids, so nothing snaps back to the
-    // catalog default.
     await waitFor(() => {
       expect(second.result.current.selectedModel).toBe("claude-sonnet-5");
       expect(second.result.current.executionInputSources.model).toBeUndefined();

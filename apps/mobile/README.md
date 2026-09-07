@@ -17,7 +17,7 @@ timeline with every row kind, markdown, inline diffs, terminal output, images +
 lightbox, sticky-bottom, older pages, unread divider; the
 prompt area with pending-interaction banners, the prompt chip row, the context
 banner, the queued-message list and the follow-up composer; header / message /
-git action sheets), deep links, and the workspace panel
+git action sheets), push notifications + deep links, and the workspace panel
 (a bottom sheet with Info · Diff · Files · Terminal + the thread's synced file
 tabs: thread metadata, the batched Diff tab with "Add to chat", file search /
 thread-storage browser / previews for text, markdown, CSV, HTML, images, the
@@ -27,7 +27,7 @@ and a host terminal), the settings buckets (General / Appearance /
 Experiments / Haptics, provider settings, usage limits, Machines with pairing /
 rename / permission ceiling / provider CLI installs, Updates, Plugins with
 detail / settings form / logs / catalog / marketplaces, Skills library +
-skills.sh registry, Discord / GitHub), "Share link" from the
+skills.sh registry, Notifications, Discord / GitHub), "Share link" from the
 thread menu, and the `Mobile E2E` GitHub workflow are in place. The Phase 0
 spikes and the renderer / composer / interactions showcases live under
 Settings → Developer.
@@ -89,9 +89,12 @@ src/
                          waitForActiveConnection,
                          ThreadOpenSignalHandler (realtime `thread-open` →
                          navigate, like the web's wsManager.onThreadOpen)
-  notifications/         push notifications arrive in a later PR (RN glue:
-                         expo-notifications behind the data-layer contract,
-                         registration sync, taps → thread, badge, Settings rows)
+  notifications/         push (RN glue): expo-notifications behind the data
+                         layer's PushNotificationsModule, MMKV push store,
+                         app-wide registration controller, PushNotificationsHost
+                         (registration sync, taps → thread, foreground toast
+                         with Open, app-icon badge, first-run prompt),
+                         and usePushRegistration (Settings)
   screens/               screen components (home/ — thread list + the
                          new-thread ComposeDock; compose/ — ComposeDock,
                          useComposeController; settings/, shell/, connect/ — bb connect enrollment: ConnectEnrollScreen,
@@ -143,8 +146,8 @@ src/
                          ThreadActionsSheet (header "…" menu: handoff, new
                          thread in worktree, rename, pin, read state, move,
                          copy link, open in web, archive, delete),
-                         ThreadGitActionSheet + useThreadGitActions (commit /
-                         squash merge through the environment actions);
+                         ThreadGitActionSheet + useThreadGitActions (commit
+                         through the environment actions);
                          interactions/ — PendingInteractionBanner (approval /
                          user question / ask-user-question + secret-request
                          plugin forms / unsupported-plugin card), QuestionForm,
@@ -224,9 +227,12 @@ src/
                          pending interactions, question form state, plugin
                          payload parsing, child-thread attention —, thread-runtime
                          — send/edit/stop/cancel-plan/clear-goal + the queued
-                         message CRUD with optimistic transactions;
-                         notifications — push registration policy — arrives in
-                         a later PR); see src/data/README.md
+                         message CRUD with optimistic transactions,
+                         notifications — push registration policy
+                         (decidePushSync / syncPushRegistration / controller),
+                         push store, plugin RPC wrapper,
+                         notification payload → profile resolution, badge count);
+                         see src/data/README.md
   lib/                   pure TypeScript, vitest-tested (no react-native imports)
     profiles/            ServerProfile model, SecureStore-backed store, URL
                          validation, /health + /system/config probe
@@ -268,15 +274,8 @@ src/
                          bottom-anchored composer screens; OverlayBounds — the
                          region under the header the composer's floating
                          typeahead may cover)
-e2e/flows/               Maestro flows (smoke, phase1-shell, phase3-threads, phase3-compose,
-                         phase4a-timeline, phase4a-diff-showcase,
-                         phase4a-conversation-rows, phase4a-work-rows,
-                         phase4b-send, phase4b-ask-user, phase4b-approve,
-                         phase4b-queue, phase4b-actions, phase4b-composer,
-                         phase4b-interactions, phase4b-approval,
-                         phase4b-thread-actions, phase5-links, phase6-panel,
-                         phase6-diff, phase6-files, phase6-terminal,
-                         phase6-terminal-resume)
+e2e/flows/               Maestro flows for launch, deep links, sending,
+                         connect, and unreachable servers
 e2e/manual/              flows that need a server the harness cannot provide
                          (phase7-plugins-devserver: the checkout's dev server;
                          demo-server: the apps/demo-server worker) and so are
@@ -382,13 +381,9 @@ queue": `delay:30000 first` → Stop + queue affordances → queue "second" →
 Send now → steered into the turn), `phase4b-actions.yaml` ("P4b actions":
 environment line, "…" → Rename, long-press → Copy text, Add to chat quotes
 into the composer). `phase4b-composer.yaml` drives the composer showcase's
-typeahead, pills, "+" menu and attachment chip. `phase5-links.yaml` takes
-`-e THREAD_ID=<threads.completed> -e PROJECT_ID=<projectId>` from the
-backend's startup JSON and drives the deep links while the app is warm:
-`bb://threads/<id>` and the web alias `bb://projects/<p>/threads/<t>` open the
-seeded "Completed thread", `bb://settings/servers` shows the added server, and
-`bb://settings` opens Settings (the per-server push row is asserted once the
-push-notifications PR lands).
+typeahead, pills, "+" menu and attachment chip. The shell rewrite deleted
+`phase5-links.yaml`. `shell-deep-link.yaml` now checks the applicable native
+route at `bb://settings/notifications`. It does not restore the deleted flow.
 `phase6-panel.yaml` opens a thread named "P6 panel thread" (create it first:
 a managed-worktree thread through the API with a file written into its
 worktree), presents the workspace panel from the header button, checks the
@@ -584,7 +579,7 @@ argument drives a dev client through Metro instead.
 - **Input**: tapping the terminal focuses xterm's hidden textarea and raises
   the keyboard (`keyboardDisplayRequiresUserAction={false}`); the accessory
   bar above it adds esc, tab, a sticky ctrl (applied to the next keystroke),
-  arrows, home / end, `-`, `/`, `|`, paste (`expo-clipboard`), a keyboard
+  arrows, home / end, `-`, `/`, `|`, paste, a keyboard
   key and, full screen, a "…" that opens the same menu as the header
   (rename / restart / new / close). Cursor keys follow DECCKM (SS3 in
   application mode), Ctrl+arrow sends `CSI 1;5<final>`.
@@ -680,9 +675,37 @@ add-root-cert`). Env: `BB_MOBILE_E2E_GATE_PORT` (42998),
 
 ## Push notifications and deep links (Phase 5)
 
-- Push notifications (Expo push registration, tap routing, foreground toast,
-  app-icon badge, Settings → Notifications rows, and the server side) arrive
-  in a later PR; `expo-notifications` is already part of the native build.
+- Registration: `PushNotificationsHost` (mounted once in `app/_layout.tsx`)
+  registers the phone's Expo push token with each enabled server through
+  Settings → This device → Notifications. It calls the `push-notifications`
+  plugin RPC methods `pushSubscriptions.add`, `pushSubscriptions.list`, and
+  `pushSubscriptions.remove` through `sdk.plugins.callRpc`. It syncs on
+  connect, on
+  AppState active, when the OS rolls the token (re-register), and when the
+  toggle flips; profiles removed from the app get their server row deleted
+  by the stored server URL. A direct profile must use HTTPS, unless it uses
+  `127.0.0.1`, `localhost`, or `::1`. Tailscale Serve and bb connect profiles
+  work normally. Other HTTP profiles show "Push needs HTTPS or bb connect"
+  and do not register. The server also needs outbound access to `exp.host`.
+  The server must enable the `push-notifications` plugin.
+  The one-time "Get notified…" sheet appears only after the first successful
+  connection. The sheet never appears on launch. The OS prompt starts only
+  after the user selects "Turn on notifications".
+- Privacy: the registration request contains the full Expo token. The list
+  RPC method and `bb push-notifications list` return only the last six token
+  characters in `tokenSuffix`. A token can receive pushes but cannot read
+  server data.
+- Handling: a foreground arrival becomes a toast with "Open" (no system
+  banner); a tap on a background / cold-start notification opens
+  `/threads/<threadId>` on the profile that owns it. The phone first matches
+  the optional `serverUrl` hint. It probes saved profiles for the thread only
+  when no hint matches. The web page sends the app-icon badge count through
+  the mobile bridge, and `AppBadgeSync` keeps that count on background.
+- Simulator check without APNs: `xcrun simctl push <udid> app.getbb.mobile
+payload.apns` with `{"aps":{"alert":{…}},"body":{"kind":"turn-finished",
+"threadId":"…","projectId":"…","serverUrl":"https://…"}}`
+  (expo-notifications reads remote `data` from the `body` key) after the user
+  grants permission.
 - Deep links: `bb://<mobile path>` (`bb://threads/<id>`, `bb://settings/servers`,
   `bb://projects/<p>/threads/<t>`, …) and universal / app links
   `https://<handle>.getbb.app/{threads,projects,settings}/*` (iOS
@@ -778,6 +801,11 @@ push key); nobody needs a local Xcode signing setup to ship.
   acceptance), `preview` (internal ad-hoc), `production` (App Store /
   TestFlight; `autoIncrement` + `appVersionSource: remote` keep the build
   number on EAS, `version` in `app.json` is the marketing version).
+- **Push release check**: confirm the APNs key with `pnpm exec eas credentials
+  -p ios`. Use `development-device` for a physical iPhone. Keep the server
+  `push-notifications` plugin enabled, and use an HTTPS or bb connect profile.
+  Run `bb push-notifications list`. Confirm that it shows a token suffix, not
+  a full token.
 - **TestFlight by hand**: `pnpm exec eas build -p ios --profile production`,
   then `pnpm exec eas submit -p ios --latest`. The submit profile reads the
   App Store Connect API key from the gitignored `apps/mobile/asc-api-key.p8`
@@ -882,8 +910,11 @@ Beta App Review and another build of the same version usually does not.
 - Preferences (theme mode `bb.theme`, sidebar `bb.sidebar.*`, thread-creation
   picks `bb.promptbox.*` / `bb.root-compose.*`, composer drafts
   `bb.promptbox.contents-*` in the web's `PromptDraftState` JSON, all with the
-  web app's key names): MMKV store `bb.preferences` (the push state of the
-  later push-notifications PR shares it).
+  web app's key names): MMKV store `bb.preferences`. Push state shares it:
+  `bb.push.enabled.<profileId>` (+ `bb.push.enabledProfiles` index),
+  `bb.push.registration.<profileId>` (+ `bb.push.registrations` index: the
+  token / server row the phone registered, so a removed profile can still be
+  unregistered), `bb.push.prompted`.
 - Each profile owns one SDK client, one realtime socket, and one TanStack
   QueryClient (`src/lib/sdk/client-registry.ts`, instantiated once by
   `src/app-shell/client-registry.ts`); the active profile's socket/session

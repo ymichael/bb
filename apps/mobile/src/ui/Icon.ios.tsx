@@ -7,12 +7,6 @@ import {
   sfSymbolFor,
 } from "./sf-symbol-map";
 
-/**
- * iOS icon: the SF Symbol mapped to `name` through expo-image's `sf:` source
- * (`tintColor` must stay a string token, never `Color.ios.*`), or the
- * Hugeicons glyph for names without a symbol (brand marks). Metro resolves
- * `./Icon` to this file on iOS; `Icon.tsx` is the Android / default sibling.
- */
 export function Icon({
   name,
   size = ICON_SIZE_DEFAULT,
@@ -42,9 +36,6 @@ export function Icon({
     <Image
       source={`sf:${symbol}`}
       tintColor={color ?? tokens.foreground}
-      // The symbol is laid out in a `size` square; `fontSize` is its point
-      // size and `fontWeight` its symbol weight (expo-image reads both from
-      // the style). Wide symbols shrink to fit rather than crop.
       contentFit="contain"
       sfEffect={effect}
       style={[

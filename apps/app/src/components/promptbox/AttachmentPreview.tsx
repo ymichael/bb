@@ -1,5 +1,8 @@
 import { useEffect } from "react";
-import { getWrappedImageIndex, ImageLightbox } from "@/components/ui/image-lightbox.js";
+import {
+  getWrappedImageIndex,
+  ImageLightbox,
+} from "@/components/ui/image-lightbox.js";
 import { Icon } from "@bb/shared-ui/icon";
 import type { PromptDraftAttachment } from "@bb/client-core";
 import { toUserAttachmentImageSrc } from "@/lib/user-attachment-images";
@@ -8,11 +11,6 @@ import {
   releaseLocalAttachmentPreview,
 } from "@/lib/attachment-local-previews";
 
-/**
- * A just-picked image renders from its local object URL; anything restored
- * from a persisted draft (or picked in another window) falls back to the
- * stored attachment URL.
- */
 function resolveAttachmentPreviewSrc(
   path: string,
   attachmentProjectId: string | undefined,
@@ -97,10 +95,12 @@ export function AttachmentPreview({
                       releaseLocalAttachmentPreview(attachment.path);
                       onRemoveAttachment(attachment.path);
                     }}
-                    className="absolute right-1 top-1 z-10 rounded-full bg-black/55 p-0.5 text-white transition-colors hover:bg-black/70"
+                    className="group/attachment-remove-image absolute right-1 top-1 z-10 inline-flex size-4 items-center justify-center rounded-full text-white focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:-right-1 max-md:pointer-coarse:-top-1 max-md:pointer-coarse:size-7"
                     aria-label={`Remove ${attachment.name}`}
                   >
-                    <Icon name="X" className="size-3" />
+                    <span className="inline-flex size-4 items-center justify-center rounded-full bg-black/55 transition-colors group-hover/attachment-remove-image:bg-black/70">
+                      <Icon name="X" className="size-3" />
+                    </span>
                   </button>
                 ) : null}
               </div>
@@ -117,14 +117,18 @@ export function AttachmentPreview({
               >
                 <span className="truncate">{attachment.name}</span>
                 {onRemoveAttachment ? (
-                  <button
-                    type="button"
-                    onClick={() => onRemoveAttachment(attachment.path)}
-                    className="rounded p-0.5 hover:bg-state-hover"
-                    title={`Remove ${attachment.name}`}
-                  >
-                    <Icon name="X" className="size-3" />
-                  </button>
+                  <span className="relative size-4 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => onRemoveAttachment(attachment.path)}
+                      className="group/attachment-remove-file absolute left-1/2 top-1/2 inline-flex size-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-md focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring max-md:pointer-coarse:size-7"
+                      aria-label={`Remove ${attachment.name}`}
+                    >
+                      <span className="inline-flex size-4 items-center justify-center rounded transition-colors group-hover/attachment-remove-file:bg-state-hover">
+                        <Icon name="X" className="size-3" />
+                      </span>
+                    </button>
+                  </span>
                 ) : null}
               </span>
             ))}

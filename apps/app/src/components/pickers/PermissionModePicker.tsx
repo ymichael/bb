@@ -33,39 +33,21 @@ export interface PermissionModePickerProps {
   onChange: (value: PermissionMode) => void;
   supported: boolean;
   className?: string;
-  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. Defaults to true. */
   muted?: boolean;
-  /** Render with the menu open on mount. Story-only escape hatch. */
   defaultOpen?: boolean;
-  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
   modal?: boolean;
-  /** Horizontal menu alignment. Defaults to "end". */
   align?: "start" | "center" | "end";
-  /** Temporary effective mode display; does not change the stored permission value. */
   displayOverride?: {
     label: string;
     compactLabel?: string;
     description?: string;
     title?: string;
   };
-  /**
-   * Render the picker as a non-interactive, dimmed label (read-only surfaces,
-   * e.g. the side chat). The selected mode still shows; the menu never opens.
-   */
   disabled?: boolean;
-  /** Keep the chevron visible while disabled, used for plan-mode permission locks. */
   showChevronWhenDisabled?: boolean;
-  /** Show a locked summary when the provider exposes only one mode. */
   showWhenSingleOption?: boolean;
 }
 
-/**
- * Permission mode picker. Returns null when the provider doesn't support
- * picking (`supported=false`), the current value has not loaded yet, or
- * there's nothing to choose between. A `disabled` picker renders the same
- * selected-mode label as its interactive counterpart, just non-interactive
- * (read-only surfaces, e.g. the side chat).
- */
 export function PermissionModePicker({
   value,
   options,
@@ -99,6 +81,7 @@ export function PermissionModePicker({
       options={compactOptions}
       onChange={onChange}
       className={cn(LIST_HOVER_TRANSITION, className)}
+      caretClassName="text-subtle-foreground/75"
       contentClassName="max-w-72"
       muted={muted}
       defaultOpen={defaultOpen}

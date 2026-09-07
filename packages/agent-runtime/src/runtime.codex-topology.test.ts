@@ -17,14 +17,6 @@ import {
 import { promptTextInput } from "./test/prompt-input.js";
 import type { AgentRuntime, AgentRuntimeBridgeLaunch } from "./types.js";
 
-/**
- * Process topology after L3: the runtime runs ONE bridge process per provider
- * artifact, and the codex bridge supervises one `codex app-server` child per
- * live thread underneath it. This drives the real codex bridge module through
- * the runtime (the way the daemon does) with the fake app-server as its child,
- * and counts children through the fake's process log.
- */
-
 const codexBridgeModulePath = fileURLToPath(
   new URL(
     "../../../plugins/provider-codex/src/bridge/bridge.ts",
@@ -41,15 +33,10 @@ const fakeAppServerPath = fileURLToPath(
 interface CodexTopologyRuntime {
   events: ThreadEvent[];
   runtime: LaunchBoundAgentRuntime;
-  /** App-server children the fake logged as spawned. */
   spawned(): number;
-  /** App-server children the fake logged as exited. */
   exited(): number;
-  /** Distinct bridge processes that spawned a child (parent pids). */
   bridges(): number;
-  /** Pids of every child the fake logged as spawned, in order. */
   childPids(): number[];
-  /** Bridge process exits the runtime reported. */
   bridgeExits: { expected: boolean }[];
   launch(digest: string): AgentRuntimeBridgeLaunch;
 }
@@ -131,17 +118,16 @@ describe("codex process topology", () => {
     return {
       events,
       runtime,
-      childPids: () =>
-        spawnLines().map((line) => Number(line.split(":")[1])),
+      childPids: () => spawnLines().map((line) => Number(line.split(":")[1])),
       spawned: () => spawnLines().length,
       exited: () => readLog().filter((line) => line.startsWith("exit:")).length,
-      bridges: () => new Set(spawnLines().map((line) => line.split(":")[2])).size,
+      bridges: () =>
+        new Set(spawnLines().map((line) => line.split(":")[2])).size,
       bridgeExits,
       launch,
     };
   }
 
-  /** The bb threads the runtime hosts, out of the ones this test starts. */
   function hosted(runtime: AgentRuntime): string[] {
     return ["t1", "t2", "t3", "t4"].filter((threadId) =>
       runtime.hasThread(threadId),
@@ -172,14 +158,12 @@ describe("codex process topology", () => {
     await startCodexThread(runtime, "t2");
     await startCodexThread(runtime, "t3");
 
-    // N concurrent threads: ONE bridge process, N app-server children.
     expect(runtime.listRunningProviders()).toEqual(["codex"]);
     expect(hosted(runtime)).toEqual(["t1", "t2", "t3"]);
     expect(topology.spawned()).toBe(3);
     expect(topology.bridges()).toBe(1);
     expect(topology.exited()).toBe(0);
 
-    // A turn runs on one of them without touching the others.
     await runtime.runTurn({
       clientRequestId: "creq_cdxtpgy222",
       threadId: "t2",
@@ -195,8 +179,6 @@ describe("codex process topology", () => {
     });
     expect(topology.spawned()).toBe(3);
 
-    // thread/stop (release): that thread's child dies; the bridge and the
-    // other children stay.
     await runtime.stopThread({ threadId: "t1" });
     await waitForRuntimeState({
       label: "t1's app-server child exited",
@@ -206,7 +188,6 @@ describe("codex process topology", () => {
     expect(runtime.listRunningProviders()).toEqual(["codex"]);
     expect(hosted(runtime)).toEqual(["t2", "t3"]);
 
-    // thread/archive: the same for the archived thread.
     const session2 = runtime.getProviderSession("t2");
     if (!session2) throw new Error("expected a codex session for t2");
     await runtime.archiveThread({
@@ -223,9 +204,6 @@ describe("codex process topology", () => {
     expect(hosted(runtime)).toEqual(["t3"]);
     expect(topology.spawned()).toBe(3);
 
-    // A plugin update ships a new artifact: the next thread starts on a new
-    // bridge process (its own child), the old bridge keeps serving t3 until
-    // t3 is released, then retires — and its last child dies with it.
     const v2 = topology.launch("codex-v2");
     await startCodexThread(runtime, "t4", v2);
     expect(topology.spawned()).toBe(4);
@@ -244,10 +222,6 @@ describe("codex process topology", () => {
     expect(hosted(runtime)).toEqual(["t4"]);
     expect(topology.spawned()).toBe(4);
 
-    // The archived session is still resumable on the current bridge once it
-    // is unarchived. The unarchive has no live child to use, so the bridge
-    // runs it on a one-shot maintenance child (spawned and reaped); the
-    // resume then gets a fresh child of its own.
     await runtime.unarchiveThread({
       providerId: "codex",
       providerThreadId: session2.providerThreadId,
@@ -278,7 +252,6 @@ describe("codex process topology", () => {
     const topology = createCodexTopologyRuntime();
     const { runtime, events } = topology;
     await startCodexThread(runtime, "t1");
-    // The fake opens this turn and never settles it on its own.
     await runtime.runTurn({
       clientRequestId: "creq_cdxtpgy223",
       threadId: "t1",
@@ -295,9 +268,6 @@ describe("codex process topology", () => {
 
     await runtime.stopThread({ threadId: "t1" });
 
-    // The interrupted turn settled before the stop was answered (the runtime
-    // forgets the thread right after), and the child is gone: after
-    // thread/stop the bridge holds nothing for the thread.
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "turn/completed",
@@ -311,14 +281,11 @@ describe("codex process topology", () => {
       predicate: () => topology.exited() === 1,
       timeoutMs: 5_000,
     });
-    expect(runtime.listRunningProviders()).toEqual(["codex"]);
-    expect(topology.bridgeExits).toEqual([]);
+    expect(runtime.listRunningProviders()).toEqual([]);
+    expect(topology.bridgeExits).toEqual([{ expected: true }]);
   }, 30_000);
 
   it("releases the thread on the bridge when a construction times out on the runtime's side", async () => {
-    // The fake answers thread/start after 800 ms; the runtime gives up at
-    // 200 ms. The bridge still constructs the session (and its child) when
-    // the answer lands — and must be told to drop it.
     const topology = createCodexTopologyRuntime({
       fakeScript: { startDelayMs: 800 },
       threadCreationTimeoutMs: 200,
@@ -331,7 +298,8 @@ describe("codex process topology", () => {
       predicate: () => topology.spawned() === 1 && topology.exited() === 1,
       timeoutMs: 10_000,
     });
-    expect(runtime.listRunningProviders()).toEqual(["codex"]);
+    expect(runtime.listRunningProviders()).toEqual([]);
+    expect(topology.bridgeExits).toEqual([{ expected: true }]);
   }, 30_000);
 
   it("sweeps every app-server child when the bridge dies unexpectedly", async () => {
@@ -350,7 +318,6 @@ describe("codex process topology", () => {
         ?.split(":")[2],
     );
 
-    // The bridge is killed outright: no shutdown path runs in it.
     process.kill(bridgePid, "SIGKILL");
     await waitForRuntimeState({
       label: "the runtime reported the unexpected bridge exit",
@@ -358,7 +325,6 @@ describe("codex process topology", () => {
       timeoutMs: 10_000,
     });
     expect(topology.bridgeExits).toEqual([{ expected: false }]);
-    // Both children were swept with the bridge's process group.
     await waitForRuntimeState({
       label: "both app-server children exited",
       predicate: () => !isAlive(child1) && !isAlive(child2),

@@ -16,11 +16,6 @@ import {
   waitForThreadTurnStarted,
 } from "./test/runtime-test-harness.js";
 
-// The `approve:<kind>` directive is the deterministic approval path the
-// mobile e2e flows drive against the scripted echo provider. These tests pin
-// the request the runtime hands to `onInteractiveRequest` — decoded from the
-// bridge's `interaction/request`, its provider-native turn id mapped through
-// the assembler — and the two ways the scripted turn resumes afterwards.
 describe("scripted echo provider approve:<kind> directive", () => {
   let tmpDir: string;
 
@@ -97,8 +92,6 @@ describe("scripted echo provider approve:<kind> directive", () => {
     });
 
     expect(requests).toHaveLength(1);
-    // The bridge named its own turn (`turn-1`); the request reaches the app
-    // under the assembler-minted id the timeline carries.
     expect(turnId).not.toBe("turn-1");
     expect(requests[0]).toMatchObject({
       threadId: "t1",

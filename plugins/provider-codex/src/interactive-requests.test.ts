@@ -1,12 +1,3 @@
-// Approval decode/encode invariants for the Codex interactive-request modules.
-//
-// These cases previously lived in the legacy Codex adapter suite
-// (`codex/adapter.test.ts`) and moved here when that adapter was deleted. The
-// modules under test are not legacy: the canonical Codex bridge routes every
-// approval through `decodeCodexInteractiveRequest` and
-// `buildCodexInteractiveResponse` (see `codex/bridge/bridge.ts`), so these
-// invariants guard live behavior.
-
 import { describe, expect, it } from "vitest";
 
 import {
@@ -182,9 +173,6 @@ describe("decodeCodexInteractiveRequest", () => {
       },
     };
 
-    // The approval reaches the user for the command, with the grantable
-    // (network/file-system) session grant only: bb's permission layer cannot
-    // grant macOS capabilities, and that must not fail the whole approval.
     const decoded = decodeCodexInteractiveRequest(request);
     expect(decoded?.payload).toMatchObject({
       kind: "approval",
@@ -196,7 +184,6 @@ describe("decodeCodexInteractiveRequest", () => {
       availableDecisions: ["allow_once", "allow_for_session", "deny"],
     });
 
-    // The macOS profile rides the timeline as the codex plugin's own item.
     expect(extractCodexMacOsPermissionRequest(request)).toEqual({
       providerThreadId: "t1",
       turnId: "turn-1",

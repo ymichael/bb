@@ -35,11 +35,6 @@ export function buildBridgeMcpServer(
     { name: BRIDGE_MCP_SERVER_NAME, version: "1.0.0" },
     { capabilities: { tools: {} } },
   );
-  // Low-level handlers instead of McpServer.registerTool: registerTool only
-  // accepts zod schemas, and rebuilding zod from the plugin's JSON Schema
-  // loses nested types, enums, and required-ness. The wire format is JSON
-  // Schema, so serve the registered schema verbatim. Argument validation
-  // stays server-side where the plugin's own parse runs on execution.
   instance.server.setRequestHandler(ListToolsRequestSchema, () => ({
     tools: dynamicTools.map((def) => ({
       name: def.name,

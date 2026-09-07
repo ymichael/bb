@@ -42,11 +42,6 @@ function setup(): { db: DbConnection; thread: Thread } {
 
 type EventInput = Parameters<typeof insertEvents>[2][number];
 
-/**
- * A thread the user started once, followed by a turn a Pi extension opened on
- * its own: the only `client/turn/requested` is the first message, and the
- * second turn's input is the provider-recorded `userMessage` item.
- */
 function seedExtensionTriggeredTurn(db: DbConnection, thread: Thread): void {
   const events: EventInput[] = [];
   let sequence = 0;
@@ -168,9 +163,6 @@ describe("timeline pages with provider-recorded input", () => {
       page: { kind: "latest", segmentLimit: 20 },
     });
 
-    // The page is anchored on stored `client/turn/requested` rows, of which
-    // there is one. A provider input row that counted as a second anchor would
-    // make the page drop the first turn and report nothing older to load.
     expect(response.timelinePage).toEqual({
       kind: "latest",
       segmentLimit: 20,

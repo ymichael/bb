@@ -40,8 +40,6 @@ describe("public thread default routes", () => {
         hostId: host.id,
         path: "/tmp/thread-defaults-create",
       });
-      // Host-default app creation is default-shaping; seed the source
-      // environment so this route test can assert the queued start directly.
       seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -407,9 +405,80 @@ describe("public thread default routes", () => {
           providerId: "codex",
         },
       ]);
-      // The Codex catalog is host-scoped, so the probe carries no workspace
-      // path (it would only fragment the server's model-list memo).
       expect(providerResponder.requests[0].command).not.toHaveProperty("cwd");
+    });
+  });
+
+  it("creates from displayed execution values when only the provider has a client source", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session } = seedHostSession(harness.deps);
+      registerProviderHostRpcResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        restoreCommandCaptureAfterResponse: true,
+        modelsByProviderId: {
+          codex: {
+            models: [
+              availableModelFixture({
+                model: "gpt-provider-default",
+                isDefault: true,
+              }),
+            ],
+            selectedOnlyModels: [],
+          },
+        },
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/thread-defaults-client-provider",
+      });
+      const environment = seedEnvironment(harness.deps, {
+        hostId: host.id,
+        projectId: project.id,
+        path: "/tmp/thread-defaults-client-provider",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-provider-default",
+          reasoningLevel: "medium",
+          permissionMode: "auto",
+          executionInputSources: {
+            providerId: "client-preference",
+          },
+          input: [
+            { type: "text", text: "Create from the new thread composer" },
+          ],
+          environment: {
+            type: "reuse",
+            environmentId: environment.id,
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const createdThread = threadSchema.parse(await readJson(response));
+      const queuedStart = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.start" &&
+          command.threadId === createdThread.id,
+      );
+      expect(queuedStart.command).toMatchObject({
+        providerId: "codex",
+        options: {
+          model: "gpt-provider-default",
+          reasoningLevel: "medium",
+          permissionMode: "auto",
+        },
+      });
     });
   });
 

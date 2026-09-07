@@ -85,7 +85,6 @@ describe("useOverflowMeasurement", () => {
     expect(observe).toHaveBeenCalledTimes(2);
     expect(scrollHeight).toHaveBeenCalledTimes(2);
     expect(clientHeight).toHaveBeenCalledTimes(2);
-    // The overflowing first row short-circuits before the width reads.
     expect(scrollWidth).toHaveBeenCalledOnce();
     expect(clientWidth).toHaveBeenCalledOnce();
     expect(first.dataset.measurement).toBe("overflowing");

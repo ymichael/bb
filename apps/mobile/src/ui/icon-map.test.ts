@@ -17,13 +17,10 @@ const SHARED_UI_DIR = join(
   "components",
   "ui",
 );
-// The web splits its map into the boot-path core glyphs and a lazily loaded
-// extended registry; mobile ships one map (no chunking on native).
 const SHARED_UI_CORE_ICON_PATH = join(SHARED_UI_DIR, "icon.tsx");
 const SHARED_UI_EXTENDED_ICON_PATH = join(SHARED_UI_DIR, "icon-extended.tsx");
 const MOBILE_ICON_MAP_PATH = join(HERE, "icon-map.ts");
 
-/** `Name: GlyphIdentifier,` entries of the `<start> … <end>` object literal. */
 function iconMapEntries(
   source: string,
   { start: startMarker, end: endMarker }: { start: string; end: string },

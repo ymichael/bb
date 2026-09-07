@@ -31,31 +31,17 @@ const MACHINE_BADGE_CLASS_NAME =
   "shrink-0 rounded-sm border border-border bg-muted/40 px-1.5 py-0.5 text-2xs leading-none text-subtle-foreground";
 
 interface MachinePickerUIProps {
-  /** All hosts known to the server, in server order. */
   hosts: readonly Host[];
-  /** Host id of the daemon running on this browser's machine, if reachable —
-   * its row gets the "this machine" badge and leads the menu. */
   localDaemonHostId: string | null;
-  /** Server-resolved primary host id from `/system/config`; null while it
-   * loads or before any host has enrolled. */
   primaryHostId: string | null;
-  /** Selected host id; an unknown or null id falls back to the primary host. */
   selectedHostId: string | null;
   onChange: (hostId: string) => void;
-  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
   disabled?: boolean;
   className?: string;
-  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories/tests. */
   modal?: boolean;
 }
 
-/**
- * Machine chip for projectless threads (>1 host):
- * picks which machine's personal workspace the thread runs in. There are no
- * worktree/checkout options — the mode is implicit, so the chip is just the
- * machine name.
- */
 export function MachinePickerUI({
   hosts,
   localDaemonHostId,
@@ -73,7 +59,6 @@ export function MachinePickerUI({
       selectPrimaryHost(hosts, primaryHostId),
     [hosts, primaryHostId, selectedHostId],
   );
-  // This machine leads; the rest keep server order (stable sort).
   const orderedHosts = useMemo(
     () =>
       [...hosts].sort(

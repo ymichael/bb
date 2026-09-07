@@ -15,7 +15,7 @@ import {
   claimQueuedRun,
   countCallsForRun,
   createRun,
-  deleteExpiredTerminalRuns,
+  deleteTerminalRuns,
   getCall,
   getCallByChildThread,
   getLatestRunForOriginThread,
@@ -24,6 +24,7 @@ import {
   incrementRepairAttempts,
   listCallsForRun,
   listCallsForRunPage,
+  listExpiredTerminalRuns,
   listActiveRunsForOriginThread,
   listRuns,
   listPendingNotificationRuns,
@@ -96,6 +97,7 @@ const VALUE_LIMITS = { bytes: 1024 * 1024, nodes: 100_000, depth: 128 };
 const NOTIFICATION_RETRY_BASE_MS = 1_000;
 const NOTIFICATION_RETRY_MAX_MS = 60 * 60 * 1_000;
 const PROVIDER_RETRY_DELAYS_MS = [1_000, 4_000] as const;
+const RETENTION_SWEEP_RUNS = 20;
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -307,8 +309,6 @@ function resolveStructuredValue(
   if (validation.valid || typeof value !== "string") {
     return { value, validation };
   }
-  // Models sometimes double-encode structured output as a JSON string.
-  // Accept the unwrapped value only when it satisfies the schema.
   let unwrapped: JsonValue;
   try {
     unwrapped = JSON.parse(value) as JsonValue;
@@ -331,15 +331,13 @@ function resolveStructuredValue(
 function sleep(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal.aborted) return resolve();
-    const timeout = setTimeout(resolve, ms);
-    signal.addEventListener(
-      "abort",
-      () => {
-        clearTimeout(timeout);
-        resolve();
-      },
-      { once: true },
-    );
+    const settle = () => {
+      clearTimeout(timeout);
+      signal.removeEventListener("abort", settle);
+      resolve();
+    };
+    const timeout = setTimeout(settle, ms);
+    signal.addEventListener("abort", settle, { once: true });
   });
 }
 
@@ -374,8 +372,6 @@ export interface WorkflowService {
     value: JsonValue,
   ): Promise<{ ok: true } | { ok: false; terminal: boolean; error: string }>;
   agentConfiguration(threadId: string): {
-    /** Parameter schema for bb_workflow_result; null when the call is not a
-     * running structured call. */
     resultParameters: Record<string, unknown> | null;
     terminal: boolean;
     instructions: string | null;
@@ -424,13 +420,6 @@ export function createWorkflowService(
     if (signal.aborted) throw new Error("Workflow cancelled");
   }
 
-  /**
-   * Tell open pages that the run set for an origin thread changed. The
-   * composer banner polls only while it shows an active run, so this is how
-   * a freshly started run appears without a standing 1 s poll on idle
-   * threads. Ephemeral: a page that missed it catches up on its next
-   * refresh (visibility regain, reconnect, or its own active poll).
-   */
   function publishRunsChanged(originThreadId: string): void {
     bb.realtime.publish(WORKFLOW_RUNS_REALTIME_CHANNEL, {
       threadId: originThreadId,
@@ -665,9 +654,7 @@ export function createWorkflowService(
     const permissionMode = executionValuesSchema.shape.permissionMode.parse(
       run.originPermissionMode,
     );
-    if (
-      !provider.capabilities.permissionModes.includes(permissionMode)
-    ) {
+    if (!provider.capabilities.permissionModes.includes(permissionMode)) {
       throw new Error(
         `Permission mode ${JSON.stringify(run.originPermissionMode)} is not supported by provider ${requested.provider}`,
       );
@@ -1000,8 +987,6 @@ export function createWorkflowService(
             },
           ],
         });
-        // The corrective turn is still part of this call. A later idle event
-        // or result-tool submission settles it and wakes the existing waiter.
         return;
       } catch (error) {
         const correctionError = `Could not request structured-output correction: ${message(error)}`;
@@ -1435,6 +1420,32 @@ export function createWorkflowService(
     }
   }
 
+  async function archiveRetiredWorker(threadId: string): Promise<boolean> {
+    try {
+      await bb.sdk.threads.archive({ threadId });
+      return true;
+    } catch (error) {
+      if (isMissingThread(error)) return true;
+      bb.log.warn(
+        `Could not archive retired workflow worker ${threadId}: ${message(error)}`,
+      );
+      return false;
+    }
+  }
+
+  async function sweepExpiredRuns(now: number): Promise<void> {
+    const expired = listExpiredTerminalRuns(db, now, RETENTION_SWEEP_RUNS);
+    if (expired.runIds.length === 0) return;
+    for (const threadId of expired.childThreadIds) {
+      if (await archiveRetiredWorker(threadId)) continue;
+      bb.log.warn(
+        `Retention kept ${expired.runIds.length} expired workflow runs until their workers archive`,
+      );
+      return;
+    }
+    deleteTerminalRuns(db, expired.runIds);
+  }
+
   async function maintenanceTick(): Promise<void> {
     const now = Date.now();
     const isolated = async (
@@ -1449,13 +1460,9 @@ export function createWorkflowService(
         );
       }
     };
-    // Thread state is authoritative. Reconcile calls before enforcing the
-    // total run deadline.
     await isolated("reconcile-workers", reconcileRunningCalls);
     await isolated("enforce-timeouts", () => enforceTimeouts(now));
-    await isolated("retention", () => {
-      deleteExpiredTerminalRuns(db, now, 100);
-    });
+    await isolated("retention", () => sweepExpiredRuns(now));
   }
 
   async function runWorker(signal: AbortSignal): Promise<void> {
@@ -1477,12 +1484,12 @@ export function createWorkflowService(
         publishRunsChanged(run.originThreadId);
         const controller = new AbortController();
         controllers.set(run.id, controller);
-        signal.addEventListener("abort", () => controller.abort(), {
-          once: true,
+        const abortRun = () => controller.abort();
+        signal.addEventListener("abort", abortRun, { once: true });
+        const execution = executeRun(run, controller.signal).finally(() => {
+          signal.removeEventListener("abort", abortRun);
+          active.delete(execution);
         });
-        const execution = executeRun(run, controller.signal).finally(() =>
-          active.delete(execution),
-        );
         active.add(execution);
       }
       if (Date.now() >= nextMaintenanceAt) {

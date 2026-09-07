@@ -90,8 +90,6 @@ function scopeProviderRequestId(
 function buildDeniedInteractiveResolution(
   payload: PendingInteractionPayload,
 ): PendingInteractionResolution {
-  // Only an approval is policy-bearing; a request (a user question, a
-  // plugin-defined form) always reaches the user.
   if (!isApprovalPendingInteractionPayload(payload)) {
     throw new ProviderResponseEncodeError(
       "Only approval interactive requests can be auto-denied",

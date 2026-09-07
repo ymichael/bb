@@ -189,7 +189,6 @@ describe("public thread tabs", () => {
         expect(wire.tabs[0]).not.toHaveProperty("hostId");
         expect(wire.tabs[1]).toHaveProperty("hostId", "host_1");
         expect(wire.tabs[2]?.fileOpenerOwner).not.toHaveProperty("hostId");
-        // Current clients still read the omission back as null.
         expect(threadTabsResponseSchema.parse(body).tabs).toEqual(tabs);
       }
     });

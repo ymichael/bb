@@ -11,10 +11,7 @@ export type BbRealtimeEventName =
   | "system:config-changed"
   | "realtime:connection";
 
-export type ThreadRealtimeEvent = Extract<
-  ChangedMessage,
-  { entity: "thread" }
->;
+export type ThreadRealtimeEvent = Extract<ChangedMessage, { entity: "thread" }>;
 export type ProjectRealtimeEvent = Extract<
   ChangedMessage,
   { entity: "project" }
@@ -24,10 +21,7 @@ export type EnvironmentRealtimeEvent = Extract<
   { entity: "environment" }
 >;
 export type HostRealtimeEvent = Extract<ChangedMessage, { entity: "host" }>;
-export type SystemRealtimeEvent = Extract<
-  ChangedMessage,
-  { entity: "system" }
->;
+export type SystemRealtimeEvent = Extract<ChangedMessage, { entity: "system" }>;
 
 export type BbRealtimeConnectionState =
   | "connecting"
@@ -40,11 +34,6 @@ export interface BbRealtimeConnectionEvent {
   state: BbRealtimeConnectionState;
 }
 
-/**
- * Entity-changed events are delivered as one shared object to every matching
- * listener; their payload types are readonly so a listener cannot mutate what
- * the next listener receives.
- */
 export interface BbRealtimeEventMap {
   "thread:changed": ThreadRealtimeEvent;
   "project:changed": ProjectRealtimeEvent;
@@ -93,12 +82,6 @@ export interface SystemConfigRealtimeSubscribeArgs {
   event: "system:config-changed";
 }
 
-/**
- * Connection listeners are pure observers — they never open or hold the
- * socket. A listener registered while a socket already exists receives the
- * latest connection event as a snapshot on the next microtask, so a status
- * UI mounted after connect still learns the current state.
- */
 export interface RealtimeConnectionSubscribeArgs {
   callback: BbRealtimeCallback<"realtime:connection">;
   event: "realtime:connection";

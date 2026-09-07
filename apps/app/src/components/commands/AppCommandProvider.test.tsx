@@ -591,9 +591,6 @@ describe("AppCommandProvider", () => {
     expect(testState.calls).toEqual(["browser"]);
   });
 
-  // The compact sidebar drawer keeps its `aria-modal` panel mounted across
-  // open/close and only marks it `inert` while closed, so a retained panel used
-  // to keep `modalOpen` on for the rest of the session.
   it.each([
     ["thread.new" as const, "o", true],
     ["panel.toggle" as const, "j", false],
@@ -604,8 +601,7 @@ describe("AppCommandProvider", () => {
         <>
           <Handler command={command} name={command} result={true} />
           <div role="dialog" aria-modal="true" data-state="closed" inert>
-            {/* Nested and still marked open: only an inert ancestor rules it
-                out, so this covers the ancestor half of the selector. */}
+            {}
             <div role="dialog" data-state="open">
               <button type="button">Sidebar entry</button>
             </div>

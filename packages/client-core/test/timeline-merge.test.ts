@@ -111,6 +111,7 @@ function makeTimelineResponse(
 ): ThreadTimelineResponse {
   return {
     rows,
+    contextBoundarySeq: null,
     activePromptMode: null,
     activeThinking: null,
     activeWorkflows: [],
@@ -408,10 +409,6 @@ describe("timeline page row merging", () => {
       surfaceKey: "thread-1:default",
     });
 
-    // Sequences 2..49 are in neither response. Keeping both and appending would
-    // render them adjacent and leave `olderCursor` below the loaded rows, so the
-    // hidden stretch could never be scrolled to. The fresh window replaces the
-    // stale one instead, and its cursor pages back through the gap.
     expect(next.rows.map((row) => row.id)).toEqual(["latest"]);
     expect(next.olderCursor).toEqual(latestCursor);
   });
@@ -442,9 +439,6 @@ describe("timeline page row merging", () => {
       surfaceKey: "thread-1:default",
     });
 
-    // Row ids describe projected objects, not the raw event coverage. The
-    // shared command cannot bridge sequences 101..149, so adopting the fresh
-    // page and its cursor is the only state that can paginate through the gap.
     expect(next.rows).toEqual([updatedStraddlingWork]);
     expect(next.olderCursor).toEqual(latestCursor);
   });
@@ -471,11 +465,6 @@ describe("timeline page row merging", () => {
   });
 
   it("reconciles when a finished turn reaches back past loaded in-turn rows", () => {
-    // Watching a long turn mid-flight loads rows cut at the budget floor, with
-    // no user message above them. When the turn finishes it collapses into one
-    // summary row spanning the whole turn, so the next latest response starts at
-    // the turn's user message — before everything held. Splicing the two would
-    // put the prompt after the work it produced.
     const inTurnCursor = timelineCursor({
       id: "thread-1:in-turn:500",
       sequence: 500,
@@ -510,14 +499,6 @@ describe("timeline page row merging", () => {
   });
 
   it("keeps loaded rows when unprojected events separate them from the follow-up window", () => {
-    // The shape a follow-up submission produces on a byte-budgeted thread: the
-    // completed turn's summary spans to `turn/completed`, a provider error that
-    // began later sorts after it and ends earlier, and the events carrying the
-    // turn's end never become rows at all. The prompt opening the next turn is
-    // the first sequence of the fresh window and continues the loaded history
-    // directly, so nothing may be dropped. Observed on a thread whose loaded
-    // tail ended at 62634, whose turn summary reached 62635, and whose
-    // follow-up opened the next window at 62636.
     const oldestCursor = timelineCursor({ id: "oldest", sequence: 1 });
     const current = makeLoadedTimelineState(
       [
@@ -550,10 +531,6 @@ describe("timeline page row merging", () => {
   });
 
   it("keeps loaded rows when a window's first row is backfilled from below the cut", () => {
-    // A sequence-cut window names the cut in its cursor, but its first row can
-    // start under it: the projection backfills the running turn's `turn/started`
-    // row from wherever that turn began. The window still continues the loaded
-    // history, so the loaded pages stay.
     const inTurnCursor = timelineCursor({
       id: "thread-1:in-turn:60",
       sequence: 60,

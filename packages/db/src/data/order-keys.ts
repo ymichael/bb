@@ -97,9 +97,6 @@ export function createOrderKeyBetween({
       const midpoint = Math.floor((previousDigit + nextDigit) / 2);
       const candidateKey = `${prefix}${requireOrderKeyDigit(midpoint)}`;
 
-      // The lexicographic scheme depends on stored keys leaving room at the
-      // suffix where the candidate branches. Fail fast if a non-canonical
-      // boundary pair has no representable key between it.
       assertCandidateOrderKey({ candidateKey, previousKey, nextKey });
       return candidateKey;
     }

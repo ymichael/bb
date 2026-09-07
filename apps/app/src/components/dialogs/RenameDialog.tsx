@@ -22,16 +22,10 @@ import { useRenameDialogAutoFocus } from "./useRenameDialogAutoFocus.js";
 interface RenameDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Extra classes for the modal shell, e.g. the compact thread variant. */
   shellClassName?: string;
-  /** Render the entity's rename content, wiring in the autofocus ref. */
   children: (inputRef: RefObject<HTMLInputElement | null>) => ReactNode;
 }
 
-/**
- * Modal shell shared by the entity rename dialogs. Owns the autofocus
- * behavior and hands the input ref to the content via a render prop.
- */
 export function RenameDialog({
   open,
   onOpenChange,
@@ -52,35 +46,27 @@ export function RenameDialog({
 }
 
 interface RenameDialogContentProps {
-  /** Lowercase noun ("project", "thread", …) used in the title and copy. */
   entityLabel: string;
   initialName: string;
   pending: boolean;
-  /** Server-side error, shown when there is no validation message. */
   errorMessage?: string | null;
   placeholder?: string;
-  /** Length cap; also sets the input's `maxLength` attribute. */
+  inputDetails?: ReactNode;
   maxLength?: { limit: number; message: string };
   autoCapitalize: "words" | "sentences";
-  /** Tighter spacing for the compact thread variant. */
   compact?: boolean;
-  /** Renders a secondary button (left of submit) when provided. */
   clearAction?: { label: string; onClear: () => void };
   onRename: (name: string) => void;
   inputRef: RefObject<HTMLInputElement | null>;
 }
 
-/**
- * Body of an entity rename dialog: header copy, validated name input, and
- * submit button, all derived from `entityLabel`. Split from the shell so
- * stories can render it without the modal overlay.
- */
 export function RenameDialogContent({
   entityLabel,
   initialName,
   pending,
   errorMessage,
   placeholder,
+  inputDetails,
   maxLength,
   autoCapitalize,
   compact = false,
@@ -135,6 +121,7 @@ export function RenameDialogContent({
               clearMessage();
             }}
           />
+          {inputDetails}
           {displayedErrorMessage ? (
             <p className="text-sm text-destructive">{displayedErrorMessage}</p>
           ) : null}

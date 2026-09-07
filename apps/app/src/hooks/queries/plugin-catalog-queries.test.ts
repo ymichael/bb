@@ -117,8 +117,8 @@ describe("plugin installs", () => {
 });
 
 describe("plugin catalog queries", () => {
-  it("preserves canonical plugin identity without source-catalog fields", async () => {
-    const entries = await searchPluginCatalog(
+  it("preserves the catalog data and an absent category", async () => {
+    const data = await searchPluginCatalog(
       fetchReturning({
         results: [
           {
@@ -128,7 +128,6 @@ describe("plugin catalog queries", () => {
             description: "Personal task capture",
             icon: "CheckList",
             iconUrl: null,
-            category: "Project management",
             source: "npm:@bb-plugins/todoist",
             marketplace: "acme-plugins",
             marketplaceDisplayName: "Acme Plugins",
@@ -136,40 +135,61 @@ describe("plugin catalog queries", () => {
             publisherLabel: "Acme Plugins",
             official: false,
             author: { name: "Acme", url: "https://acme.dev" },
+            overview: "# Todoist\n\nLong-form text.\n",
             installed: false,
             compatible: false,
             incompatibleReason: "requires bb >= 0.15",
           },
         ],
+        collections: [
+          {
+            id: "new-and-notable",
+            displayName: "New & notable",
+            pluginIds: ["todoist"],
+          },
+        ],
       }),
       "todo",
     );
-    expect(entries).toEqual([
-      {
-        entryId: "todoist",
-        pluginId: "todoist",
-        displayName: "Todoist",
-        description: "Personal task capture",
-        icon: "CheckList",
-        iconUrl: null,
-        iconTinted: false,
-        category: "Project management",
-        source: "npm:@bb-plugins/todoist",
-        // A server from before the field defaults to no link.
-        repositoryUrl: null,
-        marketplace: "acme-plugins",
-        marketplaceDisplayName: "Acme Plugins",
-        publisherKey: "acme-plugins",
-        publisherLabel: "Acme Plugins",
-        official: false,
-        author: { name: "Acme", url: "https://acme.dev" },
-        installed: false,
-        // Likewise: a server from before the field reports no count.
-        installs: null,
-        compatible: false,
-        incompatibleReason: "requires bb >= 0.15",
-      },
-    ]);
+    expect(data).toEqual({
+      entries: [
+        {
+          entryId: "todoist",
+          pluginId: "todoist",
+          displayName: "Todoist",
+          description: "Personal task capture",
+          icon: "CheckList",
+          iconUrl: null,
+          iconTinted: false,
+          screenshots: [],
+          overview: "# Todoist\n\nLong-form text.\n",
+          collections: [],
+          source: "npm:@bb-plugins/todoist",
+          repositoryUrl: null,
+          marketplace: "acme-plugins",
+          marketplaceDisplayName: "Acme Plugins",
+          publisherKey: "acme-plugins",
+          publisherLabel: "Acme Plugins",
+          official: false,
+          author: {
+            name: "Acme",
+            github: null,
+            url: "https://acme.dev",
+          },
+          installed: false,
+          installs: null,
+          compatible: false,
+          incompatibleReason: "requires bb >= 0.15",
+        },
+      ],
+      collections: [
+        {
+          id: "new-and-notable",
+          displayName: "New & notable",
+          pluginIds: ["todoist"],
+        },
+      ],
+    });
   });
 
   it("throws instead of replacing cached search data with an empty result", async () => {

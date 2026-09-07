@@ -19,10 +19,7 @@ import {
   seedThread,
   seedThreadRuntimeState,
 } from "../helpers/seed.js";
-import {
-  createTestAppHarness,
-  withTestHarness,
-} from "../helpers/test-app.js";
+import { createTestAppHarness, withTestHarness } from "../helpers/test-app.js";
 
 type TestHarness = Awaited<ReturnType<typeof createTestAppHarness>>;
 
@@ -32,9 +29,6 @@ interface ParentFixture {
   projectId: string;
 }
 
-// A parent/manager thread that can receive a `[bb system]` turn: a ready
-// environment plus runtime state (provider thread id) so the dispatch resolves
-// to a `turn.submit`.
 function seedParentFixture(
   harness: TestHarness,
   hostId: string,
@@ -156,7 +150,6 @@ describe("Family B emit-site discriminator stamping", () => {
         parentThreadId: fixture.parentThreadId,
       });
 
-      // Both queued within the batch window collapse into one batch message.
       await queueChildThreadTurnNotificationBestEffort(harness.deps, {
         childThread: childA,
         parentThreadId: fixture.parentThreadId,

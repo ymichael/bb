@@ -82,11 +82,6 @@ export interface RunningTestServer {
   db: DbConnection;
   hub: NotificationHub;
   machineAuth: Awaited<ReturnType<typeof createMachineAuthService>>;
-  /**
-   * Providers come only from plugin registrations. A test that needs a
-   * user-configured agent registers it here, exactly as the owning plugin
-   * would from its own settings.
-   */
   providerRegistry: ProviderRegistryService;
 }
 
@@ -111,23 +106,8 @@ export interface IntegrationHarness {
 }
 
 export interface CreateHarnessOptions {
-  /**
-   * Bind the server to a fixed port instead of an ephemeral one. Long-lived
-   * harness backends (mobile e2e) need a stable URL for the app under test.
-   */
   serverPort?: number;
-  /**
-   * Bind host. Defaults to loopback. `0.0.0.0` lets a physical phone on the
-   * same network reach the harness server; the client base URL stays on
-   * 127.0.0.1 either way.
-   */
   bindHost?: "127.0.0.1" | "0.0.0.0";
-  /**
-   * Serve a built `apps/app` bundle from this directory, the way a real bb
-   * server does. The mobile WebView shell renders that page, so its Maestro
-   * flow needs the harness to serve it; every other test leaves this unset
-   * and the server answers API routes only.
-   */
   staticDir?: string;
 }
 
@@ -243,8 +223,6 @@ async function startIntegrationServer(
     inferenceFallbackModel: "test/mock-fallback-model",
     inferenceModel: "test/mock-model",
     inheritedSkillsRootPaths: [],
-    // Integration tests never refresh the catalog; an unroutable host keeps
-    // an accidental refresh off the network.
     marketplaceUrl: "https://marketplace.invalid/marketplace.json",
     openAiApiKey: process.env.OPENAI_API_KEY ?? "test-openai-key",
     appUrl: "https://bb.example.test",
@@ -252,10 +230,6 @@ async function startIntegrationServer(
     sharedSkillRoots: { user: [], project: [] },
     transcriptionModel: "test/mock-transcription",
     isDevelopment: false,
-    // The integration harness runs no periodic sweep and has no time control, so
-    // the archive grace window is disabled here: archiving the last live thread
-    // tears down its workspace immediately, as these tests expect. The grace
-    // window itself is covered by the server-level cleanup tests.
     managedEnvironmentRetireGraceMs: 0,
   };
   const terminalSessions = new TerminalSessionLifecycle({
@@ -281,19 +255,9 @@ async function startIntegrationServer(
   const telemetry = createNoopTelemetryService();
   const skillTreeRegistry = new SkillTreeRegistry();
   const providerRegistry = createProviderRegistryService({});
-  // Providers come only from plugin declarations. This harness runs no plugin
-  // service, so it registers the first-party declarations directly, exactly as
-  // their plugins would.
   await registerFirstPartyProviders(providerRegistry);
   const pluginHostArtifacts = new PluginHostArtifactRegistry();
-  // The fake providers these tests drive are declarations too, each backed
-  // by the scripted echo bridge artifact: every bridge-bound command carries
-  // a `bridgeLaunch`, and the daemon runs that artifact through the real
-  // bridge-protocol adapter exactly as it would a product provider's.
   await registerFakeProviders(providerRegistry, pluginHostArtifacts);
-  // Every first-party bridge ships as a plugin artifact (pi's included), and
-  // the daemon has no bridge for a provider without one on the wire: the
-  // plugin's artifact is the only thing that launches it.
   await recordFirstPartyProviderBridgeArtifacts(pluginHostArtifacts);
   const aiServices = createAiServiceRegistry();
   const pendingInteractions = new PendingInteractionLifecycle({
@@ -337,8 +301,6 @@ async function startIntegrationServer(
       watchInterests,
       workspaceReadCaches,
     },
-    // createApp takes its options separately from its dependencies; staticDir
-    // belongs here, not in the deps object.
     options.staticDir === undefined
       ? undefined
       : { staticDir: options.staticDir },
@@ -347,10 +309,6 @@ async function startIntegrationServer(
   let addressInfo: ListeningAddress | null = null;
   const server = serve(
     {
-      // The client always connects to 127.0.0.1, so bind the test server to
-      // 127.0.0.1 too. If we leave the host unspecified, this server can end
-      // up on ::1 while another local process owns 127.0.0.1 on the same
-      // port, and the client will hit that other process instead.
       hostname: options.bindHost ?? TEST_SERVER_HOST,
       port: options.serverPort ?? 0,
       fetch: app.fetch,
@@ -404,9 +362,6 @@ async function startHarnessDaemon(
       hostId: identity.hostId,
       hostType: "persistent",
     });
-    // The harness issues an in-memory host key instead of running persistent
-    // enrollment. Once that succeeds, persist the generated host ID so daemon
-    // restarts stay attached to the same host.
     await persistHostId({ dataDir, hostId: identity.hostId });
     const daemonApp = await createHostDaemonApp({
       dataDir,
@@ -497,7 +452,7 @@ export async function createIntegrationHarness(
       const mismatchedResources = daemonResources;
       daemonResources = null;
       await mismatchedResources.daemon
-        .shutdown("integration-host-id-mismatch")
+        .shutdown("integration-host-id-mismatch", 0)
         .catch(() => undefined);
       throw new Error(
         `Restarted daemon host ID ${mismatchedResources.hostId} did not match existing harness host ID ${harness.hostId}`,
@@ -521,7 +476,7 @@ export async function createIntegrationHarness(
     }
     const currentResources = daemonResources;
     daemonResources = null;
-    await currentResources.daemon.shutdown(reason);
+    await currentResources.daemon.shutdown(reason, 0);
   }
 
   async function restartDaemon(reason = "integration-restart"): Promise<void> {

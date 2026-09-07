@@ -1,10 +1,6 @@
 const PALETTE_RECENTS_KEY = "bb.palette.recents";
 const PALETTE_RECENTS_LIMIT = 8;
 
-/**
- * Most-recently-run action ids, newest first. Client-local: ergonomics for one
- * machine, not a setting. Ids that no longer exist never match and age out.
- */
 export function readPaletteRecents(): string[] {
   try {
     const stored = window.localStorage.getItem(PALETTE_RECENTS_KEY);
@@ -29,8 +25,6 @@ export function recordPaletteRecent(
   ].slice(0, PALETTE_RECENTS_LIMIT);
   try {
     window.localStorage.setItem(PALETTE_RECENTS_KEY, JSON.stringify(next));
-  } catch {
-    // Private mode or quota: costs recency ordering, nothing else.
-  }
+  } catch {}
   return next;
 }

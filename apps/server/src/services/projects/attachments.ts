@@ -1,5 +1,3 @@
-// For now, we store attachments on the server's local file system.
-// We might move this to something like R2 or S3 in the future.
 // oxlint-disable-next-line no-restricted-imports
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import {
@@ -21,14 +19,6 @@ import { ApiError } from "../../errors.js";
 const IMAGE_LIMIT_BYTES = 10 * 1024 * 1024;
 const FILE_LIMIT_BYTES = 25 * 1024 * 1024;
 
-// HEIC/HEIF (the iPhone camera default) used to be stored and served verbatim
-// as a localImage, but nothing downstream can decode it: Chromium (web app and
-// Electron shell) has no HEVC decoder, and no provider image input accepts it,
-// so the composer showed a broken thumbnail while the model silently received
-// nothing. bb ships no transcoder, so refuse the image upload with a reason.
-// Only the image MIME types are refused: the same bytes sent with a non-image
-// MIME type still store as a plain localFile, which an agent can convert on
-// the host.
 const HEIF_IMAGE_MIME_TYPES = new Set([
   "image/heic",
   "image/heic-sequence",
@@ -198,11 +188,6 @@ export async function storeAttachment(
 
 interface StoredAttachmentContent {
   content: Buffer;
-  /**
-   * Strong validator for the stored bytes. Stored names embed a timestamp and
-   * a random suffix, so a name never maps to different bytes; the size and
-   * mtime pair still guards a copied file's identity without hashing it.
-   */
   etag: string;
   mimeType?: string;
 }

@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import type { CliSkillMachineStatus } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { InstallCliSkillsDialog } from "./InstallCliSkillsDialog";
@@ -11,16 +12,12 @@ afterEach(() => {
 });
 
 function host(overrides: Partial<Host> & Pick<Host, "id" | "name">): Host {
-  return {
-    type: "persistent",
-    status: "connected",
+  return makeHost({
     lastSeenAt: 1,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
-  };
+  });
 }
 
 const hosts: Host[] = [

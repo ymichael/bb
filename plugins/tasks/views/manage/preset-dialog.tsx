@@ -52,10 +52,6 @@ interface MachineOption {
   name: string;
 }
 
-/**
- * Manage-table summary of where a preset's threads spawn. Machine names come
- * from listMachines; an unknown id (machine removed) falls back to the id.
- */
 export function describePresetEnvironment(
   preset: Pick<Preset, "environmentKind" | "baseBranch" | "machineId">,
   machines: readonly MachineOption[],
@@ -70,7 +66,6 @@ export function describePresetEnvironment(
   return `Worktree · ${branch} · ${machine}`;
 }
 
-/** Sentinel Select value for "Default machine" (Radix rejects empty values). */
 const DEFAULT_MACHINE_VALUE = "__default-machine__";
 
 export function describeError(error: unknown): string {
@@ -85,9 +80,7 @@ export interface PresetDraft {
   serviceTier: ExperimentalProviderModelPickerValue["serviceTier"];
   permissionMode: PermissionMode;
   environmentKind: EnvironmentKind;
-  /** Empty means "project default base"; only sent for new-worktree. */
   baseBranch: string;
-  /** Empty means "default machine"; only sent for new-worktree. */
   machineId: string;
   instructions: string;
 }
@@ -123,15 +116,11 @@ function presetDraft(preset: Preset): PresetDraft {
   };
 }
 
-/** Create/update a preset from a dialog draft. */
 export async function savePresetDraft(
   rpc: TasksRpc,
   editing: Preset | null,
   draft: PresetDraft,
 ): Promise<void> {
-  // The contract rejects a branch/machine on project-default presets, and a
-  // kind switch must not leave stale targets behind — always send explicit
-  // nulls outside new-worktree.
   const worktree = draft.environmentKind === "new-worktree";
   const baseBranch = draft.baseBranch.trim();
   const machineId = draft.machineId.trim();
@@ -162,7 +151,6 @@ export function PresetDialog({
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** Preset being edited, or null to create. */
   editing: Preset | null;
   onSave: (draft: PresetDraft) => Promise<void>;
 }) {
@@ -255,8 +243,6 @@ export function PresetDialog({
               value={draft.environmentKind}
               onValueChange={(value) => {
                 const kind = value as EnvironmentKind;
-                // Leaving new-worktree clears its targets so a later save
-                // can't ship stale branch/machine values.
                 setDraft((current) => ({
                   ...current,
                   environmentKind: kind,
@@ -319,8 +305,7 @@ export function PresetDialog({
                         {machine.name}
                       </SelectItem>
                     ))}
-                    {/* An edited preset may reference a machine that no
-                        longer exists; keep it selectable by raw id. */}
+                    {}
                     {draft.machineId !== "" &&
                     !(machines ?? []).some(
                       (machine) => machine.id === draft.machineId,

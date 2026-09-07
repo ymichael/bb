@@ -1,12 +1,3 @@
-// The static part of the demo world: project, host, and the small
-// per-thread responses. Typed against @bb/server-contract so a contract
-// change fails `typecheck` instead of reaching a reviewer as a crash.
-//
-// Times are relative to the request clock. A frozen timestamp would read as
-// "12 minutes ago" on the day it was written and "3 weeks ago" when the
-// reviewer opens the app, and it would also sort the app's own optimistic
-// rows (stamped with the device clock) above rows the server appends.
-
 import type {
   Host,
   ResolvedThreadExecutionOptions,
@@ -31,12 +22,9 @@ import type { DemoThreadSeed } from "./timelines.js";
 const DAY_MS = 24 * 60 * 60_000;
 const MINUTE_MS = 60_000;
 
-/** A thread as the list and detail routes see it at one instant. */
 export interface DemoThreadView {
   seed: DemoThreadSeed;
-  /** True while a scripted reply is still pending. */
   busy: boolean;
-  /** Last activity: the seed's age, or the latest sent message. */
   updatedAt: number;
 }
 
@@ -44,7 +32,6 @@ export function seedUpdatedAt(seed: DemoThreadSeed, now: number): number {
   return now - seed.minutesAgo * MINUTE_MS;
 }
 
-/** When the seeded conversation of a thread started, 30 minutes before its last activity. */
 export function seedStartedAt(seed: DemoThreadSeed, now: number): number {
   return seedUpdatedAt(seed, now) - 30 * MINUTE_MS;
 }
@@ -91,6 +78,7 @@ export function threadListEntry(
     environmentHostId: DEMO_HOST_ID,
     environmentName: null,
     environmentBranchName: "main",
+    queuedWork: "none",
     environmentWorkspaceDisplayKind: "other",
   };
 }
@@ -107,9 +95,10 @@ export function threadResponse(
     environmentName: _environmentName,
     environmentBranchName: _environmentBranchName,
     environmentWorkspaceDisplayKind: _environmentWorkspaceDisplayKind,
+    queuedWork: _queuedWork,
     ...thread
   } = threadListEntry(view, now);
-  return { ...thread, activeBackgroundAgentCount: 0, canSpawnChild: true };
+  return { ...thread, activeBackgroundAgentCount: 0, canSpawnChild: true, queuedMessageCount: 0 };
 }
 
 const PROJECT_DEFAULT_EXECUTION_OPTIONS = {
@@ -186,22 +175,28 @@ export const SYSTEM_VERSION: SystemVersionResponse = {
   upgradeCommand: "npx bb-app@latest",
 };
 
-/** `GET /plugins/contributions` has no contract type; this mirrors the server route. */
 export const PLUGIN_CONTRIBUTIONS = { cliCommands: [], mentionProviders: [] };
 
 export function queuedMessage(args: {
   id: string;
+  threadId: string;
   content: ThreadQueuedMessage["content"];
   now: number;
 }): ThreadQueuedMessage {
   return {
     id: args.id,
+    threadId: args.threadId,
     content: args.content,
     model: THREAD_DEFAULT_EXECUTION_OPTIONS.model,
     reasoningLevel: THREAD_DEFAULT_EXECUTION_OPTIONS.reasoningLevel,
     permissionMode: THREAD_DEFAULT_EXECUTION_OPTIONS.permissionMode,
     serviceTier: THREAD_DEFAULT_EXECUTION_OPTIONS.serviceTier,
     groupWithNext: false,
+    sendAt: null,
+    waitingOn: null,
+    failureReason: null,
+    payload: { kind: "inline" },
+    editable: true,
     createdAt: args.now,
     updatedAt: args.now,
   };

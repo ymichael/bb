@@ -16,8 +16,6 @@ const reachable = (fork: boolean): AcpProbeResult => ({
 });
 
 describe("applyAcpAgentProbe", () => {
-  // #1833: a declaration above what the agent answers makes POST
-  // /threads/fork create a thread that dies on start.
   it("narrows a fork the agent does not advertise", () => {
     const applied = applyAcpAgentProbe(agent("tip"), reachable(false));
     expect(applied?.agent.fork).toBe("none");
@@ -29,15 +27,11 @@ describe("applyAcpAgentProbe", () => {
     expect(applyAcpAgentProbe(agent("none"), reachable(false))).toBeNull();
   });
 
-  // Never widen: bb has verified the agent's own answer, not that its fork
-  // works end to end through the bridge, the runtime and the timeline.
   it("does not offer a fork bb never declared", () => {
     expect(applyAcpAgentProbe(agent("none"), reachable(true))).toBeNull();
     expect(applyAcpAgentProbe(agent(), reachable(true))).toBeNull();
   });
 
-  // An agent that is not installed on this host, or a host that cannot be
-  // reached, must leave the declaration exactly as it is.
   it("leaves an unreachable agent alone", () => {
     expect(
       applyAcpAgentProbe(agent("tip"), {

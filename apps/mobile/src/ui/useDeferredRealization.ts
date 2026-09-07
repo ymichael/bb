@@ -11,10 +11,6 @@ const scheduler = {
     globalThis.clearTimeout(handle),
 };
 
-/**
- * `true` two frames after `active` first becomes true, then stays true for
- * the component's lifetime (content is retained after the first open).
- */
 export function useDeferredRealization(active: boolean): boolean {
   const [realized, setRealized] = useState(false);
   useEffect(() => {

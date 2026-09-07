@@ -24,11 +24,6 @@ export function pluginArtifactStorageRoot(
   return artifact.path;
 }
 
-/**
- * The recorded checkout root. Path parsing cannot replace it: a nested
- * directory can carry the same name as the commit, and the derived root would
- * then exclude the tenants that keep the tree alive.
- */
 function pluginArtifactGitCheckoutRoot(
   artifact: PluginArtifactRow,
 ): string | null {
@@ -85,10 +80,6 @@ export async function garbageCollectPluginArtifacts(args: {
       );
       continue;
     }
-    // A checkout that a repository and commit share can hold the plugin root
-    // of another plugin. Deleting it would take that plugin's files with it,
-    // so this artifact waits for the pass that runs after its last tenant is
-    // collected.
     const checkoutRoot = pluginArtifactGitCheckoutRoot(artifact);
     const checkoutTenants =
       checkoutRoot === null
@@ -119,8 +110,6 @@ export async function garbageCollectPluginArtifacts(args: {
         await rm(checkoutRoot, { recursive: true, force: true });
       }
       deletePluginArtifact(args.db, artifact.id);
-      // Remove an empty npm package/version parent opportunistically. force
-      // is false by default, so a sibling artifact keeps it intact.
       await rm(dirname(storageRoot)).catch(() => {});
     } catch (error) {
       args.warn(

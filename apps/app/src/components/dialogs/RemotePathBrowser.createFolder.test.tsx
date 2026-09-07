@@ -40,11 +40,6 @@ function listing(path: string, entries: string[]): HostDirectoryListing {
   };
 }
 
-/**
- * jsdom has no layout, so the entry list's virtualizer would see a 0px scroll
- * box and mount nothing. Give every scroll box a 224px (h-56) viewport and
- * every entry row its real single-line height.
- */
 const ENTRY_TEST_ROW_HEIGHT_PX = 28;
 beforeEach(() => {
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
@@ -272,14 +267,11 @@ describe("RemotePathBrowser entry list", () => {
     );
 
     await screen.findByText("file_00000");
-    // 224px / 28px is 8 visible rows; with overscan the mounted set stays a
-    // small constant instead of one row per directory entry.
     const mountedRows = container.querySelectorAll("li");
     expect(mountedRows.length).toBeLessThan(60);
     expect(mountedRows.length).toBeGreaterThanOrEqual(8);
     expect(screen.queryByText("file_04999")).toBeNull();
 
-    // Scrolling to the bottom mounts the last rows and unmounts the first.
     const list = container.querySelector("ul");
     const scrollBox = list?.parentElement;
     if (!(scrollBox instanceof HTMLElement)) throw new Error("no scroll box");

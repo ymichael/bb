@@ -30,7 +30,6 @@ const flushLoad = () => act(() => new Promise((r) => setTimeout(r, 0)));
 class FakeWorker {}
 
 beforeEach(() => {
-  // jsdom has no Worker; the provider treats that as "no pool will exist".
   vi.stubGlobal("Worker", FakeWorker);
 });
 
@@ -42,7 +41,6 @@ afterEach(() => {
 
 let mountCount = 0;
 
-/** A pane that never asks for a pool: the composer, a plain thread. */
 function PlainPane() {
   const pool = usePierreWorkerPool();
   useEffect(() => {
@@ -55,13 +53,11 @@ function PlainPane() {
   );
 }
 
-/** Stands in for a pierre element: reads pierre's own context. */
 function PierreElement() {
   const pool = useWorkerPool();
   return <>{pool === fakePool ? "ready with pool" : "ready without pool"}</>;
 }
 
-/** A diff consumer: asks for the pool and renders pierre only once ready. */
 function DiffConsumer() {
   const ready = useRequirePierreWorkerPool();
   return (
@@ -110,8 +106,6 @@ describe("ThreadDetailWorkerPoolProvider", () => {
         </>
       </ThreadDetailWorkerPoolProvider>,
     );
-    // The consumer must not render pierre before the pool exists: pierre
-    // captures the context value when it creates the diff instance.
     expect(screen.getByTestId("diff-consumer").textContent).toBe("waiting");
 
     await flushLoad();
@@ -121,10 +115,8 @@ describe("ThreadDetailWorkerPoolProvider", () => {
     );
     expect(screen.getByTestId("plain-pane").textContent).toBe("pool");
     expect(themeSyncMounts).toHaveBeenCalled();
-    // The pane kept its position in the tree while the pool arrived.
     expect(mountCount).toBe(1);
 
-    // A second consumer reuses the pool; no second build.
     rerender(
       <ThreadDetailWorkerPoolProvider>
         <>

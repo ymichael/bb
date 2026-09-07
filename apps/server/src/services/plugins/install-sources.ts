@@ -20,57 +20,35 @@ import {
   spawnPortableOutputProcess,
 } from "@bb/process-utils";
 
-/**
- * What a `git:` spec asks for.
- *
- * - "ref" is one branch, tag, or commit, classified later with ls-remote.
- * - "range" is a semver range resolved over `[tagPrefix]vX.Y.Z` tags.
- * - "ref-or-range" is the implicit form: the spec reads as a semver range,
- *   but a repository is free to name a branch `1.x`. Classification decides,
- *   and a spec that is both is refused rather than guessed. See
- *   {@link isGitSemverRangeSpec}.
- */
 type ParsedGitSelector =
   | { kind: "ref"; ref: string }
   | { kind: "range"; range: string; tagPrefix: string }
   | { kind: "ref-or-range"; ref: string; range: string };
 
-/**
- * Parsed `bb plugin install` source spec (design §6). The original spec is
- * retained for display/diagnostics; normalized persistence is authoritative.
- */
 type ParsedPluginSource =
   | { kind: "path"; path: string }
   | { kind: "builtin"; name: string }
   | {
       kind: "git";
-      /** Clone URL (https, or an on-disk repo path). */
       url: string;
-      /** The spec as written after "@"; "HEAD" when it was omitted. */
       spec: string;
       selector: ParsedGitSelector;
-      /** Cache namespace relative to plugins/cache/git: "<host>/<path>". */
       cachePath: string;
     }
   | {
       kind: "npm";
       name: string;
-      /** Empty for an omitted spec (`npm:pkg`). */
       spec: string;
       specKind: "default" | "exact" | "tag" | "range";
     };
 
 const COMMIT_SHA_PATTERN = /^[0-9a-f]{7,40}$/i;
 export const DEFAULT_GIT_REF = "HEAD";
-/** Forces the rest of a git spec to read as a semver range: `semver:^1.2.0`. */
 const GIT_RANGE_SPEC_PREFIX = "semver:";
-/** Forces the rest of a git spec to read as a literal ref: `ref:1.x`. */
 const GIT_REF_SPEC_PREFIX = "ref:";
-/** `v1`, `1.2`, and `v1.2.3` are ordinary tag names, not ranges. */
 const BARE_VERSION_SPEC_PATTERN = /^v?\d+(?:\.\d+)*$/u;
 const GIT_TAG_PREFIX_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._/-]*$/u;
 const MAX_GIT_TAG_PREFIX_LENGTH = 128;
-// Loose npm package-name shape; enough to keep names safe as path segments.
 const NPM_NAME_PATTERN = /^(@[a-z0-9][a-z0-9._~-]*\/)?[a-z0-9][a-z0-9._~-]*$/;
 const BUILTIN_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
@@ -89,13 +67,6 @@ function assertSafeSegments(value: string, label: string): void {
   }
 }
 
-/**
- * Whether a git spec reads as a semver range rather than as a ref name.
- *
- * A bare version token is excluded: `v1`, `v1.2`, and `v1.2.3` all parse as
- * semver ranges, but they are how repositories actually name tags, so they
- * keep resolving as the literal tag. Write `semver:v1` to range over them.
- */
 function isGitSemverRangeSpec(spec: string): boolean {
   return (
     semver.validRange(spec) !== null &&
@@ -104,11 +75,6 @@ function isGitSemverRangeSpec(spec: string): boolean {
   );
 }
 
-/**
- * Validate a monorepo tag prefix such as `thread-hover-cards/`, which
- * versions one plugin of a repository with `thread-hover-cards/vX.Y.Z` tags.
- * An empty prefix means repository-wide `vX.Y.Z` tags.
- */
 export function normalizeGitTagPrefix(value: string): string {
   if (value.length === 0) return value;
   if (
@@ -126,11 +92,6 @@ export function normalizeGitTagPrefix(value: string): string {
   return value;
 }
 
-/**
- * The canonical install spec for a semver range over tags. The explicit
- * `semver:` form never collides with a ref of the same name, so generated
- * specs (marketplace entries, `--tag-prefix`) always use it.
- */
 export function gitRangeSourceSpec(args: {
   url: string;
   range: string;
@@ -143,16 +104,10 @@ export function gitRangeSourceSpec(args: {
   return `git:${args.url}@${GIT_RANGE_SPEC_PREFIX}${prefix}${args.range}`;
 }
 
-/** The tag a released `version` carries under `tagPrefix`. */
 export function gitSemverTagName(tagPrefix: string, version: string): string {
   return `${tagPrefix}v${version}`;
 }
 
-/**
- * The release a tag names under `tagPrefix`, or null when the tag is not a
- * `[tagPrefix]vX.Y.Z` release tag. The version must be canonical semver, so
- * `v1.2` and `v1.2.3+build` are not releases of this scheme.
- */
 export function gitSemverTagVersion(
   tag: string,
   tagPrefix: string,
@@ -171,8 +126,6 @@ function parseGitSelector(spec: string): ParsedGitSelector {
     return { kind: "ref", ref };
   }
   if (spec.startsWith(GIT_RANGE_SPEC_PREFIX)) {
-    // "semver:<range>" or "semver:<tagPrefix>:<range>". Neither a range nor a
-    // ref name can contain ":", so the split is unambiguous.
     const parts = spec.slice(GIT_RANGE_SPEC_PREFIX.length).split(":");
     if (parts.length > 2) {
       throw new Error(`invalid git semver spec "${spec}"`);
@@ -186,8 +139,6 @@ function parseGitSelector(spec: string): ParsedGitSelector {
     }
     return { kind: "range", range, tagPrefix };
   }
-  // Git ref names cannot contain ":", so the only specs that legitimately
-  // carry one are the selector prefixes handled above.
   if (spec.includes(":")) {
     throw new Error(
       `invalid git spec "${spec}" — use "ref:<name>" or "semver:[<tagPrefix>:]<range>"`,
@@ -227,12 +178,10 @@ function parseGitSource(spec: string): ParsedPluginSource {
     host = parsed.host;
     repoPath = parsed.pathname.replace(/^\/+|\/+$/g, "").replace(/\.git$/, "");
   } else if (urlish.startsWith("/")) {
-    // An on-disk repository (dev setups, tests). Grouped under "local".
     url = urlish;
     host = "local";
     repoPath = urlish.replace(/^\/+/, "").replace(/\.git$/, "");
   } else if (/^[a-z0-9]/i.test(urlish)) {
-    // Shorthand: git:github.com/user/repo@ref
     url = `https://${urlish}`;
     const parsed = new URL(url);
     host = parsed.host;
@@ -291,7 +240,6 @@ function parseBuiltinSource(spec: string): ParsedPluginSource {
   return { kind: "builtin", name: spec };
 }
 
-/** Parse an install source spec. Bare HTTP(S) URLs are managed Git sources. */
 export function parsePluginSource(source: string): ParsedPluginSource {
   if (source.startsWith("builtin:")) return parseBuiltinSource(source.slice(8));
   if (source.startsWith("git:")) return parseGitSource(source.slice(4));
@@ -302,12 +250,6 @@ export function parsePluginSource(source: string): ParsedPluginSource {
   return { kind: "path", path };
 }
 
-/**
- * Normalize a nested-plugin selector to a POSIX relative path inside a
- * repository. A leading "./" is accepted; absolute paths, backslashes, empty
- * segments, "." and ".." are rejected. The repository root itself is never a
- * nested plugin, so a selector that normalizes to nothing is rejected too.
- */
 export function normalizePluginSubdirectory(value: string): string {
   const trimmed = value.startsWith("./") ? value.slice(2) : value;
   if (
@@ -325,11 +267,6 @@ export function normalizePluginSubdirectory(value: string): string {
   return trimmed;
 }
 
-/**
- * Plugin roots that live inside `root`, as paths relative to it. Ancestors
- * win: moving a directory moves everything under it, so a root nested inside
- * another preserved root is dropped. `root` itself is never returned.
- */
 export function nestedPluginRoots(root: string, paths: string[]): string[] {
   const relatives = paths
     .map((path) => relative(root, path))
@@ -349,7 +286,6 @@ export function nestedPluginRoots(root: string, paths: string[]): string[] {
   return kept;
 }
 
-/** Plugin root inside a checkout: the checkout itself for a root install. */
 export function pluginRootDir(
   checkoutDir: string,
   subdirectory: string | null,
@@ -359,7 +295,6 @@ export function pluginRootDir(
     : join(checkoutDir, ...subdirectory.split("/"));
 }
 
-/** Managed npm install prefix; the plugin root is <prefix>/node_modules/<name>. */
 export function npmInstallPrefix(
   dataDir: string,
   name: string,
@@ -387,7 +322,6 @@ function resolveInside(
   return target;
 }
 
-/** Resolve symlinks and require target to remain within root. */
 export async function realPathInside(
   root: string,
   target: string,
@@ -408,7 +342,6 @@ export async function realPathInside(
   return realTarget;
 }
 
-/** Immutable npm install prefix: node_modules lives beneath this directory. */
 export function npmArtifactCacheDir(
   dataDir: string,
   packageName: string,
@@ -424,7 +357,6 @@ export function npmArtifactCacheDir(
   );
 }
 
-/** Immutable git checkout directory for an exact commit. */
 export function gitArtifactCacheDir(
   dataDir: string,
   cachePath: string,
@@ -438,7 +370,6 @@ export function gitArtifactCacheDir(
   );
 }
 
-/** Stable hash of names, kinds, link targets, and file bytes in a directory. */
 export async function hashInstallDir(rootDir: string): Promise<string> {
   const hash = createHash("sha256");
   async function visit(directory: string, prefix: string): Promise<void> {
@@ -501,7 +432,6 @@ async function pathExists(path: string): Promise<boolean> {
   }
 }
 
-/** Restore or clean the backup left by a process stop during promotion. */
 export async function recoverInterruptedGitPluginPromotion(
   targetDir: string,
 ): Promise<void> {
@@ -522,11 +452,6 @@ export async function recoverInterruptedGitPluginPromotion(
   await rm(promotingDir, { recursive: true, force: true });
 }
 
-/**
- * Promote staged bytes into a never-overwritten cache path. EXDEV falls back
- * to a fully fsynced sibling copy followed by an atomic rename. An identical
- * target left by an interrupted attempt wins and the staging copy is dropped.
- */
 export async function promoteImmutableDir(args: {
   stagingDir: string;
   targetDir: string;
@@ -543,9 +468,7 @@ export async function promoteImmutableDir(args: {
     await rm(corruptDir, { recursive: true, force: true });
     await rename(args.targetDir, corruptDir);
     movedCorruptTarget = true;
-  } catch {
-    // Missing targets are the normal first-install case.
-  }
+  } catch {}
   await rm(`${args.targetDir}.promoting`, { recursive: true, force: true });
   try {
     await rename(args.stagingDir, args.targetDir);
@@ -585,28 +508,11 @@ export async function promoteImmutableDir(args: {
   }
 }
 
-/**
- * Promote a git plugin from its staged checkout into the repo+commit cache.
- *
- * One checkout serves every plugin of a multi-plugin repository, so a promote
- * must never replace a tree another plugin already built into. Only the
- * selected plugin root moves, and copies of the built trees that live inside
- * that root ride along from the target. Copying leaves the live checkout whole
- * until the final promotion if the process stops during preservation. The
- * content hash covers the plugin root alone for the same reason.
- *
- * Returns the content hash of the promoted plugin root, which differs from
- * the staged hash when a nested plugin was carried over.
- */
 export async function promoteGitPluginArtifact(args: {
   stagingDir: string;
   targetDir: string;
   subdirectory: string | null;
   contentHash: string;
-  /**
-   * Plugin roots inside this plugin's root, relative to it, whose built files
-   * belong to another plugin. See `nestedPluginRoots`.
-   */
   preserveNestedRoots: string[];
 }): Promise<string> {
   const targetExists = await stat(args.targetDir)
@@ -620,8 +526,6 @@ export async function promoteGitPluginArtifact(args: {
     });
     return args.contentHash;
   }
-  // A selected path can be an in-repository symlink. Move the directory that
-  // validation built, not the symlink whose target the staging cleanup removes.
   const stagingRoot = await realPathInside(
     args.stagingDir,
     pluginRootDir(args.stagingDir, args.subdirectory),
@@ -631,17 +535,12 @@ export async function promoteGitPluginArtifact(args: {
   const targetRoot = pluginRootDir(args.targetDir, args.subdirectory);
   let preservedCount = 0;
   try {
-    // An identical target is settled before anything moves: `promoteImmutableDir`
-    // drops the staging tree in that case, and the carried-over plugins are in
-    // it by then.
     if (
       (await hashInstallDir(targetRoot).catch(() => null)) === args.contentHash
     ) {
       await rm(args.stagingDir, { recursive: true, force: true });
       return args.contentHash;
     }
-    // Garbage collection of a nested plugin can leave its parent directories
-    // behind or empty, so the plugin root of a reinstall needs one.
     await mkdir(dirname(targetRoot), { recursive: true });
     for (const nested of args.preserveNestedRoots) {
       const from = join(targetRoot, nested);
@@ -675,21 +574,11 @@ export async function promoteGitPluginArtifact(args: {
     : await hashInstallDir(targetRoot);
 }
 
-/**
- * Run a materialization command (git/npm), buffering output. Throws a clear
- * error when the binary is missing, the command times out, or it exits
- * non-zero (with the stderr tail — that is where git/npm explain themselves).
- */
 export async function runInstallCommand(
   command: string,
   args: string[],
   options?: {
     notFoundHint?: string;
-    /**
-     * Keep the whole output up to this size and fail past it, for commands
-     * whose full stdout is parsed. Without it only the last 8 KB survives,
-     * which is enough to explain a failure but not to read a tag listing.
-     */
     maxStdoutBytes?: number;
   },
 ): Promise<string> {

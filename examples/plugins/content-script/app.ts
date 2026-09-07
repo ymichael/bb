@@ -38,8 +38,6 @@ export default definePluginApp((app) => {
       mark(document.activeElement);
       signal.addEventListener("abort", clear, { once: true });
 
-      // The host aborts signal first and then invokes this disposer. `clear`
-      // is deliberately idempotent so both cancellation paths are safe.
       return clear;
     },
   });

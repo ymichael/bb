@@ -29,9 +29,6 @@ function readOverflowMeasurement(
 }
 
 function measureOverflowElements(elements: readonly HTMLElement[]): void {
-  // Complete every layout read before any listener can schedule a React
-  // update. This prevents one row's write from invalidating the next row's
-  // measurement.
   const results = elements.map((element) => ({
     element,
     measurement: readOverflowMeasurement(element),
@@ -102,9 +99,6 @@ export function useOverflowMeasurement({
   const [measurement, setMeasurement] =
     useState<OverflowMeasurement>("unmeasured");
 
-  // useLayoutEffect (not useEffect) so the first measurement runs before
-  // paint. Otherwise the first paint renders without the overflow toggle,
-  // and the button appears on the next frame after the effect runs.
   useLayoutEffect(() => {
     if (!enabled) {
       setMeasurement("fits");
@@ -118,19 +112,10 @@ export function useOverflowMeasurement({
     }
 
     const applyMeasurement: OverflowMeasurementListener = (nextMeasurement) => {
-      // ResizeObserver still fires after the observed node detaches (e.g. when
-      // an expandable row swaps the collapsed preview for the expanded body).
-      // A detached node reports scroll/client size 0, which would flip the
-      // measurement to "fits" and unexpand the row mid-click. Treat detached
-      // nodes as "no new information" — the last connected measurement stands.
       if (!element.isConnected) return;
       setMeasurement(nextMeasurement);
     };
     if (typeof ResizeObserver === "undefined") {
-      // Modern browsers deliver one initial ResizeObserver batch for every
-      // observed element. Waiting for that batch lets the shared observer
-      // complete all sibling layout reads before any React state write. A
-      // synchronous read here would instead force layout once per message.
       applyMeasurement(readOverflowMeasurement(element));
       return;
     }

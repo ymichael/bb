@@ -1,0 +1,34 @@
+name: Marketplace v2 live validation
+
+on:
+  schedule:
+    - cron: "27 4 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Parse the live v2 marketplace
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Setup workspace
+        uses: ./.github/actions/setup-workspace
+        with:
+          node-version: 22.x
+          pnpm-version: 9.15.0
+          cache-prefix: marketplace-v2-live
+
+      - name: Parse marketplace v2
+        run: pnpm exec tsx apps/server/scripts/validate-live-marketplace.ts https://getbb.app/marketplace/v2/marketplace.json
+
+      - name: Check the published schema
+        run: |
+          curl --fail --location --silent --show-error https://raw.githubusercontent.com/get-bb/marketplace/main/schema/marketplace-v2.schema.json --output /tmp/marketplace-v2.schema.json
+          cmp apps/web/public/schemas/marketplace-v2.schema.json /tmp/marketplace-v2.schema.json

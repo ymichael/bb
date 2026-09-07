@@ -16,16 +16,9 @@ import {
   BUILT_IN_REPLACEMENT_PROVIDER,
 } from "@/lib/plugin-replacement-preference";
 import { CodeRendererSettings } from "./CodeRendererSettings";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
-const EMPTY_REGISTRATIONS = {
-  homepageSections: [],
-  settingsSections: [],
-  navPanels: [],
-  threadPanelActions: [],
-  sidebarFooterActions: [],
-  fileOpeners: [],
-  messageDirectives: [],
-};
+const EMPTY_REGISTRATIONS = makePluginRegistrationSet();
 
 afterEach(() => {
   cleanup();
@@ -71,8 +64,6 @@ describe("CodeRendererSettings", () => {
     expect(store.get(diffRendererProviderAtom)).toBe(
       BUILT_IN_REPLACEMENT_PROVIDER,
     );
-    // The two renderers are pinned independently — turning off plugin diffs
-    // must not silently turn off its source viewer too.
     expect(store.get(sourceCodeRendererProviderAtom)).toBe(
       AUTOMATIC_REPLACEMENT_PROVIDER,
     );
@@ -104,15 +95,11 @@ describe("CodeRendererSettings", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Diffs" });
-    // Plugin ids sort, so "inkwell" is the automatic winner and the label has
-    // to name it rather than whichever plugin loaded first.
     expect(trigger.textContent).toContain("Automatic");
     fireEvent.pointerDown(trigger, { button: 0 });
     expect(
       screen.getByRole("menuitem", { name: /Currently using Inkwell diffs/u }),
     ).toBeTruthy();
-    // Both providers stay individually pinnable, and each carries its own
-    // description rather than the generic "From the <plugin> plugin" fallback.
     const items = screen
       .getAllByRole("menuitem")
       .map((item) => item.textContent ?? "");
@@ -121,9 +108,7 @@ describe("CodeRendererSettings", () => {
       true,
     );
     expect(
-      items.some((text) =>
-        text.includes("Side-by-side with word highlights."),
-      ),
+      items.some((text) => text.includes("Side-by-side with word highlights.")),
     ).toBe(true);
   });
 });

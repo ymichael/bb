@@ -1,21 +1,19 @@
 import { afterEach, beforeEach, expect, it } from "vitest";
-import { FULL_PERMISSION_OPTIONS, type FakePiBridgeHarness, startFakePiBridge } from "./test-support.js";
-
-/**
- * Manual compaction over RPC: pi answers `compact` with a failed response
- * AFTER it emitted `compaction_end` for a refusal such as "Nothing to
- * compact". The event is the terminal outcome (a `compaction-skipped`
- * warning and a completed boundary, as the in-process bridge reported it);
- * the response must neither fail the turn nor settle it before the held
- * event is delivered.
- */
+import {
+  FULL_PERMISSION_OPTIONS,
+  type FakePiBridgeHarness,
+  startFakePiBridge,
+} from "./test-support.js";
 
 const THREAD_ID = "thr_compactnoop";
 
 let harness: FakePiBridgeHarness;
 
 beforeEach(async () => {
-  harness = await startFakePiBridge({ prefix: "bb-pi-compaction-", initialize: true });
+  harness = await startFakePiBridge({
+    prefix: "bb-pi-compaction-",
+    initialize: true,
+  });
 });
 
 afterEach(async () => {
@@ -57,17 +55,26 @@ it("reports a refused manual compaction as skipped, after the compaction_end del
     options: FULL_PERMISSION_OPTIONS,
   });
   await harness.waitFor(
-    () => harness.deltasOf(THREAD_ID).filter((d) => d.kind === "turn.boundary").length >= 2,
+    () =>
+      harness.deltasOf(THREAD_ID).filter((d) => d.kind === "turn.boundary")
+        .length >= 2,
     "both turn boundaries",
   );
 
-  const kinds = harness.deltasOf(THREAD_ID).map((d) =>
-    d.kind === "turn.boundary" ? `turn.boundary:${String(d.status)}` : String(d.kind),
-  );
-  const warning = harness.deltasOf(THREAD_ID).find((d) => d.kind === "provider.warning");
+  const kinds = harness
+    .deltasOf(THREAD_ID)
+    .map((d) =>
+      d.kind === "turn.boundary"
+        ? `turn.boundary:${String(d.status)}`
+        : String(d.kind),
+    );
+  const warning = harness
+    .deltasOf(THREAD_ID)
+    .find((d) => d.kind === "provider.warning");
   expect(warning).toMatchObject({ category: "compaction-skipped" });
-  // The event's own boundary (with the warning) lands before the settle's.
-  expect(kinds.indexOf("provider.warning")).toBeLessThan(kinds.indexOf("turn.boundary:completed"));
+  expect(kinds.indexOf("provider.warning")).toBeLessThan(
+    kinds.indexOf("turn.boundary:completed"),
+  );
   expect(kinds.filter((k) => k.startsWith("turn.boundary"))).toEqual([
     "turn.boundary:completed",
     "turn.boundary:completed",

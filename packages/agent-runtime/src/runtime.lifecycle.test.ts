@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ThreadEvent } from "@bb/domain";
 import { promptTextInput } from "./test/prompt-input.js";
 import {
+  createScriptedEchoLaunch,
   createScriptedEchoRequestRecord,
   createScriptedEchoRuntime,
   fullRuntimeOptions,
@@ -16,7 +17,6 @@ import {
   type ScriptedEchoRequestRecord,
 } from "./test/runtime-test-harness.js";
 
-/** The methods the bridge handled, in arrival order. */
 function recordedMethods(record: ScriptedEchoRequestRecord): string[] {
   return record.read().map((request) => request.method);
 }
@@ -57,9 +57,6 @@ describe("createAgentRuntime lifecycle", () => {
     });
 
     it("allows thread/start to outlive the generic JSON-RPC timeout", async () => {
-      // The bridge holds thread/start open in real time; the runtime's
-      // request timers are faked so 30s can elapse for them without the test
-      // waiting. The real setTimeout is captured first to pace the polls.
       const realSetTimeout = setTimeout;
       const sleepReal = (ms: number): Promise<void> =>
         new Promise((resolve) => {
@@ -104,8 +101,6 @@ describe("createAgentRuntime lifecycle", () => {
           await sleepReal(10);
         }
         await vi.advanceTimersByTimeAsync(30_001);
-        // The generic timeout has elapsed while the request is still in
-        // flight: a 30s-bounded thread/start would have rejected by now.
         expect(settled).toBe(false);
 
         expect(await startOutcome).toEqual({
@@ -126,9 +121,6 @@ describe("createAgentRuntime lifecycle", () => {
           env: record.env,
           onEvent: () => {},
         },
-        // The result is `{ threadId }` only. The bridge still notifies
-        // thread/identity, but the result is the sole carrier the runtime
-        // reads: a bridge that omits the field there is non-conformant.
         launch: { scripted: { answerStartWithoutIdentity: true } },
       });
 
@@ -144,8 +136,6 @@ describe("createAgentRuntime lifecycle", () => {
         ).rejects.toThrow(
           /Invalid JSON-RPC result for thread\/start: providerThreadId/,
         );
-        // Nothing was adopted, and the bridge was told to let go of
-        // whatever it constructed.
         expect(runtime.hasThread("t1")).toBe(false);
         expect(runtime.getProviderSession("t1")).toBeNull();
         expect(record.last("thread/stop")?.params).toMatchObject({
@@ -181,9 +171,6 @@ describe("createAgentRuntime lifecycle", () => {
         ).rejects.toThrow(
           /Invalid JSON-RPC result for thread\/resume: providerThreadId/,
         );
-        // The caller's identity does not stand in for the missing result:
-        // the thread is forgotten, and the bridge is told to release the
-        // session it opened under that identity.
         expect(runtime.hasThread("t1")).toBe(false);
         expect(runtime.getProviderSession("t1")).toBeNull();
         expect(record.last("thread/stop")?.params).toMatchObject({
@@ -225,10 +212,6 @@ describe("createAgentRuntime lifecycle", () => {
         await expect(runtime.resumeThread(resume)).rejects.toThrow(
           "resume refused",
         );
-        // A rejected resume leaves no live session behind it, so the thread
-        // is not kept registered under the caller's identity: the next
-        // command resumes it again instead of running a turn on a session
-        // the bridge never opened.
         expect(runtime.hasThread("t1")).toBe(false);
         expect(runtime.getProviderSession("t1")).toBeNull();
         expect(record.last("thread/stop")?.params).toMatchObject({
@@ -237,9 +220,14 @@ describe("createAgentRuntime lifecycle", () => {
           intent: "release",
         });
 
-        await expect(runtime.resumeThread(resume)).resolves.toEqual({
-          providerThreadId: "old-prov-123",
-        });
+        await expect(
+          runtime.resumeThread({
+            ...resume,
+            bridgeLaunch: createScriptedEchoLaunch({
+              digest: "resume-success",
+            }),
+          }),
+        ).resolves.toEqual({ providerThreadId: "old-prov-123" });
         expect(runtime.hasThread("t1")).toBe(true);
       } finally {
         await runtime.shutdown();
@@ -248,7 +236,24 @@ describe("createAgentRuntime lifecycle", () => {
 
     it("merges runtime shell env with per-thread context on start", async () => {
       const record = createScriptedEchoRequestRecord();
+      const events: ThreadEvent[] = [];
       const threadStorageRootPath = join(tmpDir, "thread-storage");
+      const contributedEnv = [
+        {
+          name: "PATH",
+          value: "/plugin/bin",
+          source: { plugin: "env-test" },
+          reason: "Use the plugin toolchain",
+          secret: false,
+        },
+        {
+          name: "AUTH_PROXY_URL",
+          value: { serverPath: "/plugins/env-test/auth" },
+          source: { plugin: "env-test" },
+          reason: "Use the authenticated server proxy",
+          secret: true,
+        },
+      ] as const;
       const runtime = createScriptedEchoRuntime({
         runtime: {
           workspacePath: tmpDir,
@@ -261,7 +266,7 @@ describe("createAgentRuntime lifecycle", () => {
             BB_SERVER_URL: "http://127.0.0.1:3334",
             BB_THREAD_ID: "wrong-thread",
           },
-          onEvent: () => undefined,
+          onEvent: (event) => events.push(event),
         },
       });
 
@@ -270,6 +275,7 @@ describe("createAgentRuntime lifecycle", () => {
         threadId: "t1",
         projectId: "p1",
         providerId: "fake",
+        contributedEnv,
         options: fullRuntimeOptions,
       });
 
@@ -281,7 +287,8 @@ describe("createAgentRuntime lifecycle", () => {
           cwd: tmpDir,
           options: expect.objectContaining({
             envVars: {
-              PATH: "/tmp/bb-bin:/usr/bin",
+              PATH: "/plugin/bin",
+              AUTH_PROXY_URL: "http://127.0.0.1:3334/plugins/env-test/auth",
               BB_HOST_DAEMON_PORT: "3002",
               BB_PROJECT_ID: "p1",
               BB_SERVER_URL: "http://127.0.0.1:3334",
@@ -290,6 +297,101 @@ describe("createAgentRuntime lifecycle", () => {
               BB_ENVIRONMENT_ID: "env-1",
             },
           }),
+        }),
+      );
+      expect(
+        events.find((event) => event.type === "provider.env-resolved"),
+      ).toMatchObject({
+        entries: expect.arrayContaining([
+          {
+            name: "PATH",
+            source: { plugin: "env-test" },
+            value: "/plugin/bin",
+            reason: "Use the plugin toolchain",
+          },
+          {
+            name: "AUTH_PROXY_URL",
+            source: { plugin: "env-test" },
+            value: { masked: true },
+            reason: "Use the authenticated server proxy",
+          },
+        ]),
+      });
+      expect(JSON.stringify(events)).not.toContain("/plugins/env-test/auth");
+
+      await runtime.runTurn({
+        clientRequestId: "creq_222222224c",
+        threadId: "t1",
+        input: [promptTextInput({ text: "follow up" })],
+        contributedEnv,
+        options: fullRuntimeOptions,
+      });
+      expect(
+        events.filter((event) => event.type === "provider.env-resolved"),
+      ).toHaveLength(1);
+
+      await runtime.shutdown();
+    });
+
+    it("drops unresolved server paths without preventing thread start", async () => {
+      const record = createScriptedEchoRequestRecord();
+      const events: ThreadEvent[] = [];
+      const runtime = createScriptedEchoRuntime({
+        runtime: {
+          workspacePath: tmpDir,
+          env: record.env,
+          shellEnv: { PATH: "/usr/bin" },
+          onEvent: (event) => events.push(event),
+        },
+      });
+
+      await runtime.startThread({
+        environmentId: "env-1",
+        threadId: "t1",
+        projectId: "p1",
+        providerId: "fake",
+        contributedEnv: [
+          {
+            name: "AUTH_PROXY_URL",
+            value: { serverPath: "/plugins/env-test/auth" },
+            source: { plugin: "env-test" },
+            reason: "Use the authenticated server proxy",
+            secret: true,
+          },
+        ],
+        options: fullRuntimeOptions,
+      });
+
+      const threadStart = record.last("thread/start");
+      expect(threadStart).toBeDefined();
+      expect(threadStart?.params).toEqual(
+        expect.objectContaining({
+          options: expect.objectContaining({
+            envVars: expect.not.objectContaining({
+              AUTH_PROXY_URL: expect.anything(),
+            }),
+          }),
+        }),
+      );
+      expect(
+        events.find((event) => event.type === "provider.env-resolved"),
+      ).toMatchObject({
+        entries: expect.arrayContaining([
+          {
+            name: "AUTH_PROXY_URL",
+            source: { plugin: "env-test" },
+            value: { masked: true },
+            reason:
+              "Use the authenticated server proxy (dropped: no BB_SERVER_URL)",
+          },
+        ]),
+      });
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          type: "provider/warning",
+          category: "config",
+          summary:
+            'Dropped environment variable "AUTH_PROXY_URL" from plugin "env-test".',
         }),
       );
 
@@ -377,8 +479,6 @@ describe("createAgentRuntime lifecycle", () => {
         },
       });
 
-      // No provider flavour: a root staged once reaches whichever provider
-      // runs in the environment, in the one shape.
       await runtime.startThread({
         environmentId: "env-1",
         threadId: "t1",
@@ -395,8 +495,6 @@ describe("createAgentRuntime lifecycle", () => {
     });
 
     it("carries changed settings on the next turn without rebuilding the session", async () => {
-      // Bridges reconcile options internally, so every settings change is
-      // live: no thread/resume, the next turn/start carries the new values.
       const record = createScriptedEchoRequestRecord();
       const runtime = createScriptedEchoRuntime({
         runtime: {
@@ -418,8 +516,6 @@ describe("createAgentRuntime lifecycle", () => {
           permissionScope: "workspace",
           approvalReviewer: "automatic",
           permissionEscalation: "ask",
-          // The plugin-derived bag rides the command as-is; only the owning
-          // bridge reads its keys.
           providerOptions: {
             memoryEnabled: true,
             providerSubagentsEnabled: true,
@@ -564,8 +660,6 @@ describe("createAgentRuntime lifecycle", () => {
           permissionEscalation: "ask",
         },
       });
-      // The mode change is live for a bridge: no session rebuild, the turn
-      // carries the new mode.
       expect(recordedMethods(record)).not.toContain("thread/resume");
       expect(record.last("turn/start")?.params).toMatchObject({
         options: { permissionMode: "full" },
@@ -661,10 +755,6 @@ describe("createAgentRuntime lifecycle", () => {
       await runtime.shutdown();
     });
 
-    // A bridge artifact is third-party code the conformance kit may never
-    // have been run against, so the host checks the grammar itself: a
-    // malformed event must never reach a consumer (and from there a persisted
-    // timeline).
     it("drops replayed completed turn starts before emitting to consumers", async () => {
       const events: ThreadEvent[] = [];
       const stderr: string[] = [];
@@ -701,9 +791,6 @@ describe("createAgentRuntime lifecycle", () => {
         runtime,
         threadId: "t1",
       });
-      // The replay rides the same notification as the completion, so it has
-      // been through the intake by now; the grace only guards a future
-      // asynchronous emission path.
       await wait(50);
 
       expect(
@@ -713,7 +800,6 @@ describe("createAgentRuntime lifecycle", () => {
         true,
       );
       expect(runtime.getActiveTurnId("t1")).toBeNull();
-      // The well-formed traffic still lands.
       expect(events.some((event) => event.type === "item/completed")).toBe(
         true,
       );
@@ -814,7 +900,6 @@ describe("createAgentRuntime lifecycle", () => {
 
       expect(providerThreadId).toBe("old-prov-123");
 
-      // Should be able to run a turn on the resumed thread
       await runtime.runTurn({
         clientRequestId: "creq_222222223p",
         threadId: "t1",
@@ -890,7 +975,7 @@ describe("createAgentRuntime lifecycle", () => {
       await runtime.shutdown();
     });
 
-    it("keeps the provider running after thread stop", async () => {
+    it("retires the provider after thread stop and starts it for resume", async () => {
       const events: ThreadEvent[] = [];
       const runtime = createScriptedEchoRuntime({
         runtime: {
@@ -914,9 +999,7 @@ describe("createAgentRuntime lifecycle", () => {
       });
 
       await runtime.stopThread({ threadId: "t1" });
-      expect(runtime.listRunningProviders()).toEqual(["fake"]);
-      // Stop removes the thread from the runtime; the follow-up below must
-      // resume it before running another turn.
+      expect(runtime.listRunningProviders()).toEqual([]);
       expect(runtime.hasThread("t1")).toBe(false);
       expect(runtime.getProviderSession("t1")).toBeNull();
       expect(runtime.getActiveTurnId("t1")).toBeNull();
@@ -1007,7 +1090,6 @@ describe("createAgentRuntime lifecycle", () => {
           env: record.env,
           onEvent: () => {},
         },
-        // The bridge accepts turn/start and never opens the turn.
         launch: { scripted: { swallowTurnStart: true } },
       });
 
@@ -1050,9 +1132,6 @@ describe("createAgentRuntime lifecycle", () => {
           workspacePath: tmpDir,
           onEvent: () => {},
         },
-        // The bridge exits right after answering thread/start; the runtime
-        // consumes the answer (and the identity before it) before it sees
-        // the exit.
         launch: { scripted: { exitAfter: "thread/start" } },
       });
 
@@ -1101,9 +1180,6 @@ describe("createAgentRuntime lifecycle", () => {
         instructions: "Updated instructions",
       });
 
-      // A model change is live for a bridge: the session is not rebuilt
-      // (which would kill its background tasks); the turn carries the new
-      // model and the fresh instructions.
       expect(recordedMethods(record).slice(methodsBeforeTurn)).toEqual([
         "turn/start",
       ]);
@@ -1145,9 +1221,6 @@ describe("createAgentRuntime lifecycle", () => {
         instructions: "Updated instructions",
       });
 
-      // A resume would replace the live provider session and kill its
-      // running background tasks, so instruction drift alone must not
-      // reconfigure the thread.
       expect(recordedMethods(record).slice(methodsBeforeTurn)).toEqual([
         "turn/start",
       ]);
@@ -1202,8 +1275,6 @@ describe("createAgentRuntime lifecycle", () => {
       ]);
       expect(record.last("turn/steer")?.params).toMatchObject({
         threadId: "t1",
-        // The wire names the bridge's own turn id (the assembler's reverse
-        // map), not the runtime-minted id the steer was addressed to.
         expectedTurnId: "turn-1",
         clientRequestId: "creq_222222223x",
         options: {

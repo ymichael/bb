@@ -16,11 +16,6 @@ import {
 } from "@/hooks/queries/plugin-catalog-queries";
 import { pluginAdminErrorMessage } from "@/lib/plugin-admin-error";
 
-/**
- * One-line toast summary of an update check. A 200 response still carries
- * per-plugin failures (`unavailable`), so those warn instead of folding into
- * "up to date".
- */
 export function summarizeUpdateCheck(
   results: readonly PluginUpdatesEntry[],
   scope: { pluginId?: string } = {},
@@ -68,22 +63,16 @@ export function summarizeUpdateCheck(
   };
 }
 
-/**
- * Checks installed plugins for updates. The server persists what it finds and
- * the invalidated plugin list surfaces it as the row update buttons; the toast
- * only summarizes the sweep.
- */
 export function CheckPluginUpdatesButton({
   pluginId,
   appearance = "toolbar",
 }: {
-  /** Check one plugin instead of all of them. */
   pluginId?: string;
-  /** `toolbar`: 32px icon key like the filter keys. `inline`: compact labeled button. */
   appearance?: "toolbar" | "inline";
 }) {
   const queryClient = useQueryClient();
   const check = useMutation({
+    meta: { showErrorToast: false },
     mutationFn: () =>
       checkPluginUpdates(fetch, pluginId === undefined ? {} : { id: pluginId }),
     onSuccess: (results) => {

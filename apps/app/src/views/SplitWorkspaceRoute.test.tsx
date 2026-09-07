@@ -72,10 +72,6 @@ describe("SplitWorkspaceRoute", () => {
     expect(workspaceLifecycle).toEqual({ mounts: 1, unmounts: 0 });
   });
 
-  // The app mounts this route under `path="*"`, so `useParams` can never
-  // carry `:pluginId` — the id must be derived from the URL here and passed
-  // down explicitly. Regression: the full-window detail URL rendered the
-  // plugins overview because ToolsView read an absent route param.
   it("passes the plugin id from the full-window detail URL to ToolsView", async () => {
     render(
       <MemoryRouter initialEntries={["/extensions/plugins/github"]}>

@@ -7,20 +7,13 @@ import {
 } from "../../helpers/test-app.js";
 import { loadPluginBrandingAssets } from "../../../src/services/plugins/app-bundle.js";
 
-// Same origin trick as the app-bundle tests: the harness config's serverPort
-// puts this host on the local-app origin allowlist.
 const BASE = "http://127.0.0.1:3334";
 
 const SERVER_SOURCE = `export default function plugin(bb: any) { bb.log.info("loaded"); }`;
 const SVG_LOGO = `<svg xmlns="http://www.w3.org/2000/svg"><rect width="4" height="4"/></svg>`;
 const DARK_SVG_LOGO = `<svg xmlns="http://www.w3.org/2000/svg"><rect fill="#fff" width="4" height="4"/></svg>`;
-const PNG_STUB = Buffer.from("89504e470d0a1a0a", "hex"); // magic bytes only
+const PNG_STUB = Buffer.from("89504e470d0a1a0a", "hex");
 const WEBP_STUB = Buffer.from("52494646", "hex");
-/**
- * What Illustrator writes: an XML declaration, a generator comment, a legacy
- * public doctype, SaveForWeb metadata in Adobe's namespace and a
- * `<switch><foreignObject requiredExtensions=…>` fallback.
- */
 const ILLUSTRATOR_LOGO = `<?xml version="1.0" encoding="utf-8"?>
 <!-- Generator: Adobe Illustrator 16.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -39,7 +32,6 @@ const ILLUSTRATOR_LOGO = `<?xml version="1.0" encoding="utf-8"?>
 </switch>
 </svg>
 `;
-/** What Inkscape writes: a sodipodi namedview and RDF metadata. */
 const INKSCAPE_LOGO = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <!-- Created with Inkscape (http://www.inkscape.org/) -->
 <svg xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:cc="http://creativecommons.org/ns#" xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:svg="http://www.w3.org/2000/svg" xmlns="http://www.w3.org/2000/svg" xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="64" height="64" viewBox="0 0 64 64" version="1.1" id="svg8" inkscape:version="1.3 (0e150ed, 2023-07-21)" sodipodi:docname="logo.svg">
@@ -50,7 +42,6 @@ const INKSCAPE_LOGO = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
   </g>
 </svg>
 `;
-/** Every plugin-authored image response carries these, whatever its caching. */
 const UNTRUSTED_IMAGE_HEADERS = {
   "x-content-type-options": "nosniff",
   "content-security-policy": "default-src 'none'; style-src 'unsafe-inline'",
@@ -165,8 +156,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
       }),
     ).rejects.toThrow(/bb\.branding\.icon must have an <svg> root element/);
 
-    // A logo is never parsed at load: the snapshot is the file's bytes,
-    // whatever markup they carry, and the route's headers keep it inert.
     const logoPath = join(harness.config.dataDir, "mutable-logo.svg");
     const scripted = `<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>`;
     await writeFile(logoPath, scripted);
@@ -204,7 +193,11 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
   });
 
   it("never refuses a logo at install, load or reload: script-bearing markup and Latin-1 bytes are served as declared behind the headers", async () => {
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-logoraw");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-logoraw",
+    );
     const scripted = `<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><script>alert(2)</script><a href="javascript:alert(3)"><rect width="4" height="4"/></a></svg>`;
     const latin1 = Buffer.from(
       `<svg xmlns="http://www.w3.org/2000/svg"><title>Café</title><rect fill="#fff" width="4" height="4"/></svg>`,
@@ -250,7 +243,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
       /^\/api\/v1\/plugins\/logoa\/assets\/logo\?h=[0-9a-f]{16}$/,
     );
 
-    // The explicitly declared SVG determines the content type and bytes.
     const logo = await harness.app.request(`${BASE}${entry.logoUrl}`);
     expect(logo.status).toBe(200);
     expect(logo.headers.get("content-type")).toBe("image/svg+xml");
@@ -260,8 +252,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
     expectUntrustedImageHeaders(logo);
     expect(await logo.text()).toBe(SVG_LOGO);
 
-    // Wrong/absent hash still serves current bytes, but uncached and with
-    // the same defensive headers.
     const noHash = await harness.app.request(
       `${BASE}/api/v1/plugins/logoa/assets/logo`,
     );
@@ -281,7 +271,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
     const logo = await harness.app.request(`${BASE}${entry.logoUrl}`);
     expect(logo.status).toBe(200);
     expect(logo.headers.get("content-type")).toBe("image/png");
-    // Raster bytes get the same headers: nosniff pins the declared type.
     expectUntrustedImageHeaders(logo);
   });
 
@@ -291,7 +280,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
       name: "bb-plugin-logoc",
       logoLight: "./assets/mark.webp",
       files: {
-        // The convention file is present but the override wins.
         "logo.svg": SVG_LOGO,
         "assets/mark.webp": WEBP_STUB,
       },
@@ -359,9 +347,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
     expect(logoUrl).not.toBeNull();
     expect(logoDarkUrl).not.toBeNull();
 
-    // A logo is identity, not runtime: disabling keeps it advertised and
-    // served (from the static-identity cache), so the list still recognizes
-    // the plugin.
     const disabled = await harness.pluginService.setEnabled("logog", false);
     expect(disabled?.enabled).toBe(false);
     expect(disabled?.logoUrl).toBe(logoUrl);
@@ -373,7 +358,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
     expect(dark.status).toBe(200);
     expect(await dark.text()).toBe(DARK_SVG_LOGO);
 
-    // Re-enabling keeps the same hash-stable URLs.
     const enabled = await harness.pluginService.setEnabled("logog", true);
     expect(enabled?.logoUrl).toBe(logoUrl);
     expect(enabled?.logoDarkUrl).toBe(logoDarkUrl);
@@ -393,7 +377,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
 
     const disabled = await harness.pluginService.setEnabled("ident", false);
     expect(disabled?.enabled).toBe(false);
-    // Identity survives the runtime going away.
     expect(disabled?.name).toBe("Identity Demo");
     expect(disabled?.icon).toBe("Brain");
     expect(disabled?.logoUrl).toBe(entry.logoUrl);
@@ -429,8 +412,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
     const changed = `<svg xmlns="http://www.w3.org/2000/svg"><circle r="2"/></svg>`;
     await writeFile(join(rootDir, "logo.svg"), changed);
 
-    // The hashed URL identifies the bytes captured at load time. Mutating the
-    // source file cannot change a response advertised as immutable.
     const original = await harness.app.request(`${BASE}${firstUrl}`);
     expect(original.status).toBe(200);
     expect(await original.text()).toBe(SVG_LOGO);
@@ -476,7 +457,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
       /^\/api\/v1\/plugins\/darka\/assets\/logo-dark\?h=[0-9a-f]{16}$/,
     );
 
-    // The explicitly declared SVG determines the content type and bytes.
     const dark = await harness.app.request(`${BASE}${entry.logoDarkUrl}`);
     expect(dark.status).toBe(200);
     expect(dark.headers.get("content-type")).toBe("image/svg+xml");
@@ -485,7 +465,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
     );
     expect(await dark.text()).toBe(DARK_SVG_LOGO);
 
-    // Wrong/absent hash still serves current bytes, but uncached.
     const noHash = await harness.app.request(
       `${BASE}/api/v1/plugins/darka/assets/logo-dark`,
     );
@@ -516,7 +495,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
       logoDark: "./assets/mark-dark.webp",
       files: {
         "logo.svg": SVG_LOGO,
-        // An undeclared root file is ignored.
         "logo-dark.svg": DARK_SVG_LOGO,
         "assets/mark-dark.webp": WEBP_STUB,
       },
@@ -597,7 +575,6 @@ describe("plugin branding assets (manifest, asset route, inventory)", () => {
       .find((plugin) => plugin.id === "darkg");
     expect(reloaded?.logoDarkUrl).not.toBeNull();
     expect(reloaded?.logoDarkUrl).not.toBe(firstUrl);
-    // The untouched light logo keeps its URL.
     expect(reloaded?.logoUrl).toBe(firstLightUrl);
 
     const dark = await harness.app.request(`${BASE}${reloaded?.logoDarkUrl}`);

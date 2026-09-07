@@ -64,8 +64,6 @@ describe("prepareThreadRewind", () => {
 
     try {
       const first = await runtime.prepareThreadRewind(request);
-      // A replay of the same lease returns the staged fork without forking
-      // again; a different lease stages its own independent fork.
       const replay = await runtime.prepareThreadRewind(request);
       expect(replay).toEqual(first);
       await runtime.prepareThreadRewind({ ...request, leaseId: "lease-2" });
@@ -85,13 +83,10 @@ describe("prepareThreadRewind", () => {
           threadId: "thread-1:rewind:lease-2",
         }),
       ]);
-      // The bridge opened both staging sessions (identity + session.reset
-      // deltas), none of which may reach the consumer.
       expect(events).toEqual([]);
       expect(runtime.hasThread("thread-1:rewind:lease-1")).toBe(true);
       expect(runtime.hasThread("thread-1:rewind:lease-2")).toBe(true);
 
-      // Discarding one lease leaves the other attempt's fork untouched.
       await runtime.discardThreadRewind({ leaseId: "lease-1" });
       expect(
         record
@@ -153,10 +148,6 @@ describe("prepareThreadRewind", () => {
   });
 
   it("releases a staged fork whose result carries no providerThreadId", async () => {
-    // The fork answers `{ threadId }` only: a non-conformant result, so the
-    // staging session is never adopted. There is no provider identity to
-    // discard by, so the bridge is told to release the staging thread under
-    // its bb id, exactly as a failed thread/start is released.
     const events: ThreadEvent[] = [];
     const { record, runtime } = createRewindRuntime({
       onEvent: (event) => events.push(event),
@@ -190,12 +181,10 @@ describe("prepareThreadRewind", () => {
           intent: "release",
         }),
       });
-      // No discard: the bridge never named a session to discard.
       expect(requests.some((entry) => entry.method === "thread/discard")).toBe(
         false,
       );
       expect(runtime.hasThread(stagingThreadId)).toBe(false);
-      // The staging thread's event stream stayed suppressed throughout.
       expect(events).toEqual([]);
     } finally {
       await runtime.shutdown();

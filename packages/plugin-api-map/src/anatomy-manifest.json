@@ -1,13 +1,7 @@
 {
   "$comment": "Shared UI-anatomy contract between the Plugin Guide surface fixtures (wireframes.tsx) and the real app. Ordered regions are rendered by both sides. surfaceFixtures records authoritative source anchors plus the minimum deterministic fidelity and states for interaction-heavy fixtures.",
-  "appSidebar": [
-    "top-reserve",
-    "primary-actions",
-    "plugin-nav",
-    "thread-list",
-    "footer"
-  ],
-  "sidebarFooter": ["settings", "plugin-footer-actions", "bug-report"],
+  "appSidebar": ["top-reserve", "sidebar-navigation", "thread-list", "footer"],
+  "sidebarFooter": ["settings", "plugin-footer-items", "bug-report"],
   "messageActionBar": [
     "copy",
     "edit",
@@ -70,6 +64,117 @@
             "fixed inset-0 z-50 bg-black/40",
             "bg-background p-6 shadow-sm",
             "sm:rounded-lg"
+          ]
+        }
+      ]
+    },
+    "sidebar-navigation": {
+      "groupId": "app-shell",
+      "fidelity": "state",
+      "responsiveStrategy": "scale-together",
+      "requiredStates": ["owner", "replacement", "fallback"],
+      "labels": {
+        "owner": ["New thread", "Search threads", "Extensions"],
+        "replacement": ["Custom navigation"],
+        "fallback": ["New thread", "Search threads", "Extensions"]
+      },
+      "fixtureClassAnchors": ["px-2 py-2", "px-2 pb-2"],
+      "sources": [
+        {
+          "path": "apps/app/src/components/sidebar/SidebarNavigationRegion.tsx",
+          "anchors": [
+            "data-testid=\"sidebar-navigation-region\"",
+            "PluginReplacementSlot",
+            "experimental_activate"
+          ]
+        },
+        {
+          "path": "apps/app/src/components/sidebar/BuiltInSidebarNavigation.tsx",
+          "anchors": [
+            "data-testid=\"app-sidebar-primary-actions\"",
+            "PluginNavSidebarItems"
+          ]
+        },
+        {
+          "path": "apps/app/src/components/sidebar/SidebarNavigationRegion.test.tsx",
+          "anchors": [
+            "routes Search through the quick palette without inline search UI",
+            "delegates and falls back after a crash without owner remounts"
+          ]
+        }
+      ]
+    },
+    "app-overlay": {
+      "groupId": "app-shell",
+      "fidelity": "anchor",
+      "responsiveStrategy": "scale-together",
+      "requiredStates": ["anchor"],
+      "labels": {
+        "anchor": ["Floating widget", "2 agents active"]
+      },
+      "fixtureClassAnchors": [
+        "absolute bottom-24 right-12",
+        "bg-popover",
+        "shadow-md"
+      ],
+      "sources": [
+        {
+          "path": "apps/app/src/components/plugin/PluginAppOverlays.tsx",
+          "anchors": [
+            "data-bb-plugin-app-overlays=\"\"",
+            "slotKind=\"appOverlay\"",
+            "crashFallback={null}"
+          ]
+        },
+        {
+          "path": "apps/app/src/components/layout/AppLayout.tsx",
+          "anchors": ["<PluginAppOverlays />"]
+        },
+        {
+          "path": "apps/app/src/components/plugin/PluginAppOverlays.test.tsx",
+          "anchors": [
+            "keeps sidebar thread actions available through a portal and route change",
+            "hides a crashing overlay without unmounting additive siblings"
+          ]
+        }
+      ]
+    },
+    "sidebar-footer": {
+      "groupId": "app-shell",
+      "fidelity": "state",
+      "responsiveStrategy": "scale-together",
+      "requiredStates": ["action", "disclosure"],
+      "labels": {
+        "action": ["Plugin action"],
+        "disclosure": ["5-hour limit", "18% left"]
+      },
+      "fixtureClassAnchors": [
+        "rounded-md border border-border",
+        "rounded-full bg-warning"
+      ],
+      "sources": [
+        {
+          "path": "apps/app/src/components/plugin/PluginSidebarFooterItems.tsx",
+          "anchors": [
+            "\"aria-expanded\": isActive",
+            "onDisclosureCommand(itemKey, \"toggle\")",
+            "<Component dismiss={onDismiss} />"
+          ]
+        },
+        {
+          "path": "packages/plugin-sdk/src/internal/plugin-app-collector.ts",
+          "anchors": [
+            "adaptSidebarFooterAction",
+            "experimental_sidebarFooter.register",
+            "registration.kind === \"action\"",
+            "registration.kind === \"disclosure\""
+          ]
+        },
+        {
+          "path": "apps/app/src/components/plugin/PluginSidebarFooterItems.test.tsx",
+          "anchors": [
+            "toggles and dismisses a disclosure accessibly",
+            "lets the host coordinate disclosures from multiple plugins"
           ]
         }
       ]

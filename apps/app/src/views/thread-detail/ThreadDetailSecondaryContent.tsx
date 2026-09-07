@@ -16,6 +16,7 @@ import {
 import { DETAIL_GRID_CLASS } from "@/components/ui/detail-card.js";
 import { useThreads } from "@/hooks/queries/thread-queries";
 import { ThreadTimelinePane } from "./ThreadTimelinePane";
+import { getCompactPanelPresentation } from "@/components/secondary-panel/panelToggleControlState";
 
 type ThreadTimelinePaneProps = Omit<
   ComponentProps<typeof ThreadTimelinePane>,
@@ -44,11 +45,6 @@ interface ThreadDetailSecondaryContentProps {
   isMetadataLoading: boolean;
   isSecondaryPanelOpen: boolean;
   isConversationCollapsed: boolean;
-  /**
-   * True when rendering inside a bounded split card. Bounded panes skip the
-   * page-bleed negative margins below — the card supplies the boundary, so
-   * bleeding out of it only gets clipped by the card's overflow-hidden.
-   */
   isBoundedPane: boolean;
   onToggleSecondaryPanel: () => void;
   onToggleConversationCollapse: () => void;
@@ -85,9 +81,6 @@ function ThreadDetailSecondaryContentBody({
   const composerHost = usePluginComposerHost();
   const { renderBrowserDeck, ...threadSecondaryPanelProps } = secondaryPanel;
 
-  // Mirror ForksRow's query (deduped by react-query) so the visibility gate
-  // accounts for the lazily fetched Forks row. Only the open panel renders the
-  // Info tab, so a closed panel does not need the request.
   const forksQuery = useThreads(
     {
       projectId: metadata.thread.projectId,
@@ -125,10 +118,6 @@ function ThreadDetailSecondaryContentBody({
         open={isSecondaryPanelOpen}
         onToggle={onToggleSecondaryPanel}
         onClose={threadSecondaryPanelProps.onClose}
-        // The physical panel host survives thread-to-thread navigation; only
-        // content identity (resetKey) changes. Per-thread state below is safe:
-        // the timeline, composer and scroll anchors live under PageShell's own
-        // key={threadId} inside EmbeddedThreadChat.
         panelGroupKey="thread-detail"
         resetKey={timeline.threadId}
         contentKey={timeline.threadId}
@@ -142,6 +131,13 @@ function ThreadDetailSecondaryContentBody({
           onToggle: onToggleConversationCollapse,
         }}
         composerHost={composerHost}
+        compactPresentation={getCompactPanelPresentation(
+          threadSecondaryPanelProps.activeTab?.kind,
+          threadSecondaryPanelProps.fixedTabs[0]?.tab.kind ??
+            threadSecondaryPanelProps.tabs.find(
+              (tab) => tab.isHidden !== true,
+            )?.tab.kind,
+        )}
         renderHostedPanel={renderHostedPanel}
         renderPanel={({
           presentation,

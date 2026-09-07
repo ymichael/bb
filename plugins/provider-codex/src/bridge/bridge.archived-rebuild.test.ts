@@ -7,20 +7,8 @@ import { experimental_createBridgeJsonRpcTestHarness as createBridgeJsonRpcTestH
 import type { BridgeJsonRpcOutputMessage } from "@get-bb/plugin-sdk/provider-bridge/testing";
 import { handleLine } from "./bridge.js";
 
-/**
- * A turn/start can rebuild the thread's codex session from its rollout (a
- * construction-scoped settings change, or the app-server child died). When
- * that rollout was archived outside bb, the rebuild is refused with the
- * typed `sessionArchived` hint, and the runtime unarchives and retries the
- * same turn/start once. The retry can only succeed if the bridge still holds
- * a resumable entry for the thread after the failed rebuild: a thread the
- * bridge forgot would fail every later turn with "No active codex session"
- * while the runtime still believes it has a live session.
- */
-
 const THREAD_ID = "thr_archived_rebuild_1";
 const PROVIDER_THREAD_ID = "rebuild-rollout-1";
-// Must match what fake-codex-app-server.mjs emits for an archived thread id.
 const ARCHIVED_ERROR_TEXT = `session ${PROVIDER_THREAD_ID} is archived; unarchive it and retry`;
 
 const fakeAppServerPath = fileURLToPath(
@@ -35,7 +23,6 @@ const sessionOptions = {
   reasoningLevel: "low",
 } as const;
 
-// A reasoning change rebuilds the session (construction-scoped for codex).
 const changedSessionOptions = {
   ...sessionOptions,
   reasoningLevel: "high",
@@ -124,7 +111,6 @@ async function resumeThread(): Promise<void> {
   expect(response.error).toBeUndefined();
 }
 
-/** The rollout is archived by another app-server client while bb holds it. */
 function archiveOutsideBb(): void {
   writeFileSync(archiveStatePath, JSON.stringify([PROVIDER_THREAD_ID]));
 }
@@ -177,11 +163,9 @@ async function expectArchivedHint(
       retryable: true,
     },
   });
-  // A refused rebuild replaced nothing.
   expect(sessionReplacedNotifications()).toEqual([]);
 }
 
-/** What the runtime does with the hint: unarchive, then retry once. */
 async function expectRetryAfterUnarchiveSucceeds(
   options: typeof sessionOptions | typeof changedSessionOptions,
 ): Promise<void> {
@@ -194,8 +178,6 @@ async function expectRetryAfterUnarchiveSucceeds(
   const retried = await startTurn(4, options);
   expect(retried.error).toBeUndefined();
   expect(retried.result).toEqual({ threadId: THREAD_ID });
-  // Exactly one replacement, announced: the rebuild from the unarchived
-  // rollout.
   expect(sessionReplacedNotifications()).toHaveLength(1);
   expect(sessionReplacedNotifications()[0]?.params).toMatchObject({
     threadId: THREAD_ID,
@@ -221,7 +203,6 @@ it("keeps the thread resumable when the rebuild after the child died hits an ext
   const childPid = Number(spawnLine?.split(":")[1]);
   expect(Number.isInteger(childPid)).toBe(true);
   process.kill(childPid, "SIGKILL");
-  // The bridge reports the dead child before the next turn rebuilds.
   const deadline = Date.now() + 15_000;
   while (
     !harness.messages.some(

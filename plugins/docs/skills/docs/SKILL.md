@@ -1,6 +1,6 @@
 ---
 name: docs
-description: Access and update the user's Docs vaults. Use whenever the user asks to read, find, create, update, or store a note, document, plan, or HTML artifact; when a Docs @-mention appears in context; or when an answer should link to a document the user can open in Docs.
+description: "Read, edit, or save documents in BB Docs vaults, including documents supplied through Docs mentions."
 ---
 
 # Docs
@@ -46,6 +46,11 @@ bb docs pull plans/release-plan.md --vault personal --into ./docs-work
 bb docs status ./docs-work --diff
 bb docs push ./docs-work
 ```
+
+`bb docs status` exits 0 when no changes exist. It exits 4 when it finds
+changes that the output describes. Exit 4 is a successful status result.
+Review that output, then run `bb docs push` as a separate command. Do not
+connect the status and push commands with `&&`.
 
 Pull a folder subtree with `--folder`, or the whole selected vault with
 `--all`:

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
@@ -8,37 +9,26 @@ import {
   type PluginListItem,
   type PluginUpdateState,
 } from "@/hooks/queries/plugin-settings-queries";
+import {
+  getNotifications,
+  resetNotificationStore,
+} from "@/lib/notifications/notification-store";
 import { UpdatePluginDialog } from "./UpdatePluginDialog";
+import { makePluginListItem } from "@/test/fixtures/plugins";
 
 function plugin(updateState: Partial<PluginUpdateState>): PluginListItem {
-  return {
+  return makePluginListItem({
     id: "linear",
     source: "npm:@example/linear@^1.6.0",
     rootDir: "/plugins/linear",
     version: "1.6.2",
-    enabled: true,
-    status: "running",
-    statusDetail: null,
-    description: null,
     name: "Linear",
-    icon: null,
-    compactIconUrl: null,
-    logoUrl: null,
-    logoDarkUrl: null,
-    hasSettings: false,
     provenance: "catalog",
-    isOrphanedBuiltin: false,
     catalogEntryId: "linear",
     publisherLabel: "BB Community",
     sourceDisplay: "npm · @bb-plugins/linear · tracks compatible",
     updateState: { ...EMPTY_PLUGIN_UPDATE_STATE, ...updateState },
-    handlerStats: { count: 0, totalMs: 0, maxMs: 0, errorCount: 0 },
-    services: [],
-    schedules: [],
-    cliCommand: null,
-    capabilities: [],
-    app: { hasApp: false, bundle: null },
-  };
+  });
 }
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -50,6 +40,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 afterEach(() => {
   cleanup();
+  resetNotificationStore();
   vi.unstubAllGlobals();
 });
 
@@ -180,7 +171,6 @@ describe("UpdatePluginDialog", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () =>
-        // The exact applyUpdate result shape from plugin-service.
         jsonResponse({
           applied: false,
           from: { version: "1.6.2", display: "1.6.2" },
@@ -211,6 +201,40 @@ describe("UpdatePluginDialog", () => {
     ).toBeTruthy();
   });
 
+  it("records one alert when an update request fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        jsonResponse({ error: "plugin source is unavailable" }, 502),
+      ),
+    );
+    const { wrapper } = createQueryClientTestHarness();
+    render(
+      <UpdatePluginDialog
+        plugin={plugin({ availableVersion: "1.7.0" })}
+        open
+        onOpenChange={() => {}}
+      />,
+      { wrapper },
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Update" }));
+
+    await vi.waitFor(() => {
+      expect(getNotifications()).toHaveLength(1);
+    });
+    const notification = getNotifications()[0];
+    expect(notification?.title).toBe("Plugin update failed");
+
+    render(<MemoryRouter>{notification?.description}</MemoryRouter>);
+    expect(
+      screen.getByRole("link", { name: "Linear" }).getAttribute("href"),
+    ).toBe("/settings/plugins/linear?view=installed");
+    expect(
+      screen.getByRole("link", { name: "Linear" }).parentElement?.textContent,
+    ).toBe("Linear — plugin source is unavailable");
+  });
+
   it("treats a malformed 2xx update response as an error, never success", async () => {
     vi.stubGlobal(
       "fetch",
@@ -228,8 +252,6 @@ describe("UpdatePluginDialog", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
-    // The dialog neither closes as a success nor shows the rollback view —
-    // the drifted response surfaces as an error and the confirmation stays.
     await vi.waitFor(() => {
       expect(
         (screen.getByRole("button", { name: "Update" }) as HTMLButtonElement)

@@ -6,7 +6,6 @@ import {
 } from "@bb/client-core";
 
 export interface PermissionModeOption extends CorePermissionModeOption {
-  /** Existing product glyph used wherever the mode needs a compact visual. */
   iconName: IconName;
 }
 

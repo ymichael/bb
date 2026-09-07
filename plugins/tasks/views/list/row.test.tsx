@@ -4,11 +4,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import { COMPACT_VIEWPORT_QUERY } from "@bb/shared-ui/hooks/use-compact-viewport";
 import type { Task, TaskMutationResult } from "../../shared/contract.js";
+import { makeTask } from "../../test-fixtures.js";
 
-// jsdom lacks matchMedia/ResizeObserver. Reporting the compact query as
-// matching renders the inline pickers as their mobile drawers, whose plain
-// buttons are clickable in jsdom (unlike Radix menu items). The desktop Radix
-// path and right-click context menu are exercised in live product QA.
 window.matchMedia = (query: string) => ({
   matches: query === COMPACT_VIEWPORT_QUERY,
   media: query,
@@ -51,21 +48,13 @@ const label = {
 };
 
 function task(overrides: Partial<Task> & Pick<Task, "id" | "number">): Task {
-  return {
+  return makeTask({
     projectId: PROJECT_ID,
     key: `TSK-${overrides.number}`,
     title: `Task ${overrides.number}`,
-    description: "",
-    status: "todo",
-    priority: "none",
-    dueDate: null,
-    parentTaskId: null,
     position: overrides.number,
-    createdAt: "2026-07-15T00:00:00.000Z",
-    updatedAt: "2026-07-15T00:00:00.000Z",
-    labelIds: [],
     ...overrides,
-  };
+  });
 }
 
 interface Options {
@@ -123,7 +112,6 @@ describe("inline row editing", () => {
       await within(drawer).findByRole("menuitem", { name: /Done/ }),
     );
 
-    // Persisted with exactly the changed field...
     await waitFor(() =>
       expect(
         slot.rpcCalls.some(
@@ -133,7 +121,6 @@ describe("inline row editing", () => {
         ),
       ).toBe(true),
     );
-    // ...and the row reflects the new status immediately (optimistically).
     await waitFor(() =>
       expect(
         within(
@@ -194,9 +181,7 @@ describe("inline row editing", () => {
       await within(drawer).findByRole("menuitem", { name: /Done/ }),
     );
 
-    // The error is surfaced...
     await slot.findByText("Server rejected it");
-    // ...and the row reverts to its original status (truthful rollback).
     await waitFor(() =>
       expect(
         within(
@@ -218,7 +203,6 @@ describe("inline row editing", () => {
       }),
     );
     const drawer = await slot.findByRole("dialog", { name: "Change status" });
-    // Re-selecting the current status is a no-op.
     fireEvent.click(
       await within(drawer).findByRole("menuitem", { name: /Todo/ }),
     );

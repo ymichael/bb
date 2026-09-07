@@ -25,11 +25,6 @@ export interface ForkThreadCreateSeed {
 
 interface BuildForkThreadRequestArgs extends ForkThreadCreateSeed {
   input: PromptInput[];
-  /**
-   * The source thread provider's `capabilities.supportsFork`, read from the
-   * server-provided ProviderInfo (execution-options query data). False when
-   * the provider is unknown or its data has not loaded — graceful absence.
-   */
   providerSupportsFork: boolean;
 }
 

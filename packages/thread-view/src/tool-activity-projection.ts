@@ -187,8 +187,6 @@ function mergeCallStatus(
   current: EventProjectionToolCallMessage["status"] | undefined,
   incoming: EventProjectionToolCallMessage["status"] | undefined,
 ): EventProjectionToolCallMessage["status"] | undefined {
-  // Lifecycle merge is monotonic: terminal call state sticks unless a later
-  // error wins.
   if (!incoming) return current;
   if (!current) return incoming;
   if (incoming === "error") return "error";
@@ -300,9 +298,7 @@ function createRunningExecutionBase({
     ...(incoming.parentToolCallId
       ? { parentToolCallId: incoming.parentToolCallId }
       : {}),
-    ...(incoming.presentation
-      ? { presentation: incoming.presentation }
-      : {}),
+    ...(incoming.presentation ? { presentation: incoming.presentation } : {}),
     output: getVisibleTextBufferText(outputBuffer) ?? "",
     completedAt: incoming.completedAt ?? null,
     status: incoming.status ?? "pending",
@@ -419,11 +415,6 @@ interface PresentedExecutionFieldsSource {
   presentation?: ThreadEventItemPresentation;
 }
 
-/**
- * The latest presentation wins: the assembler echoes the opened presentation
- * onto a close that carries none, so whatever an end event carries is the
- * bridge's final word on the row.
- */
 function mergePresentation(
   target: PresentedExecutionFieldsTarget,
   incoming: PresentedExecutionFieldsSource,
@@ -487,8 +478,6 @@ function mergeDelegationExecutionFields(
   if (incoming.subagentType && !target.subagentType) {
     target.subagentType = incoming.subagentType;
   }
-  // A v3 delegation's progress snapshots revise the label; a legacy
-  // delegation's description is set once from its arguments.
   if (
     incoming.description &&
     (!target.description || incoming.childRef !== undefined)
@@ -550,23 +539,12 @@ function upsertRunningExecCall(
     return createRunningExecCall(incoming, meta, threadId, scopeFields.scope);
   }
 
-  // Merge strategy per field:
-  //   "keep first"  — set once from the first event that provides it
-  //   "keep latest" — provider begin/end can revise command text
-  //   "keep latest non-null" — duration from authoritative terminal events
-  //   "keep longest" — begin events carry partial output, end events carry full output
-  //   "keep terminal" — first terminal state wins unless a later error arrives
-
-  // keep first: provider background work can outlive its spawning turn, and a
-  // late terminal event for the same call id may arrive scoped to a later turn.
-  // Preserve the original placement while still merging terminal state/output.
   mergeRunningExecutionMetadata(existing, incoming);
   mergeExecutionCompletion(existing, incoming);
   if (!existing.parentToolCallId && incoming.parentToolCallId) {
     existing.parentToolCallId = incoming.parentToolCallId;
   }
 
-  // keep longest (begin has partial, end has full)
   if (incoming.output && incoming.output.length > 0) {
     if (
       isTerminalToolCallStatus(incoming.status) ||
@@ -581,7 +559,6 @@ function upsertRunningExecCall(
     }
   }
 
-  // keep latest
   existing.threadId = threadId;
   existing.status =
     mergeCallStatus(existing.status, incoming.status) ?? "pending";
@@ -699,8 +676,6 @@ function reconcilePendingExecutionOutput(
     return;
   }
 
-  // Output deltas can arrive before begin; when the begin snapshot is a
-  // divergent absolute snapshot, preserve both in event order.
   const reconciledText = pendingText.includes(callText)
     ? pendingText
     : `${pendingText}${callText}`;

@@ -36,12 +36,6 @@ interface CodeRendererSettingProps {
   slots: readonly CodeRendererProviderSlot[];
 }
 
-/**
- * The per-client pin for one code renderer, mirroring the sidebar thread list
- * control. A renderer takes over surfaces the user has no other way back
- * from — the file preview, every diff — so pinning has to be reachable
- * without uninstalling the plugin that supplied it.
- */
 function CodeRendererSetting({
   label,
   description,
@@ -71,7 +65,6 @@ function CodeRendererSetting({
       description: slot.description ?? `From the ${slot.pluginId} plugin.`,
     })),
   ];
-  // An unavailable explicit provider renders BB's renderer until it returns.
   const selected =
     options.find((option) => option.key === preference) ?? builtInOption;
 
@@ -121,7 +114,6 @@ function CodeRendererSetting({
   );
 }
 
-/** Both code-renderer pins; each row hides itself when no plugin supplies one. */
 export function CodeRendererSettings() {
   const { sourceCodeRenderers, diffRenderers } = usePluginSlots();
   return (

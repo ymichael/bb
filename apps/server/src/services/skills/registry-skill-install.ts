@@ -290,7 +290,6 @@ function installConflict(skillId: string): ApiError {
   );
 }
 
-/** Download and atomically adopt one registry skill into server-owned user storage. */
 export async function installServerRegistrySkill(args: {
   dataDir: string;
   packageRef: string;
@@ -372,8 +371,6 @@ export async function installServerRegistrySkill(args: {
       );
     }
     if (existingTarget !== null) {
-      // Pre-provenance builds wrote registry skills to this same directory.
-      // A path/name match is not ownership: adopt only an exact safe snapshot.
       if (!(await boundedSkillTreesMatch(temporarySkillPath, finalSkillPath))) {
         throw installConflict(args.skillId);
       }

@@ -6,6 +6,7 @@ import type { Environment } from "@bb/domain";
 import { StrictMode, useState, type ReactNode } from "react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { useUpdateEnvironment } from "@/hooks/mutations/environment-mutations";
+import { makeEnvironment } from "@bb/test-helpers/domain-fixtures";
 import { useEnvironmentMergeBase } from "./useEnvironmentMergeBase";
 import { useGitDiffPanel } from "./useGitDiffPanel";
 import { useGitDiffPanelState } from "./useGitDiffPanelState";
@@ -50,25 +51,21 @@ vi.mock("../../../hooks/queries/environment-queries", () => ({
 
 const noop = () => undefined;
 
-function makeEnvironment(id: string, mergeBaseBranch: string): Environment {
-  return {
+function makeMergeBaseEnvironment(
+  id: string,
+  mergeBaseBranch: string,
+): Environment {
+  return makeEnvironment({
     baseBranch: null,
     branchName: `bb/${id}`,
     createdAt: 1,
-    defaultBranch: "main",
     hostId: "host-1",
     id,
-    name: null,
-    isGitRepo: true,
-    isWorktree: true,
-    managed: true,
     mergeBaseBranch,
     path: `/tmp/${id}`,
     projectId: "project-1",
-    status: "ready",
     updatedAt: 1,
-    workspaceProvisionType: "managed-worktree",
-  };
+  });
 }
 
 function TestRoot({ children }: { children: ReactNode }) {
@@ -124,8 +121,8 @@ beforeEach(() => {
 afterEach(cleanup);
 
 it("keeps production merge-base owners independent through close and reopen", async () => {
-  const leftEnvironment = makeEnvironment("env-left", "main");
-  const rightEnvironment = makeEnvironment("env-right", "release");
+  const leftEnvironment = makeMergeBaseEnvironment("env-left", "main");
+  const rightEnvironment = makeMergeBaseEnvironment("env-right", "release");
   const left = renderHook(() => useMergeBaseOwner(leftEnvironment, "left"), {
     wrapper: TestRoot,
   });
@@ -165,8 +162,8 @@ it("keeps production merge-base owners independent through close and reopen", as
 });
 
 it("never queries a new environment with the previous environment branch", async () => {
-  const environmentA = makeEnvironment("env-a", "branch-a");
-  const environmentB = makeEnvironment("env-b", "branch-b");
+  const environmentA = makeMergeBaseEnvironment("env-a", "branch-a");
+  const environmentB = makeMergeBaseEnvironment("env-b", "branch-b");
   const owner = renderHook(
     ({ environment }) => useMergeBaseOwner(environment, "switching"),
     { initialProps: { environment: environmentA }, wrapper: TestRoot },
@@ -193,8 +190,8 @@ it("never queries a new environment with the previous environment branch", async
 });
 
 it("does not revive an unconsumed file intent after navigating away and back", () => {
-  const environmentA = makeEnvironment("env-a", "branch-a");
-  const environmentB = makeEnvironment("env-b", "branch-b");
+  const environmentA = makeMergeBaseEnvironment("env-a", "branch-a");
+  const environmentB = makeMergeBaseEnvironment("env-b", "branch-b");
   const owner = renderHook(
     ({ environment, threadId }) => useMergeBaseOwner(environment, threadId),
     {
@@ -215,11 +212,16 @@ it("does not revive an unconsumed file intent after navigating away and back", (
 
 it("keeps delayed file and commit intents with the owner that requested them", async () => {
   const left = renderHook(
-    () => useMergeBaseOwner(makeEnvironment("env-left", "main"), "left"),
+    () =>
+      useMergeBaseOwner(makeMergeBaseEnvironment("env-left", "main"), "left"),
     { wrapper: TestRoot },
   );
   const right = renderHook(
-    () => useMergeBaseOwner(makeEnvironment("env-right", "release"), "right"),
+    () =>
+      useMergeBaseOwner(
+        makeMergeBaseEnvironment("env-right", "release"),
+        "right",
+      ),
     { wrapper: TestRoot },
   );
 

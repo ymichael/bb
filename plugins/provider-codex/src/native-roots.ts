@@ -1,22 +1,3 @@
-/**
- * The codex plugin's answer to `resolveNativeRoots`: the skill roots that
- * only this host knows. The declaration in `server.ts` names the static
- * ones (`.codex/skills` and `.agents/skills` in the workspace, `~/.agents/skills`
- * at home); this module adds the roots that depend on the host's own state:
- *
- * - `$CODEX_HOME/skills` and `$CODEX_HOME/skills/.system` — `CODEX_HOME`
- *   moves the codex home, so a declaration relative to `~` cannot name them.
- * - every enabled codex plugin's skills — read from `$CODEX_HOME/config.toml`
- *   (`[plugins."<name>@<marketplace>"] enabled = ...`), the plugin cache under
- *   `$CODEX_HOME/plugins/cache/<marketplace>/<plugin>/<version>/`, and each
- *   plugin's `.codex-plugin/plugin.json` manifest. The plugin directory is in
- *   the Claude plugin layout, so the SDK's `experimental_resolveVendorPluginRoots`
- *   turns it into roots: a root `SKILL.md`, `skills/`, the manifest's
- *   `skills` entries. A plugin's names carry the `<plugin-name>:` prefix.
- *
- * Every root is `user` origin: codex has no project-scoped plugin install, so
- * the workspace does not change the answer and `cwd` is not needed here.
- */
 import type { Dirent } from "node:fs";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -30,23 +11,11 @@ import {
 import { z } from "zod";
 import { resolveCodexHome } from "./codex-home.js";
 
-/**
- * The static side of codex's native skill roots, spread into the provider
- * declaration in `server.ts` and imported by the golden proof to run the
- * declaration and the resolver together: the workspace's `.codex/skills`,
- * the shared `.agents/skills` convention in the workspace and every
- * ancestor up to the repository root, and `~/.agents/skills`. Codex has no
- * native slash commands. The host-only roots come from
- * {@link resolveCodexNativeRoots}, which the `experimental_resolvesNativeRoots`
- * flag tells bb to call.
- */
 export const CODEX_NATIVE_ROOTS_DECLARATION: Pick<
   PluginProviderDeclaration,
   "experimental_nativeSkillRoots" | "experimental_resolvesNativeRoots"
 > = {
   experimental_nativeSkillRoots: {
-    // The default home directory is declared; a CODEX_HOME that moved it
-    // arrives from the resolver beside it, as the daemon scanned both.
     user: [".codex/skills", ".agents/skills"],
     project: [".codex/skills", { path: ".agents/skills", ancestors: true }],
   },
@@ -58,9 +27,7 @@ export type CodexResolvedSkillRoot = NonNullable<
 >[number];
 
 export interface ResolveCodexNativeRootsArgs {
-  /** The host user's home directory (`os.homedir()`). */
   homeDir: string;
-  /** The host daemon's environment; `CODEX_HOME` moves the codex home. */
   env: Readonly<Record<string, string | undefined>>;
 }
 
@@ -95,15 +62,8 @@ export async function resolveCodexNativeRoots(
       origin: "user",
       shape: "skills",
     },
-    // Never a repeat of the two above: a plugin lives under
-    // `$CODEX_HOME/plugins/cache`, and a manifest entry cannot leave it.
     ...(await resolveCodexPluginSkillRoots(codexHome)),
   ];
-  // A plugin whose name cannot be a name prefix (a space, `@scope/x`, a
-  // leading dot, over 63 characters) loses its own roots, not the codex home
-  // roots or the other plugins'; past the cap the side is cut. The host
-  // worker has no bb logger: the warning goes to its stderr, which the
-  // daemon logs.
   return {
     skills: experimental_filterResolvedNativeRoots(
       { skills },
@@ -112,13 +72,6 @@ export async function resolveCodexNativeRoots(
   };
 }
 
-// --- config.toml: which plugins are enabled ---------------------------------
-
-/**
- * Decode the escapes a TOML basic string may carry inside a quoted plugin
- * key. `\n`, `\r`, `\t` become the control character; any other escaped
- * character (`\"`, `\\`) becomes itself.
- */
 function decodeTomlBasicString(value: string): string {
   let decoded = "";
   for (let index = 0; index < value.length; index += 1) {
@@ -146,14 +99,6 @@ function decodeTomlBasicString(value: string): string {
   return decoded;
 }
 
-/**
- * Read `[plugins."<id>"] enabled = true|false` tables from codex's
- * `config.toml` without a TOML parser: only the plugin tables and their
- * `enabled` key matter, and a malformed line elsewhere must not hide them.
- * The plugin id may be a bare key (`[plugins.name@market]`) or a quoted
- * basic string; a trailing `# comment` is allowed on both lines. Any other
- * table header ends the current plugin table.
- */
 export function readCodexEnabledPluginSettingsFromToml(
   content: string,
 ): ReadonlyMap<string, boolean> {
@@ -202,8 +147,6 @@ async function readCodexEnabledPluginSettings(
     return new Map<string, boolean>();
   }
 }
-
-// --- plugin cache: which install of each plugin to read --------------------
 
 async function directoryHasCodexPluginManifest(
   directoryPath: string,
@@ -262,10 +205,6 @@ async function statCodexPluginCacheCandidate(
   }
 }
 
-/**
- * One plugin may have several cached installs (`<plugin>/<version>/`); the
- * most recently modified directory that holds a manifest is the live one.
- */
 async function resolveLatestPluginCacheRoot(
   pluginCacheRootPath: string,
 ): Promise<string | null> {
@@ -306,7 +245,6 @@ async function readDirectoryEntries(directoryPath: string): Promise<Dirent[]> {
   }
 }
 
-/** Every enabled plugin in the cache, named from its manifest, else its cache directory. */
 async function resolveEnabledCodexPlugins(
   codexHome: string,
 ): Promise<ExperimentalVendorPlugin[]> {
@@ -334,8 +272,6 @@ async function resolveEnabledCodexPlugins(
       plugins.push({
         rootPath,
         name: manifest.name ?? pluginEntry.name,
-        // Codex has no project-scoped install: a plugin is the user's own,
-        // so a symlinked skill directory or `SKILL.md` in it is followed.
         origin: "user",
         skills: manifest.skills,
       });
@@ -343,8 +279,6 @@ async function resolveEnabledCodexPlugins(
   }
   return plugins;
 }
-
-// --- plugin components: the roots one plugin contributes --------------------
 
 async function resolveCodexPluginSkillRoots(
   codexHome: string,

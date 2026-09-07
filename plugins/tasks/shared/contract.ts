@@ -84,6 +84,7 @@ const taskStatusSchema = z.enum(TASK_STATUSES);
 const taskPrioritySchema = z.enum(TASK_PRIORITIES);
 const taskSortSchema = z.enum(TASK_SORTS);
 const threadSearchStatusSchema = z.enum([
+  "pending",
   "idle",
   "starting",
   "active",
@@ -155,16 +156,6 @@ const commentSchema = z
   })
   .strict();
 
-/**
- * Identity of the provider (agent) that authored an agent comment, resolved at
- * read time from the authoring thread's live `providerId`. `name` and
- * `logoUrl` come from the host provider list; `logoUrl` is the logo the
- * provider's plugin declared (every provider bb ships declares one), drawn
- * as a currentColor mask, and null for a provider that declared none — the
- * UI then shows the generic agent glyph. `name` falls back to the raw
- * provider id when the provider is no longer installed. See
- * `commentProviderSchema` usages in `displayCommentSchema`.
- */
 const commentProviderSchema = z
   .object({
     id: z.string(),
@@ -173,17 +164,6 @@ const commentProviderSchema = z
   })
   .strict();
 
-/**
- * A comment enriched for display with (a) the current human title of the agent
- * thread that authored it and (b) the authoring provider. Both are resolved at
- * read time against the live thread. `threadTitle` is null for user/system
- * comments, legacy agent comments that carry no `threadId`, and threads that
- * are deleted, hidden, side chats, or otherwise inaccessible — callers fall
- * back to `authorName` and render no link. `provider` is null for user/system
- * comments, legacy agent comments with no `threadId`, and threads that are
- * deleted/hidden/inaccessible; it is present (and drives the comment's logo)
- * whenever the authoring thread resolves, including side chats.
- */
 const displayCommentSchema = commentSchema
   .extend({
     threadTitle: z.string().nullable(),
@@ -217,13 +197,6 @@ const taskThreadSchema = z
   })
   .strict();
 
-/**
- * A GitHub pull request associated with a task through an attached thread's
- * environment (the branch the delegated agent pushed). Assembled server-side
- * from environment pull-request metadata — never scraped from comments.
- * `state` matches the server's product-facing PR state, which already folds
- * GitHub's isDraft flag into a single enum.
- */
 const taskPullRequestSchema = z
   .object({
     url: z.string().url(),
@@ -231,7 +204,6 @@ const taskPullRequestSchema = z
     title: z.string(),
     state: z.enum(["open", "draft", "merged", "closed"]),
     updatedAt: z.string(),
-    /** Task threads whose environment resolved to this pull request. */
     threadIds: z.array(z.string().startsWith("thr_")).min(1),
   })
   .strict();
@@ -442,8 +414,6 @@ export const tasksRpcContract = defineRpcContract({
   },
   deleteFolder: {
     input: z.object({ folderId: idSchema }).strict(),
-    // `deleted: false` means no folder matched (already removed by another
-    // client). The moved IDs are read in the delete's own transaction.
     output: z
       .object({
         deleted: z.boolean(),
@@ -511,11 +481,6 @@ export const tasksRpcContract = defineRpcContract({
     input: z.object({ taskId: idSchema }).strict(),
     output: z.object({ task: taskSchema.nullable() }).strict(),
   },
-  /**
-   * Resolve a task key like "TSK-4" with one targeted query. The prefix is
-   * matched case-insensitively; a malformed key resolves to null rather than
-   * erroring so stale chat references degrade to the card's not-found state.
-   */
   getTaskByKey: {
     input: z.object({ taskKey: nonBlankStringSchema }).strict(),
     output: z.object({ task: taskSchema.nullable() }).strict(),
@@ -528,11 +493,6 @@ export const tasksRpcContract = defineRpcContract({
     input: z.object({ taskId: idSchema }).strict(),
     output: z.object({ deleted: z.boolean() }).strict(),
   },
-  /**
-   * Stable keyset page in the requested database sort. `nextCursor` is opaque
-   * and bound to the filters, sort, and task-list revision; any list-affecting
-   * mutation makes it stale so callers restart instead of mixing snapshots.
-   */
   listTasks: {
     input: z
       .object({
@@ -600,8 +560,6 @@ export const tasksRpcContract = defineRpcContract({
         taskId: idSchema,
         body: z.string(),
         notify: z.boolean(),
-        // Attachment-only comments opt in explicitly so existing text-only
-        // callers retain the non-empty body invariant.
         allowEmptyBody: z.boolean().default(false),
       })
       .strict()
@@ -635,12 +593,6 @@ export const tasksRpcContract = defineRpcContract({
     input: z.object({ taskId: idSchema }).strict(),
     output: z.object({ taskThreads: z.array(taskThreadSchema) }).strict(),
   },
-  // Pull requests reached through the task's attached threads, deduplicated
-  // by URL. Threads whose PR lookup failed (deleted thread, gh missing or
-  // unauthenticated, unreachable workspace) are reported in
-  // `unavailableThreadIds` rather than failing the whole call — distinct from
-  // threads with no environment or a genuinely absent PR, which produce
-  // nothing.
   listTaskPullRequests: {
     input: z.object({ taskId: idSchema }).strict(),
     output: z
@@ -732,8 +684,6 @@ export const tasksRpcContract = defineRpcContract({
       })
       .strict(),
   },
-  // BB workspace projects (proj_…) for the linked-project picker; distinct
-  // from this plugin's own task projects.
   listBbProjects: {
     input: z.null(),
     output: z

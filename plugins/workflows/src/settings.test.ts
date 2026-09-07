@@ -3,22 +3,20 @@ import { describe, expect, it } from "vitest";
 import {
   DEFAULT_WORKFLOW_SETTINGS,
   WORKFLOW_SETTING_DESCRIPTORS,
-  parseWorkflowSettings,
   parseStoredWorkflowSettings,
   registerWorkflowSettings,
+  validateWorkflowSettings,
   type WorkflowSettings,
 } from "./settings.js";
 
-function rawSettings(
-  overrides: Partial<Record<keyof WorkflowSettings, string>> = {},
-) {
+function rawSettings(overrides: Partial<WorkflowSettings> = {}) {
   return {
-    maxActiveRuns: "4",
-    maxConcurrentAgents: "8",
-    maxAgentCalls: "100",
-    totalRunTimeoutMs: "86400000",
-    retentionDays: "30",
-    maxNotificationBytes: "16384",
+    maxActiveRuns: 4,
+    maxConcurrentAgents: 8,
+    maxAgentCalls: 100,
+    totalRunTimeoutMs: 86_400_000,
+    retentionDays: 30,
+    maxNotificationBytes: 16_384,
     ...overrides,
   };
 }
@@ -36,20 +34,20 @@ describe("workflow settings policy", () => {
         WORKFLOW_SETTING_DESCRIPTORS.maxNotificationBytes.default,
     };
 
-    expect(parseWorkflowSettings(descriptorDefaults)).toEqual(
+    expect(validateWorkflowSettings(descriptorDefaults)).toEqual(
       DEFAULT_WORKFLOW_SETTINGS,
     );
     expect(Object.isFrozen(DEFAULT_WORKFLOW_SETTINGS)).toBe(true);
   });
 
-  it("parses every custom value and deliberately trims surrounding whitespace", () => {
-    const parsed = parseWorkflowSettings({
-      maxActiveRuns: "  12\t",
-      maxConcurrentAgents: "16",
-      maxAgentCalls: "750",
-      totalRunTimeoutMs: "172800000",
-      retentionDays: "90",
-      maxNotificationBytes: "65536",
+  it("accepts typed custom values without parsing strings", () => {
+    const parsed = validateWorkflowSettings({
+      maxActiveRuns: 12,
+      maxConcurrentAgents: 16,
+      maxAgentCalls: 750,
+      totalRunTimeoutMs: 172_800_000,
+      retentionDays: 90,
+      maxNotificationBytes: 65_536,
     });
 
     expect(parsed).toEqual({
@@ -64,43 +62,30 @@ describe("workflow settings policy", () => {
   });
 
   it.each([
-    ["empty", ""],
-    ["whitespace-only", " \t\n"],
-    ["exponent", "1e2"],
-    ["hexadecimal", "0x10"],
-    ["fractional", "4.5"],
-    ["NaN", "NaN"],
-    ["Infinity", "Infinity"],
-    ["signed", "+4"],
-    ["negative", "-4"],
-    ["unknown text", "many"],
-  ])("rejects %s numeric syntax", (_category, value) => {
+    ["fractional", 4.5],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+  ])("rejects a %s numeric value", (_category, value) => {
     expect(() =>
-      parseWorkflowSettings(rawSettings({ maxActiveRuns: value })),
-    ).toThrow(/Maximum active runs.*base-10 integer.*1 through 32/);
-  });
-
-  it("rejects a digit-only integer too large to be finite", () => {
-    expect(() =>
-      parseWorkflowSettings(rawSettings({ maxActiveRuns: "9".repeat(400) })),
-    ).toThrow(/Maximum active runs.*finite base-10 integer/);
+      validateWorkflowSettings(rawSettings({ maxActiveRuns: value })),
+    ).toThrow();
   });
 
   it.each([
-    ["maxActiveRuns", "0", "33", "Maximum active runs"],
-    ["maxConcurrentAgents", "0", "65", "Per-run agent concurrency"],
-    ["maxAgentCalls", "0", "1001", "Maximum agent calls"],
-    ["totalRunTimeoutMs", "59999", "604800001", "Total run timeout"],
-    ["retentionDays", "0", "3651", "Retention days"],
-    ["maxNotificationBytes", "1023", "262145", "Maximum notification bytes"],
+    ["maxActiveRuns", 0, 33, "Maximum active runs"],
+    ["maxConcurrentAgents", 0, 65, "Per-run agent concurrency"],
+    ["maxAgentCalls", 0, 1001, "Maximum agent calls"],
+    ["totalRunTimeoutMs", 59_999, 604_800_001, "Total run timeout"],
+    ["retentionDays", 0, 3651, "Retention days"],
+    ["maxNotificationBytes", 1023, 262_145, "Maximum notification bytes"],
   ] as const)(
     "enforces lower and upper bounds for %s",
     (key, below, above, label) => {
       expect(() =>
-        parseWorkflowSettings(rawSettings({ [key]: below })),
+        validateWorkflowSettings(rawSettings({ [key]: below })),
       ).toThrow(new RegExp(label));
       expect(() =>
-        parseWorkflowSettings(rawSettings({ [key]: above })),
+        validateWorkflowSettings(rawSettings({ [key]: above })),
       ).toThrow(new RegExp(label));
     },
   );
@@ -129,31 +114,27 @@ describe("workflow settings policy", () => {
       previous: WorkflowSettings;
     }> = [];
     settings.onChange((next, previous) => changes.push({ next, previous }));
-    await harness.setSettings({ maxConcurrentAgents: "12" });
+    await harness.setSettings({ maxConcurrentAgents: 12 });
 
     expect(changes).toHaveLength(1);
     expect(changes[0]?.previous.maxConcurrentAgents).toBe(8);
     expect(changes[0]?.next.maxConcurrentAgents).toBe(12);
   });
 
-  it("surfaces a field-specific error for an invalid fake-host value", async () => {
+  it("falls back from a nonnumeric legacy stored string", async () => {
     const { bb } = createFakePluginHost({
       pluginId: "workflows",
       settings: { retentionDays: "forever" },
     });
 
-    await expect(registerWorkflowSettings(bb).get()).rejects.toThrow(
-      /Retention days.*base-10 integer.*1 through 3650/,
-    );
+    await expect(registerWorkflowSettings(bb).get()).resolves.toMatchObject({
+      retentionDays: 7,
+    });
   });
 
-  it("accepts a valid update after replacing invalid persisted settings", async () => {
-    const { bb, harness } = createFakePluginHost({
-      pluginId: "workflows",
-      settings: { retentionDays: "forever" },
-    });
+  it("rejects string and out-of-range updates", async () => {
+    const { bb, harness } = createFakePluginHost({ pluginId: "workflows" });
     const settings = registerWorkflowSettings(bb);
-    await expect(settings.get()).rejects.toThrow("Retention days");
     const changes: WorkflowSettings[] = [];
     const errors: string[] = [];
     settings.onChange(
@@ -161,9 +142,15 @@ describe("workflow settings policy", () => {
       (error) => errors.push(error.message),
     );
 
-    await harness.setSettings({ maxActiveRuns: "0" });
-    expect(errors.at(-1)).toContain("Maximum active runs");
-    await harness.setSettings({ retentionDays: "14", maxActiveRuns: "6" });
+    await expect(harness.setSettings({ maxActiveRuns: "6" })).rejects.toThrow(
+      "expects a finite number",
+    );
+    await expect(harness.setSettings({ maxActiveRuns: 0 })).rejects.toThrow(
+      "Maximum active runs must be from 1 through 32",
+    );
+    expect(errors).toEqual([]);
+    expect(changes).toEqual([]);
+    await harness.setSettings({ retentionDays: 14, maxActiveRuns: 6 });
     expect(changes.at(-1)).toMatchObject({
       retentionDays: 14,
       maxActiveRuns: 6,

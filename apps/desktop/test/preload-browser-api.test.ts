@@ -168,14 +168,14 @@ function emitIpcPayload(args: EmitIpcPayloadArgs): void {
 describe("desktop preload browser API", () => {
   let api: BbDesktopApi;
 
-  // Vitest does not cancel a timed-out test body. Keep module loading in a
-  // hook so a slow transform cannot release stale commands into the next test.
   beforeEach(async () => {
     api = await loadPreload();
   }, 30_000);
 
   it("exposes only the typed browser commands and forwards them over fixed channels", async () => {
     const attachRequest = {
+      threadId: "thread-1",
+      existingOnly: true as const,
       tabId: "browser:a",
       url: "http://localhost:5173/",
       bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -209,15 +209,20 @@ describe("desktop preload browser API", () => {
       "detach",
       "findInPage",
       "focus",
+      "getControl",
+      "getTarget",
       "goBack",
       "goForward",
       "navigate",
+      "onControl",
       "onFindResult",
       "onFocus",
       "onOpenTab",
+      "onReveal",
       "onScopedOpenTab",
       "onSnapshot",
       "onState",
+      "releaseControl",
       "reload",
       "setBounds",
       "setVisible",
@@ -316,6 +321,7 @@ describe("desktop preload browser API", () => {
     electronMock.setZoomFactor(1.25);
 
     api.browser.attach({
+      threadId: "thread-1",
       tabId: "browser:zoomed",
       url: "https://example.com/",
       bounds: { x: 800, y: 40, width: 400, height: 600 },
@@ -330,6 +336,7 @@ describe("desktop preload browser API", () => {
       {
         channel: BB_DESKTOP_BROWSER_ATTACH_CHANNEL,
         payload: {
+          threadId: "thread-1",
           tabId: "browser:zoomed",
           url: "https://example.com/",
           bounds: { x: 1000, y: 50, width: 500, height: 750 },
@@ -516,8 +523,6 @@ describe("desktop preload browser API", () => {
       BB_DESKTOP_OPEN_SERVER_DAEMON_LOGS_CHANNEL,
     );
 
-    // Availability follows the runtime, so main re-pushes it on every swap and
-    // the renderer must read the pushed value, not its startup snapshot.
     expect(api.serverDaemonLogsAvailable).toBeUndefined();
     emitIpcPayload({
       channel: BB_DESKTOP_INFO_CHANGED_CHANNEL,

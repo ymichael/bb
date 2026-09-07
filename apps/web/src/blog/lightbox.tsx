@@ -44,7 +44,6 @@ export function LightboxImage({
       if (!dialog) {
         return;
       }
-      // Keep the focus inside the dialog while it covers the page.
       const items = Array.from(dialog.querySelectorAll<HTMLElement>(FOCUSABLE));
       if (items.length === 0) {
         event.preventDefault();
@@ -77,7 +76,9 @@ export function LightboxImage({
       <button
         ref={triggerRef}
         type="button"
-        className={className ? `lightbox-trigger ${className}` : "lightbox-trigger"}
+        className={
+          className ? `lightbox-trigger ${className}` : "lightbox-trigger"
+        }
         onClick={() => setOpen(true)}
       >
         <img

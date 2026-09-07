@@ -1,11 +1,5 @@
 import type { PluginListItem } from "@/hooks/queries/plugin-settings-queries";
 
-/**
- * Enabled plugins that are not running and need the user to act: an
- * `engines.bb` mismatch after a bb upgrade, a factory crash, or a deleted
- * plugin directory. `needs-configuration` and `degraded` have their own
- * in-product prompts, so they do not count (#1915).
- */
 export function pluginNeedsAttention(
   plugin: Pick<PluginListItem, "enabled" | "status">,
 ): boolean {
@@ -23,7 +17,6 @@ export function pluginsNeedingAttention(
   return plugins.filter(pluginNeedsAttention);
 }
 
-/** Tooltip / accessible name for the sidebar warning glyph. */
 export function pluginAttentionLabel(
   plugins: readonly PluginListItem[],
 ): string {

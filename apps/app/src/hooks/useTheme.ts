@@ -15,11 +15,10 @@ export type ThemePreference = Theme | "system";
 
 type ThemeListener = () => void;
 
-const themePreferenceStorage =
-  createLocalStorageEnumStorage<ThemePreference>(
-    (value): value is ThemePreference =>
-      value === "light" || value === "dark" || value === "system",
-  );
+const themePreferenceStorage = createLocalStorageEnumStorage<ThemePreference>(
+  (value): value is ThemePreference =>
+    value === "light" || value === "dark" || value === "system",
+);
 const themePreferenceAtom = atomWithStorage<ThemePreference>(
   THEME_STORAGE_KEY,
   "system",
@@ -37,28 +36,16 @@ function applyThemeClass(theme: Theme): void {
   syncThemeColorMeta();
 }
 
-/**
- * Mirrors the resolved page background onto <meta name="theme-color"> so
- * browser chrome (Android tab UI, iOS standalone status bar) blends with the
- * app. Reads the computed body background rather than duplicating the
- * theme.css color values; index.html sets the pre-paint value.
- */
 function syncThemeColorMeta(): void {
   const meta = document.querySelector<HTMLMetaElement>(
     'meta[name="theme-color"]',
   );
   if (!meta || !document.body) return;
   const background = window.getComputedStyle(document.body).backgroundColor;
-  // Keep the pre-paint value if styles haven't resolved yet (transparent).
   if (!background || background === "rgba(0, 0, 0, 0)") return;
   meta.content = background;
 }
 
-/**
- * Re-sync the PWA chrome color from the current page background. Exposed so the
- * app palette (useAppTheme) can refresh it after a palette change that doesn't
- * toggle light/dark mode.
- */
 export function refreshThemeColorMeta(): void {
   syncThemeColorMeta();
 }
@@ -89,8 +76,7 @@ function emitTheme() {
   const nextTheme = getPreferredTheme();
   applyThemeClass(nextTheme);
 
-  const themePreferenceChanged =
-    nextThemePreference !== currentThemePreference;
+  const themePreferenceChanged = nextThemePreference !== currentThemePreference;
   const themeChanged = nextTheme !== currentTheme;
 
   currentThemePreference = nextThemePreference;

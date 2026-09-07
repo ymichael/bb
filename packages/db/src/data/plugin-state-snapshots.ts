@@ -30,7 +30,6 @@ export interface PluginStateSnapshotRow {
   databasePath: string | null;
   statePath: string;
   secretsPath: string | null;
-  /** Null only for snapshots created before restart-safe rollback journals. */
   registrationPath: string | null;
   status:
     | "pending"

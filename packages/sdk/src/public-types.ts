@@ -1,7 +1,3 @@
-/**
- * Transport-independent public SDK types. Every SDK entrypoint re-exports this
- * barrel so DTO availability does not depend on a Node or browser constructor.
- */
 export type {
   CallerExecutionInputSource,
   JsonValue,
@@ -35,3 +31,4 @@ export type * from "./areas/terminals.js";
 export type * from "./areas/theme.js";
 export type * from "./areas/thread-sections.js";
 export type * from "./areas/threads.js";
+export type * from "./areas/desktop-browsers.js";

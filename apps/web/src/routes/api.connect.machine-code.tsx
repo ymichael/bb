@@ -5,8 +5,6 @@ import {
 } from "@/server/api";
 import { getEnv } from "@/server/env";
 
-// Server-authenticated: the connect plugin presents the durable tunnel
-// credential. The resulting one-time code is bound to that exact server row.
 export const Route = createFileRoute("/api/connect/machine-code")({
   server: {
     handlers: {

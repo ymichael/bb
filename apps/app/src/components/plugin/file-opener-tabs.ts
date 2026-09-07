@@ -13,12 +13,6 @@ import {
 import type { PluginFileOpenerSlot } from "@/lib/plugin-slots";
 import type { OpenSecondaryPanelTabRequest } from "@/components/secondary-panel/useThreadFileTabs";
 
-/**
- * Plugin file-opener tabs ride the existing `plugin-panel` tab kind: the
- * action id carries this prefix + the opener's id, and `paramsJson` persists
- * the opened file (`PluginFileOpenerProps`). Same identity semantics as
- * action tabs — same opener + same file focuses the existing tab.
- */
 const FILE_OPENER_ACTION_ID_PREFIX = "file-opener:";
 
 type PluginFileOpenerFile = Pick<PluginFileOpenerProps, "path" | "source">;
@@ -55,7 +49,6 @@ export function buildFileOpenerPanelTab(
   };
 }
 
-/** Parse a persisted opener tab's params; null on any mismatch (degrade). */
 export function parseFileOpenerParams(
   paramsJson: string | null,
 ): PluginFileOpenerFile | null {
@@ -95,10 +88,6 @@ export function parseFileOpenerParams(
   };
 }
 
-/**
- * Rebuild the native preview behind a plugin file opener. Persisted params own
- * file/routing identity; the owner retains only native presentation state.
- */
 export function createFileOpenerOriginalTab(
   tab: PluginPanelFixedPanelTab,
 ): FileOpenerOriginalTab | null {
@@ -159,12 +148,6 @@ interface CreateFileOpenerTabForRequestArgs {
   viewer?: FileOpenerOverride;
 }
 
-/**
- * The plugin-opener tab a file-open request should divert to, or null for
- * the built-in path. Diversion applies only to live file content — working
- * tree, host, and thread-storage previews; git-ref snapshots and deleted
- * files always use the built-in preview.
- */
 export function createFileOpenerTabForRequest({
   fileOpeners,
   preference,
@@ -218,7 +201,6 @@ function ownerRequestForOpenRequest({
 >): ThreadTabFileOpenerOwner | null {
   switch (request.kind) {
     case "workspace-file-preview": {
-      // Same guard as the built-in path, plus live-content-only rules.
       if (
         request.environmentId === undefined &&
         resolvedEnvironmentId === undefined

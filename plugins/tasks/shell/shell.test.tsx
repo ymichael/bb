@@ -2,8 +2,9 @@
 import { act, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { makeTask } from "../test-fixtures.js";
+import type { Task } from "../shared/contract.js";
 
-// jsdom lacks matchMedia; the vendored Dialog's responsive root needs it.
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,
@@ -17,8 +18,6 @@ if (!window.matchMedia) {
   });
 }
 
-// loadPluginApp installs the fake SDK runtime; routes.ts (via the app) must
-// not be imported before that happens.
 const app = await loadPluginApp(() => import("../app"));
 const { parseTasksRoute, tasksRouteToSubPath } = await import("./routes.js");
 const { pagerPosition } = await import("./topbar.js");
@@ -90,20 +89,17 @@ describe("tasks route grammar", () => {
       { kind: "task", taskKey: "TSK-4" },
       { kind: "project", projectId: PROJECT_ID, view: "list" },
       { kind: "project", projectId: PROJECT_ID, view: "board" },
-      // No view marker: the shell fills it from the stored preference.
       { kind: "project", projectId: PROJECT_ID, view: null },
     ] as const;
     for (const route of routes) {
       expect(parseTasksRoute(tasksRouteToSubPath(route))).toEqual(route);
     }
-    // The host hands the splat through URL-encoded per segment.
     expect(parseTasksRoute(`${PROJECT_ID}%3Fview%3Dboard`)).toEqual({
       kind: "project",
       projectId: PROJECT_ID,
       view: "board",
     });
     expect(parseTasksRoute("")).toEqual({ kind: "all" });
-    // An unknown marker is as good as none — never a silent "list".
     expect(parseTasksRoute(`${PROJECT_ID}?view=kanban`)).toEqual({
       kind: "project",
       projectId: PROJECT_ID,
@@ -122,7 +118,6 @@ describe("project view preference", () => {
 
   it("restores the remembered view when the URL names none", async () => {
     const listed = openProject(`${PROJECT_ID}?view=list`);
-    // The toggle is the only way a user picks a view; it must persist.
     fireEvent.click(await listed.findByRole("button", { name: "Board" }));
     expect(listed.navigateCalls).toContainEqual({
       method: "toPluginPanel",
@@ -131,7 +126,6 @@ describe("project view preference", () => {
     });
     listed.lifecycle.unmount();
 
-    // Reopening the project without a marker (sidebar click, deep link).
     const reopened = openProject(PROJECT_ID);
     const boardSegment = await reopened.findByRole("button", { name: "Board" });
     expect(boardSegment.getAttribute("aria-pressed")).toBe("true");
@@ -144,8 +138,6 @@ describe("project view preference", () => {
     slot.lifecycle.unmount();
 
     expect(loadViewMode(PROJECT_ID)).toBe("board");
-    // A project opened for the first time follows the most recent choice
-    // rather than snapping back to the list.
     expect(loadViewMode(OTHER_PROJECT_ID)).toBe("board");
 
     const other = renderSlot(
@@ -186,27 +178,19 @@ describe("project view preference", () => {
   });
 });
 
-function pagerTask(key: string, status: string, position: number) {
-  return {
+function pagerTask(key: string, status: Task["status"], position: number) {
+  return makeTask({
     id: `01HZZZZZZZZZZZZZZZZZZZZ${key.replace("-", "")}`,
     projectId: PROJECT_ID,
     number: position,
     key,
     title: key,
     status,
-    priority: "none",
-    dueDate: null,
-    parentTaskId: null,
     position,
-    createdAt: "2026-07-15T00:00:00.000Z",
-    updatedAt: "2026-07-15T00:00:00.000Z",
-    labelIds: [],
-    // Only key/status/position matter to the pager; the rest satisfies Task.
-  } as never;
+  });
 }
 
 describe("task pager", () => {
-  // List order: canonical status groups, server (board) order within a group.
   const tasks = [
     pagerTask("TSK-3", "done", 1),
     pagerTask("TSK-1", "in_progress", 1),
@@ -215,7 +199,6 @@ describe("task pager", () => {
   ];
 
   it("orders siblings like the list view and exposes neighbors", () => {
-    // Visual order: TSK-2, TSK-4 (todo) → TSK-1 (in_progress) → TSK-3 (done).
     expect(pagerPosition(tasks, "TSK-4")).toEqual({
       index: 2,
       total: 4,
@@ -472,13 +455,10 @@ describe("tasks app shell", () => {
     const refresh = slot.getByRole("button", { name: "Refresh tasks" });
     const newTask = slot.getByRole("button", { name: /New task/i });
 
-    // Icon-only: no visible "Refresh" text; accessible name remains.
     expect(refresh.textContent?.trim() ?? "").not.toMatch(/Refresh/i);
     expect(refresh.getAttribute("aria-label")).toBe("Refresh tasks");
     expect(refresh.className).toMatch(/size-7/);
 
-    // DOM and tab order: refresh → New task. BB owns the right-panel toggle
-    // outside this plugin surface.
     expect(
       refresh.compareDocumentPosition(newTask) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -491,7 +471,6 @@ describe("tasks app shell", () => {
       ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
     }
 
-    // Focus-visible path: control is a native button and can take focus.
     refresh.focus();
     expect(document.activeElement).toBe(refresh);
   });
@@ -521,8 +500,6 @@ describe("tasks app shell", () => {
             if (!holdListTasks) {
               return { tasks: [{ ...task, title }] };
             }
-            // Generation-driven fetches stay pending until released so the
-            // shared in-flight bit tracks real request completion.
             return new Promise((resolve) => {
               pendingResolvers.push(() =>
                 resolve({ tasks: [{ ...task, title }] }),
@@ -549,7 +526,6 @@ describe("tasks app shell", () => {
     expect(refresh.disabled).toBe(false);
     expect(idleClassName).toMatch(/active:bg-state-active/);
 
-    // Accessible name is the stable tooltip/label contract.
     fireEvent.pointerMove(refresh);
     fireEvent.focus(refresh);
     expect(refresh.getAttribute("aria-label")).toBe("Refresh tasks");
@@ -558,22 +534,18 @@ describe("tasks app shell", () => {
     title = "Flight title B";
     fireEvent.click(refresh);
     await waitFor(() => expect(listTasksCalls).toBeGreaterThan(baselineCalls));
-    // In-flight while the deferred RPC is still pending.
     expect(refresh.disabled).toBe(true);
     expect(refresh.getAttribute("aria-busy")).toBe("true");
     expect(refresh.className).toBe(idleClassName);
 
     const callsWhilePending = listTasksCalls;
-    // Rapid re-activation while pending must not bump generation again.
     fireEvent.click(refresh);
     fireEvent.click(refresh);
-    // Browser keyboard activation synthesizes click; exercise that path.
     refresh.focus();
     fireEvent.click(refresh);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(listTasksCalls).toBe(callsWhilePending);
 
-    // Stay pending well past any former fixed timer; still disabled.
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(refresh.disabled).toBe(true);
     expect(listTasksCalls).toBe(callsWhilePending);
@@ -590,7 +562,6 @@ describe("tasks app shell", () => {
       ).toBe(false);
     });
 
-    // Deliberate second refresh after completion works.
     title = "Flight title C";
     fireEvent.click(slot.getByRole("button", { name: "Refresh tasks" }));
     await waitFor(() =>
@@ -640,9 +611,7 @@ describe("tasks app shell", () => {
 
     shouldFail = true;
     fireEvent.click(slot.getByRole("button", { name: "Refresh tasks" }));
-    // Prior data stays on screen (useTasksQuery retains data on error).
     await waitFor(() => expect(slot.getByText("Stable title")).toBeDefined());
-    // Failed generation work clears the shared in-flight bit.
     await waitFor(() => {
       expect(
         (
@@ -709,7 +678,6 @@ describe("tasks app shell", () => {
       taskCount: 3,
       activeAgentCount: 1,
     };
-    // An RPC the test settles by hand, so the pre-resolution render is observable.
     function deferred<T>() {
       let resolve!: (value: T) => void;
       const promise = new Promise<T>((r) => {
@@ -730,7 +698,6 @@ describe("tasks app shell", () => {
           }),
         },
       );
-      // Cold profile: emptiness is not known yet, so the empty state must wait.
       expect(slot.queryByText("No projects yet")).toBeNull();
       projects.resolve({ projects: [] });
       await slot.findByText("No projects yet");
@@ -751,7 +718,6 @@ describe("tasks app shell", () => {
           }),
         },
       );
-      // First paint already matches the last truth this browser saw: no list chrome first.
       expect(slot.getByText("No projects yet")).toBeTruthy();
     });
 
@@ -761,8 +727,6 @@ describe("tasks app shell", () => {
       window.localStorage.setItem(summaryKey, JSON.stringify([summary]));
       const projects = deferred<{ projects: (typeof project)[] }>();
       const rpc = seededRpc({ listProjects: () => projects.promise });
-      // The sidebar lives in the right-panel navigation view; the page owns
-      // the empty state. Both must paint the last-known truth first.
       const panel = renderSlot(
         navigationRegistration,
         { subPath: "" },
@@ -792,7 +756,6 @@ describe("tasks app shell", () => {
     });
 
     it("prunes snapshots written under an older storage version", async () => {
-      // Pruning runs once per page load; this test owns a fresh load.
       resetQuerySnapshotStateForTest();
       window.localStorage.setItem(
         "bb-tasks:query-snapshot:v0:projects",
@@ -831,10 +794,6 @@ describe("tasks app shell", () => {
     });
 
     it("keeps the newer projects snapshot when an older request resolves later", async () => {
-      // Two hook instances (shell sidebar and list view; here two panels)
-      // fetch the same query and write the same storage key. The request that
-      // started first but finished last must not replace what the later
-      // request already recorded.
       const olderProject = { ...project, name: "Older truth" };
       const newerProject = { ...project, name: "Newer truth" };
       const older = deferred<{ projects: (typeof project)[] }>();
@@ -858,7 +817,6 @@ describe("tasks app shell", () => {
         ).toEqual([newerProject]),
       );
       older.resolve({ projects: [olderProject] });
-      // Let the older response's continuation run before asserting.
       await act(async () => {
         await older.promise;
       });
@@ -879,8 +837,6 @@ describe("tasks app shell", () => {
             }),
           },
         );
-        // The project loaded; a failed companion request must settle the
-        // skeleton rather than hide the rows behind it forever.
         fireEvent.click(await slot.findByText(project.name));
         expect(slot.navigateCalls).toContainEqual({
           method: "toPluginPanel",
@@ -892,9 +848,6 @@ describe("tasks app shell", () => {
   });
 
   it("shows the error, not the previous route's rows, when a route change fails", async () => {
-    // Switching All -> Active reuses the ListView instance. If Active's fetch
-    // rejects, the body must not settle onto All's rows: a user would then
-    // edit tasks under the wrong context.
     const tasks = [
       {
         ...pagerTask("TSK-4", "todo", 1),
@@ -934,10 +887,6 @@ describe("tasks app shell", () => {
   });
 
   it("does not paint another scope's empty state while its own rows load", async () => {
-    // All tasks has rows; Active has none. Switching Active back to All keeps
-    // the same ListView instance, whose query still holds Active's empty
-    // result while All refetches; the body must read as loading, never as
-    // "No tasks yet", until All's own rows settle.
     const tasks = [
       {
         ...pagerTask("TSK-4", "todo", 1),
@@ -950,8 +899,6 @@ describe("tasks app shell", () => {
     let releaseAll: (() => void) | null = null;
     const rpc = seededRpc({
       listLabels: () => ({ labels: [] }),
-      // The shell's own Active count also calls listTasks (activeOnly), so
-      // route by arguments rather than call order.
       listTasks: (input: { activeOnly?: boolean }) => {
         if (input.activeOnly === true) return { tasks: [] };
         if (!deferAll) return { tasks };
@@ -970,7 +917,6 @@ describe("tasks app shell", () => {
     deferAll = true;
     slot.lifecycle.rerender(<Panel subPath="all" />);
     await waitFor(() => expect(releaseAll).not.toBeNull());
-    // In flight: Active's emptiness must not masquerade as All's.
     expect(slot.queryByText("No tasks yet")).toBeNull();
     expect(slot.queryByText("Scope truth")).toBeNull();
     act(() => releaseAll!());
@@ -983,7 +929,6 @@ describe("tasks app shell", () => {
       { subPath: `${PROJECT_ID}?view=board` },
       { rpc: seededRpc() },
     );
-    // The real board renders its status columns (empty listTasks → 0 cards).
     await boardSlot.findByText("Backlog");
     await boardSlot.findByText("In Review");
     expect(boardSlot.getByText("Tasks Plugin")).toBeDefined();
@@ -995,9 +940,7 @@ describe("tasks app shell", () => {
       { subPath: "task/TSK-4" },
       { rpc: seededRpc() },
     );
-    // Seeded getTaskByKey is null, so the real detail view lands on not-found.
     await taskSlot.findByText(/Task TSK-4 was not found/);
-    // Esc returns to the previous list/board (default: all tasks).
     fireEvent.keyDown(window, { key: "Escape" });
     expect(taskSlot.navigateCalls).toContainEqual({
       method: "toPluginPanel",
@@ -1086,10 +1029,7 @@ describe("tasks app shell", () => {
     );
     await slot.findByText("All tasks");
     fireEvent.keyDown(window, { key: "c" });
-    // The New task dialog mounts (project select defaults to the only project).
     await slot.findByRole("dialog");
-    // With the dialog open, another 'c' must not stack a second overlay, and
-    // Esc still closes the dialog rather than navigating.
     fireEvent.keyDown(window, { key: "c" });
     expect(slot.getAllByRole("dialog")).toHaveLength(1);
   });
@@ -1153,7 +1093,6 @@ describe("tasks app shell", () => {
     const before = projectCalls;
     await slot.emitRealtime("projects:changed", { projectId: null });
     await waitFor(() => expect(projectCalls).toBeGreaterThan(before));
-    // Unrelated channels leave the projects query alone.
     const settled = projectCalls;
     await slot.emitRealtime("comments:changed", { taskId: "x" });
     expect(projectCalls).toBe(settled);

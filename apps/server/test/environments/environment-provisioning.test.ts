@@ -370,8 +370,6 @@ describe("environment reprovisioning", () => {
       }
       const environmentId = provisionCommand.command.environmentId;
 
-      // Project deletion tombstones the thread (deletedAt set) but keeps the
-      // row until finalization, leaving a window for the provision result.
       beginProjectDeletion(harness.deps, { projectId: project.id });
       expect(getThread(harness.db, thread.id)).toMatchObject({
         deletedAt: expect.any(Number),
@@ -386,9 +384,6 @@ describe("environment reprovisioning", () => {
         transcript: [],
       });
 
-      // The late success must not activate the tombstoned thread: it is
-      // finalized (hard-deleted) and the orphaned workspace heads straight
-      // into cleanup instead of staying provisioned.
       expect(getThread(harness.db, thread.id)).toBeNull();
       await waitForQueuedCommand(
         harness,

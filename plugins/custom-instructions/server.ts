@@ -1,29 +1,14 @@
-import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
+import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
 export const MAX_CUSTOM_INSTRUCTIONS_LENGTH = 4096;
 const STORAGE_KEY = "customInstructions";
-
-const instructionsInputSchema = z
-  .object({
-    instructions: z.string().max(MAX_CUSTOM_INSTRUCTIONS_LENGTH),
-  })
-  .strict();
-
-const instructionsResponseSchema = z
-  .object({
-    instructions: z.string(),
-    maxLength: z.number().int().positive(),
-  })
-  .strict();
-
-export const customInstructionsRpcContract = defineRpcContract({
-  getInstructions: { input: z.null(), output: instructionsResponseSchema },
-  saveInstructions: {
-    input: instructionsInputSchema,
-    output: instructionsResponseSchema,
-  },
-});
+const customInstructionsSchema = z
+  .string()
+  .max(
+    MAX_CUSTOM_INSTRUCTIONS_LENGTH,
+    `Custom instructions must be at most ${MAX_CUSTOM_INSTRUCTIONS_LENGTH} characters`,
+  );
 
 function parseInstructionsInput(input: unknown): string {
   if (typeof input !== "object" || input === null || Array.isArray(input)) {
@@ -37,32 +22,38 @@ function parseInstructionsInput(input: unknown): string {
   if (typeof instructions !== "string") {
     throw new Error('"instructions" must be a string');
   }
-  if (instructions.length > MAX_CUSTOM_INSTRUCTIONS_LENGTH) {
-    throw new Error(
-      `"instructions" must be at most ${MAX_CUSTOM_INSTRUCTIONS_LENGTH} characters`,
-    );
+  const parsed = customInstructionsSchema.safeParse(instructions);
+  if (!parsed.success) {
+    throw new Error(parsed.error.issues[0]?.message ?? "invalid instructions");
   }
-  return instructions;
+  return parsed.data;
 }
 
 export default async function plugin(bb: BbPluginApi) {
-  let customInstructions = (await bb.storage.kv.get<string>(STORAGE_KEY)) ?? "";
+  const settings = bb.settings.define({
+    instructions: {
+      type: "string",
+      label: "Custom instructions",
+      description:
+        "Give agents extra instructions and context for tasks on this bb host.",
+      experimental_multiline: true,
+      experimental_schema: customInstructionsSchema,
+      default: "",
+    },
+  });
 
-  bb.rpc.register(customInstructionsRpcContract, {
-    getInstructions() {
-      return {
-        instructions: customInstructions,
-        maxLength: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
-      };
-    },
-    async saveInstructions({ instructions }) {
-      await bb.storage.kv.set(STORAGE_KEY, instructions);
-      customInstructions = instructions;
-      return {
-        instructions: customInstructions,
-        maxLength: MAX_CUSTOM_INSTRUCTIONS_LENGTH,
-      };
-    },
+  let current = await settings.get();
+  const legacy = await bb.storage.kv.get<string>(STORAGE_KEY);
+  if (legacy !== undefined) {
+    if (current.instructions.length === 0 && legacy.length > 0) {
+      current = await settings.experimental_set({ instructions: legacy });
+    }
+    await bb.storage.kv.delete(STORAGE_KEY);
+  }
+  let customInstructions = current.instructions;
+
+  settings.onChange((next) => {
+    customInstructions = next.instructions;
   });
 
   bb.agents.contributeInstructions(() =>
@@ -105,8 +96,8 @@ export default async function plugin(bb: BbPluginApi) {
         const instructions = parseInstructionsInput({
           instructions: rest.join(" "),
         });
-        await bb.storage.kv.set(STORAGE_KEY, instructions);
-        customInstructions = instructions;
+        const next = await settings.experimental_set({ instructions });
+        customInstructions = next.instructions;
         return {
           exitCode: 0,
           stdout: json
@@ -115,8 +106,8 @@ export default async function plugin(bb: BbPluginApi) {
         };
       }
       if (command === "clear") {
-        await bb.storage.kv.set(STORAGE_KEY, "");
-        customInstructions = "";
+        const next = await settings.experimental_set({ instructions: "" });
+        customInstructions = next.instructions;
         return {
           exitCode: 0,
           stdout: json

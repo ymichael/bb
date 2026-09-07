@@ -27,12 +27,6 @@ function isMapping(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Frontmatter is a YAML mapping. A document that merely opens with a thematic
- * break (`---`) followed by prose, a list, or invalid YAML is not frontmatter,
- * so the fenced block must parse to a mapping (or to nothing) before we hide it
- * from the editor. Returns null when the block is not frontmatter.
- */
 function parseFrontmatterMetadata(
   source: string,
 ): Record<string, unknown> | null {

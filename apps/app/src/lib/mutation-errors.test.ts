@@ -159,7 +159,7 @@ describe("getMutationErrorMessage", () => {
 
     const fallbackHttpError = new HttpError({
       code: "invalid_request",
-      message: "Squash merge failed",
+      message: "Commit failed",
       status: 409,
     });
 
@@ -168,7 +168,7 @@ describe("getMutationErrorMessage", () => {
         error: fallbackHttpError,
         fallbackMessage: "Request failed.",
       }),
-    ).toBe("Squash merge failed");
+    ).toBe("Commit failed");
   });
 });
 

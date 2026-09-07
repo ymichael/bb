@@ -20,11 +20,6 @@ import {
   rollbackKeyboardSettingsCacheTransaction,
 } from "../cache-owners/system-config-cache-owner";
 
-/**
- * Replace the user's opt-in experiments (full object). The server broadcasts
- * system `config-changed` for other windows; the local invalidation gives this
- * window an immediate refresh.
- */
 export function useUpdateExperiments() {
   const queryClient = useQueryClient();
 
@@ -40,11 +35,6 @@ export function useUpdateExperiments() {
   });
 }
 
-/**
- * Replace the user's server-backed Settings → General preferences. The server
- * broadcasts `config-changed` for other windows; the local invalidation gives
- * this window an immediate refresh.
- */
 export function useUpdateGeneralSettings() {
   const queryClient = useQueryClient();
 
@@ -55,11 +45,9 @@ export function useUpdateGeneralSettings() {
     mutationFn: (settings: AppSettings) =>
       sdk.system.updateGeneralSettings(settings),
     onSuccess: (_settings, written) => {
-      // Read the previous values before the config invalidation replaces them.
       const previousStreamerMode = readCachedStreamerMode(queryClient);
       const previousProviderOrder = readCachedProviderOrder(queryClient);
       invalidateGeneralSettingsDependencies({ queryClient });
-      // An unknown previous value also resets: a stale preload is the risk.
       if (previousStreamerMode !== written.streamerMode) {
         void resetModelCatalogsAfterStreamerModeChange({ queryClient });
       }
@@ -70,15 +58,12 @@ export function useUpdateGeneralSettings() {
           (providerId, index) => providerId !== written.providerOrder[index],
         );
       if (providerOrderChanged) {
-        // Keep the reorder mutation pending until the server-sorted directory
-        // replaces the optimistic row order.
         return invalidateSystemProviders({ queryClient });
       }
     },
   });
 }
 
-/** Replace the sparse server-backed keyboard overrides for every app window. */
 export function useUpdateKeyboardSettings() {
   const queryClient = useQueryClient();
 
@@ -102,11 +87,6 @@ export function useUpdateKeyboardSettings() {
   });
 }
 
-/**
- * Copy bb's built-in CLI skills into the chosen machines' global agent skill
- * roots so agents outside bb can drive it. Purely a filesystem action on those
- * machines — nothing in the system config changes, so nothing is invalidated.
- */
 export function useInstallCliSkills() {
   return useMutation({
     meta: {
@@ -117,11 +97,6 @@ export function useInstallCliSkills() {
   });
 }
 
-/**
- * Set the complete app-wide appearance: the palette id (built-in id or custom
- * theme name) and favicon tint. Like experiments, the server broadcasts
- * `config-changed` for other windows; the local invalidation refreshes this one.
- */
 export function useUpdateAppearance() {
   const queryClient = useQueryClient();
 

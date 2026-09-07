@@ -39,6 +39,38 @@ function makeInitialState(): FixedPanelTabsState {
 }
 
 describe("fixed-panel-tabs-state", () => {
+  it("preserves native browser identities and detects a reconnected desktop generation", () => {
+    const tab = {
+      ...createBrowserFixedPanelTab({
+        environmentId: null,
+        url: "https://example.com",
+      }),
+      id: "browser:native-generated-id:none",
+      desktopTarget: {
+        hostId: "host-1",
+        instanceId: "instance-1",
+        generation: "generation-1",
+      },
+    };
+    const state = createEmptyFixedPanelTabsState({
+      lastUsedAt: NOW,
+      secondary: { activeTabId: tab.id, isOpen: true, tabs: [tab] },
+    });
+    const parsed = parseFixedPanelTabsState({
+      initialValue: makeInitialState(),
+      now: NOW,
+      storedValue: JSON.stringify(state),
+    });
+    expect(parsed.secondary.tabs).toEqual([tab]);
+    expect(parsed.secondary.activeTabId).toBe(tab.id);
+    expect(
+      areFixedPanelTabsEquivalent(tab, {
+        ...tab,
+        desktopTarget: { ...tab.desktopTarget, generation: "generation-2" },
+      }),
+    ).toBe(false);
+  });
+
   it("parses current secondary tab state", () => {
     const now = 1_000;
     const workspaceTab = createWorkspaceFilePreviewFixedPanelTab({
@@ -497,11 +529,6 @@ describe("plugin file opener owner state", () => {
 });
 
 describe("terminal tab target", () => {
-  /**
-   * Nav-panel right panels persist the target a terminal was opened against.
-   * The thread-tabs contract parses every branch strictly, so a target it does
-   * not model fails the whole sync, not just that tab.
-   */
   it("keeps the target through a storage round trip and the thread-tabs contract", () => {
     const target = {
       kind: "host_path" as const,
@@ -564,8 +591,6 @@ describe("legacy side-chat tabs", () => {
     }
   });
 
-  // The native side chat is gone, but its tabs can still sit in stored panel
-  // state. They must not fail the parse — they simply disappear.
   it("drops tabs persisted before the native side chat was removed", () => {
     const browserTab = createBrowserFixedPanelTab({
       environmentId: null,

@@ -78,7 +78,6 @@ describe("marketplace icon validation", () => {
     const path = join(directory, "large.png");
     const handle = await open(path, "w");
     try {
-      // A sparse file proves the reader does not allocate or read its size.
       await handle.truncate(3 * 1024 * 1024 * 1024);
     } finally {
       await handle.close();

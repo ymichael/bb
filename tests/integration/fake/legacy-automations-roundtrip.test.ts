@@ -1,4 +1,11 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -188,7 +195,11 @@ describe("legacy automation export/import round trip", () => {
         logger: testLogger,
       });
       const pluginDataDir = join(dataDir, "plugins", "automations");
-      const importPath = join(pluginDataDir, "import", "legacy-automations.json");
+      const importPath = join(
+        pluginDataDir,
+        "import",
+        "legacy-automations.json",
+      );
       const exported = legacyImportFileSchema.parse(
         JSON.parse(await readFile(importPath, "utf8")),
       );
@@ -220,6 +231,7 @@ describe("legacy automation export/import round trip", () => {
       expect(parseAutomationExecution(agent?.execution ?? "")).toMatchObject({
         mode: "agent",
         environment: { type: "project-default" },
+        targetThreadId: "thr_target",
       });
       const script = getAutomation(pluginDb.$client, "auto_script");
       expect(parseAutomationExecution(script?.execution ?? "")).toMatchObject({

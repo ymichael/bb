@@ -35,7 +35,6 @@ function isNotFoundError(error: unknown): boolean {
   );
 }
 
-/** Resolves share ownership from trusted bb server state. */
 export class ShareHostResolver {
   constructor(private readonly getSdk: () => BbPluginApi["sdk"]) {}
 
@@ -94,7 +93,6 @@ export class ShareHostResolver {
     return this.byId(thread.environment.hostId);
   }
 
-  /** Resolve only the durable owner id; removal must not require a live host. */
   async resolveId(ctx: Pick<PluginCliContext, "threadId">): Promise<string> {
     if (ctx.threadId === undefined) return this.serverHostId();
     const thread = threadEnvironmentSchema.parse(

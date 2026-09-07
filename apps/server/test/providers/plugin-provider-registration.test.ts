@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { validatePluginProviderDeclaration,
-  type NormalizedPluginProviderDeclaration } from "@get-bb/plugin-sdk/internal/host-policy";
+import {
+  validatePluginProviderDeclaration,
+  type NormalizedPluginProviderDeclaration,
+} from "@get-bb/plugin-sdk/internal/host-policy";
 import type { PluginProviderDeclaration } from "@get-bb/plugin-sdk";
 import { buildPluginProviderRegistration } from "../../src/services/providers/plugin-provider-registration.js";
 import { loadFirstPartyProviderDeclarations } from "../helpers/provider-registry.js";
@@ -39,6 +41,7 @@ describe("buildPluginProviderRegistration", () => {
       available: true,
       pluginId: "acme-agent",
       declaration: normalized,
+      iconHash: null,
       readSettings: NO_SETTINGS,
     });
 
@@ -70,9 +73,6 @@ describe("buildPluginProviderRegistration", () => {
           command: { trigger: "/", name: "goal", trailingText: " " },
         },
       ],
-      // The coarse ladder projects to labelled options when the declaration
-      // gives no labels of its own; a service-tier provider gets the pair the
-      // fast-mode toggle offers.
       reasoningLevels: [
         { id: "low", label: "Low" },
         { id: "medium", label: "Medium" },
@@ -83,8 +83,6 @@ describe("buildPluginProviderRegistration", () => {
         { id: "fast", label: "Fast" },
       ],
     });
-    // Every backend-only declared fact lands here, compaction included;
-    // nothing rides along as a raw declaration to be read around.
     expect(registration.serverCapabilities).toStrictEqual({
       reasoningLevels: ["low", "medium", "high"],
       fork: "checkpoint",
@@ -109,6 +107,7 @@ describe("buildPluginProviderRegistration", () => {
 
   it("projects the target-state declaration fields onto ProviderInfo", () => {
     const registration = buildPluginProviderRegistration({
+      iconHash: null,
       available: true,
       pluginId: "acme-agent",
       declaration: declaration({
@@ -155,8 +154,6 @@ describe("buildPluginProviderRegistration", () => {
       { id: "default", label: "Standard" },
       { id: "fast", label: "Priority" },
     ]);
-    // Extension kinds are namespaced by the OWNING PLUGIN id, not the
-    // provider id: the plugin is what keeps two plugins' "widget" apart.
     expect(registration.info.extensionKinds).toStrictEqual({
       "acme-agent/widget": { item: true, state: false },
       "acme-agent/mood": { item: true, state: true },
@@ -165,6 +162,7 @@ describe("buildPluginProviderRegistration", () => {
 
   it("binds the options hook to the plugin's settings and validates its result", () => {
     const registration = buildPluginProviderRegistration({
+      iconHash: null,
       available: true,
       pluginId: "acme-agent",
       declaration: declaration({
@@ -223,11 +221,11 @@ describe("buildPluginProviderRegistration", () => {
 
   it("refuses a hook result that is not bounded plain JSON", () => {
     const registration = buildPluginProviderRegistration({
+      iconHash: null,
       available: true,
       pluginId: "acme-agent",
       declaration: declaration({
         deriveProviderOptions: () => ({
-          // A function is not JSON; the bag rides the daemon wire.
           oops: (() => undefined) as unknown as string,
         }),
       }),
@@ -246,6 +244,7 @@ describe("buildPluginProviderRegistration", () => {
   it("projects each fork ladder rung onto the two client booleans", () => {
     const projection = (fork: "none" | "tip" | "checkpoint") => {
       const { capabilities } = buildPluginProviderRegistration({
+        iconHash: null,
         available: true,
         pluginId: "acme-agent",
         declaration: declaration({
@@ -258,9 +257,6 @@ describe("buildPluginProviderRegistration", () => {
         supportsSessionRewind: capabilities.supportsSessionRewind,
       };
     };
-    // "tip" is the rung that distinguishes the two: ACP can clone a session
-    // but cannot recreate one at an earlier point, so fork is offered and
-    // edit-past-message rewind is not.
     expect(projection("none")).toStrictEqual({
       supportsFork: false,
       supportsSessionRewind: false,
@@ -277,6 +273,7 @@ describe("buildPluginProviderRegistration", () => {
 
   it("maps an icon-less declaration to a null logoUrl and skills-only actions", () => {
     const registration = buildPluginProviderRegistration({
+      iconHash: null,
       available: true,
       pluginId: "acme-plain",
       declaration: declaration({
@@ -296,17 +293,15 @@ describe("buildPluginProviderRegistration", () => {
     expect(registration.info.composerActions).toStrictEqual([
       { kind: "skills", trigger: "/" },
     ]);
-    // No service tier → no tier options at all, not an empty list.
     expect(registration.info.serviceTiers).toBeUndefined();
   });
 
   it("projects a named glyph icon by name and a path icon as a logo URL, never both", () => {
-    // `icon: "Zap"` has no bytes for the logo route to serve; before this the
-    // glyph was dropped and the picker showed the display name's initial.
     const glyph = buildPluginProviderRegistration({
       available: true,
       pluginId: "echo-provider",
       declaration: declaration({ id: "echo-agent", icon: "Zap" }),
+      iconHash: null,
       readSettings: NO_SETTINGS,
     });
     expect(glyph.info.icon).toStrictEqual({ glyph: "Zap" });
@@ -316,15 +311,16 @@ describe("buildPluginProviderRegistration", () => {
       available: true,
       pluginId: "acme-agent",
       declaration: declaration({ icon: "./icons/agent.svg" }),
+      iconHash: null,
       readSettings: NO_SETTINGS,
     });
     expect(path.info.icon).toBeUndefined();
-    expect(path.info.logoUrl).toBe("/api/v1/system/providers/my-remote-agent/logo");
+    expect(path.info.logoUrl).toBe(
+      "/api/v1/system/providers/my-remote-agent/logo",
+    );
   });
 
   it("leaves the first-party providers on their SVG assets (no glyph)", async () => {
-    // The four first-party plugins ship icon files; the glyph projection must
-    // not touch how they arrive. Pinned against the declarations themselves.
     const declarations = await loadFirstPartyProviderDeclarations();
     const projected = [...declarations.entries()].flatMap(([pluginId, list]) =>
       list.map((declared) => {
@@ -332,21 +328,28 @@ describe("buildPluginProviderRegistration", () => {
           available: true,
           pluginId,
           declaration: declared,
+          iconHash: null,
           readSettings: NO_SETTINGS,
         });
         return { id: info.id, logoUrl: info.logoUrl, icon: info.icon };
       }),
     );
-    // Every well-known ACP agent declares its own SVG asset too: core vendors
-    // no brand marks, so a provider without a served logo has no mark.
     expect(projected).toStrictEqual([
-      { id: "codex", logoUrl: "/api/v1/system/providers/codex/logo", icon: undefined },
+      {
+        id: "codex",
+        logoUrl: "/api/v1/system/providers/codex/logo",
+        icon: undefined,
+      },
       {
         id: "claude-code",
         logoUrl: "/api/v1/system/providers/claude-code/logo",
         icon: undefined,
       },
-      { id: "pi", logoUrl: "/api/v1/system/providers/pi/logo", icon: undefined },
+      {
+        id: "pi",
+        logoUrl: "/api/v1/system/providers/pi/logo",
+        icon: undefined,
+      },
       {
         id: "acp-cursor",
         logoUrl: "/api/v1/system/providers/acp-cursor/logo",
@@ -357,8 +360,16 @@ describe("buildPluginProviderRegistration", () => {
         logoUrl: "/api/v1/system/providers/acp-opencode/logo",
         icon: undefined,
       },
-      { id: "acp-omp", logoUrl: "/api/v1/system/providers/acp-omp/logo", icon: undefined },
-      { id: "acp-grok", logoUrl: "/api/v1/system/providers/acp-grok/logo", icon: undefined },
+      {
+        id: "acp-omp",
+        logoUrl: "/api/v1/system/providers/acp-omp/logo",
+        icon: undefined,
+      },
+      {
+        id: "acp-grok",
+        logoUrl: "/api/v1/system/providers/acp-grok/logo",
+        icon: undefined,
+      },
       {
         id: "acp-hermes-agent",
         logoUrl: "/api/v1/system/providers/acp-hermes-agent/logo",

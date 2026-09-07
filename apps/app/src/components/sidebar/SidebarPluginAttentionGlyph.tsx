@@ -13,11 +13,6 @@ import {
 } from "@/hooks/usePluginAttention";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 
-/**
- * Snapshot key of the attention set the user acknowledged by clicking the
- * glyph: sorted `[id, status, statusDetail]` tuples, so the glyph stays hidden
- * only while that exact set persists and returns on any change (#1915).
- */
 const acknowledgedAttentionKeyAtom = atomWithStorage<string | null>(
   "bb.sidebar.pluginAttentionAcknowledged",
   null,
@@ -25,11 +20,6 @@ const acknowledgedAttentionKeyAtom = atomWithStorage<string | null>(
   { getOnInit: true },
 );
 
-/**
- * One muted warning triangle in the sidebar footer tray while an enabled
- * plugin is not running. Derived from the plugin list, never stored, so it
- * disappears once every enabled plugin runs again.
- */
 export function SidebarPluginAttentionGlyph({
   className,
   onNavigate,

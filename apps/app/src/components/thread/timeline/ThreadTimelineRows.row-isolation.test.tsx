@@ -10,9 +10,6 @@ import { ThreadTimelineRows } from "./ThreadTimelineRows";
 
 const renderedMessageTexts = vi.hoisted(() => [] as string[]);
 
-// Wrap the message body so each render of a row's content is observable. The
-// wrapper only re-renders when its parent hands it a new element, so the count
-// measures whether `ConversationRowContent` bailed out.
 vi.mock("./ConversationMessageContent.js", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("./ConversationMessageContent.js")>();
@@ -62,9 +59,6 @@ describe("ThreadTimelineRows row isolation", () => {
     expect(renderedMessageTexts).toHaveLength(12);
     renderedMessageTexts.length = 0;
 
-    // A new assistant message moves the "latest actionable" id, which every
-    // row reads from context. Only the previous latest (inline -> overflow)
-    // and the new row may render; the other ten must bail out.
     view.rerender(renderTimeline([...rows, assistantRow(12)]));
     expect([...renderedMessageTexts].sort()).toEqual([
       "Assistant answer number 11.",

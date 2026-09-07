@@ -64,6 +64,7 @@ const SHARED_DOCUMENT_EVENT_TYPES = [
   "mouseup",
   "selectionchange",
   "keyup",
+  "copy",
 ];
 
 function countSharedListenerCalls(spy: {
@@ -85,8 +86,6 @@ describe("SelectableMessageProse", () => {
     );
     const addsAfterFirstMount = countSharedListenerCalls(addSpy);
 
-    // Per-tap handler work is O(document listeners): additional messages must
-    // reuse the shared registry instead of registering their own handlers.
     rerender(
       <>
         <SelectableMessageProse>First answer</SelectableMessageProse>
@@ -96,7 +95,6 @@ describe("SelectableMessageProse", () => {
     );
     expect(countSharedListenerCalls(addSpy)).toBe(addsAfterFirstMount);
 
-    // Unmounting the last message must detach the shared listeners.
     unmount();
     expect(countSharedListenerCalls(removeSpy)).toBeGreaterThanOrEqual(
       SHARED_DOCUMENT_EVENT_TYPES.length,
@@ -139,7 +137,6 @@ describe("SelectableMessageProse", () => {
         expect.objectContaining({ text: "Second selectable" }),
       ),
     );
-    // The first message must clear its stale selection exactly once.
     await waitFor(() => expect(onSelectFirst).toHaveBeenLastCalledWith(null));
   });
 
@@ -411,14 +408,198 @@ describe("SelectableMessageProse", () => {
     );
   });
 
+  it("clips whitespace-only boundary spill for native copy, then restores it", () => {
+    vi.useFakeTimers();
+    const { getByTestId, getByText } = render(
+      <div>
+        <SelectableMessageProse>
+          <p>Copy only this message.</p>
+        </SelectableMessageProse>
+        <div data-testid="message-actions">Actions</div>
+      </div>,
+    );
+    const target = getByText("Copy only this message.");
+    const textNode = target.firstChild;
+    const outsideNode = getByTestId("message-actions").firstChild;
+    const messageNode = target.closest("[data-sidebar-swipe-selectable]");
+    expect(textNode).not.toBeNull();
+    expect(outsideNode).not.toBeNull();
+    expect(messageNode).not.toBeNull();
+
+    const range = document.createRange();
+    range.setStart(textNode!, 0);
+    range.setEnd(outsideNode!, 0);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.copy(target);
+
+    expect(range.endContainer).toBe(messageNode);
+    expect(range.endOffset).toBe(messageNode!.childNodes.length);
+
+    vi.runAllTimers();
+    expect(selection?.focusNode).toBe(outsideNode);
+    expect(selection?.focusOffset).toBe(0);
+  });
+
+  it("clips a leading boundary spill when copy starts outside the message", () => {
+    vi.useFakeTimers();
+    const { getByText } = render(
+      <div>
+        <div>Earlier row</div>
+        <SelectableMessageProse>
+          <p>Copy this prefix.</p>
+        </SelectableMessageProse>
+      </div>,
+    );
+    const outside = getByText("Earlier row");
+    const target = getByText("Copy this prefix.");
+    const outsideText = outside.firstChild;
+    const targetText = target.firstChild;
+    const messageNode = target.closest("[data-sidebar-swipe-selectable]");
+    expect(outsideText).not.toBeNull();
+    expect(targetText).not.toBeNull();
+    expect(messageNode).not.toBeNull();
+
+    const range = document.createRange();
+    range.setStart(outsideText!, outsideText!.textContent!.length);
+    range.setEnd(targetText!, targetText!.textContent!.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.copy(outside);
+
+    expect(range.startContainer).toBe(messageNode);
+    expect(range.startOffset).toBe(0);
+    vi.runAllTimers();
+  });
+
+  it("does not clip selected text outside the message", () => {
+    const { getByTestId, getByText } = render(
+      <div>
+        <SelectableMessageProse>
+          <p>foo bar foo</p>
+        </SelectableMessageProse>
+        <div data-testid="following-text"> bar</div>
+      </div>,
+    );
+    const target = getByText("foo bar foo");
+    const outside = getByTestId("following-text");
+    const targetText = target.firstChild;
+    const outsideText = outside.firstChild;
+    expect(targetText).not.toBeNull();
+    expect(outsideText).not.toBeNull();
+
+    const range = document.createRange();
+    range.setStart(targetText!, 8);
+    range.setEnd(outsideText!, outsideText!.textContent!.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.copy(target);
+
+    expect(range.endContainer).toBe(outsideText);
+    expect(range.endOffset).toBe(outsideText!.textContent!.length);
+  });
+
+  it("does not clip selected image content outside the message", () => {
+    const { getByTestId, getByText } = render(
+      <div>
+        <SelectableMessageProse>
+          <p>Copy text and image</p>
+        </SelectableMessageProse>
+        <div data-testid="following-image">
+          <img alt="Selected attachment" />
+        </div>
+      </div>,
+    );
+    const target = getByText("Copy text and image");
+    const outside = getByTestId("following-image");
+    const targetText = target.firstChild;
+    expect(targetText).not.toBeNull();
+
+    const range = document.createRange();
+    range.setStart(targetText!, 0);
+    range.setEnd(outside, outside.childNodes.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+
+    fireEvent.copy(target);
+
+    expect(range.endContainer).toBe(outside);
+    expect(range.endOffset).toBe(outside.childNodes.length);
+  });
+
+  it("leaves multi-range selections untouched", () => {
+    const { getByText } = render(
+      <SelectableMessageProse>
+        <p>Copy one of several ranges.</p>
+      </SelectableMessageProse>,
+    );
+    const target = getByText("Copy one of several ranges.");
+    const textNode = target.firstChild;
+    expect(textNode).not.toBeNull();
+
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const setEnd = vi.spyOn(range, "setEnd");
+    const selection = makeWindowSelection({
+      node: textNode!,
+      text: "Copy one of several ranges.",
+    });
+    Object.defineProperty(selection, "rangeCount", { value: 2 });
+    vi.spyOn(selection, "getRangeAt").mockReturnValue(range);
+    vi.spyOn(window, "getSelection").mockReturnValue(selection);
+
+    fireEvent.copy(target);
+
+    expect(setEnd).not.toHaveBeenCalled();
+  });
+
+  it("does not restore a copied range over a newer selection", () => {
+    vi.useFakeTimers();
+    const { getByText } = render(
+      <div>
+        <SelectableMessageProse>
+          <p>Copy this message.</p>
+        </SelectableMessageProse>
+        <div>New selection</div>
+      </div>,
+    );
+    const target = getByText("Copy this message.");
+    const outside = getByText("New selection");
+    const targetText = target.firstChild;
+    const outsideText = outside.firstChild;
+    expect(targetText).not.toBeNull();
+    expect(outsideText).not.toBeNull();
+
+    const copiedRange = document.createRange();
+    copiedRange.setStart(targetText!, 0);
+    copiedRange.setEnd(outsideText!, 0);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(copiedRange);
+    fireEvent.copy(target);
+
+    const newerRange = document.createRange();
+    newerRange.selectNodeContents(outside);
+    selection?.removeAllRanges();
+    selection?.addRange(newerRange);
+    vi.runAllTimers();
+
+    expect(selection?.toString()).toBe("New selection");
+  });
+
   it("registers the shared pointer listeners as passive", () => {
     const addSpy = vi.spyOn(document, "addEventListener");
     const view = render(
       <SelectableMessageProse>Answer prose</SelectableMessageProse>,
     );
 
-    // None of the pointer handlers call preventDefault; the passive flag is a
-    // perf contract (it keeps taps off the blocking-handler list), so pin it.
     const optionsByType = new Map(
       addSpy.mock.calls.map(([type, , options]) => [type, options]),
     );
@@ -426,8 +607,6 @@ describe("SelectableMessageProse", () => {
       expect(optionsByType.get(type), type).toEqual({ passive: true });
     }
 
-    // Detach still matches (removeEventListener ignores `passive`): the
-    // shared-listener teardown test above covers the counts.
     view.unmount();
   });
 });

@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   chmodSync,
   existsSync,
@@ -20,6 +21,9 @@ const SCRIPT_PATH = new URL(
   import.meta.url,
 );
 const createdDirectories: string[] = [];
+const FIXTURE_ARTIFACT_DIGEST = createHash("sha256")
+  .update("fixture-tarball")
+  .digest("hex");
 
 function createFixture(): { binDir: string; dataDir: string; homeDir: string } {
   const root = mkdtempSync(join(tmpdir(), "bb-install-script-test-"));
@@ -30,6 +34,7 @@ function createFixture(): { binDir: string; dataDir: string; homeDir: string } {
   mkdirSync(binDir, { recursive: true });
   mkdirSync(dataDir, { recursive: true });
   mkdirSync(homeDir, { recursive: true });
+  writeFileSync(join(root, "package.json"), '{"type":"commonjs"}\n');
   symlinkSync(process.execPath, join(binDir, "node"));
   return { binDir, dataDir, homeDir };
 }
@@ -159,16 +164,10 @@ process.on("SIGTERM", () => server.close(() => process.exit(0)));
 `;
 }
 
-// Mocks curl to serve the redeem endpoint and answer the bb-app tarball
-// download with the given status; npm records invocations and fabricates a
-// bb-app that enrolls into whatever BB_DATA_DIR the script hands it. Like a
-// real install, the fake npm lays out bb-app's native add-ons as loadable
-// modules under lib/node_modules/bb-app/node_modules; when
-// FAKE_NPM_SKIP_NATIVE_MODULES is set it leaves them empty, which mimics npm
-// >= 12 blocking their install scripts (or ignore-scripts=true).
 function writeServerInstallTools(
   fixture: ReturnType<typeof createFixture>,
   artifactStatus: 200 | 404,
+  artifactDigest = FIXTURE_ARTIFACT_DIGEST,
 ): void {
   const curlLog = join(fixture.dataDir, "curl.log");
   const npmLog = join(fixture.dataDir, "npm.log");
@@ -180,11 +179,22 @@ case "$*" in
   *redeem-machine*) printf '%s' '{"credential":"bbcm_durable","machineId":"machine-1"}' ;;
   *)
     output=
+    headers=
+    unchanged=no
+    case "$*" in *'If-None-Match: "sha256-${artifactDigest}"'*) unchanged=yes ;; esac
     while [ "$#" -gt 0 ]; do
-      if [ "$1" = --output ]; then output=$2; shift 2; else shift; fi
+      if [ "$1" = --output ]; then output=$2; shift 2
+      elif [ "$1" = --dump-header ]; then headers=$2; shift 2
+      else shift
+      fi
     done
-    [ -z "$output" ] || printf '%s' 'fixture-tarball' >"$output"
-    printf '%s' '${artifactStatus}'
+    [ -z "$headers" ] || printf '%s\n' 'HTTP/1.1 ${artifactStatus}' 'x-bb-artifact-sha256: ${artifactDigest}' >"$headers"
+    if [ "$unchanged" = yes ] && [ '${artifactStatus}' = 200 ]; then
+      printf '%s' 304
+    else
+      [ -z "$output" ] || printf '%s' 'fixture-tarball' >"$output"
+      printf '%s' '${artifactStatus}'
+    fi
     ;;
 esac
 `,
@@ -206,7 +216,11 @@ done
 mkdir -p "$prefix/bin"
 cp "${bbAppTemplatePath}" "$prefix/bin/bb-app"
 chmod +x "$prefix/bin/bb-app"
-for module in better-sqlite3 node-pty; do
+cp "${bbAppTemplatePath}" "$prefix/bin/bb"
+chmod +x "$prefix/bin/bb"
+mkdir -p "$prefix/lib/node_modules/bb-app/host-daemon/dist"
+printf '%s\n' 'fixture' >"$prefix/lib/node_modules/bb-app/host-daemon/dist/daemon-bundle.mjs"
+for module in node-pty @parcel/watcher; do
   mkdir -p "$prefix/lib/node_modules/bb-app/node_modules/$module"
   if [ -z "$FAKE_NPM_SKIP_NATIVE_MODULES" ]; then
     printf '%s\n' 'module.exports = {};' >"$prefix/lib/node_modules/bb-app/node_modules/$module/index.js"
@@ -311,7 +325,10 @@ describe("machine install script", () => {
       BB_INSTALL_SKIP_SERVICE: "1",
     });
 
-    expect(result.status, result.stderr).toBe(0);
+    expect(
+      result.status,
+      `${result.stderr}\n${readFileSync(join(fixture.dataDir, "install-join.log"), "utf8")}`,
+    ).toBe(0);
     const selectedPort = readFileSync(
       join(fixture.dataDir, "host-daemon-port"),
       "utf8",
@@ -333,6 +350,37 @@ describe("machine install script", () => {
       readFileSync(join(fixture.dataDir, "install-daemon.pid"), "utf8"),
     );
     process.kill(daemonPid, "SIGTERM");
+  });
+
+  it("starts the daemon for an existing enrollment when service setup is skipped", () => {
+    const fixture = createFixture();
+    const invocationPath = join(fixture.dataDir, "invocation");
+    const daemonPidPath = join(fixture.dataDir, "install-daemon.pid");
+    writeCurlArtifactMock(fixture, 404);
+    writeEnrollingBbApp(fixture, invocationPath);
+    writeJoinedState(fixture);
+
+    const result = runScript(JOIN_ARGS, fixture, {
+      BB_INSTALL_SKIP_SERVICE: "1",
+    });
+
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.stdout).toContain("already joined");
+    try {
+      expect(existsSync(daemonPidPath)).toBe(true);
+      expect(readFileSync(invocationPath, "utf8").trim().split("\n")).toEqual([
+        "host-daemon",
+        "--auto-update",
+        "--host-daemon-port",
+        readFileSync(join(fixture.dataDir, "host-daemon-port"), "utf8").trim(),
+        "--server-url",
+        "https://machine.getbb.app",
+      ]);
+    } finally {
+      if (existsSync(daemonPidPath)) {
+        process.kill(Number(readFileSync(daemonPidPath, "utf8")), "SIGTERM");
+      }
+    }
   });
 
   it("accepts the daemon's normalized loopback server URL", () => {
@@ -368,7 +416,6 @@ describe("machine install script", () => {
   it("installs the server tarball even when a same-version bb-app is on PATH", () => {
     const fixture = createFixture();
     writeServerInstallTools(fixture, 200);
-    // A stale build with the same version string must not be reused.
     writeExecutable(join(fixture.binDir, "bb-app"), "#!/bin/sh\nexit 99\n");
     const result = runScript(JOIN_ARGS, fixture, {
       BB_INSTALL_SKIP_SERVICE: "1",
@@ -434,6 +481,53 @@ describe("machine install script", () => {
     process.kill(daemonPid, "SIGTERM");
   });
 
+  it("skips downloading and installing an identical host artifact", () => {
+    const fixture = createFixture();
+    writeServerInstallTools(fixture, 200);
+    const first = runScript(JOIN_ARGS, fixture, {
+      BB_INSTALL_SKIP_SERVICE: "1",
+    });
+    expect(first.status, first.stderr).toBe(0);
+
+    const second = runScript(JOIN_ARGS, fixture, {
+      BB_INSTALL_SKIP_SERVICE: "1",
+    });
+
+    expect(second.status, second.stderr).toBe(0);
+    expect(second.stdout).toContain(
+      "The identical server host artifact is already installed",
+    );
+    expect(
+      readFileSync(join(fixture.dataDir, "host-artifact.sha256"), "utf8"),
+    ).toBe(`${FIXTURE_ARTIFACT_DIGEST}\n`);
+    expect(
+      readFileSync(join(fixture.dataDir, "npm.log"), "utf8").trim().split("\n"),
+    ).toHaveLength(1);
+    expect(readFileSync(join(fixture.dataDir, "curl.log"), "utf8")).toContain(
+      `If-None-Match: "sha256-${FIXTURE_ARTIFACT_DIGEST}"`,
+    );
+    const daemonPid = Number(
+      readFileSync(join(fixture.dataDir, "install-daemon.pid"), "utf8"),
+    );
+    process.kill(daemonPid, "SIGTERM");
+  });
+
+  it("rejects a server host artifact whose digest does not match", () => {
+    const fixture = createFixture();
+    writeServerInstallTools(fixture, 200, "a".repeat(64));
+
+    const result = runScript(JOIN_ARGS, fixture, {
+      BB_INSTALL_SKIP_SERVICE: "1",
+    });
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("failed SHA-256 verification");
+    expect(existsSync(join(fixture.dataDir, "npm.log"))).toBe(false);
+    expect(existsSync(join(fixture.dataDir, "host-artifact.sha256"))).toBe(
+      false,
+    );
+  });
+
   it("falls back to npm only when the server artifact returns 404", () => {
     const fixture = createFixture();
     writeServerInstallTools(fixture, 404);
@@ -461,12 +555,11 @@ describe("machine install script", () => {
 
     expect(result.status, result.stderr).toBe(1);
     expect(result.stderr).toContain(
-      "npm installed bb-app, but its native add-ons (better-sqlite3, node-pty) did not load.",
+      "npm installed bb-app, but its host native add-ons (node-pty, @parcel/watcher) did not load.",
     );
     expect(result.stderr).toContain(
       "npm_config_allow_scripts=better-sqlite3,node-pty,@parcel/watcher",
     );
-    // The installer must stop before it starts the temporary host daemon.
     expect(existsSync(join(fixture.dataDir, "install-daemon.pid"))).toBe(false);
   });
 
@@ -569,7 +662,10 @@ describe("machine install script", () => {
     writeJoinedState(firstFixture);
     writeJoinedState(secondFixture);
     writeCurlArtifactMock(fixture, 404);
-    writeExecutable(join(fixture.binDir, "bb-app"), "#!/bin/sh\nexit 99\n");
+    writeExecutable(
+      join(fixture.binDir, "bb-app"),
+      createEnrollingBbAppScript({ hostId: "host-test" }),
+    );
 
     const [firstResult, secondResult] = await Promise.all([
       runScriptAsync(JOIN_ARGS, firstFixture, { BB_INSTALL_SKIP_SERVICE: "1" }),
@@ -597,6 +693,14 @@ describe("machine install script", () => {
       ]),
     ).toEqual(
       new Set([realpathSync(firstDataDir), realpathSync(secondDataDir)]),
+    );
+    process.kill(
+      Number(readFileSync(join(firstDataDir, "install-daemon.pid"), "utf8")),
+      "SIGTERM",
+    );
+    process.kill(
+      Number(readFileSync(join(secondDataDir, "install-daemon.pid"), "utf8")),
+      "SIGTERM",
     );
   });
 
@@ -666,7 +770,7 @@ setInterval(() => {}, 1000);
     expect(result.stderr).toContain("Timed out waiting for host daemon");
   });
 
-  it("installs an idempotent macOS launch agent for joined state", () => {
+  it("starts a fresh macOS launch agent once and replaces it with one new process", () => {
     const fixture = createFixture();
     writeJoinedState(fixture);
     writeServerInstallTools(fixture, 200);
@@ -675,18 +779,34 @@ setInterval(() => {}, 1000);
       join(fixture.binDir, "launchctl"),
       `#!/bin/sh
 printf '%s\n' "$*" >>"${join(fixture.dataDir, "launchctl.log")}"
-if [ "$1" = kickstart ]; then
+if [ "$1" = bootout ] && [ -f "${join(fixture.dataDir, "service-daemon.pid")}" ]; then
+  service_pid=$(sed -n '1p' "${join(fixture.dataDir, "service-daemon.pid")}")
+  kill "$service_pid" 2>/dev/null || true
+  attempts=0
+  while kill -0 "$service_pid" 2>/dev/null && [ "$attempts" -lt 100 ]; do
+    attempts=$((attempts + 1))
+    sleep 0.01
+  done
+  rm -f "${join(fixture.dataDir, "service-daemon.pid")}"
+fi
+if [ "$1" = bootstrap ]; then
   port=$(sed -n '1p' "${join(fixture.dataDir, "host-daemon-port")}")
   BB_DATA_DIR="${fixture.dataDir}" "${join(fixture.dataDir, "npm/bin/bb-app")}" host-daemon --host-daemon-port "$port" --server-url https://machine.getbb.app >/dev/null 2>&1 &
   echo $! >"${join(fixture.dataDir, "service-daemon.pid")}"
+  printf 'start\n' >>"${join(fixture.dataDir, "launchctl-starts.log")}"
+fi
+if [ "$1" = kickstart ]; then
+  printf '%s\n' 'unexpected kickstart' >&2
+  exit 70
 fi
 `,
     );
 
-    const result = runScript(
+    const firstResult = runScript([...JOIN_ARGS], fixture);
+    const secondResult = runScript(
       [
         "--join-code",
-        "unused-fresh-code",
+        "unused-reinstall-code",
         "--host-id",
         "host-test",
         "--server",
@@ -695,15 +815,20 @@ fi
       fixture,
     );
 
-    expect(result.status, result.stderr).toBe(0);
-    expect(result.stdout).toContain("already joined");
-    expect(result.stdout).toContain(
+    expect(firstResult.status, firstResult.stderr).toBe(0);
+    expect(firstResult.stdout).toContain("already joined");
+    expect(firstResult.stdout).toContain(
       "Installing the persistent bb host daemon service",
     );
-    expect(result.stdout).toContain("Waiting for the launch agent to connect");
-    expect(result.stdout).toContain("  ●  bb machine is ready");
-    expect(result.stdout).toContain("server  https://machine.getbb.app");
-    expect(result.stdout).toContain(
+    expect(firstResult.stdout).toContain(
+      "Waiting for the launch agent to connect",
+    );
+    expect(firstResult.stdout).toContain("  ●  bb machine is ready");
+    expect(secondResult.status, secondResult.stderr).toBe(0);
+    expect(secondResult.stdout).toContain("already joined");
+    expect(secondResult.stdout).toContain("  ●  bb machine is ready");
+    expect(secondResult.stdout).toContain("server  https://machine.getbb.app");
+    expect(secondResult.stdout).toContain(
       "service " +
         join(
           fixture.homeDir,
@@ -720,6 +845,8 @@ fi
     expect(plist).toContain(
       "<string>app.getbb.host-daemon.machine-getbb-app</string>",
     );
+    expect(plist).toContain("<key>RunAtLoad</key><true/>");
+    expect(plist).toContain("<key>KeepAlive</key><true/>");
     expect(plist).toContain("<string>host-daemon</string>");
     expect(plist).toContain("<string>--auto-update</string>");
     const selectedPort = readFileSync(
@@ -733,10 +860,70 @@ fi
     expect(plist).toContain(
       `<key>BB_APP_NPM_PREFIX</key><string>${realpathSync(fixture.dataDir)}/npm</string>`,
     );
+    const serviceFile = join(
+      fixture.homeDir,
+      "Library/LaunchAgents/app.getbb.host-daemon.machine-getbb-app.plist",
+    );
+    const domain = `gui/${process.getuid?.()}`;
+    expect(readFileSync(join(fixture.dataDir, "launchctl.log"), "utf8")).toBe(
+      `bootout ${domain} ${serviceFile}\nbootstrap ${domain} ${serviceFile}\nbootout ${domain} ${serviceFile}\nbootstrap ${domain} ${serviceFile}\n`,
+    );
     expect(
-      readFileSync(join(fixture.dataDir, "launchctl.log"), "utf8"),
-    ).toContain("bootstrap");
+      readFileSync(join(fixture.dataDir, "launchctl-starts.log"), "utf8"),
+    ).toBe("start\nstart\n");
   });
+
+  it("reports launchctl bootstrap failures", () => {
+    const fixture = createFixture();
+    writeJoinedState(fixture);
+    writeServerInstallTools(fixture, 200);
+    writeExecutable(join(fixture.binDir, "uname"), "#!/bin/sh\necho Darwin\n");
+    writeExecutable(
+      join(fixture.binDir, "launchctl"),
+      `#!/bin/sh
+printf '%s\n' "$*" >>"${join(fixture.dataDir, "launchctl.log")}"
+if [ "$1" = bootstrap ]; then
+  printf '%s\n' 'fixture bootstrap failure' >&2
+  exit 36
+fi
+`,
+    );
+
+    const result = runScript(JOIN_ARGS, fixture);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "Could not register the bb host-daemon launch agent app.getbb.host-daemon.machine-getbb-app.",
+    );
+    expect(result.stderr).toContain("launchctl: fixture bootstrap failure");
+  });
+
+  it("treats launch-agent readiness as authoritative after bootstrap", () => {
+    const fixture = createFixture();
+    writeJoinedState(fixture);
+    writeServerInstallTools(fixture, 200);
+    writeExecutable(join(fixture.binDir, "uname"), "#!/bin/sh\necho Darwin\n");
+    writeExecutable(
+      join(fixture.binDir, "launchctl"),
+      `#!/bin/sh
+printf '%s\n' "$*" >>"${join(fixture.dataDir, "launchctl.log")}"
+`,
+    );
+    writeExecutable(join(fixture.binDir, "sleep"), "#!/bin/sh\nexit 0\n");
+
+    const result = runScript(JOIN_ARGS, fixture);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(
+      "The bb host-daemon launch agent started but did not connect to https://machine.getbb.app.",
+    );
+    expect(result.stderr).toContain(
+      `See ${fixture.dataDir}/logs/launchd.log for the daemon error.`,
+    );
+    expect(result.stdout).toContain(
+      "Still waiting for the launch agent (60/60 checks)",
+    );
+  }, 15_000);
 
   it("restarts an active Linux systemd user unit after replacing it", () => {
     const fixture = createFixture();

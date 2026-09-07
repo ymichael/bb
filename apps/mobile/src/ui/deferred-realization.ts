@@ -1,9 +1,3 @@
-/**
- * Realize heavy content two frames after a surface starts animating in, so
- * the sheet transform begins on an empty body (the web persistent drawer's
- * rule). A timeout fallback covers frames that never fire (backgrounded app,
- * throttled JS thread).
- */
 export interface FrameScheduler {
   requestAnimationFrame: (callback: () => void) => number;
   cancelAnimationFrame: (handle: number) => void;
@@ -17,11 +11,6 @@ export interface FrameScheduler {
 const DEFERRED_REALIZATION_FRAMES = 2;
 const DEFERRED_REALIZATION_TIMEOUT_MS = 120;
 
-/**
- * Calls `realize` once, after `frames` animation frames or `timeoutMs`,
- * whichever comes first. Returns a cancel function; after cancel, `realize`
- * never runs.
- */
 export function scheduleDeferredRealization(
   realize: () => void,
   scheduler: FrameScheduler,

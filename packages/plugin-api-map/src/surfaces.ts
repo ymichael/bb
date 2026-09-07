@@ -1,37 +1,10 @@
-/**
- * The product-shape inventory behind the Plugin Guide: every surface a plugin
- * can plug into, in plain language. This file is the whole of bb's plugin API
- * documentation, so it has to stay current with the SDK — each surface names
- * the SDK symbols it documents and api-sync.test.ts fails the build when the
- * two drift apart.
- *
- * Each surface reads as plain product capability: what becomes possible in
- * that part of bb once a plugin owns it.
- *
- * `firstParty` lists the shipped bb plugins that use each surface today,
- * taken from a registration-call inventory of plugins/* in the bb repo.
- */
-
 export interface PluginSurface {
   id: string;
   title: string;
-  /** Lead sentence, ending in the phrase the bullets hang off. */
   summary: string;
-  /** What a plugin can do on this surface, one capability per line. */
   bullets: string[];
-  /**
-   * One scannable line for capability grids; the prose stays in the detail
-   * card. Only the pixel-less surfaces need one today.
-   */
   tagline?: string;
-  /**
-   * The SDK symbols this surface documents. Not shown in the UI: it is the
-   * tie between a card and the API it describes, and api-sync.test.ts fails
-   * when one of them is renamed or removed, or when a new registration slot
-   * ships with no card naming its type.
-   */
   apiSymbols: string[];
-  /** First-party bb plugins that ship on this surface today (display names). */
   firstParty?: string[];
   experimental?: boolean;
 }
@@ -47,14 +20,8 @@ export interface SurfaceGroup {
     | "headless";
   title: string;
   blurb: string;
-  /** Product anatomy stays spatial; non-spatial documentation can reflow. */
   fixtureKind: "spatial" | "capability-grid";
   surfaces: PluginSurface[];
-  /**
-   * Named clusters for a group that lists its surfaces instead of drawing
-   * them. Every surface id in the group appears in exactly one section
-   * (surfaces.test.ts enforces it).
-   */
   sections?: readonly {
     title: string;
     surfaceIds: readonly string[];
@@ -63,11 +30,6 @@ export interface SurfaceGroup {
 
 export type FixtureResponsiveStrategy = "scale-together" | "reflow";
 
-/**
- * Responsive behavior follows fixture meaning, never an author's per-page
- * preference. Product anatomy scales as one composition; the one non-spatial
- * capability grid uses ordinary document reflow.
- */
 export function fixtureResponsiveStrategy(
   group: Pick<SurfaceGroup, "fixtureKind">,
 ): FixtureResponsiveStrategy {
@@ -83,6 +45,28 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       "The main bb window, containing the sidebar, the conversation, and the side panel. A plugin can add rows, controls, panel tabs, and message content to the numbered regions.",
     surfaces: [
       {
+        id: "sidebar-navigation",
+        title: "Sidebar navigation",
+        summary:
+          "Replaces bb's navigation controls above the thread list with a component your plugin renders. With this, a plugin can:",
+        bullets: [
+          "Arrange New thread, Search, Extensions, and plugin destinations",
+          "Activate each destination through bb, including split placement for supported items",
+          "Render bb's original controls when the plugin wants to delegate",
+          "Leave the thread list, footer, drawer, and resize handle under bb's control",
+        ],
+        apiSymbols: [
+          "ExperimentalSidebarNavigationRegistration",
+          "ExperimentalSidebarNavigationProps",
+          "ExperimentalSidebarNavigationItem",
+          "ExperimentalSidebarNavigationAction",
+          "ExperimentalSidebarNavigationIcon",
+          "ExperimentalSidebarNavigationShortcut",
+          "ExperimentalSidebarNavigationActivationOptions",
+        ],
+        experimental: true,
+      },
+      {
         id: "nav-panel",
         title: "Full-page panels",
         summary:
@@ -94,22 +78,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         ],
         apiSymbols: ["PluginNavPanelRegistration"],
         firstParty: ["Automations", "Docs", "GitHub", "Tasks"],
-      },
-      {
-        id: "thread-list",
-        title: "The thread list",
-        summary:
-          "Replaces the list of threads in bb's sidebar with a component your plugin renders. With this, a plugin can:",
-        bullets: [
-          "Render every row, and decide the grouping, the ordering, and what each row shows",
-          "Read the same live thread data and run statuses bb's own list reads",
-          "Replace only the list. The New thread button, the search action, the plugin rows, and the sidebar footer stay bb's",
-        ],
-        apiSymbols: [
-          "PluginThreadListRegistration",
-          "PluginSidebarThreadsState",
-        ],
-        experimental: true,
       },
       {
         id: "thread-row-status",
@@ -130,17 +98,44 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         experimental: true,
       },
       {
-        id: "sidebar-footer",
-        title: "Sidebar footer buttons",
+        id: "thread-list",
+        title: "The thread list",
         summary:
-          "Adds an icon button to the row at the bottom of bb's sidebar, beside the Settings button. With this, a plugin can:",
+          "Replaces the list of threads in bb's sidebar with a component your plugin renders. With this, a plugin can:",
         bullets: [
-          "Supply the button's icon and its hover tooltip",
-          "Run a callback when the button is clicked",
-          "Stay reachable wherever bb's sidebar is showing",
+          "Render every row, and decide the grouping, the ordering, and what each row shows",
+          "Read the same live thread data and run statuses bb's own list reads",
+          "Replace only the list. The New thread button, the search action, the plugin rows, and the sidebar footer stay bb's",
         ],
-        apiSymbols: ["PluginSidebarFooterActionRegistration"],
+        apiSymbols: [
+          "PluginThreadListRegistration",
+          "PluginSidebarThreadsState",
+        ],
+        experimental: true,
+      },
+      {
+        id: "sidebar-footer",
+        title: "Sidebar footer items",
+        summary:
+          "Adds a host-rendered icon item to the bottom of bb's sidebar. With this, a plugin can:",
+        bullets: [
+          "Run an action, or reveal plugin-rendered content above the footer row",
+          "Let bb coordinate one open disclosure across every enabled plugin",
+          "Keep navigation, tabs, data, and controls inside the plugin's disclosure component",
+        ],
+        apiSymbols: [
+          "ExperimentalSidebarFooter",
+          "ExperimentalSidebarFooterItemBase",
+          "ExperimentalSidebarFooterItemRegistration",
+          "ExperimentalSidebarFooterActionRegistration",
+          "ExperimentalSidebarFooterActionContext",
+          "ExperimentalSidebarFooterDisclosureRegistration",
+          "ExperimentalSidebarFooterDisclosureProps",
+          "ExperimentalSidebarFooterDisclosureController",
+          "PluginSidebarFooterActionRegistration",
+        ],
         firstParty: ["Remote access"],
+        experimental: true,
       },
       {
         id: "thread-header",
@@ -153,6 +148,22 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Render in the same row as bb's own header controls",
         ],
         apiSymbols: ["PluginThreadHeaderActionRegistration"],
+        experimental: true,
+      },
+      {
+        id: "timeline-renderers",
+        title: "Timeline entry content",
+        summary:
+          "Renders the expanded content of plugin-owned timeline entries while bb keeps each entry's header and controls. With this, a plugin can:",
+        bullets: [
+          "Draw the expanded content beneath timeline entries created by the plugin's own provider",
+          "Receive the entry data and plugin payload, plus bb's default content as `Original`",
+          "Fall back to bb's default content automatically when the plugin is unavailable or crashes",
+        ],
+        apiSymbols: [
+          "PluginTimelineRendererRegistration",
+          "PluginTimelineRendererProps",
+        ],
         experimental: true,
       },
       {
@@ -238,18 +249,19 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         firstParty: ["Docs"],
       },
       {
-        id: "timeline-renderers",
-        title: "Timeline entry content",
+        id: "app-overlay",
+        title: "App-wide overlays",
         summary:
-          "Renders the expanded content of plugin-owned timeline entries while bb keeps each entry's header and controls. With this, a plugin can:",
+          "Mounts floating plugin UI across the bb app, outside route-owned layout regions. With this, a plugin can:",
         bullets: [
-          "Draw the expanded content beneath timeline entries created by the plugin's own provider",
-          "Receive the entry data and plugin payload, plus bb's default content as `Original`",
-          "Fall back to bb's default content automatically when the plugin is unavailable or crashes",
+          "Render a persistent widget once per bb window while the plugin is enabled",
+          "Use app-level SDK hooks and preserve their React context through portals",
+          "Own the widget's chrome, position, visibility, and responsive behavior",
+          "Coexist with other overlays while crashes remain isolated to the overlay that failed",
         ],
         apiSymbols: [
-          "PluginTimelineRendererRegistration",
-          "PluginTimelineRendererProps",
+          "ExperimentalAppOverlayRegistration",
+          "ExperimentalAppOverlayProps",
         ],
         experimental: true,
       },
@@ -368,8 +380,13 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Supply each row's icon, label, and disabled state; bb renders the row itself",
           "Run a callback when someone picks the row",
           "Read and rewrite the draft prompt from that callback",
+          "Send the draft at a time the person picks, through the prompt box's own send — so a scheduled message keeps its attachments, its @-mentions, and on the new-thread screen the agent and environment chosen on screen",
         ],
-        apiSymbols: ["ComposerPlusMenuItem"],
+        apiSymbols: [
+          "ComposerPlusMenuItem",
+          "ExperimentalComposerSubmitOptions",
+        ],
+        firstParty: ["Send later"],
       },
       {
         id: "provider-picker",
@@ -381,10 +398,15 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Declare what the provider supports, then serve its model list at runtime",
           "Supply a small icon that appears next to its name",
           "Receive every message in a thread started with it, through a bridge process the plugin ships",
+          "Contribute validated environment variables to any provider for each session and turn",
         ],
         apiSymbols: [
           "PluginProviderDeclaration",
           "PluginProviderIconRegistration",
+          "ExperimentalPluginProviderEnvContext",
+          "ExperimentalPluginProviderEnvEntry",
+          "ExperimentalPluginProviderEnvHealthContext",
+          "ExperimentalPluginProviderEnvHealth",
         ],
         firstParty: [
           "ACP providers",
@@ -456,17 +478,25 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         summary:
           "Declares the settings your plugin needs as plain data; bb renders the form for them on the plugin's settings page and stores the values. With this, a plugin can:",
         bullets: [
-          "Declare each field's type (text, toggle, choice, or project) with a label and an optional default",
-          "Get the form, its validation, and saving without writing any UI",
+          "Declare each field's type (text, number, toggle, choice, or project) with a label and an optional default",
+          "Get the form, its validation, and autosaving without writing any UI",
+          "Validate each proposed value with a synchronous, non-transforming Standard Schema through `experimental_schema`; Zod schemas qualify",
+          "Render multi-line text with `experimental_multiline`",
           "Mark a text field secret: bb stores it in a protected file on the server and never sends it to the browser",
-          "Read saved values from its server code, or the non-secret ones from its own UI with `useSettings()`",
+          "Read values from server code, update them with `experimental_set`, or read non-secret values from plugin UI with `useSettings()`",
         ],
         apiSymbols: [
           "PluginSettings",
+          "PluginSettingsHandle",
           "PluginSettingDescriptor",
           "PluginSettingsState",
         ],
-        firstParty: ["GitHub", "Provider retry", "Workflows"],
+        firstParty: [
+          "Custom instructions",
+          "GitHub",
+          "Provider retry",
+          "Workflows",
+        ],
       },
       {
         id: "settings-section",
@@ -479,12 +509,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Supply a heading and a one-line description for bb to render above it",
         ],
         apiSymbols: ["PluginSettingsSectionRegistration"],
-        firstParty: [
-          "Custom instructions",
-          "Keep Awake",
-          "Memory",
-          "Remote access",
-        ],
+        firstParty: ["Account Pooler", "Keep Awake", "Memory", "Remote access"],
       },
     ],
   },
@@ -513,8 +538,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
     id: "headless",
     title: "Plugin backend",
     fixtureKind: "capability-grid",
-    // The grid below names all ten capabilities with their own taglines, so
-    // the blurb does not list them again.
     blurb: "The parts of the plugin API with no interface of their own.",
     sections: [
       {
@@ -523,11 +546,23 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       },
       {
         title: "Running & reacting",
-        surfaceIds: ["background", "wire", "thread-events", "host-workers"],
+        surfaceIds: [
+          "background",
+          "wire",
+          "thread-events",
+          "dispatch-hook",
+          "host-workers",
+        ],
       },
       {
         title: "Data & platform",
-        surfaceIds: ["storage", "bb-sdk", "host-components"],
+        surfaceIds: [
+          "storage",
+          "bb-sdk",
+          "desktop-browsers",
+          "ai-services",
+          "host-components",
+        ],
       },
       {
         title: "Confidence",
@@ -607,16 +642,24 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
       },
       {
         id: "wire",
-        tagline: "Typed RPC, webhook routes, realtime push",
-        title: "HTTP, RPC & realtime",
+        tagline: "Typed RPC, HTTP & WebSocket routes, realtime push",
+        title: "HTTP, WebSocket, RPC & realtime",
         summary:
           "Connects the plugin's own UI, its server code, and outside services. With this, a plugin can:",
         bullets: [
           "Call its server from its UI over RPC, with arguments and results checked against a schema",
-          "Serve HTTP routes other systems can call, webhooks included",
+          "Serve exact-path HTTP and WebSocket routes other systems can call, webhooks included",
           "Push messages to every open bb window, so the UI does not have to poll",
         ],
-        apiSymbols: ["PluginRpc", "PluginHttp", "PluginRealtime"],
+        apiSymbols: [
+          "PluginRpc",
+          "PluginHttp",
+          "PluginRealtime",
+          "ExperimentalPluginWebSocket",
+          "ExperimentalPluginWebSocketContext",
+          "ExperimentalPluginWebSocketHandler",
+          "ExperimentalPluginWebSocketHandlers",
+        ],
         firstParty: [
           "Automations",
           "Custom instructions",
@@ -640,11 +683,43 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Runs server code when a thread changes state. With this, a plugin can:",
         bullets: [
           "Subscribe to threads being created, going active or idle, failing, being archived, or being deleted",
-          "Receive a typed payload describing the thread and the transition",
-          "Respond by sending a notification, retrying, or writing to its own storage",
+          "Subscribe to messages being queued behind a wait and dispatching when it clears",
+          "Subscribe when a thread receives a pending interaction",
+          "Subscribe to a turn failing, with the provider's error and rate-limit windows attached",
+          "Respond by sending a notification, asking for a retry, or writing to its own storage",
         ],
-        apiSymbols: ["PluginEvents", "PluginThreadEventPayloads"],
-        firstParty: ["Automations", "Provider retry", "Tasks", "Workflows"],
+        apiSymbols: [
+          "PluginEvents",
+          "PluginThreadEventPayloads",
+          "PluginTurnFailedEvent",
+        ],
+        firstParty: [
+          "Automations",
+          "Provider retry",
+          "Push notifications",
+          "Tasks",
+          "Workflows",
+        ],
+      },
+      {
+        id: "dispatch-hook",
+        tagline: "Decide whether a message may go",
+        title: "Dispatch hook",
+        summary:
+          "Answers the checkpoint every message passes on its way to a provider. With this, a plugin can:",
+        bullets: [
+          "Let a dispatch proceed, queue it with a user-visible reason, or refuse it outright",
+          "See the thread, project, machine, prompt and resolved execution tuple before the turn runs",
+          "Hold work until a moment it names, then ask core to re-decide every queued message when its condition changes",
+        ],
+        apiSymbols: [
+          "PluginHooks",
+          "PluginHookSignatures",
+          "MessageDispatchHookContext",
+          "MessageDispatchHookDecision",
+        ],
+        firstParty: ["Concurrency limit"],
+        experimental: true,
       },
       {
         id: "host-workers",
@@ -656,6 +731,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Ship a Node entry point bb starts on demand on the machine it calls",
           "Call that worker from its server code over typed RPC",
           "Do work that has to happen on the machine itself, such as watching files or holding a wake lock",
+          "Declare desired loopback ports once and let bb deliver retained declarations when an enrolled machine reconnects",
         ],
         apiSymbols: ["PluginHosts"],
         firstParty: ["Keep Awake", "Remote access"],
@@ -670,6 +746,7 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
         bullets: [
           "Get a key-value store for small values such as flags and cursors",
           "Get its own SQLite database, with migrations, for larger or relational data",
+          "Reject a changed or reused migration number before it can hide a schema change",
           "Read and write only its own namespace; other plugins cannot see it",
         ],
         apiSymbols: ["PluginStorage"],
@@ -696,8 +773,9 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Create threads, send messages to them, and manage projects",
           "Reach the same operations the [bb CLI](cli) and the bb UI use",
           "Have the threads it creates attributed back to the plugin",
+          "Read the server's loopback URL, public app URL, and data directory when it needs server facts",
         ],
-        apiSymbols: ["BbPluginApi"],
+        apiSymbols: ["BbPluginApi", "PluginServerApi"],
         firstParty: [
           "Automations",
           "Docs",
@@ -705,11 +783,50 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
           "Inline visualizations",
           "Keep Awake",
           "Provider retry",
+          "Push notifications",
           "Secrets",
           "Side chat",
           "Tasks",
           "Workflows",
         ],
+      },
+      {
+        id: "desktop-browsers",
+        title: "Desktop browser control",
+        tagline: "Use your automation tool on BB-owned tabs",
+        summary:
+          "Controls a selected desktop window through bb.sdk.experimental_desktopBrowsers. With this, a plugin can:",
+        bullets: [
+          "Discover instances on an explicit host and create thread-owned tabs with separate automation profiles",
+          "Acquire expiring control and focus the first selected tab; new CDP pages are revealed too. Personal tabs require an explicit handoff",
+          "Give a worker on that host a private, scoped CDP WebSocket connection for DevBrowser or agent-browser",
+          "Capture or reveal a tab and release control while preserving the tab and its login",
+          "Observe changed tab and control state with a disposable two-second polling subscription; report disconnect errors",
+        ],
+        apiSymbols: [
+          "ExperimentalDesktopBrowsersArea",
+          "ExperimentalDesktopBrowserScope",
+          "ExperimentalDesktopBrowserLease",
+          "ExperimentalDesktopBrowserCreateInput",
+          "ExperimentalDesktopBrowserAcquireInput",
+        ],
+        firstParty: ["DevBrowser"],
+        experimental: true,
+      },
+      {
+        id: "ai-services",
+        tagline: "Serve bb's helper model from your own machine",
+        title: "AI services",
+        summary:
+          "Lets a plugin answer bb's own helper-model calls — the short model calls behind thread titles and commit messages, and the microphone button's transcription. With this, a plugin can:",
+        bullets: [
+          "Serve those calls from an enrolled machine, so bb's helper model can be one the plugin holds the credentials for",
+          "Serve voice transcription the same way, for the microphone button in the prompt box",
+          "Appear as a choice in the AI-service settings, alongside the models bb reaches itself",
+        ],
+        apiSymbols: ["PluginAiServices", "PluginAiServiceDeclaration"],
+        firstParty: ["Codex provider"],
+        experimental: true,
       },
       {
         id: "host-components",
@@ -767,11 +884,6 @@ export const SURFACE_GROUPS: SurfaceGroup[] = [
   },
 ];
 
-/**
- * Which slide each surface is drawn on, so a card that names another surface
- * can say where to find it — the same page's marker number, or the other
- * page by name.
- */
 export const GROUP_BY_SURFACE_ID: ReadonlyMap<
   string,
   { id: SurfaceGroup["id"]; title: string }

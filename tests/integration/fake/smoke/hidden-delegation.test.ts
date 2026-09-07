@@ -14,11 +14,6 @@ import {
   TURN_TIMEOUT_MS,
 } from "./shared.js";
 
-/**
- * The parent notification arrives as a fresh turn whose input mentions the
- * child thread, so the mention text is the end-to-end proof that the child
- * reported back.
- */
 async function waitForThreadEventContaining(
   api: Parameters<typeof getThreadEvents>[0],
   threadId: string,

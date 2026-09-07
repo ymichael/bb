@@ -165,7 +165,6 @@ describe("Tasks RPC domain API", () => {
               });
             }
             if (threadId === "thr_blank_title") {
-              // A whitespace primary title must not suppress a useful fallback.
               return makeThreadResponse({
                 id: threadId,
                 title: "   ",
@@ -181,7 +180,6 @@ describe("Tasks RPC domain API", () => {
                 visibility: "hidden",
               });
             }
-            // Deleted / hidden / inaccessible threads reject.
             throw new Error("thread_not_found");
           },
         },
@@ -198,7 +196,6 @@ describe("Tasks RPC domain API", () => {
       projectId: project.id,
       title: "Wire up comments",
     });
-    // Agent comment whose thread has a human title.
     store.tasks.createComment({
       taskId: task.id,
       kind: "agent",
@@ -207,7 +204,6 @@ describe("Tasks RPC domain API", () => {
       body: "Titled",
       notifiedCount: 0,
     });
-    // Agent comment whose thread only has a fallback title.
     store.tasks.createComment({
       taskId: task.id,
       kind: "agent",
@@ -216,7 +212,6 @@ describe("Tasks RPC domain API", () => {
       body: "Fallback title",
       notifiedCount: 0,
     });
-    // Agent comment whose thread has only a whitespace primary title.
     store.tasks.createComment({
       taskId: task.id,
       kind: "agent",
@@ -225,7 +220,6 @@ describe("Tasks RPC domain API", () => {
       body: "Blank title",
       notifiedCount: 0,
     });
-    // Agent comment authored by a side chat (must not leak title/link).
     store.tasks.createComment({
       taskId: task.id,
       kind: "agent",
@@ -234,7 +228,6 @@ describe("Tasks RPC domain API", () => {
       body: "Side chat",
       notifiedCount: 0,
     });
-    // Agent comment whose thread is gone/inaccessible.
     store.tasks.createComment({
       taskId: task.id,
       kind: "agent",
@@ -243,7 +236,6 @@ describe("Tasks RPC domain API", () => {
       body: "Missing thread",
       notifiedCount: 0,
     });
-    // Legacy agent comment with no thread id.
     store.tasks.createComment({
       taskId: task.id,
       kind: "agent",
@@ -252,7 +244,6 @@ describe("Tasks RPC domain API", () => {
       body: "Legacy",
       notifiedCount: 0,
     });
-    // User comment never resolves a thread title.
     store.tasks.createComment({
       taskId: task.id,
       kind: "user",
@@ -275,7 +266,6 @@ describe("Tasks RPC domain API", () => {
     expect(titleByBody.get("Missing thread")).toBeNull();
     expect(titleByBody.get("Legacy")).toBeNull();
     expect(titleByBody.get("Human note")).toBeNull();
-    // Each distinct agent thread is resolved once, not per comment.
     expect(harness.sdk.callsTo("threads.get")).toHaveLength(5);
     await harness.dispose();
   });
@@ -296,7 +286,6 @@ describe("Tasks RPC domain API", () => {
               });
             }
             if (threadId === "thr_side_chat") {
-              // Side chats suppress the title/link but still expose a provider.
               return makeThreadResponse({
                 id: threadId,
                 title: "Internal side chat",
@@ -370,38 +359,30 @@ describe("Tasks RPC domain API", () => {
     const byBody = new Map(
       result.comments.map((comment) => [comment.body, comment]),
     );
-    // Built-in provider resolves its display name; built-ins carry no logoUrl.
     expect(byBody.get("Codex")?.provider).toEqual({
       id: "codex",
       name: "Codex",
       logoUrl: null,
     });
-    // Custom ACP agent carries the served logo asset URL.
     expect(byBody.get("Custom logo")?.provider).toEqual({
       id: "acp-custom",
       name: "Custom Agent",
       logoUrl: "/api/v1/system/providers/acp-custom/logo",
     });
-    // Side chat: provider present (drives the logo) though the title is hidden.
     expect(byBody.get("Side chat")?.provider).toEqual({
       id: "claude-code",
       name: "Claude Code",
       logoUrl: null,
     });
     expect(byBody.get("Side chat")?.threadTitle).toBeNull();
-    // Provider no longer installed: badge falls back to the raw provider id so
-    // the UI can still render a brand glyph by id.
     expect(byBody.get("Uninstalled")?.provider).toEqual({
       id: "acp-gone",
       name: "acp-gone",
       logoUrl: null,
     });
-    // Inaccessible thread, legacy no-thread agent comment, and user comment
-    // carry no provider.
     expect(byBody.get("Missing thread")?.provider).toBeNull();
     expect(byBody.get("Legacy")?.provider).toBeNull();
     expect(byBody.get("Human note")?.provider).toBeNull();
-    // The host provider list is read once per listComments, not per comment.
     expect(harness.sdk.callsTo("providers.list")).toHaveLength(1);
     await harness.dispose();
   });
@@ -1035,8 +1016,6 @@ describe("Tasks RPC domain API", () => {
     );
     expect(caseInsensitive.task?.id).toBe(task.id);
 
-    // Unknown number, unknown prefix, and malformed keys all degrade to null
-    // (the chat card's not-found state), never an RPC error.
     for (const taskKey of ["PLUG-999", "NOPE-1", "not a key", "PLUG-"]) {
       const missing = tasksRpcContract.getTaskByKey.output.parse(
         await harness.callRpc("getTaskByKey", { taskKey }),
@@ -1205,8 +1184,6 @@ describe("Tasks RPC domain API", () => {
       await harness.callRpc("listTaskPullRequests", { taskId: task.id }),
     );
 
-    // Same-millisecond attachments make relative thread order nondeterministic,
-    // so compare threadIds as sets.
     expect(
       result.pullRequests.map((pullRequest) => ({
         ...pullRequest,
@@ -1231,8 +1208,6 @@ describe("Tasks RPC domain API", () => {
       },
     ]);
     expect(result.unavailableThreadIds).toEqual(["thr_deleted00"]);
-    // One lookup per distinct environment: threads sharing env_shared reuse
-    // a single grouped call.
     expect(
       harness.sdk
         .callsTo("environments.pullRequest")
@@ -1306,8 +1281,6 @@ describe("Tasks RPC domain API", () => {
     const result = tasksRpcContract.listTaskPullRequests.output.parse(
       await harness.callRpc("listTaskPullRequests", { taskId: task.id }),
     );
-    // The genuinely absent PR is quiet; only failed lookups are flagged, and
-    // every thread of a failed environment is flagged.
     expect(result.pullRequests).toEqual([]);
     expect([...result.unavailableThreadIds].sort()).toEqual([
       "thr_crash0000",
@@ -1349,7 +1322,6 @@ describe("Tasks RPC domain API", () => {
       projectId: project.id,
       title: "Ship it",
     });
-    // Two threads share env_a; a third uses env_b.
     for (const threadId of [
       "thr_alpha0000",
       "thr_alpha0001",
@@ -1367,8 +1339,6 @@ describe("Tasks RPC domain API", () => {
     const resultPromise = harness.callRpc("listTaskPullRequests", {
       taskId: task.id,
     });
-    // Both environment lookups must be in flight before either resolves —
-    // serialized lookups would only ever have one pending resolver here.
     await vi.waitFor(() => {
       expect([...resolvers.keys()].sort()).toEqual(["env_a", "env_b"]);
     });
@@ -1392,7 +1362,6 @@ describe("Tasks RPC domain API", () => {
       "thr_alpha0000",
       "thr_alpha0001",
     ]);
-    // Still exactly one lookup per distinct environment.
     expect(harness.sdk.callsTo("environments.pullRequest")).toHaveLength(2);
 
     await harness.dispose();
@@ -1487,7 +1456,6 @@ type PullRequestLookup =
   | { outcome: "absent" }
   | { outcome: "unavailable"; message: string };
 
-/** Full environment PR payload; tests override the fields they assert on. */
 function makePullRequest(
   overrides: Partial<{
     number: number;

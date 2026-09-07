@@ -1,10 +1,5 @@
 import { z } from "zod";
 
-/**
- * Sessionless provider maintenance query. `providerOptions` carries the same
- * provider-scoped statics as model/list (notably an ACP launch spec), while
- * `providerId` lets one bridge implementation serve several provider ids.
- */
 export const providerMaintenanceParamsSchema = z
   .object({
     providerId: z.string().min(1),
@@ -17,9 +12,7 @@ export type ProviderMaintenanceParams = z.infer<
   typeof providerMaintenanceParamsSchema
 >;
 
-export const providerInstallationRequirementSchema = z.enum([
-  "thread_rewind",
-]);
+export const providerInstallationRequirementSchema = z.enum(["thread_rewind"]);
 export type ProviderInstallationRequirement = z.infer<
   typeof providerInstallationRequirementSchema
 >;
@@ -32,11 +25,6 @@ export type ProviderInstallationStatusParams = z.infer<
   typeof providerInstallationStatusParamsSchema
 >;
 
-/**
- * Cheap, host-local readiness reported by a provider implementation. Network
- * usage and update checks deliberately live outside this result so choosing a
- * provider for the composer never waits on them.
- */
 export const providerHealthSchema = z
   .object({
     status: z.enum([
@@ -58,11 +46,8 @@ export const providerHealthSchema = z
   })
   .passthrough();
 
-export type ProviderHealth = z.infer<
-  typeof providerHealthSchema
->;
+export type ProviderHealth = z.infer<typeof providerHealthSchema>;
 
-/** One usage window reported by a provider subscription. */
 export const providerUsageWindowSchema = z
   .object({
     label: z.string().min(1),
@@ -77,11 +62,8 @@ export const providerUsageWindowSchema = z
   })
   .passthrough();
 
-export type ProviderUsageWindow = z.infer<
-  typeof providerUsageWindowSchema
->;
+export type ProviderUsageWindow = z.infer<typeof providerUsageWindowSchema>;
 
-/** Live usage for one provider, normalized by that provider's bridge. */
 export const providerUsageSchema = z.discriminatedUnion("status", [
   z
     .object({
@@ -104,43 +86,31 @@ export const providerUsageSchema = z.discriminatedUnion("status", [
     .passthrough(),
 ]);
 
-export type ProviderUsage = z.infer<
-  typeof providerUsageSchema
->;
+export type ProviderUsage = z.infer<typeof providerUsageSchema>;
 
-export const providerHealthResultSchema = z.discriminatedUnion(
-  "supported",
-  [
-    z.object({ supported: z.literal(false) }).passthrough(),
-    z
-      .object({
-        supported: z.literal(true),
-        health: providerHealthSchema,
-      })
-      .passthrough(),
-  ],
-);
+export const providerHealthResultSchema = z.discriminatedUnion("supported", [
+  z.object({ supported: z.literal(false) }).passthrough(),
+  z
+    .object({
+      supported: z.literal(true),
+      health: providerHealthSchema,
+    })
+    .passthrough(),
+]);
 
-export type ProviderHealthResult = z.infer<
-  typeof providerHealthResultSchema
->;
+export type ProviderHealthResult = z.infer<typeof providerHealthResultSchema>;
 
-export const providerUsageResultSchema = z.discriminatedUnion(
-  "supported",
-  [
-    z.object({ supported: z.literal(false) }).passthrough(),
-    z
-      .object({
-        supported: z.literal(true),
-        usage: providerUsageSchema,
-      })
-      .passthrough(),
-  ],
-);
+export const providerUsageResultSchema = z.discriminatedUnion("supported", [
+  z.object({ supported: z.literal(false) }).passthrough(),
+  z
+    .object({
+      supported: z.literal(true),
+      usage: providerUsageSchema,
+    })
+    .passthrough(),
+]);
 
-export type ProviderUsageResult = z.infer<
-  typeof providerUsageResultSchema
->;
+export type ProviderUsageResult = z.infer<typeof providerUsageResultSchema>;
 
 export const providerInstallationActionKindSchema = z.enum([
   "install",
@@ -150,11 +120,6 @@ export type ProviderInstallationActionKind = z.infer<
   typeof providerInstallationActionKindSchema
 >;
 
-/**
- * An installation action that a provider currently knows how to perform.
- * Only the display command crosses the product boundary; the executable plan
- * is resolved afresh by `provider/installation/run` on the host.
- */
 export const providerInstallationActionSchema = z
   .object({
     kind: providerInstallationActionKindSchema,
@@ -175,7 +140,6 @@ export type ProviderInstallationSource = z.infer<
   typeof providerInstallationSourceSchema
 >;
 
-/** Provider-owned installation and update state for one host. */
 export const providerInstallationStatusSchema = z
   .object({
     executableName: z.string().min(1),
@@ -204,10 +168,6 @@ export type ProviderInstallationRunParams = z.infer<
   typeof providerInstallationRunParamsSchema
 >;
 
-/**
- * A typed process plan. The provider chooses the executable and arguments;
- * the daemon chooses the environment and cwd and owns process supervision.
- */
 export const providerInstallationCommandSchema = z
   .object({
     command: z.string().min(1),
@@ -219,8 +179,9 @@ export type ProviderInstallationCommand = z.infer<
   typeof providerInstallationCommandSchema
 >;
 
-export const providerInstallationVerificationSchema =
-  z.discriminatedUnion("kind", [
+export const providerInstallationVerificationSchema = z.discriminatedUnion(
+  "kind",
+  [
     z.object({ kind: z.literal("installed") }).passthrough(),
     z
       .object({
@@ -234,17 +195,15 @@ export const providerInstallationVerificationSchema =
         version: z.string().min(1),
       })
       .passthrough(),
-  ]);
+  ],
+);
 export type ProviderInstallationVerification = z.infer<
   typeof providerInstallationVerificationSchema
 >;
 
-/**
- * `available: false` handles a stale action safely: status may have changed
- * between rendering a button and the daemon resolving the execution plan.
- */
-export const providerInstallationRunResultSchema =
-  z.discriminatedUnion("available", [
+export const providerInstallationRunResultSchema = z.discriminatedUnion(
+  "available",
+  [
     z
       .object({
         available: z.literal(false),
@@ -258,7 +217,8 @@ export const providerInstallationRunResultSchema =
         verification: providerInstallationVerificationSchema,
       })
       .passthrough(),
-  ]);
+  ],
+);
 export type ProviderInstallationRunResult = z.infer<
   typeof providerInstallationRunResultSchema
 >;

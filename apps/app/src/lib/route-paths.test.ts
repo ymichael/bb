@@ -78,13 +78,12 @@ describe("route path helpers", () => {
     );
     expect(
       getPluginDetailRoutePath({ pluginId: "github", view: "installed" }),
-    ).toBe("/extensions/plugins/github?view=installed");
+    ).toBe("/settings/plugins/github?view=installed");
     expect(getPluginConfigurationRoutePath({ pluginId: "github" })).toBe(
       "/settings/plugins/github",
     );
     for (const path of [
       "/extensions",
-      // Legacy prefix: old /tools links stay routable so they can redirect.
       "/tools",
       "/tools/plugins/github",
       "/extensions/skills",

@@ -238,9 +238,6 @@ describe("bb thread log command output", () => {
   });
 
   it("bb thread log --json caps at --limit and warns on stderr when more events exist", async () => {
-    // The server lists ascending by sequence, so a capped page is the OLDEST
-    // events. Without a warning a grep over the default page looks like a
-    // search over the whole thread (#1768).
     const events = Array.from({ length: 4 }, (_, index) => ({
       id: `evt-${index + 1}`,
       scope: { kind: "thread" },

@@ -51,11 +51,7 @@ function BetaThreadList({
   );
 }
 
-function BetaFileOpener({
-  Original,
-  path,
-  source,
-}: PluginFileOpenerProps) {
+function BetaFileOpener({ Original, path, source }: PluginFileOpenerProps) {
   const [embedOriginal, setEmbedOriginal] = useState(false);
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) throw new Error("Beta file-opener test crash");

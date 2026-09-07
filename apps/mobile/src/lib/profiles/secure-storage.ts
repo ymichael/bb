@@ -1,18 +1,9 @@
-/**
- * Minimal async key/value contract the profile store persists through.
- * `expo-secure-store` implements it on device (see `../native/expo-secure-storage.ts`);
- * tests use {@link createMemorySecureStorage}.
- *
- * SecureStore caps values at 2 KB per key, so callers must keep each value
- * small (one profile per key, one small index).
- */
 export interface SecureStorageLike {
   getItem(key: string): Promise<string | null>;
   setItem(key: string, value: string): Promise<void>;
   deleteItem(key: string): Promise<void>;
 }
 
-/** Upper bound enforced for every persisted value (expo-secure-store limit). */
 export const SECURE_STORAGE_MAX_VALUE_BYTES = 2048;
 
 export function utf8ByteLength(value: string): number {

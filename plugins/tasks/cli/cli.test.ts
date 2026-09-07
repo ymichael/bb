@@ -20,9 +20,6 @@ import { createStore } from "../api";
 import plugin from "../server";
 import { registerTasksCli } from "./index";
 
-// Passthrough mock with one injectable failure: files named boom.bin fail at
-// blob-write time, simulating a post-preflight persistence error so the
-// create --attach partial-failure path is deterministic.
 vi.mock("../attachments", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../attachments")>();
   const saveAttachmentFromBytes: typeof actual.saveAttachmentFromBytes = async (
@@ -38,11 +35,6 @@ vi.mock("../attachments", async (importOriginal) => {
   return { ...actual, saveAttachmentFromBytes };
 });
 
-// Fake bb.sdk.files backed by the local filesystem, mimicking the host
-// daemon's transport contract (missing-path errors, the 25 MB read cap, and
-// utf8-vs-base64 content encoding). The CLI reaches invoking-machine files
-// only through bb.sdk.files, so these tests stub it instead of relying on
-// the plugin touching the server's disk.
 function localFilesSdk() {
   return {
     read: async ({ path }: { path: string }) => {
@@ -854,8 +846,6 @@ describe("bb tasks CLI", () => {
       movedFolderIds: [child.id],
     });
 
-    // Nothing is destroyed: the project and subfolder move to the top level
-    // and the task is untouched.
     expect(
       JSON.parse(stdout(await harness.runCli(["folder", "list", "--json"])))
         .folders,
@@ -872,7 +862,6 @@ describe("bb tasks CLI", () => {
         .task,
     ).toMatchObject({ id: task.id });
 
-    // A second delete by id of the now-empty child folder reports no moves.
     expect(stdout(await harness.runCli(["folder", "delete", child.id]))).toBe(
       "Deleted folder Child",
     );
@@ -889,10 +878,6 @@ describe("bb tasks CLI", () => {
   it("fails folder delete when another client removed the folder first", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "tasks" });
     const store = createStore(bb);
-    // Same real store and SQLite database; only the delete is wrapped so a
-    // competing client's delete lands between the CLI's lookup and its own
-    // delete. The store then reports `deleted: false`, which must not read
-    // as success.
     const racingStore = {
       ...store,
       tasks: {
@@ -1224,8 +1209,6 @@ describe("bb tasks CLI", () => {
       "detach                         Detach an agent thread from a task",
     );
 
-    // An orchestrator attaches a worker, it dies, and a replacement is
-    // attached: the list must lead with the live replacement.
     stdout(
       await harness.runCli(["attach", "DET-1", "--thread", "thr_dead_worker"]),
     );
@@ -1256,7 +1239,6 @@ describe("bb tasks CLI", () => {
       stderr: "Thread thr_dead_worker is not attached to DET-1",
     });
 
-    // Without --thread the command targets the invoking thread, like attach.
     const previousThreadId = process.env.BB_THREAD_ID;
     process.env.BB_THREAD_ID = "thr_live_worker";
     try {
@@ -1307,7 +1289,6 @@ describe("bb tasks CLI", () => {
         ]),
       );
 
-      // A bad path fails before anything is created — no half-built task.
       const missing = await harness.runCli([
         "create",
         "--project",
@@ -1320,7 +1301,6 @@ describe("bb tasks CLI", () => {
       expect(missing.exitCode).toBe(1);
       expect(missing.stderr).toContain("attachment source is not a file");
 
-      // Preflight also enforces the shared 25 MB upload limit.
       const hugePath = join(directory, "huge.bin");
       await writeFile(hugePath, "");
       await truncate(hugePath, 25 * 1024 * 1024 + 1);
@@ -1419,7 +1399,6 @@ describe("bb tasks CLI", () => {
         ]),
       );
 
-      // JSON mode: middle file fails, both neighbors are still attempted.
       const mixed = await harness.runCli([
         "create",
         "--project",
@@ -1446,13 +1425,11 @@ describe("bb tasks CLI", () => {
       expect(payload.failedAttachments).toEqual([
         { path: boomPath, error: "simulated blob write failure" },
       ]);
-      // Both successes really persisted on the created task.
       const listed = JSON.parse(
         stdout(await harness.runCli(["attachment", "list", "MIX-1", "--json"])),
       );
       expect(listed.attachments).toHaveLength(2);
 
-      // Human mode reports the same outcome with a per-file recovery command.
       const human = await harness.runCli([
         "create",
         "--project",
@@ -1564,8 +1541,6 @@ describe("bb tasks CLI", () => {
     expect(shown).toContain("Pull requests");
     expect(shown).toContain("#12  draft  BB-15 Show PRs in tasks");
     expect(shown).toContain("https://github.com/acme/bb/pull/12");
-    // Genuine absence (no environment, or gh reported no PR) stays quiet —
-    // it must not read as a failed lookup.
     expect(shown).not.toContain("PR lookup unavailable");
 
     const payload = JSON.parse(
@@ -1833,7 +1808,6 @@ describe("bb tasks CLI", () => {
         afterRemove.attachments.map((entry: { id: string }) => entry.id),
       ).not.toContain(attachment.id);
 
-      // Removing an already-gone id is an explicit CLI error, not a silent 0.
       const removeMissing = await harness.runCli([
         "attachment",
         "remove",
@@ -1870,9 +1844,6 @@ describe("bb tasks CLI", () => {
   });
 
   it("routes file flags to the invoking thread's machine and honors --machine", async () => {
-    // Files that exist only on the remote enrolled machine, never on the
-    // server's filesystem — the CLI must reach them via bb.sdk.files with
-    // the resolved hostId.
     const remoteFiles = new Map<string, Buffer>([
       ["/remote/notes.md", Buffer.from("remote description\n", "utf8")],
       [
@@ -1959,7 +1930,6 @@ describe("bb tasks CLI", () => {
     expect(created.attachments).toEqual([
       expect.objectContaining({ fileName: "shot.png", mime: "image/png" }),
     ]);
-    // Every client file read resolved the thread's machine.
     for (const [args] of harness.sdk.callsTo("files.read")) {
       expect(args).toMatchObject({ hostId: "machine-remote" });
     }
@@ -1990,7 +1960,6 @@ describe("bb tasks CLI", () => {
       remoteFiles.get("/remote/shot.png"),
     );
 
-    // --machine overrides by name without any thread context.
     stdout(
       await harness.runCli([
         "attachment",
@@ -2061,7 +2030,6 @@ describe("bb tasks CLI", () => {
       stdout: "",
       stderr: 'Task project "Unlinked CLI" is not linked to a bb project',
     });
-    // "delegate" stays as a hidden compatibility alias for "dispatch".
     const aliased = await harness.runCli([
       "delegate",
       "UNL-1",

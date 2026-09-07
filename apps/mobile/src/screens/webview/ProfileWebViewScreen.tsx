@@ -23,20 +23,13 @@ import {
 } from "@/lib/shell";
 import { getShellPreferenceStore } from "@/lib/shell/shell-preference-store";
 import { settingsSectionHref } from "@/screens/shell/hrefs";
+import { useTheme } from "@/theme";
 import { Button, EmptyStatePanel, Spinner, Text } from "@/ui";
 import { Linking } from "react-native";
 import { useShellBridge } from "./useShellBridge";
 
-/**
- * The WebView shell: one screen that renders the bb page for the active
- * profile. The shell keeps what a web page cannot do on a phone — profiles,
- * the Keychain credential, the session cookie, deep links, the share sheet,
- * haptics, the badge, and this error state — and the page owns the rest.
- */
-
 const APP_VERSION = String(Constants.expoConfig?.version ?? "0.0.0");
 
-/** A Direct profile has no auth, so its session never leaves this state. */
 const IDLE_SESSION = { status: "idle" } as const;
 
 function firstParam(value: string | string[] | undefined): string | undefined {
@@ -44,6 +37,7 @@ function firstParam(value: string | string[] | undefined): string | undefined {
 }
 
 export function ProfileWebViewScreen() {
+  const { tokens } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const params = useLocalSearchParams<{ profileId?: string; path?: string }>();
@@ -54,8 +48,6 @@ export function ProfileWebViewScreen() {
   const requestedProfileId = firstParam(params.profileId);
   const requestedPath = firstParam(params.path);
 
-  // A link may name a profile that is not the active one. Switch first; the
-  // screen renders its loading state until the connector catches up.
   useEffect(() => {
     if (requestedProfileId === undefined) return;
     if (activeProfile?.id === requestedProfileId) return;
@@ -64,14 +56,12 @@ export function ProfileWebViewScreen() {
   }, [activeProfile?.id, profiles, requestedProfileId, setActiveProfile]);
 
   const profile = activeProfile;
-  // A fresh object every render would re-run the reload effect every render.
   const session = connection?.session ?? IDLE_SESSION;
   const webViewRef = useRef<WebView>(null);
   const [load, setLoad] = useState<ShellLoadPhase>({ kind: "loading" });
   const [reloadKey, setReloadKey] = useState(0);
   const currentPathRef = useRef<string>("/");
 
-  // The path the WebView opens on: the link's, else where the user was.
   const initialPath = useMemo(() => {
     if (requestedPath !== undefined && requestedPath.length > 0) {
       return requestedPath;
@@ -109,8 +99,6 @@ export function ProfileWebViewScreen() {
     },
   });
 
-  // The device-settings screen is a sibling in the navigator, so its recovery
-  // actions reach the live WebView through a small command bus.
   useEffect(
     () =>
       subscribeToShellCommands((command) => {
@@ -125,7 +113,6 @@ export function ProfileWebViewScreen() {
     [],
   );
 
-  // Rotation and a keyboard both change the insets the page must pad with.
   const safeArea = useMemo(
     () => ({
       top: insets.top,
@@ -144,8 +131,6 @@ export function ProfileWebViewScreen() {
     bridge.send({ type: "safe-area", safeArea });
   }, [bridge, safeArea]);
 
-  // WKWebView suspends JavaScript in the background, so the page has to be
-  // told to reconnect rather than waiting for a timer that never fired.
   useEffect(() => {
     const subscription = AppState.addEventListener("change", (state) => {
       if (state === "active") bridge.send({ type: "resume" });
@@ -153,8 +138,6 @@ export function ProfileWebViewScreen() {
     return () => subscription.remove();
   }, [bridge]);
 
-  // A resumed app re-mints the connect cookie. The page loaded with the old
-  // one, so reload rather than let its next request meet the gate's sign-in.
   const previousSession = useRef(session);
   useEffect(() => {
     if (shouldReloadForSession(previousSession.current, session)) {
@@ -243,9 +226,7 @@ export function ProfileWebViewScreen() {
                 Pair again
               </Button>
             ) : null}
-            {/* The escape hatch. This screen is the one place the shell still
-                renders when the page will not load, so it has to offer the way
-                back to the switch that turns the shell off. */}
+            {}
             <Button
               variant="ghost"
               testID="shell-device-settings"
@@ -262,25 +243,24 @@ export function ProfileWebViewScreen() {
   if (profile === null || sourceUrl === null || handshake === null) return null;
 
   return (
-    <View className="flex-1" testID="shell-webview">
+    <View className="flex-1 bg-background" testID="shell-webview">
       <WebView
         key={`${profile.id}#${sourceUrl}#${reloadKey}`}
         ref={webViewRef}
         source={{ uri: sourceUrl }}
-        // Phase 0 measured every one of these. See the plan, section 11.
+        style={{ backgroundColor: tokens.background }}
         sharedCookiesEnabled
         javaScriptEnabled
         domStorageEnabled
         allowsInlineMediaPlayback
         mediaPlaybackRequiresUserAction={false}
-        // Without "grant" WKWebView re-asks for the microphone on every
-        // recording, which makes voice input unusable (11.1).
         mediaCapturePermissionGrantType="grant"
-        // iOS draws a previous/next/done bar above the keyboard for every web
-        // input. It costs 68 CSS px the composer needs (11.4).
         hideKeyboardAccessoryView
-        allowsBackForwardNavigationGestures
-        pullToRefreshEnabled
+        allowsBackForwardNavigationGestures={false}
+        bounces={false}
+        pullToRefreshEnabled={false}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
         webviewDebuggingEnabled={__DEV__}
         injectedJavaScriptBeforeContentLoaded={buildBridgeInjectionScript(
           handshake,
@@ -288,8 +268,6 @@ export function ProfileWebViewScreen() {
         onMessage={bridge.onMessage}
         onShouldStartLoadWithRequest={(request) => {
           if (isShellNavigation(request.url, profile.serverUrl)) return true;
-          // A link that leaves the server opens in the system browser. The
-          // shell has no chrome to navigate back from a foreign site.
           if (isExternallyOpenable(request.url)) {
             void Linking.openURL(request.url).catch(() => undefined);
           }
@@ -311,8 +289,6 @@ export function ProfileWebViewScreen() {
           })
         }
         onHttpError={(event) => {
-          // The gate answers an unauthenticated WebView with its own sign-in
-          // page on 401. Showing that inside the shell reads as a broken app.
           const { statusCode } = event.nativeEvent;
           if (statusCode >= 400)
             setLoad({ kind: "http-error", status: statusCode });

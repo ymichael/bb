@@ -1,78 +1,5 @@
-/**
- * GENERATED FILE — run pnpm --filter @bb/mobile theme:generate
- *
- * Source: apps/app/src/components/ui/theme.css, then the mobile-only override
- * layer apps/mobile/src/theme/mobile-overrides.css, then the built-in palettes
- * in apps/app/src/lib/themes/*.ts, replayed through the web cascade per
- * palette and mode by apps/mobile/scripts/generate-native-theme.ts. The
- * mobile layer re-tunes the default palette to the iOS system look; palettes
- * cascade after it, so their anchors and literals still win.
- *
- * `var()` is substituted textually; `color-mix(in oklch|oklab, …)` is
- * evaluated like Chrome (premultiplied alpha, shorter hue arc, converted
- * near-achromatic operands lose their hue). Opaque results are `#rrggbb`,
- * translucent ones `rgba(r, g, b, a)`. Typography is the Apple text-style
- * ramp from the mobile layer's `@theme` block, in CSS pixels.
- *
- * Tokens only the mobile layer defines (no web utility class; global.css
- * maps them by hand):
- *   --surface-grouped
- *   --surface-grouped-cell
- *
- * Tokens deliberately left out (edit the generator to add them):
- *   --bb-sidebar-row-height: dimension (1.75rem)
- *   --bb-sidebar-row-height-coarse: dimension (2.5rem)
- *   --diffs-dark: @pierre/diffs bridge; defined per mode only
- *   --diffs-dark-addition-color: @pierre/diffs bridge; defined per mode only
- *   --diffs-dark-bg: @pierre/diffs bridge; defined per mode only
- *   --diffs-dark-deletion-color: @pierre/diffs bridge; defined per mode only
- *   --diffs-light: @pierre/diffs bridge; defined per mode only
- *   --diffs-light-addition-color: @pierre/diffs bridge; defined per mode only
- *   --diffs-light-bg: @pierre/diffs bridge; defined per mode only
- *   --diffs-light-deletion-color: @pierre/diffs bridge; defined per mode only
- *   --font-mono: font stack
- *   --font-sans: font stack
- *   --font-serif: font stack
- *   --icon-stroke-width: dimension (1.75)
- *   --pill-shadow: box-shadow
- *   --pill-surface: gradient
- *   --pill-surface-selected: gradient
- *   --radius: emitted as nativeRadii
- *   --resource-source-shelf-action-block: computed dimension
- *   --resource-source-shelf-action-inline: computed dimension
- *   --resource-source-shelf-card-action-gap: computed dimension
- *   --resource-source-shelf-card-hover-shadow: box-shadow
- *   --resource-source-shelf-fade-ramp: computed dimension
- *   --resource-source-shelf-inset: computed dimension
- *   --resource-source-shelf-item-gap: computed dimension
- *   --resource-source-shelf-item-width: dimension (31.25%)
- *   --resource-source-shelf-label-gap: computed dimension
- *   --resource-source-shelf-section-gap: computed dimension
- *   --resource-source-shelf-shadow-bleed: computed dimension
- *   --resource-source-shelf-shadow-left-bleed: computed dimension
- *   --shadow: box-shadow
- *   --shadow-2xl: box-shadow
- *   --shadow-2xs: box-shadow
- *   --shadow-blur: dimension (0px)
- *   --shadow-lg: box-shadow
- *   --shadow-lift: box-shadow
- *   --shadow-md: box-shadow
- *   --shadow-opacity: dimension (0.15)
- *   --shadow-sm: box-shadow
- *   --shadow-spread: dimension (0px)
- *   --shadow-x: dimension (0px)
- *   --shadow-xl: box-shadow
- *   --shadow-xs: box-shadow
- *   --shadow-y: dimension (2px)
- *   --spacing: dimension (0.25rem)
- *   --tracking-normal: dimension (0em)
- */
 import type { BuiltInThemeId } from "@bb/domain";
 
-/**
- * theme.css custom-property color tokens, keyed by camelCase name. Every
- * value is a React Native color string.
- */
 export interface NativeThemeTokens {
   accent: string;
   accentForeground: string;
@@ -1407,10 +1334,6 @@ export const nativeThemes: Record<BuiltInThemeId, NativeThemeModes> = {
   },
 };
 
-/**
- * `--radius` and the Tailwind `--radius-*` steps, in CSS pixels. `xl2` is
- * `rounded-2xl`; `full` is `rounded-full` (pills, circles).
- */
 export const nativeRadii = {
   base: 8,
   sm: 4,
@@ -1426,11 +1349,6 @@ export interface NativeTextStyle {
   lineHeight: number;
 }
 
-/**
- * The `--text-*` scale: theme.css's coarse-pointer (touch) values with the
- * mobile layer's Apple text-style ramp on top (caption2 → largeTitle), in
- * CSS pixels. Mirrored as ratios in global.css (theme-vars.test.ts).
- */
 export const nativeTypography = {
   "2xs": {
     fontSize: 11,

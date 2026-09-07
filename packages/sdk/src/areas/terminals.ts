@@ -28,7 +28,6 @@ export interface TerminalEnvironmentScope {
 }
 
 export interface TerminalHostPathListScope {
-  /** Optional exact initial working-directory filter on the selected host. */
   cwd?: string;
   environmentId?: never;
   hostId: string;
@@ -37,7 +36,6 @@ export interface TerminalHostPathListScope {
 }
 
 export interface TerminalHostPathCreateScope {
-  /** Null starts in the selected host's home directory. */
   cwd: string | null;
   environmentId?: never;
   hostId: string;
@@ -120,13 +118,6 @@ export interface TerminalsArea {
   list(args: TerminalListArgs): Promise<TerminalListResult>;
   output(args: TerminalOutputArgs): Promise<TerminalOutputResult>;
   rename(args: TerminalRenameArgs): Promise<TerminalRenameResult>;
-  /**
-   * Replace a terminal with a shell at the same scope, size, and title.
-   * The server serializes concurrent restarts and opens the replacement before
-   * closing the old session, so a failed open leaves the old terminal running.
-   * The original command is not replayed because terminal sessions do not
-   * persist launch commands. The replacement has a new terminal ID.
-   */
   restart(args: TerminalRestartArgs): Promise<TerminalRestartResult>;
   resize(args: TerminalResizeArgs): Promise<TerminalResizeResult>;
 }

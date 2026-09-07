@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Task } from "./contract.js";
 import { sortTasks } from "./sort.js";
+import { makeTask } from "../test-fixtures.js";
 
 const ULIDS = [
   "01ARZ3NDEKTSV4RRFFQ69G5FAA",
@@ -13,23 +14,14 @@ function task(
   key: string,
   overrides: Partial<Pick<Task, "priority" | "dueDate">> = {},
 ): Task {
-  return {
+  return makeTask({
     id: ULIDS[Number(key.split("-")[1]) - 1]!,
     projectId: ULIDS[0],
-    number: 1,
     key,
-    title: "A task",
-    description: "",
-    status: "todo",
-    priority: "none",
-    dueDate: null,
-    parentTaskId: null,
-    position: 0,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
-    labelIds: [],
     ...overrides,
-  };
+  });
 }
 
 const keys = (tasks: readonly Task[]) => tasks.map((t) => t.key);

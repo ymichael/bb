@@ -13,21 +13,6 @@ import {
 } from "@get-bb/plugin-sdk/provider-bridge/testing";
 import type { CapturedBridgeJsonRpcOutput } from "@get-bb/plugin-sdk/provider-bridge/testing";
 
-/**
- * The claude-code bridge's conformance run: drives the bridge through the
- * canonical Provider Bridge Protocol suite against a scripted in-process
- * Claude Agent SDK query (the exact seam the bridge tests use for hermetic
- * sessions: `vi.mock("@anthropic-ai/claude-agent-sdk")` replacing `query`,
- * while SdkSession, session options, and the whole bridge request surface
- * stay real) and asserts a fully green report.
- *
- * The scripted query answers every prompt with a streamed text delta first
- * (`stream_event`), then the full assistant message, then a success result —
- * so the suite exercises the translator's turn lifecycle, delta-first
- * item/started synthesis, and cross-resume id uniqueness (each canonical
- * session gets a fresh entropy-prefixed translator).
- */
-
 const { forkSessionMock, queryMock } = vi.hoisted(() => ({
   forkSessionMock: vi.fn(),
   queryMock: vi.fn(),
@@ -42,10 +27,8 @@ vi.mock("@anthropic-ai/claude-agent-sdk", () => ({
 
 import { handleLine } from "./bridge.js";
 
-/** The prompt the kit's turn/settles-without-activity scenario sends. */
 const ZERO_WORK_PROMPT_TEXT = "/clear";
 
-/** Freeform provider fixture; the bridge translator narrows it by schema. */
 function asSdkMessage(message: Record<string, unknown>): SDKMessage {
   return message as unknown as SDKMessage;
 }
@@ -57,13 +40,6 @@ interface ScriptedClaudeQueryCall {
 
 let scriptedTurnCounter = 0;
 
-/**
- * A Claude SDK query whose message stream answers every consumed prompt with
- * one full scripted turn: a `stream_event` text delta (delta-first, so the
- * translator must synthesize item/started), the assistant message carrying
- * the final text plus usage, then a success result with usage and model
- * context-window data.
- */
 function createScriptedClaudeQuery(call: ScriptedClaudeQueryCall) {
   const sessionId =
     call.options.resume ?? call.options.sessionId ?? "scripted-session";
@@ -82,9 +58,6 @@ function createScriptedClaudeQuery(call: ScriptedClaudeQueryCall) {
 
   void (async () => {
     for await (const userMessage of call.prompt) {
-      // Claude handles `/clear` locally: a bare success result, no assistant
-      // message and no stream event, so nothing opens a bb turn (#1431). The
-      // kit's zero-work prompt reproduces exactly that shape.
       if (userMessage.message.content === ZERO_WORK_PROMPT_TEXT) {
         push(
           asSdkMessage({
@@ -190,9 +163,6 @@ beforeEach(() => {
   queryMock.mockImplementation((call: ScriptedClaudeQueryCall) =>
     createScriptedClaudeQuery(call),
   );
-  // The bridge declares `fork: "checkpoint"`, so the kit forks the lifecycle
-  // session at its tip: the SDK's forkSession answers with the new session
-  // id and the bridge resumes it through the same scripted query.
   forkSessionMock.mockImplementation((sessionId: string) =>
     Promise.resolve({ sessionId: `${sessionId}-fork` }),
   );
@@ -200,8 +170,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  // The kit releases its session at the end of the run, so no SDK session
-  // state outlives the test.
   output.restore();
   rmSync(workspaceDir, { recursive: true, force: true });
 });
@@ -220,8 +188,6 @@ it("passes the canonical protocol suite against the scripted claude session", as
     timeoutMs: 10_000,
   });
 
-  // Keep the human-readable report visible in test output for diagnosing
-  // any regression.
   console.info(
     `claude-code bridge conformance:\n${formatConformanceReport(report)}`,
   );

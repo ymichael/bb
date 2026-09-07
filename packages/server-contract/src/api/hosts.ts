@@ -12,12 +12,6 @@ import {
   type ProviderCliStatusResponse,
 } from "@bb/host-daemon-contract/local";
 
-/**
- * Query for `GET /hosts/:id/directory`, the interactive path browser's
- * single-level directory read. `path` is an absolute directory on the host;
- * omitting it lists the host's home directory (the daemon resolves it, since a
- * remote caller cannot know the host's home).
- */
 export const hostDirectoryQuerySchema = z.object({
   path: z.string().min(1).optional(),
 });
@@ -30,15 +24,12 @@ export const hostDirectoryEntrySchema = z.object({
 });
 
 export const hostDirectoryListingSchema = z.object({
-  // Resolved absolute directory that was listed (symlinks already followed).
   directory: z.string(),
-  // Absolute parent directory, or null at the filesystem root.
   parent: z.string().nullable(),
   entries: z.array(hostDirectoryEntrySchema),
 });
 export type HostDirectoryListing = z.infer<typeof hostDirectoryListingSchema>;
 
-/** Project name is sent so the daemon can derive its host-local checkout path. */
 export const hostCloneDefaultPathQuerySchema = z.object({
   projectId: z.string().min(1),
 });
@@ -53,8 +44,6 @@ export type HostCloneDefaultPathResponse = z.infer<
   typeof hostCloneDefaultPathResponseSchema
 >;
 
-// The machine names itself at enroll time (the daemon reports its hostname),
-// so minting takes no fields.
 export const createHostJoinCodeRequestSchema = z.object({}).strict();
 export type CreateHostJoinCodeRequest = z.infer<
   typeof createHostJoinCodeRequestSchema
@@ -76,12 +65,6 @@ export const updateHostRequestSchema = z
   .strict();
 export type UpdateHostRequest = z.infer<typeof updateHostRequestSchema>;
 
-/**
- * Body for `PATCH /hosts/:id/permission-ceiling`. Deliberately its own route
- * rather than a field on `updateHostRequestSchema`: the ceiling is the control
- * that stops one machine from running privileged work on another, so it is
- * owner-session-only and is not part of the SDK or the `bb` CLI surface.
- */
 export const updateHostPermissionCeilingRequestSchema = z
   .object({
     maxPermissionMode: permissionModeSchema,

@@ -17,6 +17,7 @@ const repoRoot = resolve(packageRoot, "..", "..");
 export function resolveCliExecution(
   cliArgs: string[] = process.argv.slice(2),
 ): CliExecution {
+  const forwardedArgs = cliArgs[0] === "--" ? cliArgs.slice(1) : cliArgs;
   const env = { ...process.env };
   if (process.env.NODE_ENV !== "production") {
     const devEnv = resolveCurrentDevProcessEnv(repoRoot, process.env);
@@ -25,7 +26,7 @@ export function resolveCliExecution(
       process.env.BB_HOST_DAEMON_PORT ?? devEnv.BB_HOST_DAEMON_PORT;
   }
   return {
-    args: ["apps/cli/dist/index.js", ...cliArgs],
+    args: ["apps/cli/dist/index.js", ...forwardedArgs],
     command: process.execPath,
     cwd: repoRoot,
     env,

@@ -26,15 +26,16 @@ The plugin replaces the scroll area only. The host keeps the chrome, so
 every sidebar looks like bb, resizes like bb, and collapses like bb.
 
 Two reasons the host keeps the rest. The nav rows and footer are other
-plugins' surfaces — Docs, Tasks, and every `sidebarFooterAction` live there —
+plugins' surfaces — Docs, Tasks, and every sidebar footer item live there —
 and one plugin must not be able to remove another's. The drag row and resize
 handle carry desktop window behavior that is not a plugin concern.
 
 An earlier revision let a list claim the New-thread and search row too. That
 is gone: the row is shared chrome, and passing it down as a prop would mean a
 plugin could silently drop it. A list that wants its own controls puts them at
-the top of its own scroll area, and filters by the `searchQuery` prop rather
-than shipping a second search field.
+the top of its own scroll area. Thread search stays host-owned in the quick
+palette; the required `searchQuery` prop remains only for compatibility and is
+always `""`.
 
 ---
 
@@ -65,14 +66,14 @@ interface PluginThreadListProps {
   /** True on phone-width viewports and coarse pointers. */
   isCompactViewport: boolean;
   /**
-   * Call after the user opens a thread. It closes the mobile sidebar, and it
-   * clears the host search field on every viewport. Always call it, or the
-   * sidebar stays in search mode after the thread opens.
+   * Call after the user opens a thread. It closes the mobile sidebar drawer.
    */
   onNavigate: () => void;
   /**
-   * The host search field's text, or "" when the field is closed. The host
-   * owns that field, so filter by this rather than shipping a second one.
+   * Compatibility value for the former sidebar search field. BB now searches
+   * threads in the quick palette, so the host always supplies "".
+   *
+   * @deprecated The quick palette owns thread search. Ignore this value.
    */
   searchQuery: string;
   /**
@@ -645,8 +646,9 @@ missing explicitly selected plugin falls back to the built-in list.
    Confirm no real sidebar needs more, and that handing the shared regions
    down as props — letting a plugin place them, at the risk of dropping them —
    stays the wrong trade.
-4. **Search ownership.** Confirm passing `searchQuery` down is right, versus
-   a callback that lets the plugin own the field.
+4. **Search compatibility.** Confirm released plugins no longer need the
+   required deprecated `searchQuery` field before removing it in a deliberate
+   breaking change. Until then, the host supplies `""`.
 5. **Accessibility.** Confirm the host can still guarantee list semantics,
    focus order, and the mobile close behavior when a plugin owns the markup.
 

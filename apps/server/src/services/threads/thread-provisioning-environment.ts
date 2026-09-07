@@ -1,5 +1,6 @@
 import {
   createEnvironment,
+  getAppSettings,
   getEnvironment,
   getThread,
   type CreateEnvironmentInput,
@@ -22,6 +23,7 @@ import { advanceEnvironmentProvisioning } from "../environments/environment-prov
 import { applyLoggedEnvironmentLifecycleEventInTransaction } from "../environments/lifecycle-outcome.js";
 import type { EnvironmentProvisionRequest } from "../environments/environment-provision-request.js";
 import { ensureHostSessionReadyForWork } from "../hosts/host-lifecycle.js";
+import { requestQueuedMessageDispatch } from "./queued-message-dispatch.js";
 import {
   appendSystemErrorEvent,
   appendThreadProvisioningEvent,
@@ -104,13 +106,6 @@ interface EnsureWorkspaceReadyEventArgs {
   threadId: string;
 }
 
-/**
- * `reached: false` ⇒ the thread is no longer provisionable into this
- * environment, so it did not land in `workspace-ready`.
- *
- * `appendedSequence: null` ⇒ workspace-ready was reached without appending a
- * `system/thread-provisioning` row, because nothing was provisioned.
- */
 type EnsureWorkspaceReadyEventResult =
   | { reached: true; appendedSequence: number | null }
   | { reached: false };
@@ -150,6 +145,7 @@ interface BuildEnvironmentProvisionRequestArgs {
 
 interface BuildUnmanagedCheckoutArgs {
   branch: UnmanagedBranchSpec;
+  branchPrefix: string;
   context: ThreadProvisionEnvironmentProvisioningContext;
   thread: Thread;
 }
@@ -189,6 +185,7 @@ interface RequestPreparedEnvironmentProvisionArgs {
 }
 
 interface DirectUnmanagedEnvironmentPlanArgs {
+  branchPrefix: string;
   intent: DirectUnmanagedIntent;
   thread: Thread;
 }
@@ -223,6 +220,7 @@ type CheckoutUnmanagedEnvironmentProvisionResult =
   | { kind: "active-provision" };
 
 interface ManagedEnvironmentPlanArgs {
+  branchPrefix: string;
   dataDir: string;
   hostId: string;
   sourcePath: string;
@@ -329,11 +327,6 @@ function ensureWorkspaceReadyEventRecord(
     attachedEnvironmentId: args.environmentId,
   });
 
-  // Nothing was provisioned when the thread attached straight to an
-  // already-ready environment: no provisioning was started, so the transcript
-  // would only restate the workspace path and branch. Reach workspace-ready
-  // without a timeline row rather than showing "Provisioned thread" for work
-  // that never happened.
   const appendedSequence =
     provisionableContext.state.provisionEventSequence === null
       ? null
@@ -367,10 +360,17 @@ export function ensureWorkspaceReadyEventInTransaction(
 }
 
 export function failThreadProvisioning(
-  deps: Pick<AppDeps, "db" | "hub" | "logger" | "providerRegistry">,
+  deps: ThreadProvisioningDeps,
   args: FailThreadProvisioningArgs,
 ): void {
   forgetActiveThreadProvisionContext(args.thread.id);
+  // Provisioning is not coming, so nothing may keep waiting on it. The
+  // messages stay queued rather than being discarded: they are still the
+  // user's, and retrying the thread is exactly when they should go.
+  requestQueuedMessageDispatch(deps, {
+    kind: "provisioning-ended",
+    threadId: args.thread.id,
+  });
   appendSystemErrorEvent(deps, {
     threadId: args.thread.id,
     environmentId: args.environmentId,
@@ -454,16 +454,10 @@ async function resolveMetadataIfNeeded(
           const environment = titledThread?.environmentId
             ? getEnvironment(deps.db, titledThread.environmentId)
             : null;
-          // A non-managed thread generates its title async (no branch name to
-          // block on), so the turn often finishes before it lands: rename the
-          // provider session for an `idle` thread too, not just an `active`
-          // one. The rename only needs a loaded runtime (warm process), which
-          // an idle thread still has; it is best-effort and logs on failure.
           if (
             !titledThread ||
             !environment ||
-            (titledThread.status !== "active" &&
-              titledThread.status !== "idle")
+            (titledThread.status !== "active" && titledThread.status !== "idle")
           ) {
             return;
           }
@@ -643,8 +637,6 @@ function createProvisioningEnvironment(
         context,
         environment,
       });
-      // No provision.requested event here: the environment was created in
-      // this same transaction with status "provisioning".
       return { context, environment, provisionRequest };
     },
     { behavior: "immediate" },
@@ -677,14 +669,10 @@ function createPreparedProvisioningEnvironment(
         );
       }
 
-      const environment = createEnvironment(
-        tx,
-        deps.hub,
-        {
-          ...args.environmentInput,
-          status: "ready",
-        },
-      );
+      const environment = createEnvironment(tx, deps.hub, {
+        ...args.environmentInput,
+        status: "ready",
+      });
       if (args.thread.environmentId !== environment.id) {
         updateThread(tx, deps.hub, args.thread.id, {
           environmentId: environment.id,
@@ -729,6 +717,7 @@ function buildUnmanagedCheckout(
   return {
     kind: "new",
     name: buildManagedBranchName({
+      branchPrefix: args.branchPrefix,
       branchSlug: args.context.request.branchSlug,
       threadId: args.thread.id,
     }),
@@ -738,12 +727,14 @@ function buildUnmanagedCheckout(
 
 function buildCheckoutUnmanagedEnvironmentProvisionRequest(
   args: BuildEnvironmentProvisionRequestArgs & {
+    branchPrefix: string;
     intent: CheckoutUnmanagedIntent;
     thread: Thread;
   },
 ): EnvironmentProvisionRequest {
   const checkout = buildUnmanagedCheckout({
     branch: args.intent.branch,
+    branchPrefix: args.branchPrefix,
     context: args.context,
     thread: args.thread,
   });
@@ -774,12 +765,10 @@ function buildDirectUnmanagedEnvironmentPlan(
       status: "provisioning",
     },
     buildRequest: ({ context, environment }) => {
-      // Resolve intent.branch to a daemon-side checkout payload. The daemon
-      // expects an explicit branch name in both kinds; for "new" we mint a
-      // thread-scoped name using the same scheme as managed worktrees.
       const checkout = args.intent.branch
         ? buildUnmanagedCheckout({
             branch: args.intent.branch,
+            branchPrefix: args.branchPrefix,
             context,
             thread: args.thread,
           })
@@ -816,6 +805,7 @@ function buildManagedEnvironmentPlan(
     buildRequest: ({ context, environment }) => {
       const command = buildEnvironmentProvisionCommand({
         branchName: buildManagedBranchName({
+          branchPrefix: args.branchPrefix,
           branchSlug: context.request.branchSlug,
           threadId: args.thread.id,
         }),
@@ -877,6 +867,7 @@ async function resolveEnvironmentCreationPlan(
   switch (args.intent.type) {
     case "direct-unmanaged":
       return buildDirectUnmanagedEnvironmentPlan({
+        branchPrefix: getAppSettings(deps.db).managedBranchPrefix,
         intent: args.intent,
         thread: args.thread,
       });
@@ -885,6 +876,7 @@ async function resolveEnvironmentCreationPlan(
         hostId: args.intent.hostId,
       });
       return buildManagedEnvironmentPlan({
+        branchPrefix: getAppSettings(deps.db).managedBranchPrefix,
         dataDir: hostSession.dataDir,
         hostId: args.intent.hostId,
         sourcePath: args.intent.sourcePath,
@@ -913,6 +905,7 @@ function requestCheckoutUnmanagedEnvironmentProvision(
   deps: ThreadProvisionWriteDeps,
   args: RequestCheckoutUnmanagedEnvironmentProvisionArgs,
 ): CheckoutUnmanagedEnvironmentProvisionResult {
+  const branchPrefix = getAppSettings(deps.db).managedBranchPrefix;
   return deps.db.transaction(
     (tx) => {
       if (hasActiveEnvironmentProvision(args.environment)) {
@@ -948,6 +941,7 @@ function requestCheckoutUnmanagedEnvironmentProvision(
             ),
           });
       const request = buildCheckoutUnmanagedEnvironmentProvisionRequest({
+        branchPrefix,
         context,
         environment: args.environment,
         intent: args.intent,
@@ -958,13 +952,14 @@ function requestCheckoutUnmanagedEnvironmentProvision(
         threadId: args.thread.id,
         context,
       });
-      const requestedOutcome = applyLoggedEnvironmentLifecycleEventInTransaction(
-        { db: tx, logger: deps.logger },
-        {
-          environmentId: args.environment.id,
-          event: { type: "provision.requested" },
-        },
-      );
+      const requestedOutcome =
+        applyLoggedEnvironmentLifecycleEventInTransaction(
+          { db: tx, logger: deps.logger },
+          {
+            environmentId: args.environment.id,
+            event: { type: "provision.requested" },
+          },
+        );
       if (requestedOutcome.applied) {
         deps.hub.notifyEnvironment(
           args.environment.id,
@@ -986,7 +981,7 @@ function requestCheckoutUnmanagedEnvironmentProvision(
 }
 
 function queueCheckoutUnmanagedEnvironment(
-  deps: ThreadProvisionWriteDeps,
+  deps: ThreadProvisioningDeps,
   args: QueueCheckoutUnmanagedEnvironmentArgs,
 ): ThreadProvisioningResult {
   const result = requestCheckoutUnmanagedEnvironmentProvision(deps, {
@@ -1066,13 +1061,14 @@ async function requestPreparedEnvironmentProvision(
         context,
         environment,
       });
-      const requestedOutcome = applyLoggedEnvironmentLifecycleEventInTransaction(
-        { db: tx, logger: deps.logger },
-        {
-          environmentId: environment.id,
-          event: { type: "provision.requested" },
-        },
-      );
+      const requestedOutcome =
+        applyLoggedEnvironmentLifecycleEventInTransaction(
+          { db: tx, logger: deps.logger },
+          {
+            environmentId: environment.id,
+            event: { type: "provision.requested" },
+          },
+        );
       if (requestedOutcome.applied) {
         deps.hub.notifyEnvironment(environment.id, requestedOutcome.changes);
       }
@@ -1087,7 +1083,7 @@ async function requestPreparedEnvironmentProvision(
 }
 
 function attachActiveProvisioningEnvironment(
-  deps: ThreadProvisionWriteDeps,
+  deps: ThreadProvisioningDeps,
   args: EnvironmentPayloadThreadArgs,
 ): ThreadProvisioningResult {
   if (!hasActiveEnvironmentProvision(args.environment)) {
@@ -1113,7 +1109,7 @@ function attachActiveProvisioningEnvironment(
 }
 
 function ensureCheckoutUnmanagedEnvironmentRequested(
-  deps: ThreadProvisionWriteDeps,
+  deps: ThreadProvisioningDeps,
   args: CheckoutUnmanagedEnvironmentArgs,
 ): ThreadProvisioningResult {
   if (!isAttachableContext(args.context)) {

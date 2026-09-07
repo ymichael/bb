@@ -9,13 +9,8 @@ export type ToastId = string | number;
 
 export interface ToastOptions {
   description?: string;
-  /** Milliseconds; defaults to the Toaster's duration. */
   duration?: number;
   action?: { label: string; onClick: () => void };
-  /**
-   * Reuse an id to update a toast in place (a `loading` toast that turns
-   * into `success` / `error` once the request settles).
-   */
   id?: ToastId;
 }
 
@@ -46,7 +41,6 @@ function show(
   }
 }
 
-/** Imperative toasts; render one `<Toaster />` inside the ThemeProvider. */
 export const toast = {
   message: (message: string, options?: ToastOptions) =>
     show("message", message, options),
@@ -58,7 +52,6 @@ export const toast = {
     show("info", message, options),
   warning: (message: string, options?: ToastOptions) =>
     show("warning", message, options),
-  /** Spinner toast that stays until updated (pass its id) or dismissed. */
   loading: (message: string, options?: ToastOptions) =>
     show("loading", message, options),
   dismiss: (id?: ToastId) => sonnerToast.dismiss(id),
@@ -67,12 +60,6 @@ export const toast = {
 const TOAST_RADIUS = 14;
 const ICON_SIZE = 20;
 
-/**
- * Themed sonner-native host. Place once, after the navigator. Status glyphs
- * are SF Symbols on iOS (through `Icon`), the card is the raised surface
- * with continuous corners, a hairline in light mode only, and the system
- * font.
- */
 export function Toaster() {
   const { tokens, mode, radii } = useTheme();
   const icons = useMemo(

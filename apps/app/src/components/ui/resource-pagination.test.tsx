@@ -88,24 +88,15 @@ afterEach(() => {
 });
 
 describe("useResourcePagination", () => {
-  /**
-   * The selected page used to be mirrored back into state from an effect. That
-   * discarded the page the user picked as soon as a measured page size changed,
-   * and — because the write-back carried a pre-interaction page — a click that
-   * beat the effect was silently reverted. Surviving this round trip is the
-   * observable proof that nothing but setPage writes the selection.
-   */
   it("rescales the selection across page-size changes instead of overwriting it", () => {
     const { rerender } = render(<Probe pageSize={10} />);
     goToPage(1);
     expect(visibleRows()).toEqual(ROWS.slice(10, 20));
 
-    // Row 11 stays in view at the larger page size...
     rerender(<Probe pageSize={15} />);
     expect(selectedPage()).toBe(0);
     expect(visibleRows()).toEqual(ROWS.slice(0, 15));
 
-    // ...and remeasuring back restores the page the user actually chose.
     rerender(<Probe pageSize={10} />);
     expect(selectedPage()).toBe(1);
     expect(visibleRows()).toEqual(ROWS.slice(10, 20));
@@ -119,8 +110,6 @@ describe("useResourcePagination", () => {
     rerender(<Probe pageSize={10} resetKey="filtered" />);
     expect(selectedPage()).toBe(0);
 
-    // Returning to an earlier projection is still a new projection, not a
-    // reason to resurrect the page that was selected under it.
     rerender(<Probe pageSize={10} resetKey="all" />);
     expect(selectedPage()).toBe(0);
   });
@@ -137,12 +126,6 @@ describe("useResourcePagination", () => {
 });
 
 describe("useResourceInfiniteItems", () => {
-  /**
-   * The hook used to store a loaded page count and slice by the current
-   * measured page size, so a viewport remeasure that shrank the page size
-   * (2 pages × 10 rows → page size 5) cut already-loaded rows out of view.
-   * The anchor now preserves the loaded item count across page-size changes.
-   */
   it("keeps already-loaded rows visible when the measured page size shrinks", () => {
     const { rerender } = render(<InfiniteProbe pageSize={10} />);
     loadMore();
@@ -151,7 +134,6 @@ describe("useResourceInfiniteItems", () => {
     rerender(<InfiniteProbe pageSize={5} />);
     expect(visibleRows()).toEqual(ROWS.slice(0, 20));
 
-    // Loading more continues from the preserved count at the new page size.
     loadMore();
     expect(visibleRows()).toEqual(ROWS.slice(0, 25));
   });
@@ -174,10 +156,8 @@ const TALL_ROW_HEIGHT = 110;
 const TALL_ROW_INDEX = 3;
 const SHORT_ROW_PAGE_SIZE = Math.floor(VIEWPORT_HEIGHT / SHORT_ROW_HEIGHT);
 const TALL_ROW_PAGE_SIZE = Math.floor(VIEWPORT_HEIGHT / TALL_ROW_HEIGHT);
-/** Bounds a regression so it fails an assertion instead of hanging the run. */
 const MEASUREMENT_LIMIT = 12;
 
-/** Counts the row heights the hook reads, to prove measurements coalesce. */
 let rowMeasurements = 0;
 
 function stubSize(node: HTMLElement, height: number, width: number): void {
@@ -202,7 +182,6 @@ function stubSize(node: HTMLElement, height: number, width: number): void {
   };
 }
 
-/** jsdom has no ResizeObserver, and these tests decide when a resize lands. */
 class TestResizeObserver implements ResizeObserver {
   static instances: TestResizeObserver[] = [];
 
@@ -221,13 +200,6 @@ class TestResizeObserver implements ResizeObserver {
   }
 }
 
-/**
- * A collection whose fourth row is taller than the rest — a wrapped
- * description, a badge that adds a line. Which rows render is decided by the
- * measured page size, so the tall row is only measurable while the page size
- * is large enough to show it. `tallRow={false}` makes every row short, the way
- * a filter that drops that row or a wider window that unwraps its text does.
- */
 function ViewportProbe({
   measured,
   resetKey,
@@ -295,14 +267,6 @@ describe("useResourceViewportPageSize", () => {
     vi.unstubAllGlobals();
   });
 
-  /**
-   * The measurement reads back its own output: it can only see the rows the
-   * page size selected. A page size of 5 shows the tall row and measures 2, a
-   * page size of 2 hides it and measures 5, and the two trade places forever —
-   * a render loop that re-measures on every mutation and locks the tab up.
-   * Changing pages is what used to start it, by swapping in rows of a
-   * different height.
-   */
   it("settles instead of trading page sizes with the rows it measures", async () => {
     const measured: number[] = [];
     render(<ViewportProbe measured={measured} />);
@@ -323,7 +287,6 @@ describe("useResourceViewportPageSize", () => {
     await settle();
     expect(measured.at(-1)).toBe(TALL_ROW_PAGE_SIZE);
 
-    // A filter that drops the tall row: the rows left over fit a full page.
     rerender(
       <ViewportProbe measured={measured} resetKey="filtered" tallRow={false} />,
     );
@@ -337,8 +300,6 @@ describe("useResourceViewportPageSize", () => {
     await settle();
     expect(measured.at(-1)).toBe(TALL_ROW_PAGE_SIZE);
 
-    // A wider window unwraps the description that made that row tall, so the
-    // height that shrank the page no longer describes any row.
     rerender(
       <ViewportProbe
         measured={measured}
@@ -353,10 +314,6 @@ describe("useResourceViewportPageSize", () => {
     expect(measured.at(-1)).toBe(SHORT_ROW_PAGE_SIZE);
   });
 
-  /**
-   * Each measurement forces a layout read, and this subtree is mutated by
-   * browser extensions and plugin content scripts as well as by React.
-   */
   it("measures once per frame however many mutations arrive", async () => {
     const measured: number[] = [];
     render(<ViewportProbe measured={measured} tallRow={false} />);
@@ -369,7 +326,6 @@ describe("useResourceViewportPageSize", () => {
         const marker = document.createElement("span");
         screen.getByTestId("panel").appendChild(marker);
         marker.remove();
-        // Let each batch reach the observer before the next one starts.
         await Promise.resolve();
       }
     });

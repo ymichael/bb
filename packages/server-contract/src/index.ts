@@ -8,9 +8,6 @@ export * from "./thread-timeline.js";
 
 export { typedRoutes } from "@bb/hono-typed-routes";
 
-// Selected re-exports from @bb/domain so contract consumers don't need a
-// direct @bb/domain dependency. Keep these explicit: starring another
-// package's barrel would absorb its entire surface.
 export {
   TERMINAL_COLS_MAX,
   TERMINAL_DATA_MAX_BASE64_LENGTH,

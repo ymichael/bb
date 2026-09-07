@@ -22,7 +22,6 @@ describe("PluginSlotMount", () => {
   beforeEach(() => {
     resetAllCrashedPluginSlotsForTest();
     resetPluginCssForTest();
-    // React logs boundary-caught errors; keep test output quiet.
     vi.spyOn(console, "error").mockImplementation(() => {});
     vi.spyOn(console, "warn").mockImplementation(() => {});
   });
@@ -52,6 +51,21 @@ describe("PluginSlotMount", () => {
 
     expect(screen.getByText("plugin broken crashed")).toBeDefined();
     expect(screen.getByText("healthy slot")).toBeDefined();
+  });
+
+  it("renders nothing after a crash when the fallback is explicitly null", () => {
+    render(
+      <PluginSlotMount
+        pluginId="broken"
+        slotKind="appOverlay"
+        slotId="widget"
+        crashFallback={null}
+      >
+        <Bomb />
+      </PluginSlotMount>,
+    );
+
+    expect(screen.queryByText("plugin broken crashed")).toBeNull();
   });
 
   it("keeps one sheet through simultaneous mounts and a portal until the final route unmount", async () => {
@@ -92,8 +106,6 @@ describe("PluginSlotMount", () => {
 
     view.unmount();
     await act(async () => {});
-    // The final release holds the sheet through a grace window so a remount
-    // across navigation reuses it instead of paying a second recalc.
     expect(pluginSheets()).toHaveLength(1);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1_500);
@@ -109,8 +121,6 @@ describe("PluginSlotMount", () => {
     );
     first.unmount();
 
-    // Fresh mount of the same instance: the healthy child never renders
-    // because the instance is session-disabled.
     const childRender = vi.fn(() => <div>should not render</div>);
     function Child() {
       return childRender();

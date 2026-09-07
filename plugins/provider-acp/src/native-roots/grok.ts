@@ -1,16 +1,3 @@
-/**
- * Grok Build's host-local skill roots.
- *
- * `<grokDir>/skills` follows `$GROK_HOME`. Grok also reads Claude's and
- * Cursor's skill directories, but each can be turned off per host
- * (`compat.claude.skills` / `compat.cursor.skills` in `config.toml`, or
- * `GROK_CLAUDE_SKILLS_ENABLED` / `GROK_CURSOR_SKILLS_ENABLED`), so those
- * roots are resolved here rather than declared. Then `skills.paths`, the
- * grok plugins (repository `.grok/plugins` and `.claude/plugins`
- * directories, the home ones, `plugins.paths`, and the install registry),
- * and — with Claude compatibility on — the installed Claude plugins' skills.
- */
-
 import path from "node:path";
 import {
   experimental_resolveClaudePluginRoots,
@@ -40,7 +27,6 @@ import {
 
 const GROK_DIR_NAME = ".grok";
 const CLAUDE_DIR_NAME = ".claude";
-/** A directory holding this file inside a skills tree is a Claude plugin, not a skill. */
 const CLAUDE_PLUGIN_MANIFEST_MARKER = ".claude-plugin/plugin.json";
 const CURSOR_DIR_NAME = ".cursor";
 
@@ -70,14 +56,6 @@ const grokSkillConfigSchema = z
   .passthrough();
 type GrokSkillConfig = z.infer<typeof grokSkillConfigSchema>;
 
-/**
- * A grok plugin manifest (`plugin.json`, `.grok-plugin/plugin.json`, or a
- * Claude plugin's `.claude-plugin/plugin.json`): the Claude plugin manifest's
- * shape. Grok reads `name` and `skills`; `defaultEnabled` and `commands`
- * still take part in the parse, so a manifest that mistypes either reads as
- * absent (the plugin named after its directory, its `skills/` listed), as
- * the Claude manifest reader answers it.
- */
 const grokPluginManifestSchema = z
   .object({
     name: z.string().min(1).optional(),
@@ -105,7 +83,6 @@ const grokInstalledPluginRegistrySchema = z
   })
   .passthrough();
 
-/** `$GROK_HOME`, else `~/.grok`. */
 export function resolveGrokDir(
   homeDir: string,
   env: AcpNativeRootsEnvironment,
@@ -116,7 +93,6 @@ export function resolveGrokDir(
     : path.join(homeDir, GROK_DIR_NAME);
 }
 
-/** The environment overrides the config; both default to on. */
 function grokCompatEnabled(
   configured: boolean | undefined,
   environmentValue: string | undefined,
@@ -131,7 +107,6 @@ function grokCompatEnabled(
   return configured ?? true;
 }
 
-/** The workspace and home `<dir>/skills` roots grok reads when a compat switch is on. */
 function compatSkillRoots(
   args: AcpNativeRootsResolverArgs,
   directoryName: string,
@@ -158,7 +133,6 @@ function compatSkillRoots(
   ];
 }
 
-/** `skills.paths`: a path inside the repository is a project root. */
 async function resolveGrokConfiguredSkillRoots(
   args: AcpNativeRootsResolverArgs,
   config: GrokSkillConfig | null,
@@ -211,13 +185,11 @@ function grokPluginListMatches(
 }
 
 interface GrokPluginCandidate {
-  /** A `plugins.paths` entry is on unless disabled; every other plugin must be enabled. */
   autoEnabled: boolean;
   origin: ResolvedRootOrigin;
   pluginRootPath: string;
 }
 
-/** The plugin as the SDK walk reads it, or null when grok's lists switch it off. */
 async function resolveGrokPlugin(
   candidate: GrokPluginCandidate,
   config: GrokSkillConfig | null,
@@ -236,7 +208,6 @@ async function resolveGrokPlugin(
     rootPath: candidate.pluginRootPath,
     name: pluginName,
     origin: candidate.origin,
-    // A manifest that names no `skills` means the plugin's `skills` directory.
     skills: manifest?.skills ?? ["skills"],
   };
 }
@@ -323,7 +294,6 @@ async function resolveGrokPluginSkillRoots(
       plugins.push(plugin);
     }
   }
-  // The grok layout: the manifest's entries only, each directory recursive.
   const roots = await experimental_resolveVendorPluginRoots({
     plugins,
     layout: "grok",

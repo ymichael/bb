@@ -3,7 +3,6 @@ import { TruncateStart } from "./truncate-start.js";
 
 interface FilePathLinkProps {
   path: string;
-  /** Override the displayed text. Defaults to `path`. The `path` value is always used for the title tooltip. */
   displayName?: string;
   onClick?: () => void;
   className?: string;

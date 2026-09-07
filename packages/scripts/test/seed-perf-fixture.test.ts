@@ -32,7 +32,6 @@ describe("seedPerfFixture", () => {
     const foreignKeyViolations = db.$client.pragma("foreign_key_check");
     expect(foreignKeyViolations).toEqual([]);
 
-    // The scope shape check must hold: turn events carry a turn id.
     const scopeViolations = db.$client
       .prepare(
         `SELECT COUNT(*) AS violations FROM events
@@ -41,7 +40,6 @@ describe("seedPerfFixture", () => {
       .get();
     expect(scopeViolations).toEqual({ violations: 0 });
 
-    // Sequences must be unique per thread for timeline pagination.
     const duplicateSequences = db.$client
       .prepare(
         `SELECT COUNT(*) AS duplicates FROM (
@@ -52,8 +50,6 @@ describe("seedPerfFixture", () => {
       .get();
     expect(duplicateSequences).toEqual({ duplicates: 0 });
 
-    // Every seeded event must survive the production stored-event parser;
-    // otherwise the timeline route returns a 500 for seeded threads.
     const eventRows = db.$client
       .prepare(
         `SELECT thread_id AS threadId, turn_id AS turnId, type,
@@ -87,7 +83,6 @@ describe("seedPerfFixture", () => {
     }
     expect(Object.fromEntries(parseFailuresByType)).toEqual({});
 
-    // FTS triggers must index the seeded search segments.
     const ftsRow = db.$client
       .prepare(
         `SELECT COUNT(*) AS indexed FROM thread_search_segments_fts
@@ -96,7 +91,6 @@ describe("seedPerfFixture", () => {
       .get();
     expect(ftsRow).toBeDefined();
 
-    // The same seed must produce the same fixture for reproducible tests.
     const secondDb = createConnection(":memory:");
     migrate(secondDb);
     const secondResult = seedPerfFixture(secondDb, {

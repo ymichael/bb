@@ -1,7 +1,3 @@
-// The persisted-panel schema, tab constructors, and normalization live in
-// @bb/client-core (shared with the native app). This module re-exports them and
-// keeps the two web-only pieces: browser tabs (nanoid ids for the desktop
-// browser) and localStorage pruning.
 import { nanoid } from "nanoid";
 import {
   buildFixedPanelTabId,
@@ -58,11 +54,6 @@ interface PruneFixedPanelTabsStorageArgs {
   now: number;
 }
 
-/**
- * Browser tabs get a fresh unique id per instance — the URL is mutable (it
- * changes on every navigation), so it cannot serve as a stable identity the way
- * a file path does.
- */
 export function createBrowserFixedPanelTab({
   environmentId,
   url,

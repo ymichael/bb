@@ -1,11 +1,3 @@
-// bb-plugin-automations — the frontend bundle.
-//
-// A single navPanel "Automations" that replaces the kernel's Automations
-// views. The panel root lists every automation across projects (rpc
-// automations.overview); the detail subPath (/:projectId/:automationId)
-// shows one automation's full config plus its cursor-paginated run history.
-// Realtime "automations" signals refetch in place. Creation and editing start
-// from chat with enough resource context for the agent to do the work.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { buildAutomationEditThreadPrompt } from "@bb/shared-ui/resource-edit-prompt";
@@ -20,6 +12,7 @@ import type { automationRpcContract } from "./src/rpc.js";
 import { toast } from "sonner";
 import type {
   AutomationResponse,
+  AutomationReadResult,
   AgentExecutionUpdate,
   AutomationRunListResponse,
   AutomationRunResponse,
@@ -49,19 +42,9 @@ const PANEL_PATH = "automations";
 const PERSONAL_PROJECT_ID = "proj_personal";
 type OverviewEntry = AutomationsOverviewResponse["automations"][number];
 
-// ---------------------------------------------------------------------------
-// rpc boundary — the backend validates every response with zod, so the wire
-// shape is trusted; narrow with a single cast at the call site.
-// ---------------------------------------------------------------------------
-
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
-
-// ---------------------------------------------------------------------------
-// Sub-routing: the panel owns /plugins/automations/automations/*. The root
-// ("") is the overview; "<projectId>/<automationId>" is the detail view.
-// ---------------------------------------------------------------------------
 
 interface DetailRoute {
   projectId: string;
@@ -83,12 +66,6 @@ function parseSubPath(subPath: string): ParsedDetailRoute | null {
   }
   return null;
 }
-
-// ---------------------------------------------------------------------------
-// Data hooks. Each refetches on the "automations" realtime channel; the
-// payload carries { projectId, kind } — mirror the kernel cache-effects and
-// refetch on the relevant kind.
-// ---------------------------------------------------------------------------
 
 interface AutomationSignal {
   projectId: string;
@@ -180,8 +157,6 @@ function useOverview(): {
       runRefetch(false);
     }, 75);
   }, [runRefetch]);
-  // Any create/update/pause/resume/run/delete or run-completion touches the
-  // overview (rows show last-run status), so refetch on either kind.
   useRealtime("automations", (payload) => {
     if (asSignal(payload) !== null) scheduleRefetch();
   });
@@ -189,7 +164,7 @@ function useOverview(): {
 }
 
 function useAutomation(route: DetailRoute): {
-  automation: AutomationResponse | null;
+  automation: AutomationReadResult | null;
   error: string | null;
   missing: boolean;
   refetch: () => void;
@@ -197,7 +172,7 @@ function useAutomation(route: DetailRoute): {
   const rpc = useRpc<typeof automationRpcContract>();
   const { projectId, automationId } = route;
   const [state, setState] = useState<{
-    automation: AutomationResponse | null;
+    automation: AutomationReadResult | null;
     error: string | null;
     missing: boolean;
   }>({ automation: null, error: null, missing: false });
@@ -209,7 +184,7 @@ function useAutomation(route: DetailRoute): {
     rpc.call("automations_get", { projectId, automationId }).then(
       (result) => {
         if (requestRef.current !== requestId) return;
-        const automation = result as AutomationResponse | null;
+        const automation = result as AutomationReadResult | null;
         setState({
           automation: automation ?? null,
           error: null,
@@ -257,8 +232,6 @@ function useRuns(
     loadingMore: false,
     error: null,
   });
-  // Guard concurrent loadMore + refetch races: only the latest first-page
-  // load is allowed to replace the list.
   const requestRef = useRef(0);
   const loadMoreInFlightRef = useRef(false);
 
@@ -329,8 +302,6 @@ function useRuns(
   useEffect(() => {
     loadFirstPage();
   }, [loadFirstPage]);
-  // A completed/started run (automation-runs-changed) for this project
-  // refreshes the first page in place.
   useRealtime("automations", (payload) => {
     const signal = asSignal(payload);
     if (
@@ -343,10 +314,6 @@ function useRuns(
   });
   return { ...state, loadMore, retry: loadFirstPage };
 }
-
-// ---------------------------------------------------------------------------
-// Mutations — pause/resume/run/delete all take { projectId, automationId }.
-// ---------------------------------------------------------------------------
 
 function useMutations() {
   const rpc = useRpc<typeof automationRpcContract>();
@@ -369,12 +336,6 @@ function useMutations() {
   };
 }
 
-/**
- * Confirm-before-delete dialog, controlled by the caller. Uses the responsive
- * Dialog — a centered modal on desktop, a bottom drawer on compact viewports —
- * matching the kernel's ConfirmDeleteDialog pattern. Kept mounted until the
- * mutation resolves so the pending state stays visible.
- */
 function DeleteAutomationDialog({
   open,
   onOpenChange,
@@ -426,10 +387,6 @@ function DeleteAutomationDialog({
     </Dialog>
   );
 }
-
-// ---------------------------------------------------------------------------
-// List view (panel root): the cross-project overview.
-// ---------------------------------------------------------------------------
 
 function OverviewView({
   onOpenDetail,
@@ -537,7 +494,7 @@ function DetailView({
   );
 
   const openEdit = useCallback(() => {
-    if (automation === null) return;
+    if (automation === null || "problem" in automation) return;
     if (automation.execution.mode === "agent") {
       setEditingRequested(true);
       return;
@@ -606,6 +563,48 @@ function DetailView({
     );
   }
 
+  const deleteDialog = (
+    <DeleteAutomationDialog
+      open={deleteOpen}
+      onOpenChange={setDeleteOpen}
+      name={automation.name}
+      pending={deleting}
+      onConfirm={confirmDelete}
+      onCancel={() => setDeleteOpen(false)}
+    />
+  );
+
+  if ("problem" in automation && automation.problem === "invalid-stored-data") {
+    return (
+      <>
+        <div className="mx-auto w-full max-w-3xl space-y-3">
+          <ResourceListState
+            state="error"
+            message="The stored automation configuration cannot be read."
+            layout="detail"
+            onRetry={refetch}
+          />
+          <div className="flex justify-center">
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              disabled={deleting}
+              onClick={() => setDeleteOpen(true)}
+            >
+              Delete automation
+            </Button>
+          </div>
+        </div>
+        {deleteDialog}
+      </>
+    );
+  }
+
+  const requiresPrompt =
+    automation.execution.mode === "agent" && automation.execution.prompt === "";
+  const readableAutomation: AutomationResponse = automation;
+
   const overviewEntry = overviewState.entries?.find(
     (entry) =>
       entry.automation.projectId === route.projectId &&
@@ -620,46 +619,23 @@ function DetailView({
 
   return (
     <AutomationDetailView
-      automation={automation}
+      automation={readableAutomation}
       projectLabel={projectLabel}
       runsState={runsState}
       actionPending={actionPending}
-      editing={editingRequested}
+      editing={requiresPrompt || editingRequested}
       onToggle={(checked) => runAction(checked ? "resume" : "pause")}
       onEdit={openEdit}
-      onCancelEdit={() => setEditingRequested(false)}
+      onCancelEdit={requiresPrompt ? onBack : () => setEditingRequested(false)}
       onUpdateAgent={updateAgent}
       onRunNow={() => runAction("run")}
       onDelete={() => setDeleteOpen(true)}
       onOpenThread={openThread}
-      footer={
-        <DeleteAutomationDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          name={automation.name}
-          pending={deleting}
-          onConfirm={confirmDelete}
-          onCancel={() => setDeleteOpen(false)}
-        />
-      }
+      footer={deleteDialog}
     />
   );
 }
 
-// ---------------------------------------------------------------------------
-// Panel root — routes between overview and detail by subPath.
-// ---------------------------------------------------------------------------
-
-/**
- * The panel's own page frame. The host mounts nav panels full-bleed with zero
- * padding, so page padding, max width, and page scrolling belong to the
- * plugin — otherwise the panel renders edge to edge at the full window width
- * wherever the host does not wrap it (the /plugins panel route).
- *
- * `fill` pins the content box to the viewport for the collection, whose
- * toolbar and pagination stay put while its own viewport scrolls; the detail
- * route scrolls this frame instead.
- */
 function AutomationsPageFrame({
   fill,
   children,

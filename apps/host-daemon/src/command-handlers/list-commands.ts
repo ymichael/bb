@@ -18,15 +18,8 @@ import {
   type CommandScanRoot,
 } from "../command-discovery.js";
 
-/**
- * Everything the daemon needs to turn one provider's native roots into scan
- * roots on this host. `providerId` is opaque here: it only seeds skill
- * identities so one skill keeps one id across hosts.
- */
 export interface DeclaredScanRootResolution {
-  /** Resolved workspace path, or null for an unprovisioned thread. */
   cwd: string | null;
-  /** User-home base (`os.homedir()`). */
   homeDir: string;
   providerId: string;
   nativeRoots: ProviderNativeRootSet;
@@ -40,7 +33,6 @@ interface ProjectAncestors {
   projectRootPath: string;
 }
 
-/** The workspace, with its ancestor chain resolved at most once per listing. */
 interface Workspace {
   cwd: string;
   ancestors: () => Promise<ProjectAncestors>;
@@ -55,11 +47,6 @@ async function hasProjectRootMarker(directoryPath: string): Promise<boolean> {
   }
 }
 
-/**
- * Find the repository ancestor chain used by native provider skill discovery.
- * The nearest ancestor with a `.git` entry is the repository root. Without a
- * marker, only the cwd is used. Results run from the repository root to cwd.
- */
 async function resolveProjectAncestorDirectories(
   cwd: string,
 ): Promise<ProjectAncestors> {
@@ -108,7 +95,6 @@ function rootPathForDeduplication(root: CommandScanRoot): string {
   return "rootPath" in root ? root.rootPath : root.filePath;
 }
 
-/** Append the candidates whose path `target` does not hold yet: the first root per path wins. */
 function appendUniqueRoots(
   target: CommandScanRoot[],
   candidates: readonly CommandScanRoot[],
@@ -128,14 +114,6 @@ function toPosixRelativePath(fromPath: string, toPath: string): string {
   return path.relative(fromPath, toPath).split(path.sep).join("/");
 }
 
-/**
- * One directory root. The `command` shape already scans nested `*.md` files,
- * so `recursive` only selects between the `skill` and `skill-recursive`
- * shapes. A non-empty `namePrefix` makes a plugin root: the prefix namespaces
- * every name under it and the root carries no identity seed (skill listing
- * classifies plugin roots by prefix). A project-origin root gets a boundary
- * so a recursive scan through a symlinked root stays inside the workspace.
- */
 function directoryScanRoot(args: {
   boundaryPath: string | null;
   identity: string;
@@ -183,13 +161,6 @@ function directoryScanRoot(args: {
   };
 }
 
-/**
- * Expand one project root that walks ancestors: the same relative directory
- * in every directory from the repository root down to cwd (cwd included
- * once). Identity `${relativePath}:${directory relative to the project root}`
- * keeps same-named skills in different ancestors apart; the boundary is the
- * project root.
- */
 async function ancestorScanRoots(args: {
   namePrefix: string;
   providerId: string;
@@ -254,11 +225,6 @@ async function declaredProjectScanRoots(args: {
   return roots;
 }
 
-/**
- * Declared roots: project entries relative to cwd (none without a
- * workspace), then user entries relative to the host home. A declared root
- * that does not exist here is simply an empty scan.
- */
 async function declaredScanRoots(args: {
   homeDir: string;
   providerId: string;
@@ -291,14 +257,19 @@ async function declaredScanRoots(args: {
   ];
 }
 
-/** A resolved root that names one file or one skill directory, or null for a directory of entries. */
 function resolvedSingleScanRoot(
   root: ProviderResolvedNativeRoot,
   providerId: string,
 ): CommandScanRoot | null {
   const seed =
     root.namePrefix === ""
-      ? { skillIdentitySeed: skillIdentitySeed(providerId, root.origin, root.path) }
+      ? {
+          skillIdentitySeed: skillIdentitySeed(
+            providerId,
+            root.origin,
+            root.path,
+          ),
+        }
       : {};
   switch (root.shape) {
     case "skill":
@@ -335,11 +306,6 @@ function resolvedSingleScanRoot(
   }
 }
 
-/**
- * Roots the plugin resolved on this host: host-absolute, with origin, prefix,
- * and recursion as given. A project root inside cwd that walks ancestors
- * expands like a declared one, with the path's part relative to cwd.
- */
 async function resolvedScanRoots(args: {
   providerId: string;
   roots: readonly ProviderResolvedNativeRoot[];
@@ -372,9 +338,6 @@ async function resolvedScanRoots(args: {
       );
       continue;
     }
-    // A project-origin root the plugin resolved (a config entry or a vendor
-    // plugin inside the repository) stays within the repository, as the
-    // walked project roots do; a user-origin root has no boundary.
     roots.push(
       directoryScanRoot({
         boundaryPath:
@@ -395,14 +358,6 @@ async function resolvedScanRoots(args: {
   return roots;
 }
 
-/**
- * Build the ordered set of roots to scan for one provider on this host:
- * declared skills (project, then user), declared commands (same order), then
- * the resolved skills and commands. Each absolute path scans once across the
- * whole set: the first root in that order wins, so a resolved root that
- * repeats a declared one scans once with the declared identity. The daemon
- * names no provider: an empty root set yields no roots.
- */
 export async function resolveDeclaredScanRoots(
   resolution: DeclaredScanRootResolution,
 ): Promise<CommandScanRoot[]> {

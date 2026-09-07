@@ -25,18 +25,22 @@ function registerRemovedManagerSubcommand(
     .command(nameAndArgs)
     .description(description)
     .option("--json", "Print machine-readable JSON output")
-    .action(action(async (_opts: RemovedManagerCommandOptions) => {
-      throwRemovedManagerCommand();
-    }));
+    .action(
+      action(async (_opts: RemovedManagerCommandOptions) => {
+        throwRemovedManagerCommand();
+      }),
+    );
 }
 
 export function registerManagerCommands(program: Command): void {
   const manager = program
     .command("manager")
     .description("Compatibility notice for removed manager commands")
-    .action(action(async () => {
-      throwRemovedManagerCommand();
-    }));
+    .action(
+      action(async () => {
+        throwRemovedManagerCommand();
+      }),
+    );
 
   registerRemovedManagerSubcommand(
     manager,

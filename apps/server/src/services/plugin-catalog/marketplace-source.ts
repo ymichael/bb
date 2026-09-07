@@ -13,18 +13,17 @@ import {
   type MarketplaceFetch,
 } from "./marketplace-http.js";
 import {
+  entryScreenshotUrls,
   parseMarketplaceManifest,
   parseMarketplaceManifestJson,
   type MarketplaceIconBase,
   type MarketplaceManifest,
 } from "./marketplace-manifest.js";
 
-/** File a git or path marketplace keeps its manifest in. */
 const MARKETPLACE_MANIFEST_FILENAME = "marketplace.json";
 
 const MARKETPLACE_MANIFEST_MAX_BYTES = 1_048_576;
 
-/** Where a marketplace's manifest is read from. */
 type MarketplaceSource =
   | { kind: "https"; manifestUrl: string }
   | { kind: "git"; url: string; ref: string }
@@ -35,11 +34,6 @@ const GIT_CLONE_ARGS = ["-c", "core.hooksPath=/dev/null"] as const;
 const SOURCE_FORMS =
   'expected "https://<manifest-url>", "git:<url>[@<ref>]", or "path:<directory>"';
 
-/**
- * Parse a `bb marketplace add` source. The three forms are explicit on
- * purpose: a marketplace is a trust decision, so bb never guesses whether a
- * bare string meant a repository, a directory, or a URL.
- */
 export function parseMarketplaceSource(raw: string): MarketplaceSource {
   const source = raw.trim();
   if (source.length === 0) {
@@ -57,8 +51,6 @@ export function parseMarketplaceSource(raw: string): MarketplaceSource {
     if (parsed.kind !== "git") {
       throw new Error(`invalid marketplace git source "${source}"`);
     }
-    // A marketplace has no release tags to range over, and a spec that could
-    // read as either is refused rather than guessed.
     if (parsed.selector.kind !== "ref") {
       throw new Error(
         `invalid marketplace git source "${source}": a marketplace ref names one branch, tag, or commit`,
@@ -77,14 +69,12 @@ export function parseMarketplaceSource(raw: string): MarketplaceSource {
   throw new Error(`invalid marketplace source "${source}": ${SOURCE_FORMS}`);
 }
 
-/** The canonical spec that re-adds this marketplace. */
 export function marketplaceSourceDisplay(source: MarketplaceSource): string {
   if (source.kind === "https") return source.manifestUrl;
   if (source.kind === "path") return `path:${source.directory}`;
   return `git:${source.url}@${source.ref}`;
 }
 
-/** Rebuild a source from its stored columns. */
 export function marketplaceSourceFromRow(row: {
   sourceKind: PluginMarketplaceSourceKind;
   manifestUrl: string;
@@ -102,7 +92,6 @@ export function marketplaceSourceFromRow(row: {
   return { kind: "git", url: row.manifestUrl, ref: row.sourceGitRef };
 }
 
-/** Columns a source writes back to its marketplace row. */
 export function marketplaceSourceColumns(source: MarketplaceSource): {
   sourceKind: PluginMarketplaceSourceKind;
   manifestUrl: string;
@@ -131,48 +120,45 @@ export function marketplaceSourceColumns(source: MarketplaceSource): {
 
 interface MaterializedMarketplace {
   catalog: MarketplaceManifest;
-  /** Canonical JSON of `catalog`, ready to store. */
   manifestJson: string;
-  /** True when a conditional request said the stored document still applies. */
   unchanged: boolean;
   etag: string | null;
   lastModified: string | null;
-  /** Commit a git checkout was read at; null for the other kinds. */
   commit: string | null;
-  /** Where this marketplace's relative icons come from. */
   iconBase: MarketplaceIconBase;
-  /** Remove the temporary checkout, if any. Always call it. */
   dispose(): Promise<void>;
 }
 
-/**
- * Read a marketplace's manifest without installing or running anything.
- *
- * An https marketplace replays its stored ETag/Last-Modified so an unchanged
- * catalog costs one 304. A git marketplace is cloned into a throwaway staging
- * directory, read, and deleted: everything bb keeps — the manifest and the
- * icon bytes — is already in SQLite, so no checkout has to survive. A path
- * marketplace is read in place.
- */
 export async function materializeMarketplace(args: {
   source: MarketplaceSource;
-  /** Stored document and validators; null forces a full read. */
   cached: {
     manifestJson: string;
     etag: string | null;
     lastModified: string | null;
   } | null;
-  /** Parent directory for git staging checkouts. */
   stagingDir: string;
   fetch: MarketplaceFetch;
+  fallbackManifestUrl?: string;
+  warn?: (message: string) => void;
 }): Promise<MaterializedMarketplace> {
   if (args.source.kind === "https") {
-    return materializeHttps(args.source, args.cached, args.fetch);
+    return materializeHttps(
+      args.source,
+      args.cached,
+      args.fetch,
+      args.fallbackManifestUrl,
+      args.warn,
+    );
   }
   if (args.source.kind === "path") {
-    return materializeLocal(args.source.directory, null, async () => {});
+    return materializeLocal(
+      args.source.directory,
+      null,
+      async () => {},
+      args.warn,
+    );
   }
-  return materializeGit(args.source, args.stagingDir);
+  return materializeGit(args.source, args.stagingDir, args.warn);
 }
 
 async function materializeHttps(
@@ -183,18 +169,78 @@ async function materializeHttps(
     lastModified: string | null;
   } | null,
   fetchMarketplace: MarketplaceFetch,
+  fallbackManifestUrl: string | undefined,
+  warn: ((message: string) => void) | undefined,
 ): Promise<MaterializedMarketplace> {
-  const headers = new Headers({ accept: "application/json" });
-  if (cached?.etag != null) headers.set("if-none-match", cached.etag);
-  if (cached?.lastModified != null) {
-    headers.set("if-modified-since", cached.lastModified);
+  const cachedCatalog =
+    cached === null
+      ? null
+      : parseMarketplaceManifestJson(
+          cached.manifestJson,
+          "stored marketplace catalog",
+          warn,
+        );
+
+  async function requestManifest(
+    manifestUrl: string,
+    useCache: boolean,
+    preferJson: boolean,
+  ): Promise<Response> {
+    const headers = new Headers(
+      preferJson ? { accept: "application/json" } : undefined,
+    );
+    if (useCache && cached?.etag != null) {
+      headers.set("if-none-match", cached.etag);
+    }
+    if (useCache && cached?.lastModified != null) {
+      headers.set("if-modified-since", cached.lastModified);
+    }
+    return fetchMarketplace(manifestUrl, {
+      method: "GET",
+      headers,
+      redirect: "error",
+      signal: AbortSignal.timeout(MARKETPLACE_FETCH_TIMEOUT_MS),
+    });
   }
-  const response = await fetchMarketplace(source.manifestUrl, {
-    method: "GET",
-    headers,
-    redirect: "error",
-    signal: AbortSignal.timeout(MARKETPLACE_FETCH_TIMEOUT_MS),
-  });
+
+  let manifestUrl = source.manifestUrl;
+  let response = await requestManifest(
+    manifestUrl,
+    fallbackManifestUrl === undefined || cachedCatalog?.schemaVersion === 2,
+    fallbackManifestUrl === undefined,
+  );
+  if (response.status === 404 && fallbackManifestUrl !== undefined) {
+    if (cachedCatalog?.schemaVersion === 2 && cached !== null) {
+      await response.body?.cancel();
+      warn?.(
+        "the marketplace v2 manifest returned HTTP 404; BB kept the stored v2 catalog and did not request v1",
+      );
+      const iconBase = {
+        kind: "url",
+        manifestUrl: source.manifestUrl,
+      } as const;
+      for (const entry of cachedCatalog.plugins) {
+        entryScreenshotUrls(entry, iconBase, warn);
+      }
+      return {
+        catalog: cachedCatalog,
+        manifestJson: cached.manifestJson,
+        unchanged: true,
+        etag: cached.etag,
+        lastModified: cached.lastModified,
+        commit: null,
+        iconBase,
+        dispose: async () => {},
+      };
+    }
+    await response.body?.cancel();
+    manifestUrl = fallbackManifestUrl;
+    response = await requestManifest(
+      manifestUrl,
+      cachedCatalog?.schemaVersion === 1,
+      true,
+    );
+  }
   const unchanged = response.status === 304 && cached !== null;
   if (!unchanged && !response.ok) {
     await response.body?.cancel();
@@ -205,10 +251,13 @@ async function materializeHttps(
   if (unchanged) {
     await response.body?.cancel();
     manifestJson = cached.manifestJson;
-    catalog = parseMarketplaceManifestJson(
-      manifestJson,
-      "stored marketplace catalog",
-    );
+    catalog =
+      cachedCatalog ??
+      parseMarketplaceManifestJson(
+        manifestJson,
+        "stored marketplace catalog",
+        warn,
+      );
   } else {
     const raw = new TextDecoder().decode(
       await boundedResponseBytes(
@@ -217,8 +266,12 @@ async function materializeHttps(
         "marketplace manifest",
       ),
     );
-    catalog = parseMarketplaceManifestJson(raw, "marketplace manifest");
+    catalog = parseMarketplaceManifestJson(raw, "marketplace manifest", warn);
     manifestJson = JSON.stringify(catalog);
+  }
+  const iconBase = { kind: "url", manifestUrl } as const;
+  for (const entry of catalog.plugins) {
+    entryScreenshotUrls(entry, iconBase, warn);
   }
   return {
     catalog,
@@ -229,7 +282,7 @@ async function materializeHttps(
       response.headers.get("last-modified") ??
       (unchanged ? cached.lastModified : null),
     commit: null,
-    iconBase: { kind: "url", manifestUrl: source.manifestUrl },
+    iconBase,
     dispose: async () => {},
   };
 }
@@ -238,6 +291,7 @@ async function materializeLocal(
   root: string,
   commit: string | null,
   dispose: () => Promise<void>,
+  warn: ((message: string) => void) | undefined,
 ): Promise<MaterializedMarketplace> {
   try {
     const isDirectory = await stat(root)
@@ -251,8 +305,6 @@ async function materializeLocal(
       join(root, MARKETPLACE_MANIFEST_FILENAME),
       "marketplace manifest",
     );
-    // Size first, then read: an oversize manifest is refused before it is
-    // loaded, the same bound an https manifest gets from its content-length.
     const manifestSize = (await stat(manifestPath)).size;
     if (manifestSize > MARKETPLACE_MANIFEST_MAX_BYTES) {
       throw new Error(
@@ -263,7 +315,12 @@ async function materializeLocal(
     const catalog = parseMarketplaceManifest(
       JSON.parse(raw) as unknown,
       "marketplace manifest",
+      warn,
     );
+    const iconBase = { kind: "dir", root } as const;
+    for (const entry of catalog.plugins) {
+      entryScreenshotUrls(entry, iconBase, warn);
+    }
     return {
       catalog,
       manifestJson: JSON.stringify(catalog),
@@ -271,7 +328,7 @@ async function materializeLocal(
       etag: null,
       lastModified: null,
       commit,
-      iconBase: { kind: "dir", root },
+      iconBase,
       dispose,
     };
   } catch (error) {
@@ -283,6 +340,7 @@ async function materializeLocal(
 async function materializeGit(
   source: Extract<MarketplaceSource, { kind: "git" }>,
   stagingDir: string,
+  warn: ((message: string) => void) | undefined,
 ): Promise<MaterializedMarketplace> {
   await mkdir(stagingDir, { recursive: true });
   const checkout = join(stagingDir, randomUUID());
@@ -311,10 +369,8 @@ async function materializeGit(
       "rev-parse",
       "HEAD",
     ]);
-    // The checkout is only a manifest carrier. Dropping .git first keeps a
-    // hostile repository from smuggling hooks or config into the icon read.
     await rm(join(checkout, ".git"), { recursive: true, force: true });
-    return await materializeLocal(checkout, commit, dispose);
+    return await materializeLocal(checkout, commit, dispose, warn);
   } catch (error) {
     await dispose();
     throw error;

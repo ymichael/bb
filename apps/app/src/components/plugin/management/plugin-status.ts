@@ -15,11 +15,6 @@ type PluginRuntimeStatusDefinition = Omit<
   "condition" | "recovery"
 >;
 
-/**
- * Canonical user-facing projection of plugin runtime health. Enabled/disabled
- * remains lifecycle state, while updates remain release state; neither is
- * folded into this health vocabulary.
- */
 const PLUGIN_RUNTIME_STATUS_DEFINITIONS: Record<
   PluginRuntimeStatus,
   PluginRuntimeStatusDefinition | null
@@ -99,14 +94,6 @@ export function pluginRuntimeStatusPresentation(
   };
 }
 
-/**
- * A plugin row earns at most one signal. Updates use a pill; abnormal runtime
- * health uses a specific icon action that opens plugin details. A failed update
- * that rolled back outranks an available update — the user should know a
- * rollback happened before applying anything else. Newer-but-incompatible
- * releases and pinned sources never signal the list; they surface on the detail
- * page.
- */
 export type PluginRowSignal =
   | { kind: "update"; version: string }
   | {
@@ -121,8 +108,6 @@ export function pluginRowSignal(
   plugin: PluginListItem,
 ): PluginRowSignal | null {
   const state = plugin.updateState;
-  // A rollback wins the row's single signal slot even when the same plugin
-  // still has an available candidate.
   if (state.lastFailure !== null) {
     return {
       kind: "status",

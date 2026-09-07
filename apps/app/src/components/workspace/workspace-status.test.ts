@@ -161,7 +161,8 @@ describe("workspace-status", () => {
       }),
     ).toMatchObject({
       label: "Unknown",
-      summary: "Loaded environment env_1 is bound to /tmp/old, not /tmp/current",
+      summary:
+        "Loaded environment env_1 is bound to /tmp/old, not /tmp/current",
     });
   });
 

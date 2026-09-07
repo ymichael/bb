@@ -1,4 +1,3 @@
-/** Up to two initials from a server label ("Sawyer's Mac" → "SM", "" → "bb"). */
 export function workspaceInitials(label: string | null | undefined): string {
   const words = (label ?? "")
     .split(/[\s\-_./:]+/)

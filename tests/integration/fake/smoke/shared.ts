@@ -11,13 +11,9 @@ import type { IntegrationHarness } from "../../helpers/harness.js";
 import { waitForEnvironmentStatus } from "../../helpers/assertions.js";
 import { scaleTimeoutMs } from "../../helpers/time.js";
 
-// Setup and provisioning waits: project creation, environment readiness, and archive cleanup.
 export const DEFAULT_TIMEOUT_MS = scaleTimeoutMs(10_000);
-// Whole-turn waits: allow the fake provider enough time to start and finish a normal turn.
 export const TURN_TIMEOUT_MS = scaleTimeoutMs(15_000);
-// Active-turn waits: only long enough to observe the thread leave idle.
 export const ACTIVE_TURN_TIMEOUT_MS = scaleTimeoutMs(5_000);
-// Fake provider inputs accept `delay:<ms>` prefixes to pause a turn before completion.
 export const STOP_DELAY_TEXT = "delay:5000 stop me";
 
 export async function createProjectFixture(

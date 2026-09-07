@@ -139,7 +139,7 @@ jobs:
           cache-prefix: test-${{ matrix.shard }}
 
       - name: Test
-        run: pnpm exec turbo run test ${{ matrix.filter }} --cache-dir=.turbo/cache --output-logs=new-only ${{ matrix.args }}
+        run: pnpm exec turbo run test ${{ matrix.filter }} --cache-dir=.turbo/cache --output-logs=new-only --concurrency=4 ${{ matrix.args }}
 
   # The macOS legs run without the Turbo cache. Blacksmith's transparent cache
   # only backs their Linux runners, so on macOS the cache moves over GitHub's
@@ -181,9 +181,10 @@ jobs:
 
       - name: Install AppImage FUSE runtime
         if: ${{ runner.os == 'Linux' }}
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes libfuse2t64
+        uses: ./.github/actions/install-appimage-fuse
+        timeout-minutes: 5
+        with:
+          package: libfuse2t64
 
       - name: Package Linux AppImage
         if: ${{ runner.os == 'Linux' }}

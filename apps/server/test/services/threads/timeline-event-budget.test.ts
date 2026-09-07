@@ -18,7 +18,6 @@ import type { DbConnection } from "@bb/db";
 import type { TimelinePaginationCursor } from "@bb/server-contract";
 import { buildThreadTimeline } from "../../../src/services/threads/timeline.js";
 
-/** Larger than any thread these tests build, so the budget never binds. */
 const LARGE_BUDGET = 1_000_000;
 
 const providerThreadId = "provider-root";
@@ -52,11 +51,6 @@ function setup(): { db: DbConnection; thread: Thread } {
   return { db, thread };
 }
 
-/**
- * Builds `turnCount` turns, each a user message followed by `itemsPerTurn`
- * completed items — the "few user messages, many events" shape that defeats
- * segment-only windowing.
- */
 function insertTurns(
   db: DbConnection,
   thread: Thread,
@@ -141,12 +135,6 @@ function insertTurns(
   insertEvents(db, noopNotifier, events);
 }
 
-/**
- * Builds `turnCount` turns that each end with a file change carrying the *same*
- * item id. Providers really do this: a resumed ACP session restarts its
- * synthetic `acp-fs-write-N` counter, so an id from an early turn comes back in
- * a later one.
- */
 function insertTurnsWithReusedFileChangeItemId(
   db: DbConnection,
   thread: Thread,
@@ -254,7 +242,6 @@ function insertTurnsWithReusedFileChangeItemId(
   insertEvents(db, noopNotifier, events);
 }
 
-/** Every file-change row the walk can reach, oldest page first. */
 function walkAllFileChangeDiffs(
   db: DbConnection,
   thread: Thread,
@@ -296,14 +283,11 @@ interface WalkResult {
   userMessages: string[];
 }
 
-/** Walks every page oldest-ward, collecting the user messages it can reach. */
 function walkAllPages(
   db: DbConnection,
   thread: Thread,
   eventBudget: number,
 ): WalkResult {
-  // Per page, oldest-first within the page. Pages arrive newest-first, so the
-  // page list (not the flattened list) is what gets reversed at the end.
   const messagesByPage: string[][] = [];
   const seenCursors = new Set<string>();
   let cursor: TimelinePaginationCursor | null = null;
@@ -346,8 +330,6 @@ function walkAllPages(
 describe("timeline event budget", () => {
   it("reaches every user message that the unbudgeted build reaches", () => {
     const { db, thread } = setup();
-    // 12 turns × ~60 events: far below `segmentLimit` in turns, far above any
-    // sane event budget in work.
     insertTurns(db, thread, 12, 60);
 
     const unbudgeted = walkAllPages(db, thread, LARGE_BUDGET);
@@ -355,7 +337,6 @@ describe("timeline event budget", () => {
 
     expect(budgeted.userMessages).toEqual(unbudgeted.userMessages);
     expect(budgeted.userMessages).toHaveLength(12);
-    // The budget is what forces pagination; without it this is a single page.
     expect(unbudgeted.pages).toBe(1);
     expect(budgeted.pages).toBeGreaterThan(1);
   });
@@ -364,10 +345,6 @@ describe("timeline event budget", () => {
     const { db, thread } = setup();
     insertTurns(db, thread, 8, 40);
 
-    // Segment-only windowing sees 8 turns ≤ segmentLimit 20 and declares the
-    // thread fully loaded. The budget must not inherit that: dropping segments
-    // for cost while still reporting `hasOlderRows: false` would make the
-    // older history permanently unreachable.
     const unbudgeted = buildThreadTimeline(db, thread, {
       eventBudget: LARGE_BUDGET,
       includeProviderUnhandledOperations: false,
@@ -395,8 +372,6 @@ describe("timeline event budget", () => {
 
   it("still renders a single turn larger than the whole budget", () => {
     const { db, thread } = setup();
-    // One turn of 400 events against a budget of 50: the window cannot be
-    // shrunk below one segment without showing an empty thread.
     insertTurns(db, thread, 3, [10, 400, 10]);
 
     const budgeted = buildThreadTimeline(db, thread, {
@@ -419,11 +394,6 @@ describe("timeline event budget", () => {
 
   it("keeps one file change per turn when turns reuse a file-change item id", () => {
     const { db, thread } = setup();
-    // 3 turns of 13 events against a budget of 10, so the cut lands inside a
-    // turn and whole-item closure runs. Read as one thread-wide item, the
-    // reused id spans every turn: the newest page backfills the oldest turn's
-    // lifecycle rows, and every older page disowns the item, so the earlier
-    // file changes vanish from the timeline entirely.
     insertTurnsWithReusedFileChangeItemId(db, thread, 3, 8);
 
     const unbudgeted = walkAllFileChangeDiffs(db, thread, LARGE_BUDGET);

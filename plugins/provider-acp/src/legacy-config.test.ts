@@ -33,9 +33,6 @@ describe("readLegacyCustomAcpAgents", () => {
     });
   });
 
-  // The old config had a `logo` path the server served from a route of its
-  // own. The setting schema is strict and has no such field, so the entry has
-  // to lose it here or the whole agent would be dropped on migration.
   it("strips the legacy logo field before the agent schema sees it", async () => {
     const dir = await dataDir({
       customAcpAgents: [
@@ -53,8 +50,6 @@ describe("readLegacyCustomAcpAgents", () => {
     });
   });
 
-  // No config file is the normal case for most installs, and an empty
-  // customAcpAgents is the normal case after a migration.
   it("reports no agents and no problem when there is nothing to read", async () => {
     expect(await readLegacyCustomAcpAgents(await dataDir())).toEqual({
       entries: [],

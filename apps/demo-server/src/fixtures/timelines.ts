@@ -1,14 +1,3 @@
-// Synthetic timelines for the demo threads.
-//
-// Every row is typed against @bb/server-contract, so a contract change that
-// would crash the thread screen fails `typecheck` here instead of reaching a
-// reviewer. `demo-world.test.ts` additionally parses the served responses
-// with the contract's zod schemas.
-//
-// The content is invented. Nothing here comes from a real thread, because
-// this server is public and a real capture would publish whatever the
-// captured machine was working on.
-
 import type {
   TimelineCommandWorkRow,
   TimelineConversationRow,
@@ -18,9 +7,7 @@ import type {
 export interface DemoThreadSeed {
   id: string;
   title: string;
-  /** How long before "now" the thread was last touched. */
   minutesAgo: number;
-  /** The seeded conversation, oldest first. */
   rows: (threadId: string, startedAt: number) => TimelineRow[];
 }
 
@@ -37,12 +24,6 @@ function baseRow(threadId: string, turnId: string, seq: number, at: number) {
   };
 }
 
-/**
- * A conversation row. The two roles are not symmetric: a user row carries
- * `mentions`, an attachments object, and a `turnRequest`; an assistant row
- * carries `attachments: null` and `turnRequest: null`. The contract type
- * enforces the difference.
- */
 export function conversationRow(args: {
   threadId: string;
   turnId: string;
@@ -246,7 +227,6 @@ export const DEMO_THREADS: readonly DemoThreadSeed[] = [
   },
 ];
 
-/** The scripted reply every sent message produces, so the app shows a real turn. */
 export const DEMO_REPLY = [
   "That change is straightforward.",
   "",

@@ -28,10 +28,6 @@ const handshake: NativeShellHandshake = {
 
 const posted: string[] = [];
 
-/**
- * Install the real script the shell ships, so the page tests exercise the
- * actual global rather than a hand-written stand-in.
- */
 function installShell(overrides: Partial<NativeShellHandshake> = {}): void {
   Object.defineProperty(window, "ReactNativeWebView", {
     configurable: true,
@@ -42,9 +38,10 @@ function installShell(overrides: Partial<NativeShellHandshake> = {}): void {
     },
   });
   // eslint-disable-next-line no-new-func
-  new Function("window", buildBridgeInjectionScript({ ...handshake, ...overrides }))(
-    window,
-  );
+  new Function(
+    "window",
+    buildBridgeInjectionScript({ ...handshake, ...overrides }),
+  )(window);
   resetNativeShellForTests();
 }
 
@@ -91,8 +88,6 @@ describe("getNativeShell", () => {
   });
 
   it("ignores a global that is not a usable bridge", () => {
-    // Another script on the origin could define `window.bb`. The page must
-    // not treat that as a shell and start posting into it.
     Object.defineProperty(window, "bb", {
       configurable: true,
       value: { native: { post: "not a function" } },
@@ -106,8 +101,6 @@ describe("getNativeShell", () => {
   });
 
   it("keeps working with a shell newer than this page", () => {
-    // A phone updates on its own schedule, so the page will meet a shell it
-    // does not fully know. It must still use what it does know.
     installShell({ bridgeVersion: 99 });
     expect(getNativeShell()).not.toBeNull();
   });
@@ -214,7 +207,10 @@ describe("shellShare", () => {
   });
 
   it("returns null when nothing can share", async () => {
-    Reflect.deleteProperty(navigator as unknown as Record<string, unknown>, "share");
+    Reflect.deleteProperty(
+      navigator as unknown as Record<string, unknown>,
+      "share",
+    );
     await expect(shellShare({ text: "hello" })).resolves.toBeNull();
   });
 });

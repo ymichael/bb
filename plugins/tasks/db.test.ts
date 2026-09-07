@@ -54,10 +54,9 @@ describe("tasks storage", () => {
       createTasksStore(db);
       expect(
         db
-          .prepare<
-            [],
-            { count: number }
-          >("SELECT COUNT(*) AS count FROM schema_version")
+          .prepare<[], { count: number }>(
+            "SELECT COUNT(*) AS count FROM schema_version",
+          )
           .get()?.count,
       ).toBe(6);
     } finally {
@@ -204,14 +203,11 @@ describe("tasks storage", () => {
         movedProjectIds: [filed.id],
         movedFolderIds: [child.id],
       });
-      // ON DELETE SET NULL re-parents rather than cascades.
       expect(store.getFolder(child.id)?.parentFolderId).toBeNull();
       expect(store.getProject(filed.id)?.folderId).toBeNull();
       expect(store.getProject(elsewhere.id)?.folderId).toBe(other.id);
       expect(store.getTask(task.id)?.projectId).toBe(filed.id);
 
-      // A second delete finds no row and must not claim to have moved the
-      // children the first delete already unfiled.
       expect(store.deleteFolder(parent.id)).toEqual({
         deleted: false,
         movedProjectIds: [],
@@ -671,8 +667,6 @@ describe("tasks storage", () => {
         });
         setAttachedAt.run(attachedAt, row.id);
       };
-      // An orchestrator respawns workers: the dead predecessors are the
-      // oldest rows, the live replacement is the newest.
       attach("thr_dead_first", "failed", "2026-07-15T09:00:00.000Z");
       attach("thr_live_old", "idle", "2026-07-15T10:00:00.000Z");
       attach("thr_dead_later", "completed", "2026-07-15T11:00:00.000Z");
@@ -687,7 +681,6 @@ describe("tasks storage", () => {
         "thr_dead_first",
       ]);
 
-      // Detaching removes exactly that (task, thread) row.
       const detached = store.getTaskThreadByThreadId(task.id, "thr_dead_first");
       expect(store.deleteTaskThread(detached!.id)).toBe(true);
       expect(
@@ -752,7 +745,6 @@ describe("tasks storage", () => {
         body: "Earlier reply",
       });
       const later = store.createComment({
-        // Deliberately lexicographically smaller than the earlier ID.
         id: "01H00000000000000000000001",
         taskId: task.id,
         kind: "agent",

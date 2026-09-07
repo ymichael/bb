@@ -10,7 +10,7 @@
     "paths": {
       "@/*": ["./src/*"]
     },
-    "rootDir": ".",
+    "rootDir": "../..",
     // Pin auto-included global type packages (like the sibling apps do):
     // without this, tsc walks up past the repo and pulls in whatever
     // @types happen to sit in ancestor node_modules (e.g. @types/bun in

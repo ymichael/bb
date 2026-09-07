@@ -65,15 +65,12 @@ const sleep: Sleep = (durationMs) =>
   });
 
 async function settleAsyncWatchWork(): Promise<void> {
-  // Let watcher startup/retry microtasks finish before restoring shared spies.
   await Promise.resolve();
   await sleep(0);
   await Promise.resolve();
 }
 
-function ignoreWatchError(): void {
-  // Ignore watcher warnings in tests that assert only change callbacks.
-}
+function ignoreWatchError(): void {}
 
 async function runGit(
   args: RunGitArgs,
@@ -392,7 +389,6 @@ afterEach(async () => {
   );
 });
 
-// These tests mutate shared module spies, so keep them out of Vitest parallelism.
 describe.sequential("watchWorkspaceStatus", () => {
   it("starts watching before git init and promotes the repository watch", async () => {
     const workspacePath = await makeTempDir("bb-workspace-plain-");

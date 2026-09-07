@@ -13,7 +13,7 @@ import {
   OFFICIAL_PLUGINS,
 } from "../../../src/services/plugins/builtin-registry.js";
 
-const MANIFEST_URL = "https://marketplace.test/marketplace/v1/marketplace.json";
+const MANIFEST_URL = "https://marketplace.test/marketplace.json";
 const SEED_ENTRY_COUNT = BUNDLED_CURATED_MARKETPLACE.plugins.length;
 const VALID_SVG = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h16v16H0z"/></svg>',
@@ -73,13 +73,14 @@ describe("plugin catalog routes", () => {
         optionalPluginCount: OFFICIAL_PLUGINS.length + SEED_ENTRY_COUNT,
       },
     });
-    const search = await app.request("/plugin-catalog/search?q=memory");
+    const search = await app.request(
+      "/plugin-catalog/search?q=durable%20memory",
+    );
     await expect(search.json()).resolves.toMatchObject({
       results: [{ entryId: "memory", installed: false }],
+      collections: [{ id: "bb-official", displayName: "BB Official" }],
     });
 
-    // Refreshes are server-owned (startup plus a six-hour interval); no route
-    // lets a caller drive them.
     const refresh = await app.request("/plugin-catalog/refresh", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -214,7 +215,11 @@ describe("plugin catalog routes", () => {
 
       const listed = await app.request("/marketplaces");
       await expect(listed.json()).resolves.toMatchObject({
-        marketplaces: [{ name: "bb-community" }, { name: "acme-plugins" }],
+        marketplaces: [
+          { name: "bb-official", official: true, sourceKind: "path" },
+          { name: "bb-community" },
+          { name: "acme-plugins" },
+        ],
       });
 
       const refreshed = await postJson(app, "/marketplaces/refresh", {
@@ -316,8 +321,6 @@ describe("plugin catalog routes", () => {
           unresolvedReason: "no registry in this test",
         },
       });
-      // The route reached the marketplace entry; the install then refused
-      // because a range with no resolved version identifies no exact code.
       expect(install.status).toBe(422);
       await expect(install.json()).resolves.toMatchObject({
         error: expect.stringContaining("the npm source could not be resolved"),

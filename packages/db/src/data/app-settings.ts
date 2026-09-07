@@ -12,13 +12,8 @@ import { appSettingsValues } from "../schema.js";
 const appSettingsKeySchema = appSettingsSchema.keyof();
 const appSettingsKeys = appSettingsKeySchema.options;
 
-/**
- * Keyboard overrides live in the same table under a reserved key. It is not an
- * `AppSettings` member, so general-settings reads skip it as an unknown key.
- */
 const KEYBINDING_OVERRIDES_KEY = "keybindingOverrides";
 
-/** Stored values are JSON text written by this module; corrupt text reads as a miss. */
 function parseStoredValue(text: string): unknown {
   try {
     return JSON.parse(text);
@@ -44,9 +39,6 @@ function writeValue(
 }
 
 export function getAppSettings(db: DbConnection): AppSettings {
-  // Defaults first, then each stored row that still names a live setting and
-  // still holds a valid value. Per-key validation keeps one stale or corrupt
-  // row from resetting every other preference.
   const values: Record<string, unknown> = { ...defaultAppSettings };
   const rows = db
     .select({ key: appSettingsValues.key, value: appSettingsValues.value })
@@ -55,8 +47,6 @@ export function getAppSettings(db: DbConnection): AppSettings {
     .all();
 
   for (const row of rows) {
-    // The query already excludes keyboard and retired rows; this narrows the
-    // key so the value can be checked against that setting's own schema.
     const key = appSettingsKeySchema.safeParse(row.key);
     if (!key.success) continue;
     const value = appSettingsSchema.shape[key.data].safeParse(

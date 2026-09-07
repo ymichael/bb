@@ -1,20 +1,3 @@
-/**
- * Splits an in-progress assistant message into a settled prefix and a live
- * tail so the timeline can render them as two memoized `MarkdownPreview`
- * instances: only the tail is re-parsed when the next delta arrives.
- *
- * The boundary is the last blank line that
- *  - is not inside an open fenced code block or `$$` math block,
- *  - is not inside a list (the next line is neither indented continuation
- *    nor a further list item), and
- *  - is followed by a complete line (one already terminated by `\n`), so the
- *    partially streamed last line can never make an earlier boundary
- *    eligible and later ineligible. Boundaries therefore only ever move
- *    forward while text is appended.
- *
- * Returns `null` when no such boundary exists (short messages, an open fence
- * spanning the whole text, ...) so the caller renders one document.
- */
 interface StreamingMarkdownSplit {
   settled: string;
   tail: string;
@@ -75,7 +58,6 @@ export function splitStreamingMarkdown(
   text: string,
 ): StreamingMarkdownSplit | null {
   const lines = text.split("\n");
-  // `lines[lines.length - 1]` is the unterminated last line (possibly empty).
   const lastCompleteLineIndex = lines.length - 2;
   let openFence: OpenFence | null = null;
   let mathOpen = false;
@@ -99,7 +81,6 @@ export function splitStreamingMarkdown(
       continue;
     }
     if (isBlankLine(line)) {
-      // The line after the boundary must already be complete.
       if (index + 1 > lastCompleteLineIndex) {
         continue;
       }
@@ -115,7 +96,6 @@ export function splitStreamingMarkdown(
         continue;
       }
       if (lastNonBlankLine === null) {
-        // Leading blank lines: nothing settled yet.
         continue;
       }
       boundaryLineIndex = index;

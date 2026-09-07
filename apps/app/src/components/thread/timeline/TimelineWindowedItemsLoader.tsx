@@ -14,11 +14,9 @@ export interface TimelineWindowingScrollRoot {
   getScrollElement: () => HTMLElement | null;
 }
 
-/** Nested capped details virtualize against their own scroll element. */
 export const TimelineWindowingScrollRootContext =
   createContext<TimelineWindowingScrollRoot | null>(null);
 
-/** Exact heights survive while a virtualized parent unmounts a nested list. */
 export const TimelineWindowingMeasurementsContext = createContext<Map<
   string,
   number
@@ -82,7 +80,6 @@ function TimelineWindowedItemsControl({
   );
 }
 
-/** Keep TanStack Virtual out of the route bundle until the experiment is on. */
 export function TimelineWindowedItemsLoader(props: TimelineWindowedItemsProps) {
   const configured =
     props.enabled &&

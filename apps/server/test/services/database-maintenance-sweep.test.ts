@@ -26,9 +26,6 @@ import { runDatabaseMaintenanceSweep } from "../../src/services/system/periodic-
 import { testLogger } from "../helpers/test-app.js";
 
 const ONE_HOUR_MS = 60 * 60_000;
-// The non-isolated server project shares the production module's last-sweep
-// clock across files. Start beyond wall time so another test that uses
-// Date.now() cannot make these synthetic sweeps look too early.
 const SWEEP_TIME_START_MS = Date.now() + 24 * ONE_HOUR_MS;
 const FREELIST_ROW_COUNT = 1_200;
 const SQLITE_BUSY_HEADROOM_MS = 1_000;
@@ -135,7 +132,6 @@ function markDatabaseBusy(db: DbConnection): void {
 }
 
 function buildFreelist(db: DbConnection): void {
-  // Build a freelist: insert several pages of data, then delete it.
   db.$client.exec(
     "CREATE TABLE scratch_blobs (id INTEGER PRIMARY KEY, blob TEXT)",
   );
@@ -198,8 +194,6 @@ describe("runDatabaseMaintenanceSweep", () => {
   it("reclaims freed pages incrementally even when the instance is not idle", () => {
     const { db } = setupBusyDatabaseWithFreelist();
 
-    // Precondition: there is reclaimable space and the instance is busy, so the
-    // old full-VACUUM path would have skipped maintenance.
     const before = getDatabaseFreelistStats(db);
     expect(before.freelistCount).toBeGreaterThan(0);
     expect(isDatabaseMaintenanceIdle(getDatabaseMaintenanceActivity(db))).toBe(

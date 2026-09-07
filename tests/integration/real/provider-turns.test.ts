@@ -1,4 +1,3 @@
-// Real provider turn lifecycle coverage.
 import { describe, expect, it } from "vitest";
 import { getThreadTimeline } from "../helpers/api.js";
 import {

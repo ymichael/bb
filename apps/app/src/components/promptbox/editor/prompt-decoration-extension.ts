@@ -25,16 +25,10 @@ interface PromptDecorationRange {
   to: number;
 }
 
-/** One public ComposerRichTextSpec content-derived effect entry. */
 type PromptDecorationRule = NonNullable<
   ComposerRichTextSpec["effects"]
 >[number];
 
-/**
- * One host or plugin contribution to the decoration engine. Generations must
- * change when a plugin registration is replaced so a rule disabled after a
- * thrown match can be retried for the new registration.
- */
 export interface PromptDecorationSource {
   id: string;
   generation: string | number;
@@ -49,30 +43,15 @@ export interface PromptDraftObserver {
 }
 
 export interface PromptDecorationExtensionOptions {
-  /**
-   * Returns current sources in composition order. Call
-   * refreshPromptDecorations after generations or state effects change
-   * without a document edit.
-   */
   getDecorationSources?: () => readonly PromptDecorationSource[];
-  /**
-   * Returns the currently registered richText.onDraftChange callbacks and
-   * their latest ComposerView snapshots. Callback order is preserved.
-   */
   getDraftObservers?: () => readonly PromptDraftObserver[];
-  /** Draft observation debounce; defaults to 100 ms. */
   draftObserverDebounceMs?: number;
-  /** Optional host logger for an isolated rich-text match failure. */
   onRuleError?: (sourceId: string, ruleId: string, error: unknown) => void;
 }
 
 interface PromptDecorationPluginState {
   decorations: DecorationSet | null;
   revision: number;
-  /**
-   * A doc edit was absorbed by mapping the existing decorations instead of
-   * rebuilding them; a deferred full rebuild is required.
-   */
   rebuildPending: boolean;
 }
 
@@ -80,26 +59,8 @@ const promptDecorationPluginKey = new PluginKey<PromptDecorationPluginState>(
   "promptDecorations",
 );
 
-/**
- * Transaction meta values understood by the plugin. `refresh` is the public
- * signal that decoration sources changed (bumps `revision`, so draft observers
- * re-run); `deferred-rebuild` only re-applies the current rules to a large doc
- * and must not look like a source change.
- */
 type PromptDecorationMeta = "refresh" | "deferred-rebuild";
 
-/**
- * Above this ProseMirror doc size (≈ characters), a doc edit no longer
- * rebuilds decorations synchronously. Rebuilding serializes the entire
- * document and runs every rule's `match` over the full text — several ms per
- * keystroke once a large paste (e.g. a 1 MB minified bundle) sits in the
- * composer, and unbounded for plugin-supplied rules. Instead, existing
- * decorations are mapped through the edit (so they stay anchored to their
- * text) and a full rebuild runs shortly afterwards via
- * PROMPT_DECORATION_LARGE_DOC_REBUILD_DELAY_MS. The only observable
- * difference on a large doc is that highlight additions/removals can lag the
- * edit by one rebuild interval.
- */
 export const PROMPT_DECORATION_LARGE_DOC_SIZE = 100_000;
 export const PROMPT_DECORATION_LARGE_DOC_REBUILD_DELAY_MS = 200;
 
@@ -120,7 +81,6 @@ export function findUltracodeRanges(text: string): PromptDecorationRange[] {
   return ranges;
 }
 
-/** Built-in host rule, intentionally shaped exactly like a public effect. */
 const PROMPT_ULTRACODE_DECORATION_RULE: PromptDecorationRule = {
   id: "ultracode",
   match: findUltracodeRanges,
@@ -334,7 +294,6 @@ function promptDecorationMeta(
   return meta === "refresh" || meta === "deferred-rebuild" ? meta : null;
 }
 
-/** Testing/diagnostic access to this extension's current decoration set. */
 export function getPromptDecorationSet(
   state: EditorState,
 ): DecorationSet | null {
@@ -409,8 +368,6 @@ export const PromptDecorationExtension =
             let timeout: ReturnType<typeof setTimeout> | null = null;
             let rebuildTimeout: ReturnType<typeof setTimeout> | null = null;
             let latestDoc = initialView.state.doc;
-            // Throttled (not reset per keystroke) so continuous typing in a
-            // large doc still refreshes matches at a bounded cadence.
             const scheduleDeferredRebuild = (view: typeof initialView) => {
               if (rebuildTimeout !== null) return;
               rebuildTimeout = setTimeout(() => {
@@ -431,8 +388,6 @@ export const PromptDecorationExtension =
                 timeout = null;
                 const observers =
                   options.getDraftObservers?.() ?? EMPTY_OBSERVERS;
-                // Serializing the whole doc is the expensive part; skip it
-                // when no plugin is listening.
                 if (observers.length === 0) return;
                 const draft = composerStructuredDraftFromDoc(latestDoc);
                 for (const observer of observers) {

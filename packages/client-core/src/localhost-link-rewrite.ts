@@ -17,11 +17,6 @@ function isRewriteableLoopbackLink(url: URL): boolean {
   );
 }
 
-/**
- * Rewrites loopback links an agent emitted (`http://localhost:5173`) to the
- * host the client reached the bb server on, so links open on the machine that
- * is actually serving them when bb is used remotely.
- */
 export function rewriteLocalhostLinkHref({
   currentHostname,
   enabled,

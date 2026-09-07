@@ -41,10 +41,6 @@ const sourceInputFields = {
     )
     .optional(),
 } as const;
-// zod 4's `z.json()` compiles to a self-referential `$defs` entry, and some
-// model providers reject an entire tool list that contains a recursive `$ref`
-// before the turn starts. Declare freeform JSON as `unknown` so the wire schema
-// stays flat, then narrow with `toJsonValue` at each call site.
 const freeformJson = z.unknown();
 
 const runInputSchema = z
@@ -173,8 +169,6 @@ export default async function plugin(bb: BbPluginApi) {
 
   bb.agents.registerTool({
     name: "bb_workflow_result",
-    // The structured result is the turn's deliverable; its tool row is
-    // bookkeeping beside it, so clients collapse the row by default.
     presentation: {
       label: {
         pending: "Returning structured result",

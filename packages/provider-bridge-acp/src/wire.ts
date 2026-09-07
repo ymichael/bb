@@ -1,15 +1,4 @@
-/**
- * Zod schemas for the subset of the Agent Client Protocol (ACP) that BB
- * consumes — https://agentclientprotocol.com. The bridge validates agent
- * traffic with these before forwarding, and the adapter re-validates the
- * `update` payloads it translates into thread events.
- */
-
 import { z } from "zod";
-
-// ---------------------------------------------------------------------------
-// Content blocks
-// ---------------------------------------------------------------------------
 
 const acpTextContentBlockSchema = z
   .object({
@@ -40,14 +29,6 @@ export function extractAcpContentText(
   return parsed.success ? parsed.data.text : undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Tool calls
-// ---------------------------------------------------------------------------
-
-/**
- * The ACP tool-call kind vocabulary (protocol v1 `ToolKind`); an absent kind
- * reads as `other`.
- */
 export const ACP_TOOL_KINDS = [
   "read",
   "edit",
@@ -64,10 +45,6 @@ export const acpToolKindSchema = z.enum(ACP_TOOL_KINDS);
 export type AcpToolKind = z.infer<typeof acpToolKindSchema>;
 const ACP_TOOL_KIND_SET: ReadonlySet<string> = new Set(ACP_TOOL_KINDS);
 
-/**
- * The tool-call status vocabulary: the four v1 statuses plus the v2 draft's
- * `cancelled`, which settles the call as interrupted.
- */
 export const ACP_TOOL_CALL_STATUSES = [
   "pending",
   "in_progress",
@@ -105,20 +82,12 @@ const acpToolCallContentSchema = z.union([
 ]);
 export type AcpToolCallContent = z.infer<typeof acpToolCallContentSchema>;
 
-/**
- * A tool call's content list, one entry at a time: an entry of a type this
- * schema does not know (the v2 draft adds an open `Other` content variant)
- * is skipped, and the call keeps the entries it does know. A closed list
- * here would drop the whole call for one foreign entry.
- */
-const acpToolCallContentListSchema = z
-  .array(z.unknown())
-  .transform((entries) =>
-    entries.flatMap((entry) => {
-      const parsed = acpToolCallContentSchema.safeParse(entry);
-      return parsed.success ? [parsed.data] : [];
-    }),
-  );
+const acpToolCallContentListSchema = z.array(z.unknown()).transform((entries) =>
+  entries.flatMap((entry) => {
+    const parsed = acpToolCallContentSchema.safeParse(entry);
+    return parsed.success ? [parsed.data] : [];
+  }),
+);
 
 const acpToolCallLocationSchema = z
   .object({
@@ -127,22 +96,11 @@ const acpToolCallLocationSchema = z
   })
   .passthrough();
 
-/**
- * The unstable programmatic tool name (ACP 1.6.0, `unstable_tool_call_name`).
- * A `null` leaves the name unchanged, so it reads as absent.
- */
 const acpToolCallNameSchema = z
   .union([z.string(), z.null()])
   .transform((value) => value ?? undefined)
   .optional();
 
-/**
- * The parsed tool-call fields. `kind` and `status` are the normalized
- * vocabularies above; `rawKind` is the agent's own kind when it was not one
- * of them (see `openAcpToolCallEnums`). `_meta` stays an opaque passthrough
- * field: vendor side channels are read by the per-agent dialect, never by
- * this shared schema.
- */
 const acpToolCallFieldsSchema = z.object({
   toolCallId: z.string(),
   title: z.string().optional(),
@@ -156,22 +114,10 @@ const acpToolCallFieldsSchema = z.object({
   rawOutput: z.unknown().optional(),
 });
 
-/**
- * Open the tool-call enums at the wire boundary. ACP's `ToolKind` is an open
- * enum upstream (`#[serde(other)]`; the v2 draft adds `Unknown(String)` and
- * an open status), so an agent may send a `kind` or `status` this schema has
- * never seen, and some agents serialize an absent optional as `null`. A
- * closed enum here rejected the whole `tool_call`, so the call never opened
- * and its later `completed` update merged into nothing — the row was lost.
- * Now an unknown kind parses as `other` with the raw value kept on
- * `rawKind` (it names the generic tool slot), an unknown status parses as
- * `pending`, and a `null` reads as absent.
- */
 function openAcpToolCallEnums(value: unknown): unknown {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
     return value;
   }
-  // Freeform agent traffic: narrowed field by field below.
   const fields = value as Record<string, unknown>;
   const { kind, status, ...rest } = fields;
   const next: Record<string, unknown> = rest;
@@ -192,10 +138,6 @@ function openAcpToolCallEnums(value: unknown): unknown {
   }
   return next;
 }
-
-// ---------------------------------------------------------------------------
-// Session updates (`session/update` notification payloads)
-// ---------------------------------------------------------------------------
 
 export const acpAgentMessageChunkUpdateSchema = z
   .object({
@@ -275,10 +217,6 @@ export const acpSessionNotificationParamsSchema = z
   })
   .passthrough();
 
-// ---------------------------------------------------------------------------
-// Initialization & sessions
-// ---------------------------------------------------------------------------
-
 export const ACP_PROTOCOL_VERSION = 1;
 
 export const acpInitializeResultSchema = z
@@ -308,12 +246,6 @@ export const acpInitializeResultSchema = z
   })
   .passthrough();
 
-/**
- * Some ACP agents serialize an absent optional string as an explicit `null`
- * instead of omitting the key — pi-acp does this for every model and
- * config-option `description`. Accept both forms and normalize to `undefined`
- * so downstream code sees a single shape.
- */
 const acpOptionalString = z
   .union([z.string(), z.null()])
   .transform((value) => value ?? undefined)
@@ -461,10 +393,6 @@ export const acpPromptResultSchema = z
     stopReason: acpStopReasonSchema,
   })
   .passthrough();
-
-// ---------------------------------------------------------------------------
-// Client-bound requests (agent → client)
-// ---------------------------------------------------------------------------
 
 const acpPermissionOptionKindSchema = z.enum([
   "allow_once",

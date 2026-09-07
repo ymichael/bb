@@ -9,12 +9,6 @@ import { hostArtifactFileResponse } from "./host-artifact-response.js";
 
 const DIGEST_PATTERN = /^[a-f0-9]{64}$/u;
 
-/**
- * The one route serving plugin `bb.host` artifacts to enrolled daemons, for
- * both consumers: the host RPC worker and the provider bridge. It reads the
- * live-artifact registry the plugin runtime publishes into, so presence there
- * — not a second bookkeeping map — is what makes bytes servable.
- */
 export function registerInternalPluginHostArtifactRoutes(
   app: Hono,
   deps: Pick<AppDeps, "pluginHostArtifacts">,

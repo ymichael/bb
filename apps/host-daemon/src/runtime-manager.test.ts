@@ -35,7 +35,6 @@ type GetSharedGitRefsFingerprintResult = Awaited<
   ReturnType<HostWorkspace["getSharedGitRefsFingerprint"]>
 >;
 type CommitArgs = Parameters<HostWorkspace["commit"]>;
-type SquashMergeArgs = Parameters<HostWorkspace["squashMerge"]>;
 type ProvisionWorkspaceMockArgs = Parameters<
   (options: ProvisionWorkspaceArgs) => Promise<HostWorkspace>
 >;
@@ -203,12 +202,6 @@ function createFakeWorkspace(
       commitSubject: "commit",
     })),
     reset: vi.fn(async () => undefined),
-    squashMerge: vi.fn(async (..._args: SquashMergeArgs) => ({
-      merged: true,
-      commitSha: "commit-1",
-      commitSubject: "commit",
-      targetBranch: "main",
-    })),
     setLocalStateFingerprint(value: GetLocalStateFingerprintResult) {
       localStateFingerprint = value;
     },
@@ -235,7 +228,6 @@ function createFakeWorkspace(
 }
 
 interface FakeAgentRuntime extends AgentRuntime {
-  /** Test-only mutators for the runtime-owned per-thread turn state. */
   endActiveTurn: (threadId: string) => void;
   setActiveTurn: (threadId: string, turnId: string) => void;
   setOpenBackgroundWork: (hasOpenWork: boolean) => void;
@@ -422,7 +414,6 @@ describe("RuntimeManager", () => {
       manager.reapIdleProviderSessions({
         idleForMs: 1_000,
         nowMs: 5_000,
-        providerSessionReapingEnabled: false,
       }),
     ).resolves.toEqual({
       reapedSessions: [
@@ -445,13 +436,11 @@ describe("RuntimeManager", () => {
     expect(firstRuntime.reapIdleProviderSessions).toHaveBeenCalledWith({
       idleForMs: 1_000,
       nowMs: 5_000,
-      providerSessionReapingEnabled: false,
       runThreadExclusive: expect.any(Function),
     });
     expect(secondRuntime.reapIdleProviderSessions).toHaveBeenCalledWith({
       idleForMs: 1_000,
       nowMs: 5_000,
-      providerSessionReapingEnabled: false,
       runThreadExclusive: expect.any(Function),
     });
   });
@@ -487,7 +476,6 @@ describe("RuntimeManager", () => {
     const result = await manager.reapIdleProviderSessions({
       idleForMs: 1_000,
       nowMs: 5_000,
-      providerSessionReapingEnabled: true,
     });
 
     expect(result.reapedSessions).toEqual([]);
@@ -737,10 +725,6 @@ describe("RuntimeManager", () => {
     expect(createRuntime).toHaveBeenCalledTimes(2);
     expect(firstEntry.runtime.shutdown).toHaveBeenCalledTimes(1);
 
-    // The replacement's staging cleanup must keep the about-to-be-active
-    // catalog (the new runtime's skill roots point into it) and drop the
-    // replaced one. The hash-shape assertions above keep the `?? ""` fallback
-    // from silently pointing these stats at the staging root itself.
     const stagingRoot = path.join(dataDir, "runtime", "global-skills");
     const newCatalogStat = await fs.stat(
       path.join(stagingRoot, secondEntry.skillCatalogHash ?? ""),
@@ -758,18 +742,18 @@ describe("RuntimeManager", () => {
       name: "release-notes",
       token: "env-a-token",
     });
-    // Env A's workspace provisioning stalls inside createEntry: its entry is
-    // pending, its catalog is staged, and nothing in `entries` names it yet.
     const provisionStarted = createDeferredPromise<void>();
     const releaseProvision = createDeferredPromise<void>();
-    const provisionWorkspace = vi.fn(async (options: ProvisionWorkspaceArgs) => {
-      const targetPath = "path" in options ? options.path : undefined;
-      if (targetPath === "/tmp/env-a") {
-        provisionStarted.resolve();
-        await releaseProvision.promise;
-      }
-      return createFakeWorkspace(targetPath ?? "/tmp/env");
-    });
+    const provisionWorkspace = vi.fn(
+      async (options: ProvisionWorkspaceArgs) => {
+        const targetPath = "path" in options ? options.path : undefined;
+        if (targetPath === "/tmp/env-a") {
+          provisionStarted.resolve();
+          await releaseProvision.promise;
+        }
+        return createFakeWorkspace(targetPath ?? "/tmp/env");
+      },
+    );
     const manager = new RuntimeManager({
       dataDir,
       provisionWorkspace,
@@ -783,8 +767,6 @@ describe("RuntimeManager", () => {
     });
     await provisionStarted.promise;
 
-    // Env B starts on one catalog, then swaps to another: the swap prunes
-    // every staged catalog no environment uses — A's must count as in use.
     const sourceB = await writeInjectedSkillSource({
       dataDir,
       name: "other-notes",
@@ -876,8 +858,6 @@ describe("RuntimeManager", () => {
       createRuntime,
     });
 
-    // Terminal-first entry: created without skill sources, so the runtime has
-    // no catalog (hash null) and the open terminal keeps it busy.
     const terminalEntry = await manager.ensureEnvironment({
       environmentId: "env-skills",
       workspacePath: "/tmp/env-1",
@@ -1507,8 +1487,6 @@ describe("RuntimeManager", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    // A workflow outlives its turn, so the runtime has no active turn while it
-    // runs. Evicting here would SIGTERM the provider process running it.
     runtime.setOpenBackgroundWork(true);
 
     await manager.replaceBaseShellEnv({
@@ -1607,9 +1585,6 @@ describe("RuntimeManager", () => {
       environmentId: "env-old",
       workspacePath: "/tmp/env-old",
     });
-    // A turn command for the new environment holds its retain while a control
-    // command for the old environment waits for that retain. The waiting
-    // command must not hold the thread control lane against it.
     const release = await manager.retainEnvironmentForThreadCommand(
       "env-new",
       "thread-1",
@@ -1636,7 +1611,6 @@ describe("RuntimeManager", () => {
     await expect(
       Promise.all([oldEnvironmentControl, turnHandoff]),
     ).resolves.toBeDefined();
-    // A later turn on the same thread must still acquire the control lane.
     await expect(
       manager.retainEnvironmentForThreadCommand("env-new", "thread-1"),
     ).resolves.toBeInstanceOf(Function);
@@ -1761,8 +1735,6 @@ describe("RuntimeManager", () => {
     expect(manager.get("env-active")).toBeDefined();
     expect(runtimes[0]?.shutdown).toHaveBeenCalledTimes(1);
     expect(runtimes[1]?.shutdown).not.toHaveBeenCalled();
-    // Idle eviction only tears down daemon-owned runtime processes. Workspace
-    // destruction remains a server-owned explicit lifecycle action.
     expect(workspaces[0]?.destroy).not.toHaveBeenCalled();
     expect(workspaces[1]?.destroy).not.toHaveBeenCalled();
   });
@@ -1801,7 +1773,7 @@ describe("RuntimeManager", () => {
       environmentId: "env-1",
       workspacePath: "/tmp/env-1",
     });
-    await manager.destroyEnvironment("env-1");
+    await manager.destroyEnvironment("env-1", { timeoutMs: 900000 });
 
     expect(runtime.shutdown).toHaveBeenCalledTimes(1);
     expect(workspace.destroy).toHaveBeenCalledTimes(1);
@@ -1828,7 +1800,6 @@ describe("RuntimeManager", () => {
         environmentId: "env-procs",
         workspacePath,
       });
-      // A new-session process is out of reach of any process-group kill.
       const orphan = spawn("sh", ["-c", "sleep 300 & echo $!; wait"], {
         cwd: workspacePath,
         detached: true,
@@ -1849,7 +1820,7 @@ describe("RuntimeManager", () => {
       try {
         expect(isAlive(grandchildPid)).toBe(true);
 
-        await manager.destroyEnvironment("env-procs");
+        await manager.destroyEnvironment("env-procs", { timeoutMs: 900000 });
 
         expect(managedWorkspace.destroy).toHaveBeenCalledTimes(1);
         const deadline = Date.now() + 5000;
@@ -1865,9 +1836,7 @@ describe("RuntimeManager", () => {
         for (const pid of [grandchildPid, orphan.pid ?? 0]) {
           try {
             process.kill(pid, "SIGKILL");
-          } catch {
-            // already gone
-          }
+          } catch {}
         }
         await fs.rm(workspacePath, { recursive: true, force: true });
       }
@@ -2332,8 +2301,6 @@ describe("RuntimeManager", () => {
 
     expect(runtimeA.shutdown).toHaveBeenCalledTimes(1);
     expect(runtimeB.shutdown).toHaveBeenCalledTimes(1);
-    // shutdownAll does NOT destroy workspaces — the server owns managed
-    // workspace lifecycle via explicit environment.destroy commands
     expect(workspaceA.destroy).not.toHaveBeenCalled();
     expect(workspaceB.destroy).not.toHaveBeenCalled();
   });

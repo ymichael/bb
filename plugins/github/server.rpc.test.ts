@@ -195,16 +195,59 @@ afterEach(() => {
   rmSync(binDir, { recursive: true, force: true });
 });
 
-async function loadPlugin() {
+async function loadPlugin(extraRepos = "acme/widgets") {
   const host = createFakePluginHost({
     pluginId: "github",
-    settings: { extraRepos: "acme/widgets" },
+    settings: { extraRepos },
   });
   await plugin(host.bb);
   return host;
 }
 
 describe("github plugin RPC behavior", () => {
+  it("reports extraRepos entries it cannot honor instead of dropping them", async () => {
+    const { harness } = await loadPlugin("acme/widgets, ACME-ORG/*, nonsense");
+
+    await expect(harness.runCli(["repos"])).resolves.toEqual({
+      exitCode: 0,
+      stdout: "acme/widgets",
+      stderr:
+        'ignoring 2 extraRepos entries that are not "owner/repo": ACME-ORG/*, nonsense\n',
+    });
+    expect(harness.logEntries).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          level: "warn",
+          message:
+            'ignoring 2 extraRepos entries that are not "owner/repo": ACME-ORG/*, nonsense',
+        }),
+      ]),
+    );
+
+    await harness.runCli(["repos"]);
+    expect(
+      harness.logEntries.filter(
+        (entry) =>
+          entry.level === "warn" && entry.message.includes("extraRepos"),
+      ),
+    ).toHaveLength(1);
+  });
+
+  it("says nothing about extraRepos when every entry is usable", async () => {
+    const { harness } = await loadPlugin("acme/widgets");
+
+    await expect(harness.runCli(["repos"])).resolves.toEqual({
+      exitCode: 0,
+      stdout: "acme/widgets",
+      stderr: "",
+    });
+    expect(
+      harness.logEntries.filter((entry) =>
+        entry.message.includes("extraRepos"),
+      ),
+    ).toEqual([]);
+  });
+
   it("syncs, filters, mutates, and exposes the same cached issue across surfaces", async () => {
     const { harness } = await loadPlugin();
 

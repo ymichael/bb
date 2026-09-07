@@ -15,7 +15,6 @@ import {
 import { resolveTimelineRenderer } from "@/lib/plugin-slot-resolvers";
 import { useThreadProvider } from "../thread-provider-context.js";
 
-/** The rows a plugin may render: its extension kinds and generic tool items. */
 export type PluginRenderableWorkRow = Extract<
   TimelineViewWorkRow,
   { workKind: "extension" | "tool" }
@@ -35,22 +34,13 @@ function useTimelineRendererSlots(): readonly PluginTimelineRendererSlot[] {
   );
 }
 
-/**
- * The plugin renderer registered for a row, or null when the row renders
- * its declarative base. A tool row resolves through the plugin that owns
- * the thread's provider; without a known provider no plugin may claim it.
- */
 export function usePluginTimelineRenderer(
   row: TimelineViewWorkRow | null,
 ): PluginTimelineRendererSlot | null {
   const slots = useTimelineRendererSlots();
   const { pluginId: providerPluginId } = useThreadProvider();
   return useMemo(() => {
-    if (
-      row === null ||
-      slots.length === 0 ||
-      !isPluginRenderableWorkRow(row)
-    ) {
+    if (row === null || slots.length === 0 || !isPluginRenderableWorkRow(row)) {
       return null;
     }
     return resolveTimelineRenderer(
@@ -85,15 +75,9 @@ function rendererPayload(row: PluginRenderableWorkRow): JsonValue {
 interface PluginTimelineRendererBodyProps {
   row: PluginRenderableWorkRow;
   slot: PluginTimelineRendererSlot;
-  /** The host's declarative base for the row body. */
   original: () => React.ReactElement | null;
 }
 
-/**
- * Mounts a plugin's timeline renderer for one row, crash-contained per row
- * (a crash falls back to the declarative base rather than an empty body).
- * The header stays host-rendered; the plugin owns only the expanded body.
- */
 export function PluginTimelineRendererBody({
   row,
   slot,

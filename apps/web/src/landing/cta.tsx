@@ -13,11 +13,8 @@ import {
   downloadMacosHref,
 } from "./site";
 
-/* Marketing CTAs shared by the landing page and the changelog. */
-
 type CtaLinkProps = {
   placement: CtaPlacement;
-  /** Omit for a plain inline link (nav/footer); set for button-styled CTAs. */
   className?: string;
   children: ReactNode;
 };
@@ -30,10 +27,16 @@ export function DownloadLink({ placement, className, children }: CtaLinkProps) {
   );
 }
 
-export function GitHubLink({ placement, className, children }: CtaLinkProps) {
+export function GitHubLink({
+  placement,
+  className,
+  children,
+  "aria-label": ariaLabel,
+}: CtaLinkProps & { "aria-label"?: string }) {
   return (
     <a
       className={className}
+      aria-label={ariaLabel}
       href={GITHUB_URL}
       target="_blank"
       rel="noreferrer"
@@ -87,13 +90,8 @@ export function XLink({ placement, className, children }: CtaLinkProps) {
   );
 }
 
-/* ── Email signup ─────────────────────────────────────────────────── */
-
 type SubscribeStatus = "idle" | "submitting" | "success" | "error";
 
-// Email capture that POSTs to the first-party /api/subscribe Worker route,
-// which adds the address to the bb marketing audience in Resend. JS-enhanced:
-// it submits inline and swaps to a confirmation rather than navigating.
 export const SUBSCRIBE_EMAIL_ID = "subscribe-email";
 
 export function focusSubscribeEmail() {

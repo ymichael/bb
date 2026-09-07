@@ -1,4 +1,3 @@
-import type { TerminalSession } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import {
   createEmptyFixedPanelTabsState,
@@ -11,33 +10,10 @@ import {
   pruneTerminalTabsForSessions,
   syncTerminalTabsInFixedPanelState,
 } from "./terminalPanelTabs";
-
-type TerminalSessionOverrides = Partial<TerminalSession>;
+import { makeTerminalSession as terminalSession } from "@/test/fixtures/terminal-sessions";
 
 interface TabIdentity {
   id: string;
-}
-
-function terminalSession(
-  overrides: TerminalSessionOverrides,
-): TerminalSession {
-  return {
-    id: "term_1",
-    threadId: "thr_1",
-    environmentId: "env_1",
-    hostId: "host_1",
-    title: "Terminal",
-    initialCwd: "/workspace",
-    cols: 100,
-    rows: 30,
-    status: "running",
-    exitCode: null,
-    closeReason: null,
-    createdAt: 1,
-    updatedAt: 1,
-    lastUserInputAt: null,
-    ...overrides,
-  };
 }
 
 function tabIds(tabs: readonly TabIdentity[]): string[] {
@@ -268,9 +244,7 @@ describe("terminalPanelTabs", () => {
       terminalSessions: [terminalSession({ id: "term_1" })],
     });
 
-    expect(tabIds(nextState.secondary.tabs)).toEqual([
-      "terminal:term_1:none",
-    ]);
+    expect(tabIds(nextState.secondary.tabs)).toEqual(["terminal:term_1:none"]);
     expect(nextState.secondary.activeTabId).toBeNull();
   });
 

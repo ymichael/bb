@@ -47,17 +47,6 @@ function requireMutableHost(deps: AppDeps, hostId: string) {
   return host;
 }
 
-/**
- * Host management is owner-only, and "owner" means anything that is not a
- * paired machine's credential: a browser session on this account, or a process
- * already running on the server machine. A local caller carries no gate header
- * and passes — deliberately, and identically to rename, remove, and join-code
- * minting. Anything running on the server machine can already read the data
- * directory and restart the server, so the permission limit defends against
- * *other* machines, not against local code. Reaching this route from another
- * machine requires the connect gate, which stamps `machine` and is refused
- * both there and here.
- */
 function assertHostManagementAllowed(context: GateAuthHeaderReader): void {
   if (getGateAuthKind(context) === "machine") {
     throw new ApiError(
@@ -108,8 +97,6 @@ export function registerHostRoutes(
   });
   const routes = publicApiRoutes.hosts;
 
-  // UI-driven add-a-machine uses the same trust boundary as the rest of the
-  // public API, so this route intentionally does not require loopback access.
   post(routes.createJoinCode, async (context) => {
     assertHostManagementAllowed(context);
     const issued = await issuePersistentHostEnrollKey(deps, {
@@ -143,14 +130,10 @@ export function registerHostRoutes(
     if (!updated) {
       throw new ApiError(404, "host_not_found", "Host not found");
     }
-    // Host metadata currently shares the connection-change invalidation path.
     deps.hub.notifyHost(hostId, ["host-connected"]);
     return context.json(requireNonDestroyedHostWithStatus(deps, updated.id));
   });
 
-  // Owner-session only, and deliberately absent from the SDK and the `bb` CLI:
-  // this ceiling is what stops one paired machine from running privileged work
-  // on another, so an agent on any machine must not be able to raise it.
   patch(routes.updatePermissionCeiling, (context, payload) => {
     assertHostManagementAllowed(context);
     const hostId = context.req.param("id");
@@ -218,8 +201,6 @@ export function registerHostRoutes(
     return context.json({ ok: true });
   });
 
-  // Single-level directory listing for the interactive path browser. Omitting
-  // `path` lists the host's home directory (resolved on the host).
   get(routes.directory, async (context, query) => {
     const hostId = context.req.param("id");
     assertUsableHostId(deps, { hostId });
@@ -234,8 +215,6 @@ export function registerHostRoutes(
     return context.json(result);
   });
 
-  // Discovery only: resolves the daemon-local checkout convention without
-  // touching the filesystem or starting a clone.
   get(routes.cloneDefaultPath, async (context, query) => {
     const hostId = context.req.param("id");
     assertUsableHostId(deps, { hostId });
@@ -297,10 +276,7 @@ export function registerHostRoutes(
     assertUsableHostId(deps, { hostId });
     await deps.providerRegistry.whenProviderRegistered(payload.provider);
     const registration = deps.providerRegistry.get(payload.provider);
-    if (
-      registration === null ||
-      !registration.info.maintenance.installation
-    ) {
+    if (registration === null || !registration.info.maintenance.installation) {
       throw new ApiError(
         404,
         "provider_installation_unavailable",
@@ -328,6 +304,14 @@ export function registerHostRoutes(
         bridgeLaunch,
       },
     });
+    if (
+      result.events.some((event) => event.type === "completed" && event.success)
+    ) {
+      deps.providerRegistry.forgetInstalledKey({
+        hostId,
+        providerId: payload.provider,
+      });
+    }
     return new Response(providerCliInstallEventsToNdjson(result.events), {
       headers: {
         "content-type": "application/x-ndjson; charset=utf-8",

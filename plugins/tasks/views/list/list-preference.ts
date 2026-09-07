@@ -7,14 +7,6 @@ import {
 import { TASK_SORTS, type TaskSort } from "../../shared/pagination.js";
 import { EMPTY_FILTERS, type ListFilterState } from "./filter-bar.js";
 
-/**
- * Client-local list filter/sort preferences. Stored in the browser profile so
- * one client (or user profile) does not rewrite another client connected to
- * the same bb server — same boundary as the Tasks sidebar preference.
- *
- * Preferences are scoped per list surface so All / Active / each project keep
- * independent restored and cleared state.
- */
 export const LIST_PREFERENCE_STORAGE_KEY = "bb-tasks:list-preferences";
 export const LIST_PREFERENCE_VERSION = 1 as const;
 
@@ -76,12 +68,6 @@ function uniqueValidPriorities(values: unknown): TaskPriority[] {
   return result;
 }
 
-/**
- * Label selections are stored by name (matching the filter UI). Unknown or
- * deleted names are kept so a temporary empty label catalog does not wipe the
- * user's selection; once the catalog is loaded, unresolved names force an
- * empty match set in the list query (see ListView).
- */
 function uniqueLabelNames(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
   const seen = new Set<string>();
@@ -129,10 +115,8 @@ export function sanitizeListPreference(raw: unknown): ListPreference {
 }
 
 interface ParsedStorage {
-  /** Document version as stored, when a number. */
   version: number | null;
   scopes: Record<string, unknown>;
-  /** True when version is greater than this build understands. */
   isFutureVersion: boolean;
 }
 
@@ -162,11 +146,7 @@ function readStorage(): ParsedStorage | null {
         : null;
     const isFutureVersion =
       version !== null && version > LIST_PREFERENCE_VERSION;
-    // Only v1 (or missing version with a scopes map from early experiments)
-    // is a fully known shape. Future versions may still expose a scopes map
-    // for best-effort reads of known fields.
     if (version !== null && version < LIST_PREFERENCE_VERSION) {
-      // No older versions shipped; refuse rather than silently invent fields.
       return null;
     }
     return {
@@ -190,11 +170,6 @@ export function loadListPreference(scope: ListPreferenceScope): ListPreference {
   return sanitizeListPreference(document.scopes[scope]);
 }
 
-/**
- * Persist a preference for one scope. Refuses to overwrite storage written by
- * a newer client (version > current) so older builds cannot down-convert a
- * future document. Concurrent same-version writes merge scopes.
- */
 export function storeListPreference(
   scope: ListPreferenceScope,
   preference: ListPreference,
@@ -203,7 +178,6 @@ export function storeListPreference(
   try {
     const existing = readStorage();
     if (existing?.isFutureVersion) {
-      // Leave the future document untouched; session state still updates in React.
       return;
     }
     const scopes = { ...(existing?.scopes ?? {}) };
@@ -216,7 +190,5 @@ export function storeListPreference(
       LIST_PREFERENCE_STORAGE_KEY,
       JSON.stringify(document),
     );
-  } catch {
-    // Persistence is best-effort (private mode / storage disabled).
-  }
+  } catch {}
 }

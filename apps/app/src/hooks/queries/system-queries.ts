@@ -1,4 +1,9 @@
-import { useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  queryOptions,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { QueryKey } from "@tanstack/react-query";
 import type {
   PermissionMode,
@@ -10,7 +15,6 @@ import { permissionModeValues } from "@bb/domain";
 import { toRecord } from "@bb/core-ui";
 import type {
   SystemCliSkillsStatusResponse,
-  SystemConfigResponse,
   SystemExecutionOptionsResponse,
   SystemProvidersQuery,
   SystemProviderStatesResponse,
@@ -80,31 +84,6 @@ type UseSystemProviderInfoArgs = UseSystemProvidersArgs & {
 
 const SYSTEM_EXECUTION_OPTIONS_RETRY_DELAY_MS = 250;
 const SYSTEM_EXECUTION_OPTIONS_RETRY_COUNT = 1;
-// Model probes run on the host (Claude's spawns a CLI process; every provider
-// pays a round trip), so waiting for one leaves the composer with no model list
-// for seconds on each full load. Render the last catalog this routing actually
-// reported immediately and let the authoritative rows replace it when the probe
-// lands: its ids match what the fresh probe will return, so a selection made
-// during the preload window survives instead of snapping back to a default.
-//
-// On a cold cache there is nothing to replay: the app vendors no provider
-// roster and no model catalog of its own (a provider's declared cold-cache
-// fallback is served by the server when a probe fails), so the composer waits
-// for the first probe, and a provider that no replayable list can vouch for
-// waits too.
-//
-// The provider list rides along from its own last-known cache: the live list
-// carries the host's custom and installed ACP agents. If the remembered
-// provider is not in the list we can replay, there is no honest provisional
-// frame and the composer waits.
-//
-// Callers must gate model recovery on `isPlaceholderData` either way: a cached
-// catalog can be stale, so absence from this list is not evidence that a stored
-// model was retired.
-//
-// The placeholder's permission ceiling is the most restrictive mode. Consumers
-// ignore the ceiling while data is provisional, so the value is never used —
-// but a replay must fail safe if a future reader forgets that gate.
 const PLACEHOLDER_PERMISSION_CEILING: PermissionMode = permissionModeValues[0];
 
 function isSameExecutionOptionsRoute(
@@ -136,8 +115,6 @@ function resolveExecutionOptionsPlaceholder({
   catalogCacheKey: string;
   providersCacheKey: string;
 }): SystemExecutionOptionsResponse | undefined {
-  // Same-route provider roster from the prior response: dynamic (ACP) tabs
-  // stay visible while the newly selected provider's models load.
   const previousProviders = isSameExecutionOptionsRoute(
     previousQueryKey,
     environmentId,
@@ -145,14 +122,6 @@ function resolveExecutionOptionsPlaceholder({
   )
     ? previousData?.providers
     : undefined;
-  // Only the exact routing key replays. The model endpoint resolves the
-  // environment's path as its working directory and a host's account decides
-  // its entitlements, so a catalog observed on one environment or host says
-  // nothing about another — and a placeholder is enough for a composer to
-  // offer a model, so a cross-route replay could let it submit one the current
-  // route never returned. A routing that was never fetched to completion (a
-  // composer mounted before its environment is known) gets no rows and waits
-  // for its own probe.
   const cached = readCachedModelCatalog(catalogCacheKey);
   const remembered = readCachedProviderList(providersCacheKey);
   const providers =
@@ -167,8 +136,6 @@ function resolveExecutionOptionsPlaceholder({
   }
   return {
     providers,
-    // A prior response's models belong to the prior provider. Only this
-    // provider's own remembered catalog may stand in while its probe runs.
     models: cached?.models ?? [],
     selectedOnlyModels: cached?.selectedOnlyModels ?? [],
     permissionCeiling: PLACEHOLDER_PERMISSION_CEILING,
@@ -176,12 +143,6 @@ function resolveExecutionOptionsPlaceholder({
   };
 }
 
-/**
- * The freshest ProviderInfo the client already has for a provider id, scanned
- * across every cached execution-options response (any environment/host).
- * Null when no cached response mentions the id — callers treat that as the
- * capability being absent (graceful absence for unknown providers).
- */
 export function findCachedProviderInfo(
   queryClient: import("@tanstack/react-query").QueryClient,
   providerId: string,
@@ -221,24 +182,6 @@ function shouldRetrySystemExecutionOptions(
   return true;
 }
 
-/**
- * The declared model-catalog scope for one provider, read from any roster
- * already in the cache — the provider list and the execution-options response
- * both carry `ProviderInfo`, and either answers.
- *
- * This exists for the one caller that must know the scope BEFORE it can pick
- * a query key: routing an execution-options read by host or by environment.
- * A subscription cannot answer that, because the query it would subscribe to
- * is the one being routed. Until some roster has landed the answer is
- * undefined and the caller routes by environment, so the first read of a cold
- * cache goes to the environment and later reads settle on the host — one
- * redundant probe per session, never a catalog from the wrong workspace.
- * Reading the execution-options cache is what makes that settle at all: a
- * surface that only ever calls this hook's caller populates no provider list.
- *
- * Every render that can change the answer is a render one of those rosters
- * caused, so the peek stays current without a subscription of its own.
- */
 export function useKnownProviderModelCatalogScope(
   providerId: string,
 ): ProviderModelCatalogScope | undefined {
@@ -270,58 +213,52 @@ export function useKnownProviderModelCatalogScope(
   return undefined;
 }
 
-/**
- * The provider roster with the server's display names. Cheaper than the full
- * execution-options query (no model probe), which is what surfaces that only
- * need provider metadata or capabilities should use.
- */
 export function useSystemProviders(args: UseSystemProvidersArgs = {}) {
   const capability = args.capability ?? null;
   const environmentId = args.environmentId ?? null;
   const hostId = args.hostId ?? null;
   const enabled = args.enabled ?? true;
   useSystemRealtimeSubscription({ enabled });
+  const providersCacheKey = providerListCacheKey({ environmentId, hostId });
   return useQuery<ProviderInfo[]>({
     queryKey: systemProvidersQueryKey({ capability, environmentId, hostId }),
-    queryFn: ({ signal }) => {
-      if (args.environmentId !== undefined) {
-        return sdk.providers.list({
-          ...(args.capability === undefined
-            ? {}
-            : { capability: args.capability }),
-          environmentId: args.environmentId,
-          signal,
-        });
+    queryFn: async ({ signal }) => {
+      const capabilityFilter =
+        args.capability === undefined ? {} : { capability: args.capability };
+      const providers = await (args.environmentId !== undefined
+        ? sdk.providers.list({
+            ...capabilityFilter,
+            environmentId: args.environmentId,
+            signal,
+          })
+        : args.hostId !== undefined
+          ? sdk.providers.list({
+              ...capabilityFilter,
+              hostId: args.hostId,
+              signal,
+            })
+          : sdk.providers.list({ ...capabilityFilter, signal }));
+      if (capability === null) {
+        writeCachedProviderList(providersCacheKey, providers);
       }
-      if (args.hostId !== undefined) {
-        return sdk.providers.list({
-          ...(args.capability === undefined
-            ? {}
-            : { capability: args.capability }),
-          hostId: args.hostId,
-          signal,
-        });
-      }
-      return sdk.providers.list({
-        ...(args.capability === undefined
-          ? {}
-          : { capability: args.capability }),
-        signal,
-      });
+      return providers;
     },
     enabled,
     staleTime: 60_000,
+    placeholderData: () => {
+      const remembered = readCachedProviderList(providersCacheKey);
+      if (remembered === null) return undefined;
+      const eligible =
+        capability === null
+          ? remembered
+          : remembered.filter(
+              (provider) => provider.maintenance[capability],
+            );
+      return eligible.length > 0 ? eligible : undefined;
+    },
   });
 }
 
-/**
- * Resolve one provider from the lightweight provider roster. Unlike the full
- * execution-options request, this does not wait for model discovery, so
- * capability-gated controls can render as soon as provider metadata arrives.
- * A just-submitted composer has already loaded the same provider facts through
- * execution options, so reuse that warm cache synchronously during navigation
- * while the lightweight roster fills its own route-scoped cache.
- */
 export function useSystemProviderInfo({
   providerId,
   ...args
@@ -366,11 +303,6 @@ export function useSystemExecutionOptions(
         providerId: args.providerId,
         signal,
       });
-      // The provider list is authoritative whether or not the model probe
-      // succeeded. Only a verified catalog is worth remembering, though:
-      // caching a provisional list would let the server's probe-failure
-      // fallback masquerade as this routing's real models on the next cold
-      // load.
       writeCachedProviderList(providersCacheKey, response.providers);
       if (response.modelLoadError === null) {
         const catalog = {
@@ -398,23 +330,24 @@ export function useSystemExecutionOptions(
   });
 }
 
-export function useSystemConfig(options?: QueryOptions) {
-  const enabled = options?.enabled ?? true;
-  useSystemRealtimeSubscription({ enabled });
-
-  return useQuery<SystemConfigResponse>({
+export function systemConfigQueryOptions() {
+  return queryOptions({
     queryKey: systemConfigQueryKey(),
     queryFn: ({ signal }) => sdk.system.config({ signal }),
-    enabled,
     staleTime: 60_000,
   });
 }
 
-/**
- * Per-machine install state of bb's built-in CLI skills. Each read asks every
- * enrolled machine's daemon, so it is fetched on demand (the settings section)
- * rather than kept fresh in the background.
- */
+export function useSystemConfig(options?: QueryOptions) {
+  const enabled = options?.enabled ?? true;
+  useSystemRealtimeSubscription({ enabled });
+
+  return useQuery({
+    ...systemConfigQueryOptions(),
+    enabled,
+  });
+}
+
 export function useCliSkillsStatus(options?: QueryOptions) {
   return useQuery<SystemCliSkillsStatusResponse>({
     queryKey: systemCliSkillsQueryKey(),
@@ -458,7 +391,6 @@ export function useHostProviderCliStatus({
   });
 }
 
-/** Live provider readiness for unset composer selection. */
 export function useSystemProviderStates(
   options: UseSystemProviderStatesOptions = {},
 ) {
@@ -473,8 +405,6 @@ export function useSystemProviderStates(
         signal,
       }),
     enabled: options.enabled ?? true,
-    // Each read starts sessionless bridge health checks. The root composer's
-    // provider default wants one answer rather than a polling query.
     ...(options.poll === false
       ? { staleTime: 60_000 }
       : { refetchInterval: 15_000 }),
@@ -491,7 +421,6 @@ interface UseSystemProviderUsageLimitsArgs extends QueryOptions {
   providerIds: readonly string[];
 }
 
-/** Loads each provider independently so one slow bridge cannot block peers. */
 export function useSystemProviderUsageLimits(
   args: UseSystemProviderUsageLimitsArgs,
 ) {

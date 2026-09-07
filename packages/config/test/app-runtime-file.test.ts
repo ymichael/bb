@@ -56,7 +56,6 @@ describe("claimBbAppRuntimeFile", () => {
         isRunning: () => true,
       }),
     ).resolves.toBe(false);
-    // The live launcher keeps the record, so `bb-app stop` can still find it.
     await expect(readBbAppRuntimeFile(dataDir)).resolves.toMatchObject({
       pid: 1_111,
     });
@@ -155,7 +154,6 @@ describe("stopVerifiedProcess", () => {
     const result = await stopVerifiedProcess({
       killTimeoutMs: 10,
       pid: 4_242,
-      // A recycled pid: same command name, but it started two days ago.
       processOps: createOps({ readElapsedSeconds: async () => 172_800 }),
       signal: "SIGTERM",
       startedAt,

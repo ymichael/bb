@@ -1,12 +1,3 @@
-/**
- * Object URLs for images the user just picked, keyed by the stored attachment
- * path the upload returned. The composer preview reads from here first so a
- * fresh photo renders from the local file instead of re-downloading the
- * multi-megabyte original the browser just uploaded.
- *
- * Bounded and revoked in FIFO order; the entries only need to survive the
- * composer session that produced them.
- */
 const MAX_LOCAL_PREVIEWS = 24;
 
 const localPreviewUrlsByPath = new Map<string, string>();
@@ -17,10 +8,7 @@ function canCreateObjectUrls(): boolean {
   );
 }
 
-export function registerLocalAttachmentPreview(
-  path: string,
-  file: Blob,
-): void {
+export function registerLocalAttachmentPreview(path: string, file: Blob): void {
   if (!canCreateObjectUrls() || !file.type.startsWith("image/")) {
     return;
   }
@@ -52,7 +40,6 @@ export function releaseLocalAttachmentPreview(path: string): void {
   URL.revokeObjectURL(url);
 }
 
-/** Test hook: revoke and forget every registered preview. */
 export function clearLocalAttachmentPreviews(): void {
   for (const path of [...localPreviewUrlsByPath.keys()]) {
     releaseLocalAttachmentPreview(path);

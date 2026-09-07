@@ -8,10 +8,6 @@ import {
 } from "@/test/fixtures/thread-timeline-rows";
 import { findStreamingAssistantMessageId } from "./ThreadTimelineRows";
 
-// Only the message that can still receive text deltas renders through the
-// settled/tail markdown split. Picking any other row would re-mount a finished
-// body as two documents (and pick up the seam margin classes) for nothing;
-// missing the live one re-parses the whole message per delta again.
 describe("findStreamingAssistantMessageId", () => {
   it("returns the trailing top-level assistant message", () => {
     const rows = buildTimelineViewRows([

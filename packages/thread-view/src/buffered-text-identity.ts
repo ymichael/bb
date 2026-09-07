@@ -28,10 +28,6 @@ export function createBufferedTextInstanceKey(
   ].join("|");
 }
 
-function getThreadEventTurnId(decoded: ThreadEvent): string | undefined {
-  return getThreadEventScopeTurnId(decoded.scope);
-}
-
 function getThreadEventParentToolCallId(
   decoded: ThreadEvent,
 ): string | undefined {
@@ -47,7 +43,7 @@ function getThreadEventParentToolCallId(
 export function resolveBufferedTextIdentity(
   args: ResolveBufferedTextIdentityArgs,
 ): BufferedTextInstanceIdentity | null {
-  const turnId = args.turnId ?? getThreadEventTurnId(args.decoded);
+  const turnId = args.turnId ?? getThreadEventScopeTurnId(args.decoded.scope);
   if (!turnId) {
     return null;
   }
@@ -84,35 +80,20 @@ export function resolveBufferedTextIdentity(
     return null;
   }
 
-  if (args.decoded.type === "item/reasoning/summaryTextDelta") {
-    return {
-      itemId: args.decoded.itemId,
-      kind: "reasoning",
-      parentToolCallId,
-      turnId,
-    };
-  }
-  if (args.decoded.type === "item/reasoning/textDelta") {
-    return {
-      itemId: args.decoded.itemId,
-      kind: "reasoning",
-      parentToolCallId,
-      turnId,
-    };
-  }
   if (
-    args.decoded.type === "item/started" &&
-    args.decoded.item.type === "reasoning"
+    args.decoded.type === "item/reasoning/summaryTextDelta" ||
+    args.decoded.type === "item/reasoning/textDelta"
   ) {
     return {
-      itemId: args.decoded.item.id,
+      itemId: args.decoded.itemId,
       kind: "reasoning",
       parentToolCallId,
       turnId,
     };
   }
   if (
-    args.decoded.type === "item/completed" &&
+    (args.decoded.type === "item/started" ||
+      args.decoded.type === "item/completed") &&
     args.decoded.item.type === "reasoning"
   ) {
     return {

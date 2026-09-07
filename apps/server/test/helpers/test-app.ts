@@ -70,21 +70,8 @@ export async function installTestBuiltinPlugin(
 export type TestAppHarnessConfigOverrides = Partial<ServerRuntimeConfig> & {
   appVersionService?: AppVersionService;
   terminalCloseTimeoutMs?: number;
-  /** Clock for the plugin-resolved native roots cache; defaults to Date.now. */
   nativeRootsClock?: () => number;
-  /**
-   * Start with an EMPTY provider registry. Providers come only from plugin
-   * declarations now, so the harness pre-registers the four first-party ones
-   * for the majority of tests that need providers but not a plugin runtime.
-   * Tests that install those plugins for real must opt out, or the plugin's
-   * registration collides with the pre-registered copy.
-   */
   seedFirstPartyProviders?: boolean;
-  /**
-   * Extra provider registrations, exactly as a plugin would make them. The
-   * ACP plugin registers a user's configured agents this way from its own
-   * settings, so a test that needs one registers it here.
-   */
   extraProviders?: readonly {
     declaration: PluginProviderDeclaration;
     pluginId: string;
@@ -136,13 +123,6 @@ export function createTestDaemonHostKey(
 
 let migratedTemplate: Buffer | null = null;
 
-/**
- * A fresh in-memory database with every migration applied and the personal
- * project seeded, exactly as `initDb` leaves it. The first call migrates for
- * real and keeps the serialized image; every later call opens an independent
- * copy of that image. Replaying the 100+ migrations was ~57ms of the ~61ms a
- * harness cost, paid by nearly two thousand tests.
- */
 export function createTestDb(): DbConnection {
   if (migratedTemplate === null) {
     migratedTemplate = initDb(":memory:").$client.serialize();
@@ -177,6 +157,7 @@ export async function createTestAppHarness(
         available: true,
         pluginId: extra.pluginId,
         declaration: validatePluginProviderDeclaration(extra.declaration),
+        iconHash: null,
         readSettings: () => ({}),
       }),
       pluginId: extra.pluginId,
@@ -343,10 +324,6 @@ export async function startTestServer(
   );
   const server = serve(
     {
-      // The client always connects to 127.0.0.1, so bind the test server to
-      // 127.0.0.1 too. If we leave the host unspecified, this server can end
-      // up on ::1 while another local process owns 127.0.0.1 on the same
-      // port, and the client will hit that other process instead.
       hostname: TEST_SERVER_HOST,
       port: 0,
       fetch: app.fetch,

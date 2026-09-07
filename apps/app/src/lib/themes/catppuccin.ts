@@ -1,12 +1,3 @@
-/**
- * Catppuccin palette (https://catppuccin.com). Light = Latte, dark = Mocha,
- * accent = Mauve. Overrides only the two anchors (--canvas/--ink), the accent,
- * the secondary text tiers, the semantic colors, and the ANSI palette — every
- * neutral surface (cards, borders, sidebar, hover, selection, ring) derives
- * from the anchors and accent in theme.css, so it follows automatically.
- * Unlike Nord, Latte and Mocha have *different* terminal colors, so the
- * --ansi-* (and --ansi-bg-fg-*) blocks live in BOTH selectors, not just light.
- */
 export const catppuccinThemeCss = `
 :root, .light {
   /* Anchors: Base / Text */

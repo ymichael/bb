@@ -57,9 +57,6 @@ export function cancelEnvironmentProvisioningForThreadStopInTransaction(
     return "ready_to_finalize";
   }
 
-  // Not lifecycle: stop routing — an in-flight provision needs a host-side
-  // cancel RPC before the stopped thread can finalize; settled environments
-  // finalize immediately. No transition is written here.
   if (environment.status === "provisioning") {
     return "awaiting_host_cancel";
   }

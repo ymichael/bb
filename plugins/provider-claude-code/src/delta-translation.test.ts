@@ -10,18 +10,6 @@ import {
   spawningToolUseFor,
 } from "./delta-test-harness.js";
 
-/**
- * Claude translation equivalence for the narrow-grammar path.
- *
- * These are the claude event-translation suite's cases, ported so the SAME
- * claude SDK fixtures drive the new pipeline: claude dialect events → semantic
- * deltas → the runtime delta assembler → canonical ThreadEvents. Event
- * content, ordering, scoping, and statuses are asserted exactly as before;
- * ids are asserted by shape and via the assembler's provider↔bb maps because
- * minting moved from the bridge to the assembler (thread/provider thread ids
- * are stamped downstream by the runtime, so events leave with empty ids).
- */
-
 const THREAD_ID = "thr_claude_rate_limits";
 
 function sdkMessage(message: Record<string, unknown>): Record<string, unknown> {
@@ -37,9 +25,6 @@ function providerErrors(events: readonly ThreadEvent[]) {
 }
 
 describe("claude rate-limit classification (delta path)", () => {
-  // An automatic SDK retry is a transient rejection: it must be classified
-  // rate-limit AND marked retrying, or the UI reports a dead turn while the
-  // SDK is still working, and provider-retry recovery treats it as terminal.
   it("classifies an SDK rate-limit retry as a retrying rate-limit error", () => {
     const harness = createClaudeDeltaHarness();
     harness.translate(
@@ -79,11 +64,6 @@ describe("claude rate-limit classification (delta path)", () => {
     ]);
   });
 
-  // #1408: Claude reports a hard subscription limit BEFORE its synthetic
-  // assistant/result sequence. Emitting an error there and again on the result
-  // produced two errors, the first outside the failed turn's range, so
-  // recovery never saw the blocked window. The rejection is now deferred onto
-  // the result: exactly one terminal error, inside the failed turn.
   it("defers a hard rejection into one terminal rate-limit error on the result", () => {
     const harness = createClaudeDeltaHarness();
 
@@ -156,10 +136,6 @@ describe("claude rate-limit classification (delta path)", () => {
     );
   });
 
-  // A rejection the provider then reverses must not be replayed onto whatever
-  // result arrives next: that would classify an unrelated failure (or a clean
-  // run that later fails for another reason) as rate-limited and schedule a
-  // retry against a window that is no longer blocked.
   it("drops a pending rejection once the provider reports allowed again", () => {
     const harness = createClaudeDeltaHarness();
 
@@ -352,7 +328,6 @@ describe("claude turn and checkpoint lifecycle", () => {
   it("increments turn IDs across turns", () => {
     const harness = createClaudeDeltaHarness();
 
-    // Turn 1
     harness.translate({
       type: "assistant",
       message: {
@@ -367,7 +342,6 @@ describe("claude turn and checkpoint lifecycle", () => {
       session_id: "sess-1",
     });
 
-    // Turn 2
     const events = harness.translate({
       type: "assistant",
       message: {
@@ -387,7 +361,6 @@ describe("claude turn and checkpoint lifecycle", () => {
 
   it("emits turn/completed on result message", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn
     harness.translate({
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "done" }] },
@@ -411,7 +384,6 @@ describe("claude turn and checkpoint lifecycle", () => {
 
   it("emits failed status for error result", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn
     harness.translate({
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "x" }] },
@@ -500,8 +472,6 @@ describe("claude turn and checkpoint lifecycle", () => {
       ),
     ).toEqual([]);
 
-    // A real accepted input ends the drain window: the next assistant output
-    // opens the follow-up turn and correlates the acceptance.
     harness.acceptInput("creq_23456789ad", context.threadId);
     const followUp = harness.translate(
       {
@@ -589,8 +559,6 @@ describe("claude turn and checkpoint lifecycle", () => {
 describe("claude synthetic no-response handling", () => {
   it("completes a pending turn for Claude synthetic no-response messages", () => {
     const harness = createClaudeDeltaHarness();
-    // The bridge queued this from an accepted turn/start command; the queue is
-    // assembler state fed by the translator's input.accepted delta.
     expect(harness.acceptInput("creq_23456789af", "bb-thread-1")).toEqual([]);
 
     const events = harness.translate(
@@ -642,8 +610,6 @@ describe("claude synthetic no-response handling", () => {
     const harness = createClaudeDeltaHarness();
     harness.acceptInput("creq_23456789af", "bb-thread-1");
 
-    // The CLI resolves /clear locally: conversation_reset is the successful
-    // context-clear signal, followed by a result with no model call.
     const resetEvents = harness.translate(
       {
         type: "conversation_reset",
@@ -690,9 +656,6 @@ describe("claude synthetic no-response handling", () => {
     const harness = createClaudeDeltaHarness();
     harness.acceptInput("creq_23456789af", "bb-thread-1");
 
-    // On resume the Claude SDK can drain a provider-owned task notification
-    // immediately before the queued human prompt. Its zero-work result is a
-    // different root segment and must not claim the pending bb input.
     expect(
       harness.translate(
         {
@@ -772,8 +735,6 @@ describe("claude synthetic no-response handling", () => {
       { threadId: "bb-thread-1" },
     );
 
-    // A stop finishes the open turn before the CLI's result lands, so a result
-    // with no open turn is routine. It must not open a second, empty turn.
     harness.translate(
       { type: "result", subtype: "success", session_id: "claude-session-1" },
       { threadId: "bb-thread-1" },
@@ -992,7 +953,6 @@ describe("claude synthetic no-response handling", () => {
 describe("claude streaming", () => {
   it("emits item/agentMessage/delta for stream text", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn first
     harness.translate({
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "x" }] },
@@ -1081,8 +1041,6 @@ describe("claude streaming", () => {
         scope: turnScope(TURN_1),
       }),
     );
-    // Canonical grammar: the delta-first item opens with a synthesized
-    // item/started.
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/started",
@@ -1184,8 +1142,6 @@ describe("claude streaming", () => {
     });
 
     expect(reasoningDelta?.itemId).toMatch(ITEM_ID_PATTERN);
-    // Canonical grammar: the delta-first reasoning item opens with a
-    // synthesized item/started ahead of its first delta.
     expect(deltaEvents).toContainEqual(
       expect.objectContaining({
         type: "item/started",
@@ -1716,8 +1672,6 @@ describe("claude compaction", () => {
       status: "compacting",
       session_id: "sess-1",
     });
-    // The turn that owned the compaction completes before the status clears;
-    // a stale entry must not complete under a later turn.
     harness.translate({
       type: "result",
       subtype: "end_turn",
@@ -1907,8 +1861,6 @@ describe("claude error translation", () => {
     );
   });
 
-  // The only coverage in the repo for claude-code/error-info.ts's
-  // non-rate-limit classification.
   it("maps Claude result error subtypes to provider error info", () => {
     const harness = createClaudeDeltaHarness();
 

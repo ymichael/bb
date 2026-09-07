@@ -41,17 +41,9 @@ const PLAN_STEP_TODO_STATUSES: Readonly<
   pending: "pending",
   active: "in_progress",
   completed: "completed",
-  // A failed step is settled work: it is no longer pending in the banner.
   failed: "completed",
 };
 
-/**
- * A grammar v3 `planSteps` snapshot (Claude TodoWrite and the folded
- * task-list tools, codex `update_plan`, the ACP plan): the bridge already
- * reduced the plan to its full step list, so the snapshot is the candidate
- * as-is. The only source the banner reads — core keeps no table of the tool
- * names that used to carry a plan.
- */
 function extractPlanStepsCandidate(
   event: ThreadEvent,
   meta: SnapshotCandidateMeta,
@@ -72,12 +64,6 @@ function extractPlanStepsCandidate(
   return { seq: meta.seq, createdAt: meta.createdAt, items };
 }
 
-/**
- * Walks decoded thread events and emits the latest plan snapshot. Treated
- * like `activeThinking`: only meaningful while the thread has an active
- * turn. Returns null when the thread is idle/errored/etc. or when no
- * snapshot was observed. A later snapshot supersedes an earlier one.
- */
 export function extractThreadTimelinePendingTodos(
   threadStatus: Thread["status"],
   events: readonly ThreadEventWithMeta[],

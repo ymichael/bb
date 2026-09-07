@@ -14,7 +14,6 @@ const presentation = {
   title: "Linear: create issue",
 };
 
-/** An approval payload around one subject, parsed through the public union. */
 function approvalOf(subject: Record<string, unknown>) {
   return pendingInteractionPayloadSchema.safeParse({
     kind: "approval",
@@ -101,7 +100,6 @@ describe("interaction request payload family", () => {
         `expected kind ${JSON.stringify(kind)} to be rejected`,
       ).toBe(false);
     }
-    // Plugin request data must be JSON.
     expect(
       interactionRequestPayloadSchema.safeParse({
         kind: "linear/pick-project",

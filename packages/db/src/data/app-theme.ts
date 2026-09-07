@@ -9,10 +9,6 @@ import { appTheme } from "../schema.js";
 
 const APP_THEME_ROW_ID = "current";
 
-/**
- * The persisted active palette id (built-in id or custom theme name). The CSS
- * for a custom theme is resolved from disk by the server, not stored here.
- */
 export function getStoredThemeId(db: DbConnection): string {
   const row = db
     .select({ themeId: appTheme.themeId })
@@ -23,7 +19,6 @@ export function getStoredThemeId(db: DbConnection): string {
   return row?.themeId ?? defaultAppTheme.themeId;
 }
 
-/** The persisted favicon tint; "default" when unset. */
 export function getStoredFaviconColor(db: DbConnection): FaviconColorPreference {
   const row = db
     .select({ faviconColor: appTheme.faviconColor })

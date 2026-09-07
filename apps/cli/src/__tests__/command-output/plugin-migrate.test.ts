@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,10 +31,6 @@ let toolsDir: string;
 beforeEach(async () => {
   rootDir = await mkdtemp(join(tmpdir(), "bb-cli-migrate-"));
   toolsDir = await mkdtemp(join(tmpdir(), "bb-cli-migrate-tools-"));
-  // Repinning and migrating both ask npm whether the host's SDK version is
-  // published, so the new pin can be reported as installable. The fake npm on
-  // PATH answers yes: these tests are about the manifest, not the registry, and
-  // must not depend on the network.
   await installFakeNpm(toolsDir);
   vi.spyOn(console, "warn").mockImplementation(() => {});
 });
@@ -44,7 +47,6 @@ async function writeManifest(value: Record<string, unknown>): Promise<void> {
   );
 }
 
-/** A plugin on the pre-npm layout: vendored declarations plus the path map. */
 async function writeVendoredPlugin(): Promise<void> {
   await writeManifest({
     name: "bb-plugin-legacy",
@@ -83,11 +85,6 @@ function setTty(value: boolean): void {
   });
 }
 
-/**
- * The migration is consent-gated on purpose: the vendored layout keeps working
- * this release, so an unattended `bb plugin migrate` must never rewrite a
- * plugin. These pin the refusal and the pin management that replaced it.
- */
 describe("bb plugin migrate", () => {
   it("prints the plan and changes nothing without --yes on a non-TTY", async () => {
     await writeVendoredPlugin();
@@ -99,14 +96,14 @@ describe("bb plugin migrate", () => {
       runCommand(["plugin", "migrate", rootDir], register),
     ).rejects.toThrow("process.exit:1");
 
-    // The plan is still shown — the author learns what the migration would do.
     const logged = collectLogPayloads(logSpy).join("\n");
-    expect(logged).toContain(`"@get-bb/plugin-sdk": (none) → ${PLUGIN_SDK_VERSION}`);
+    expect(logged).toContain(
+      `"@get-bb/plugin-sdk": (none) → ${PLUGIN_SDK_VERSION}`,
+    );
     expect(logged).toContain("delete         types/bb-plugin-sdk.d.ts");
     expect(vi.mocked(console.error).mock.calls.flat().join("\n")).toContain(
       "Refusing to migrate without confirmation",
     );
-    // Nothing on disk moved.
     expect(await readFile(join(rootDir, "package.json"), "utf8")).toBe(before);
     expect(
       await stat(join(rootDir, "types", "bb-plugin-sdk.d.ts")).then(() => true),
@@ -133,10 +130,6 @@ describe("bb plugin migrate", () => {
     expect(logged).toContain("Run `npm install`");
   });
 
-  /**
-   * The plan is the consent gate's whole substance, so a migration that edits
-   * the author's source files has to say so before it runs — and then do it.
-   */
   it("plans and applies the pre-rename import rewrite", async () => {
     await writeVendoredPlugin();
     await writeFile(
@@ -173,11 +166,6 @@ describe("bb plugin migrate", () => {
     expect(await readFile(join(rootDir, "package.json"), "utf8")).toBe(before);
   });
 
-  /**
-   * The half-migrated plugin: the vendored artifacts are gone, so the layout
-   * probe reads `package`, but the manifest never gained the pin. Reporting it
-   * as already migrated would leave it resolving nothing at all.
-   */
   it("pins a package-layout plugin that never got the devDependency", async () => {
     await writeManifest({
       name: "bb-plugin-pinless",
@@ -202,16 +190,9 @@ describe("bb plugin migrate", () => {
     );
   });
 
-  /**
-   * The plan the author approved is the only thing that may be applied. A file
-   * edited while the prompt was open (an editor save, a concurrent install)
-   * would otherwise be migrated on the strength of a plan describing something
-   * else, so the recheck aborts before any write.
-   */
   it("aborts when the plugin changes between the plan and the confirmation", async () => {
     await writeVendoredPlugin();
     setTty(true);
-    // Answering the prompt is where the window is: mutate the plugin there.
     readlineMocks.question.mockImplementation(async () => {
       await writeFile(
         join(rootDir, "types", "bb-plugin-sdk-app.d.ts"),
@@ -235,15 +216,7 @@ describe("bb plugin migrate", () => {
   });
 });
 
-/**
- * Under the vendored layout `bb plugin build`/`dev` rewrote `types/` so an
- * author never typechecked against a bb they were not running. The package
- * layout has no file to rewrite — the fix is a repin plus `npm install` — so
- * the equivalent is telling them. One line, no prompt, never fatal.
- */
 describe("bb plugin dev stale-pin warning", () => {
-  /** `dev` needs the plugin to be installed; answer with an empty list so it
-   * stops right after the check under test. */
   function stubEmptyPluginList(): void {
     vi.mocked(fetch).mockResolvedValueOnce(
       new Response(JSON.stringify({ plugins: [] }), {
@@ -280,8 +253,6 @@ describe("bb plugin dev stale-pin warning", () => {
       runCommand(["plugin", "dev", rootDir], register),
     ).rejects.toThrow("process.exit:1");
 
-    // A range is `bb plugin types --check`'s business: the host may well
-    // satisfy it, and resolving that here would warn on every build.
     await writeManifest({
       name: "bb-plugin-modern",
       bb: { server: "./server.ts" },
@@ -315,8 +286,6 @@ describe("bb plugin types on a package-layout plugin", () => {
         "@get-bb/plugin-sdk"
       ],
     ).toBe(PLUGIN_SDK_VERSION);
-    // The engines floor states what the source needs; reading newer
-    // declarations does not raise it.
     expect((manifest.engines as Record<string, string>).bbPluginSdk).toBe(
       ">=0.2.0",
     );

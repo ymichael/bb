@@ -81,7 +81,7 @@ const completedImageView: TimelineRow = imageViewRow({
   status: "completed",
   callId: "call_K2JwaDpg7y69AmcFsZyu3jQi",
   path: "/tmp/sightglass-quote-merge-check/dashboard-main.png",
-  durationMs: STARTED_AT + 180 - (STARTED_AT),
+  durationMs: STARTED_AT + 180 - STARTED_AT,
 });
 
 const runningImageView: TimelineRow = {

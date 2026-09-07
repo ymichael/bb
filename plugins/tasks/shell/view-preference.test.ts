@@ -48,8 +48,6 @@ describe("view preference storage", () => {
     });
     window.localStorage.setItem(VIEW_PREFERENCE_STORAGE_KEY, future);
 
-    // Known fields still read; the write is refused so the future build's own
-    // fields survive this session.
     expect(loadViewMode(PROJECT_A)).toBe("board");
     storeViewMode(PROJECT_A, "list");
     expect(window.localStorage.getItem(VIEW_PREFERENCE_STORAGE_KEY)).toBe(

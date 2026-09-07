@@ -53,7 +53,6 @@ describe("frame round-trips", () => {
       headers: [],
       hasBody: false,
     });
-    // Payload must not contain the target key at all.
     const payload = new TextDecoder().decode(encoded.subarray(5));
     expect(payload).not.toContain("target");
     const out = decodeFrame(encoded);
@@ -213,7 +212,7 @@ describe("validation", () => {
 
   it("rejects malformed JSON metadata", () => {
     const bad = new Uint8Array(5 + 3);
-    bad[0] = 1; // open-http
+    bad[0] = 1;
     bad.set(new TextEncoder().encode("{no"), 5);
     expect(() => decodeFrame(bad)).toThrow(/malformed open-http/);
   });
@@ -233,8 +232,6 @@ describe("chunkBody", () => {
       total.set(chunk.data, offset);
       offset += chunk.data.length;
     }
-    // Native memcmp — element-wise toEqual over ~2 MiB of numbers blows the
-    // test timeout on slower CI runners.
     expect(Buffer.compare(Buffer.from(total), Buffer.from(data))).toBe(0);
   });
 

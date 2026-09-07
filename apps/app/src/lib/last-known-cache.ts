@@ -2,56 +2,26 @@ import type { z } from "zod";
 import { createJsonLocalStorage } from "@/lib/browser-storage";
 
 interface LastKnownCache<T> {
-  /**
-   * Storage key for one scope of this cache. `null` parts (an unset routing
-   * dimension) serialize as "-" so the key shape stays fixed.
-   */
   key(...scope: ReadonlyArray<string | null>): string;
-  /** The remembered value, or null when absent, malformed, or unreadable. */
   read(key: string): T | null;
-  /** Best-effort: storage failures (quota, privacy modes) are swallowed. */
   write(key: string, value: T): void;
-  /**
-   * Forget every scope of this cache's current version. Use it when a policy
-   * change makes every remembered answer wrong to replay, not merely stale.
-   */
   clear(): void;
 }
 
-/**
- * A localStorage cache for "last-known truth": the last verified answer a
- * surface received, replayed on the next mount so first paint shows real data
- * instead of a neutral default that the live answer then replaces.
- *
- * Contract for consumers:
- * - Treat replayed values as provisional (TanStack `placeholderData`,
- *   snapshot-seeded state) and keep every irreversible action gated on the
- *   live result.
- * - Write only verified results, never a fallback or an error-state stand-in.
- * - Bump `version` when the stored shape changes; entries from other versions
- *   are pruned on first use, and every read is validated against `schema` so a
- *   stale or hand-edited entry can never leak into the app as trusted data.
- *
- * Neither reads nor writes throw: a full store or a restricted browser (a
- * SecurityError on `localStorage` itself) degrades to "no cache", which is
- * what a cache is for. In particular a write inside a query function must
- * never turn a successful fetch into a query error, and a read during render
- * must never take the surface down.
- */
 export function createLastKnownCache<T>({
   prefix,
   version,
   schema,
+  maxEntries,
+  obsoletePrefixes = [],
 }: {
   prefix: string;
   version: string;
   schema: z.ZodType<T>;
+  maxEntries?: number;
+  obsoletePrefixes?: readonly string[];
 }): LastKnownCache<T> {
   const storage = createJsonLocalStorage<unknown>();
-  // A cache with no routing dimensions stores under the bare version key, so
-  // the prune must spare it as well as the dotted scope namespace: pruning
-  // "everything under my prefix that is not my version" would otherwise eat
-  // the cache's own entry on the next page load.
   const zeroScopeKey = `${prefix}.${version}`;
   const versionPrefix = `${zeroScopeKey}.`;
   let pruned = false;
@@ -64,17 +34,56 @@ export function createLastKnownCache<T>({
         const stored = window.localStorage.key(index);
         if (
           stored !== null &&
-          stored.startsWith(`${prefix}.`) &&
-          stored !== zeroScopeKey &&
-          !stored.startsWith(versionPrefix)
+          ((stored.startsWith(`${prefix}.`) &&
+            stored !== zeroScopeKey &&
+            !stored.startsWith(versionPrefix)) ||
+            obsoletePrefixes.some(
+              (obsoletePrefix) =>
+                stored === obsoletePrefix ||
+                stored.startsWith(`${obsoletePrefix}.`),
+            ))
         ) {
           stale.push(stored);
         }
       }
       for (const key of stale) window.localStorage.removeItem(key);
-    } catch {
-      // No storage, or none we may enumerate: nothing to prune.
-    }
+    } catch {}
+  };
+  const pruneExcessEntries = (
+    currentKey: string,
+    reservesCurrentKey: boolean,
+  ) => {
+    if (maxEntries === undefined) return;
+    try {
+      const otherKeys: string[] = [];
+      let hasCurrentKey = false;
+      for (let index = 0; index < window.localStorage.length; index += 1) {
+        const stored = window.localStorage.key(index);
+        if (stored === currentKey) {
+          hasCurrentKey = true;
+          continue;
+        }
+        if (
+          stored !== null &&
+          (stored === zeroScopeKey || stored.startsWith(versionPrefix))
+        ) {
+          otherKeys.push(stored);
+        }
+      }
+      const entryLimit = Math.max(1, Math.floor(maxEntries));
+      const retainedOtherEntries = Math.max(
+        0,
+        entryLimit - (reservesCurrentKey || hasCurrentKey ? 1 : 0),
+      );
+      for (
+        let index = 0;
+        index < otherKeys.length - retainedOtherEntries;
+        index += 1
+      ) {
+        const key = otherKeys[index];
+        if (key !== undefined) window.localStorage.removeItem(key);
+      }
+    } catch {}
   };
   return {
     key: (...scope) =>
@@ -82,24 +91,21 @@ export function createLastKnownCache<T>({
     read: (key) => {
       try {
         pruneOtherVersions();
+        pruneExcessEntries(key, false);
         const stored = storage.getItem(key, null);
         if (stored === null) return null;
         const parsed = schema.safeParse(stored);
         return parsed.success ? parsed.data : null;
       } catch {
-        // Unreadable storage (a SecurityError on the accessor, a blocked
-        // getItem) is "no cache", by contract; a read must never turn into a
-        // render or query failure.
         return null;
       }
     },
     write: (key, value) => {
       pruneOtherVersions();
+      pruneExcessEntries(key, true);
       try {
         storage.setItem(key, value);
-      } catch {
-        // Best-effort by contract; see above.
-      }
+      } catch {}
     },
     clear: () => {
       try {
@@ -114,9 +120,7 @@ export function createLastKnownCache<T>({
           }
         }
         for (const key of owned) window.localStorage.removeItem(key);
-      } catch {
-        // No storage, or none we may enumerate: nothing to clear.
-      }
+      } catch {}
     },
   };
 }

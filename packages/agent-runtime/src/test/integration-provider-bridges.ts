@@ -1,14 +1,3 @@
-/**
- * The live-CLI integration suite's view of the first-party provider bridges.
- *
- * Every first-party bridge except Pi's now ships as a plugin artifact, and the
- * runtime has no bridge at all for such a provider unless the caller hands it
- * a `bridgeLaunch` — in production the server attaches one built from the
- * plugin's recorded artifact. `integration-global-setup.ts` builds those same
- * artifacts once per run and writes this manifest; the harness reads it
- * synchronously so `createTestRuntime` stays a plain constructor. Nothing is
- * stubbed: the tests launch the real built artifact.
- */
 import { readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -69,14 +58,6 @@ function readManifest(): IntegrationProviderBridgeManifest {
   return cachedManifest;
 }
 
-/**
- * The `bridgeLaunch` a live test must pass for this provider — the artifact
- * its plugin built. Every provider has one, exactly as on the wire.
- *
- * The ACP fallback mirrors the server's: `acp-*` ids other than the one the
- * plugin declares are resolved at request time and never registered, so they
- * borrow the ACP plugin's artifact.
- */
 export function resolveIntegrationBridgeLaunch(
   providerId: string,
 ): AgentRuntimeBridgeLaunch {
@@ -85,8 +66,6 @@ export function resolveIntegrationBridgeLaunch(
   if (direct !== undefined) {
     return direct;
   }
-  // Test-only: every ACP agent in the integration manifest shares one bridge
-  // artifact, so any acp-* entry stands in for any acp-* provider id.
   if (providerId.startsWith("acp-")) {
     const acpEntry = Object.entries(manifest).find(([id]) =>
       id.startsWith("acp-"),

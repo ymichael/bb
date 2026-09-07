@@ -143,6 +143,11 @@ const threadEventScopeDefinitionByType = {
     rationale:
       "Subscription usage is account-scoped state that can affect multiple turns and threads.",
   },
+  "provider.env-resolved": {
+    policy: "thread",
+    rationale:
+      "Resolved provider environment is session state and can change between turns.",
+  },
   "thread/extensionState/updated": {
     policy: "thread",
     rationale:

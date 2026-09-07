@@ -4,12 +4,6 @@ import {
   PLUGIN_AGENT_STATUS_LABEL_MAX_CHARS,
 } from "../internal/host-policy.js";
 
-/**
- * `bb.agents.registerTool` runs this parser in the production host and the
- * fake host alike. The table below is the one set of presentations both
- * hosts accept and reject; a row that changes here changes what a plugin
- * unit test and bb agree on.
- */
 describe("parsePluginAgentToolPresentation", () => {
   const maxLabel = "x".repeat(PLUGIN_AGENT_STATUS_LABEL_MAX_CHARS);
 

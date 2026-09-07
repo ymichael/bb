@@ -31,6 +31,11 @@ export const compatibleMigrationHashes = [
     when: 1787181956957,
     hash: "79d39e7b68d1db8ba02614fe4cc227cc0c154d77c7183f2e37ed2d8475412993",
   },
+  {
+    tag: "0111_known_morph",
+    when: 1788219579088,
+    hash: "eda4daf7f011d8718c21d3fbd71030f30438863cd1e6ceddd32a5052fb3a14cd",
+  },
 ] as const satisfies readonly CompatibleMigrationHash[];
 
 export const publishedMigrationWhensByTag: ReadonlyMap<string, number> =

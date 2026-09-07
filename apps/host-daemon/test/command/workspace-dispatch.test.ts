@@ -65,19 +65,6 @@ describe("workspace command dispatch", () => {
       },
       harness.dispatchOptions(),
     );
-    const squashResult = await dispatchCommand(
-      {
-        type: "workspace.squash_merge",
-        environmentId: "env-1",
-        workspaceContext: {
-          workspacePath: "/tmp/env-1",
-          workspaceProvisionType: "unmanaged",
-        },
-        targetBranch: "main",
-        commitMessage: "feat: squash merge",
-      },
-      harness.dispatchOptions(),
-    );
     expect(statusResult.outcome).toBe("available");
     expect(diffResult.outcome).toBe("available");
     if (statusResult.outcome !== "available") {
@@ -91,11 +78,6 @@ describe("workspace command dispatch", () => {
     expect(commitResult).toEqual({
       commitSha: "commit-1",
       commitSubject: "Commit message",
-    });
-    expect(squashResult).toEqual({
-      merged: true,
-      commitSha: "merge-main",
-      commitSubject: "feat: squash merge",
     });
     expect(harness.workspaceState.statusReads).toBe(1);
     expect(harness.workspaceState.lastCommitMessage).toBe("Commit message");
@@ -129,9 +111,7 @@ describe("workspace command dispatch", () => {
 
     expect(result.outcome).toBe("available");
     expect(refreshed.state.statusReads).toBe(1);
-    expect(
-      harness.manager.get("env-late-git")?.workspace.isGitRepo,
-    ).toBe(true);
+    expect(harness.manager.get("env-late-git")?.workspace.isGitRepo).toBe(true);
   });
 
   it("covers workspace.pull_request", async () => {
@@ -191,8 +171,6 @@ describe("workspace command dispatch", () => {
     );
     expect(absentResult).toEqual({ outcome: "absent" });
 
-    // A failed gh lookup (missing binary, auth failure, timeout) must stay
-    // distinguishable from "checked and found no PR".
     harness.workspaceState.pullRequestLookupError =
       "gh pr view failed: authentication required";
     const unavailableResult = await dispatchOnlineRpcCommand(

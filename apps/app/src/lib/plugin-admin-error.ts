@@ -1,4 +1,3 @@
-/** Keep server-provided plugin administration failures concise in app toasts. */
 export function pluginAdminErrorMessage(error: unknown): string {
   if (
     error instanceof Error &&

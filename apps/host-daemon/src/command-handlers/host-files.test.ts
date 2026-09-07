@@ -247,7 +247,6 @@ describe("browseHostDirectory", () => {
     await fs.mkdir(path.join(root, ".hidden"));
     await fs.mkdir(path.join(root, "node_modules"));
     await fs.writeFile(path.join(root, "readme.md"), "hi", "utf8");
-    // A nested file must not surface — listing is single-level.
     await fs.writeFile(path.join(root, "alpha", "deep.txt"), "x", "utf8");
     await fs.symlink(path.join(root, "alpha"), path.join(root, "link"));
 
@@ -266,7 +265,6 @@ describe("browseHostDirectory", () => {
         path: path.join(realRoot, "alpha"),
       },
       { kind: "directory", name: "beta", path: path.join(realRoot, "beta") },
-      // Symlink to a directory is classified as a navigable directory.
       { kind: "directory", name: "link", path: path.join(realRoot, "link") },
       {
         kind: "file",
@@ -333,7 +331,6 @@ describe("readHostFile (with ref — git history read)", () => {
     await runGit(["add", "tracked.txt"], { cwd: repoPath });
     await runGit(["commit", "-m", "v1"], { cwd: repoPath });
 
-    // Mutate on disk so HEAD differs from the working tree.
     await fs.writeFile(filePath, "version 2\n", "utf8");
 
     const result = await readHostFile({
@@ -350,7 +347,6 @@ describe("readHostFile (with ref — git history read)", () => {
 
   it("returns empty content when the file does not exist at the ref", async () => {
     const repoPath = await initRepo();
-    // Create initial commit so HEAD exists.
     await fs.writeFile(path.join(repoPath, "seed.txt"), "seed\n", "utf8");
     await runGit(["add", "seed.txt"], { cwd: repoPath });
     await runGit(["commit", "-m", "seed"], { cwd: repoPath });

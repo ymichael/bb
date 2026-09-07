@@ -2,34 +2,28 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MachinePickerUI } from "./MachinePicker";
 
 const HOUR_MS = 60 * 60 * 1000;
 
-const thisMachine: Host = {
+const thisMachine = makeHost({
   id: "host_local",
   name: "MacBook Pro",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: null,
-  maxPermissionMode: "full",
-  lastRejectedProtocolVersion: null,
-  createdAt: 0,
-  updatedAt: 0,
-};
-const studio: Host = {
+});
+const studio = makeHost({
   ...thisMachine,
   id: "host_studio",
   name: "Mac Studio",
-};
-const devVm: Host = {
+});
+const devVm = makeHost({
   ...thisMachine,
   id: "host_vm",
   name: "dev-vm",
   status: "disconnected",
   lastSeenAt: Date.now() - 2 * HOUR_MS,
-};
+});
 
 afterEach(() => {
   cleanup();
@@ -37,12 +31,13 @@ afterEach(() => {
 });
 
 function renderMachineMenu(overrides?: {
+  hosts?: readonly Host[];
   selectedHostId?: string | null;
   onChange?: (hostId: string) => void;
 }) {
   render(
     <MachinePickerUI
-      hosts={[thisMachine, studio, devVm]}
+      hosts={overrides?.hosts ?? [thisMachine, studio, devVm]}
       localDaemonHostId={thisMachine.id}
       primaryHostId={thisMachine.id}
       selectedHostId={overrides?.selectedHostId ?? thisMachine.id}
@@ -56,6 +51,23 @@ function renderMachineMenu(overrides?: {
 }
 
 describe("MachinePickerUI", () => {
+  it("keeps a long machine menu inside a short viewport and scrolls it", () => {
+    renderMachineMenu({
+      hosts: Array.from({ length: 20 }, (_, index) => ({
+        ...thisMachine,
+        id: `host_${index}`,
+        name: `Machine ${index}`,
+      })),
+    });
+
+    const menu = screen.getByRole("menu");
+    expect(menu.className).toContain(
+      "max-h-[min(var(--radix-dropdown-menu-content-available-height),calc(100dvh-0.5rem))]",
+    );
+    expect(menu.className).toContain("overflow-y-auto");
+    expect(menu.className).toContain("overscroll-contain");
+  });
+
   it("names the selected machine in the trigger and badges this machine in the menu", () => {
     renderMachineMenu({ selectedHostId: studio.id });
 

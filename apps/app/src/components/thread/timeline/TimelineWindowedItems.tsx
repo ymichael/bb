@@ -17,15 +17,10 @@ import type { TimelineWindowedItemsProps } from "./TimelineWindowedItemsLoader.j
 
 export type { TimelineWindowedItemRenderState } from "./TimelineWindowedItemsLoader.js";
 
-/** Rich rows retained on each side of the visible range. */
 const TIMELINE_WINDOW_OVERSCAN_ITEMS = 8;
-/** TanStack's scroll-idle boundary also drives rich-content realization. */
 const TIMELINE_WINDOW_IDLE_DELAY_MS = 300;
-/** Bound row-local interaction state retained across a long-lived session. */
 const TIMELINE_WINDOW_MAX_INTERACTION_PINS = 24;
-/** Bound exact heights that survive nested-list unmounts. */
 const TIMELINE_WINDOW_MAX_MEASUREMENTS = 2_000;
-/** Short lists cost less to keep mounted than to virtualize. */
 const TIMELINE_WINDOWING_MIN_ITEM_COUNT = 20;
 
 const EMPTY_KEY_SET: ReadonlySet<string> = new Set();
@@ -74,14 +69,6 @@ function findOwnedWindowKey(
   return null;
 }
 
-/**
- * Timeline adapter around TanStack Virtual.
- *
- * TanStack owns range calculation, dynamic measurement, scroll correction,
- * and iOS momentum safety. This adapter only retains product policy: stable
- * row keys, nested scroll offsets, search/interaction pins, and cheap
- * placeholders during a synthetic or high-velocity traversal.
- */
 export function TimelineWindowedItems({
   enabled,
   alwaysMountedKeys = EMPTY_KEY_SET,
@@ -263,8 +250,6 @@ export function TimelineWindowedItems({
     return () => observer.disconnect();
   }, [configured, resolvedGetScrollElement, updateScrollGeometry]);
 
-  // A nested list's offset can change when its owning row expands or reflows
-  // without resizing the scroll root itself. Re-read after those React commits.
   useLayoutEffect(updateScrollGeometry);
 
   const retainInteractedItem = useCallback(
@@ -302,9 +287,6 @@ export function TimelineWindowedItems({
   const virtualItemsByIndex = new Map(
     virtualizer.getVirtualItems().map((item) => [item.index, item]),
   );
-  // Range calculation starts after the scroll element is measured. Product-
-  // pinned rows must exist in the first commit so navigation search and saved
-  // scroll restoration can find their DOM ids immediately.
   for (const index of forcedIndexes) {
     const item = virtualizer.measurementsCache[index];
     if (item !== undefined) virtualItemsByIndex.set(index, item);

@@ -31,7 +31,6 @@ interface StatusPayload {
     title: string | null;
   }> | null;
   pendingTodos: ThreadTimelinePendingTodos | null;
-  /** Enabled plugins the server did not load (#1915). */
   pluginsNeedingAttention: Array<{ id: string; status: string }>;
 }
 
@@ -66,8 +65,6 @@ export function registerStatusCommand(
 
         let serverAvailable = false;
 
-        // Best-effort: the data dir comes from system config (where theme/,
-        // plugins, and the DB live). Works without any project/thread context.
         try {
           const response = await cliFetch(`${getUrl()}/api/v1/system/config`);
           if (response.ok) {
@@ -77,9 +74,7 @@ export function registerStatusCommand(
               serverAvailable = true;
             }
           }
-        } catch {
-          // Server unreachable — leave dataDir null.
-        }
+        } catch {}
 
         if (serverAvailable) {
           const { plugins } = await createCliBbSdk(getUrl()).plugins.list();
@@ -92,7 +87,6 @@ export function registerStatusCommand(
             .map((p) => ({ id: p.id, status: p.status }));
         }
 
-        // Try to fetch enriched data from the server
         if (context.projectId || context.threadId) {
           const sdk = createCliBbSdk(getUrl());
           const status = await sdk.status.get({
@@ -138,10 +132,8 @@ export function registerStatusCommand(
           }
         }
 
-        // JSON output
         if (outputJson(opts, payload)) return;
 
-        // Human-readable output
         if (serverAvailable && payload.project) {
           console.log(
             `Project: ${payload.project.name} (${payload.project.id})`,

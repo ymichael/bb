@@ -1,5 +1,3 @@
-// Transport-generic tunnel client session: proxies relayed HTTP/WS streams
-// from one live tunnel socket to per-stream loopback origins.
 import {
   request as httpRequest,
   type IncomingMessage,
@@ -37,15 +35,6 @@ interface OriginHttpRequestArgs {
   url: URL;
 }
 
-/**
- * Restore the Content-Length that the relay strips.
- *
- * Node's HTTP client does not use chunked encoding by default for GET, HEAD,
- * and DELETE. Without a Content-Length, it writes such a body with no framing
- * at all. The origin then reads a body-less request and parses the leftover
- * bytes as the next request on that connection, which answers an empty 400.
- * An explicit Content-Length frames the body for every method.
- */
 function frameBodyHeaders(
   headers: Record<string, string>,
   body: Buffer | undefined,
@@ -93,13 +82,11 @@ function roundDurationMs(durationMs: number): number {
   return Math.round(durationMs * 10) / 10;
 }
 
-/** True when this open-ws is the bb app's realtime socket via the bare handle. */
 export function isBareBbRealtimeWs(
   path: string,
   target: string | undefined,
 ): boolean {
   if (target !== undefined) return false;
-  // Spec: path starts with `/ws` and has no target.
   return path === "/ws" || path.startsWith("/ws?") || path.startsWith("/ws/");
 }
 
@@ -112,15 +99,12 @@ interface WsStream {
   socket: NodeWebSocket;
   buffered: Frame[];
   open: boolean;
-  /** Counted toward remoteClients (bare-handle /ws). */
   countsAsRemoteClient: boolean;
 }
 
 interface ResolvedStreamOrigin {
-  /** Fetch/WS base, e.g. `http://127.0.0.1:38886` or a share port. */
   origin: string;
   publicOrigin: string;
-  /** Injected Host for share streams; omitted for bare-handle. */
   host?: string;
 }
 
@@ -131,18 +115,11 @@ export type StreamOriginResult =
 interface TunnelSessionOptions {
   tunnel: NodeWebSocket;
   log: TunnelClientLogger;
-  /**
-   * Resolve a frame's optional `target` (decimal port string) to a local
-   * origin. Called for every open-http / open-ws.
-   */
   resolveOrigin: (target: string | undefined) => StreamOriginResult;
-  /** Fired when remoteClients transitions 0↔nonzero. */
   onRemoteClientsChange?: (remoteClients: number) => void;
-  /** Fired on every relayed frame (any type). */
   onActivity?: (at: number) => void;
 }
 
-/** Proxies one live tunnel socket's frames to per-stream loopback origins. */
 export class TunnelSession {
   private readonly httpStreams = new Map<number, HttpStream>();
   private readonly wsStreams = new Map<number, WsStream>();
@@ -357,8 +334,6 @@ export class TunnelSession {
         );
       }
     } catch (e) {
-      // Unreachable share ports and other fetch failures: clean close-stream,
-      // not a crash. Aborted streams are silent.
       if (!stream.abort.signal.aborted) {
         this.send({
           type: "close-stream",
@@ -446,8 +421,6 @@ export class TunnelSession {
       }
     });
     socket.on("error", (e: Error) => {
-      // Dead share ports surface as socket errors; the subsequent 'close'
-      // sends close-stream. Log only — do not throw.
       this.options.log.warn(`origin ws error on ${frame.path}: ${e.message}`);
     });
   }

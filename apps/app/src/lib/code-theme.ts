@@ -38,7 +38,10 @@ function fileFingerprint(file: JsonObject): string {
   return (hash >>> 0).toString(16).padStart(8, "0");
 }
 
-function versionedThemeName(name: string, file: JsonObject | undefined): string {
+function versionedThemeName(
+  name: string,
+  file: JsonObject | undefined,
+): string {
   if (file === undefined) return name;
   return `${name}:${fileFingerprint(file)}`;
 }
@@ -66,11 +69,6 @@ function subscribeResolvedCodeTheme(callback: () => void): () => void {
   };
 }
 
-/**
- * Publish the resolved dark/light names for every FileDiff / File surface
- * and first-party plugin renderers. Pierre file registration lives next to
- * the worker-pool sync so `@pierre/diffs` stays off the app boot path.
- */
 export function applyResolvedCodeTheme(resolved: ResolvedCodeTheme): void {
   const published = publishableCodeTheme(resolved);
   writeDocumentDataset(published);

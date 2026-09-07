@@ -1,4 +1,3 @@
-/* shadcn/ui-derived */
 import * as React from "react";
 import { cn } from "../../lib/utils";
 import { CONTROL_HOVER_TRANSITION } from "./motion.js";

@@ -72,9 +72,6 @@ describe("keyboard shortcut settings", () => {
     });
   });
 
-  // Recording must agree with matching: macOS reports Option+M as "µ", so the
-  // recorder has to store the physical key or the captured chord would never
-  // fire again.
   it("records an alt chord by its physical key", () => {
     expect(
       appShortcutFromInput(

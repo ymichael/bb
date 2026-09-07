@@ -1,13 +1,6 @@
 import type { ThreadRuntimeDisplayStatus } from "@bb/domain";
 import { assertNever } from "@bb/core-ui";
 
-/**
- * Placeholder copy for the follow-up prompt-box, derived from the thread's
- * runtime display status. Lives in its own module so stories can share the
- * same derivation as production
- * (ThreadDetailPromptArea) — keeping placeholder text from drifting across
- * surfaces.
- */
 export function getFollowUpPromptPlaceholder(
   displayStatus: ThreadRuntimeDisplayStatus,
 ): string {
@@ -24,6 +17,7 @@ export function getFollowUpPromptPlaceholder(
       return "Waiting for host to reconnect...";
     case "error":
       return "Retry by sending a follow-up message";
+    case "pending":
     case "idle":
     case "active":
       return "Ask for a follow-up. @ to mention files, folders, sections, or threads";
@@ -32,7 +26,6 @@ export function getFollowUpPromptPlaceholder(
   }
 }
 
-/** Short copy that remains fully visible in the one-line mobile composer. */
 export function getCompactFollowUpPromptPlaceholder(
   displayStatus: ThreadRuntimeDisplayStatus,
 ): string {
@@ -49,6 +42,7 @@ export function getCompactFollowUpPromptPlaceholder(
       return "Reconnecting...";
     case "error":
       return "Send a follow-up";
+    case "pending":
     case "idle":
     case "active":
       return "Ask a follow-up";

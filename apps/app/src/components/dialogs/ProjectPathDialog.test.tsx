@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Host } from "@bb/domain";
+import { makeHost as host } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProjectPathDialog } from "./ProjectPathDialog";
 
@@ -32,19 +32,6 @@ vi.mock("@/components/dialogs/RemotePathBrowser", () => ({
     </button>
   ),
 }));
-
-function host(overrides: Partial<Host> & Pick<Host, "id" | "name">): Host {
-  return {
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: null,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
-    createdAt: 0,
-    updatedAt: 0,
-    ...overrides,
-  };
-}
 
 const atum = host({ id: "host_atum", name: "atum" });
 const kunst = host({ id: "host_kunst", name: "Kunst" });
@@ -130,9 +117,6 @@ describe("ProjectPathDialog machine selection", () => {
     );
   });
 
-  // With machines listed but none selectable there is no host to resolve a
-  // path against, so the manual-path fallback must not invite a submit that
-  // the picker hook would drop without feedback.
   it("blocks submission when every listed machine is offline", () => {
     const onSubmit = vi.fn();
     render(

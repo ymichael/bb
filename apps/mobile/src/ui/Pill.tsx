@@ -3,7 +3,6 @@ import { View } from "react-native";
 import { cn } from "./cn";
 import { Text } from "./Text";
 
-/* Mirrors packages/shared-ui/src/components/ui/pill.tsx. */
 export type PillVariant = "secondary" | "destructive" | "outline" | "emphasis";
 export type PillSize = "default" | "sm";
 
@@ -30,7 +29,6 @@ export interface PillProps {
   variant: PillVariant;
   size?: PillSize;
   className?: string;
-  /** Strings truncate to one line; nodes render inside the pill as-is. */
   children: ReactNode;
 }
 

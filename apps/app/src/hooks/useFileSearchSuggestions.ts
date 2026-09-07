@@ -30,7 +30,6 @@ interface UseFileSearchSuggestionsArgs {
 interface UseFileSearchSuggestionsResult {
   suggestions: FileSearchSuggestion[];
   isLoading: boolean;
-  /** Workspace/thread-storage path search failed. Only ever true with a query. */
   fileSearchError: boolean;
   isDebouncing: boolean;
   isUnavailable: boolean;

@@ -13,6 +13,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Host } from "@bb/domain";
+import { makeHost as makeHostFixture } from "@bb/test-helpers/domain-fixtures";
 import type { BbDesktopApi, BbDesktopInfo } from "@bb/desktop-contract";
 import {
   HOST_DAEMON_PROTOCOL_VERSION,
@@ -50,8 +51,7 @@ vi.mock("@/components/ui/app-toast", () => ({
 }));
 
 vi.mock("@/lib/sdk", async () => {
-  // The provider roster: each provider's declared logo is its mark.
-  const { makeProviderInfo } = await import("@/test/provider-info-fixture");
+  const { makeProviderInfo } = await import("@bb/test-helpers/domain-fixtures");
   return {
     sdk: {
       system: { version: vi.fn() },
@@ -123,16 +123,12 @@ vi.mock("@/components/provider-cli/provider-cli-install", async (original) => {
 });
 
 function makeHost(overrides: Partial<Host> & Pick<Host, "id" | "name">): Host {
-  return {
-    type: "persistent",
-    status: "connected",
+  return makeHostFixture({
     lastSeenAt: Date.now(),
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
-  };
+  });
 }
 
 function makeUpdateIssue(args: {
@@ -331,17 +327,14 @@ describe("UpdatesSettingsSection", () => {
 
     renderSection();
 
-    // Visiting the page is the request to check — there is no button for it.
     expect(screen.queryByRole("button", { name: /check/i })).toBeNull();
     await waitFor(() => {
       expect(sdk.system.version).toHaveBeenCalledWith({ force: true });
     });
-    // Exactly one: re-renders must not re-fire it, and the store's own
-    // single-flight guard must not be the only thing preventing a loop.
     expect(sdk.system.version).toHaveBeenCalledTimes(1);
   });
 
-  it("aligns Update all with the first machine heading", () => {
+  it("places fleet-wide Update all above every machine section", () => {
     useDesktopUpdateInfoMock.mockReturnValue({
       desktopApi: null,
       desktopInfo: null,
@@ -374,7 +367,7 @@ describe("UpdatesSettingsSection", () => {
     expect(updateAll?.className).toContain("bg-foreground");
     expect(updateAll?.className).toContain("text-background");
     expect(updateAll?.textContent).toBe("Update all");
-    expect(updateAll?.lastElementChild?.getAttribute("data-icon")).toBe(
+    expect(updateAll?.firstElementChild?.getAttribute("data-icon")).toBe(
       "Download",
     );
     const workstationHeading = screen.getByRole("heading", {
@@ -385,10 +378,23 @@ describe("UpdatesSettingsSection", () => {
       "[data-updates-machine]",
     );
     const homelabSection = homelabHeading.closest("[data-updates-machine]");
-    expect(workstationSection?.contains(bulkActions)).toBe(true);
+    const fleetHeading = screen.getByRole("heading", {
+      name: "Machine updates",
+    });
+    const fleetSection = fleetHeading.closest("section");
+    const fleetHeader = fleetSection?.firstElementChild;
+    const fleetBody = fleetSection?.children.item(1);
+    expect(fleetHeader?.contains(bulkActions)).toBe(true);
+    expect(fleetBody?.contains(workstationSection)).toBe(true);
+    expect(fleetBody?.contains(homelabSection)).toBe(true);
+    expect(workstationSection?.contains(bulkActions)).toBe(false);
     expect(homelabSection?.contains(bulkActions)).toBe(false);
     expect(bulkActions.querySelector('[data-icon="Download"]')).not.toBeNull();
-    expect(bulkActions.parentElement?.className).toContain("pr-4");
+    expect(
+      screen.getByText(
+        "Manage bb and provider CLI updates across all machines.",
+      ),
+    ).toBeDefined();
   });
 
   it("keeps the changelog preview behind its experiment", () => {
@@ -451,9 +457,6 @@ The canonical release summary.
 
     renderSection({ showChangelogPreview: true });
 
-    // A settled row is a mark, named only to a screen reader and on hover.
-    // Opening the page runs the check, so there is no freshness stamp: the age
-    // of the claim is always "since you got here".
     await waitFor(() => {
       expect(
         screen
@@ -472,16 +475,8 @@ The canonical release summary.
     expect(screen.queryByText(/ago$/)).toBeNull();
     expect(screen.queryByText(/^In sync$/)).toBeNull();
     expect(screen.queryByText("workstation, studio-mac")).toBeNull();
-    // Opening the page is the request to check, so there is no button to press
-    // and no freshness stamp to justify one.
     expect(screen.queryByRole("button", { name: /check/i })).toBeNull();
-    // Nothing needs updating, so the page drops the "Updates" title entirely
-    // and the settled sentence is the heading.
     expect(screen.queryByRole("heading", { name: "Updates" })).toBeNull();
-    // The changelog is a preview card at the top of the page, not a row
-    // action: it is about the release, not about any one row. It stays
-    // reachable with nothing to install, and every word in it is the
-    // changelog's own.
     expect(
       screen.getByRole("button", { name: /^Open the full bb .* changelog$/ }),
     ).toBeDefined();
@@ -506,7 +501,7 @@ The canonical release summary.
     expect(changelog?.textContent).toContain("The canonical release summary.");
     expect(
       changelog?.querySelector('[data-changelog-version="9.9.9"]'),
-    ).not.toBeNull();
+    ).toBeNull();
     const changelogLabel = changelog?.querySelector("[data-changelog-label]");
     expect(changelogLabel?.className).toContain("rounded-sm");
     expect(changelogLabel?.className).not.toContain("rounded-full");
@@ -528,16 +523,12 @@ The canonical release summary.
     expect(
       changelog?.querySelector("[data-changelog-footer]")?.className,
     ).toContain("text-background");
-    // The footer is one fixed label, so it cannot change length with whatever
-    // release happens to be bundled.
     expect(changelog?.textContent).toContain("Full changelog");
     expect(
       screen.getByRole("button", {
         name: "Open the full bb 9.9.9 changelog",
       }).className,
     ).toContain("font-semibold");
-    // The card carries the whole release, not a fixed three: a truncated list
-    // reads as the complete set unless the reader already knows to doubt it.
     for (const highlight of ["New features", "Fixes"]) {
       expect(
         within(changelog as HTMLElement).getByRole("heading", {
@@ -551,6 +542,12 @@ The canonical release summary.
     const dismissChangelog = screen.getByRole("button", {
       name: "Dismiss bb 9.9.9 changelog preview",
     });
+    const changelogHeader = changelog?.querySelector("[data-changelog-header]");
+    const changelogCard = changelogHeader?.closest("section");
+    expect(changelogPreview?.firstElementChild).toBe(changelogHeader);
+    expect(changelogHeader?.className).not.toContain("border-b");
+    expect(changelogHeader?.contains(dismissChangelog)).toBe(true);
+    expect(changelogCard?.contains(changelogPreview ?? null)).toBe(true);
     expect(dismissChangelog.querySelector('[data-icon="X"]')).not.toBeNull();
     fireEvent.click(
       screen.getByRole("button", {
@@ -626,8 +623,6 @@ The canonical release summary.
       ).toBeDefined();
     });
 
-    // Being up to date is the state every row is expected to be in, so it
-    // carries no indicator: the page spends its dots on exceptions only.
     const settledRows = screen.getAllByText(/^Up to date/);
     expect(
       settledRows.every(
@@ -692,8 +687,6 @@ The canonical release summary.
     expect(
       screen.getByRole("button", { name: "Open homelab settings" }),
     ).toBeDefined();
-    // App and daemon rows use the bb identity mark; machine ownership comes
-    // from the section heading rather than a laptop glyph in the row.
     expect(
       daemonRow?.querySelector('[data-bb-update-role="daemon"]'),
     ).not.toBeNull();
@@ -701,10 +694,6 @@ The canonical release summary.
       document.querySelector('[data-bb-update-role="app"]'),
     ).not.toBeNull();
     expect(daemonRow?.querySelector('[data-icon="Laptop"]')).toBeNull();
-    // An unreachable machine is not pending update work, so the page still
-    // leads with the settled answer instead of going silent.
-    // Every row states its own condition, and a settled one says when that was
-    // established rather than going blank.
     await waitFor(() => {
       expect(screen.getByText(/^Up to date/)).toBeDefined();
     });
@@ -785,7 +774,6 @@ The canonical release summary.
 
     expect(screen.getByText("homelab")).toBeDefined();
     expect(screen.queryByText("1 updating")).toBeNull();
-    // The machine owns the section; the row identifies the daemon explicitly.
     expect(screen.getByText("bb daemon")).toBeDefined();
     expect(screen.getAllByText("In progress").length).toBeGreaterThan(0);
     expect(
@@ -824,8 +812,6 @@ The canonical release summary.
 
     expect(screen.getByText("homelab")).toBeDefined();
     expect(screen.queryByText("1 needs attention")).toBeNull();
-    // Not "stalled": that names an internal step and gives the reader nothing
-    // to weigh. How long it has been waiting is what makes it judgeable.
     expect(
       screen.getByRole("button", { name: "Failed · Retry on homelab now" }),
     ).toBeDefined();
@@ -834,8 +820,6 @@ The canonical release summary.
     expect(
       screen.getByText("bb daemon").closest("[data-resource-row]")?.className,
     ).not.toContain("bg-surface-destructive");
-    // A stalled bb update is outstanding update work, so the page must not
-    // claim everything is settled while that row sits under the claim.
     expect(screen.queryByText(/^Up to date/)).toBeNull();
     const stalledMessage = screen.getByText("Update didn't finish");
     expect(stalledMessage.tagName).toBe("SPAN");
@@ -843,13 +827,10 @@ The canonical release summary.
     expect(stalledMessage.className).toContain("text-destructive");
     expect(stalledMessage.className).not.toContain("rounded");
     expect(stalledMessage.className).not.toContain("font-mono");
-    // The row states the condition once; no banner repeats it above.
     expect(
       screen.getAllByRole("button", { name: /^Failed · Retry on/ }),
     ).toHaveLength(1);
 
-    // One stuck machine already has its own Retry on the row, so a bulk sweep
-    // beside it would be two controls doing the same thing.
     expect(
       screen.queryByRole("button", { name: /Update all .* machines now/ }),
     ).toBeNull();
@@ -879,8 +860,6 @@ The canonical release summary.
               id: "host_1",
               name: "homelab",
               status: "disconnected",
-              // Ahead of the server, so the machine cannot fix itself and no
-              // retry can help — the server is what has to move.
               lastRejectedProtocolVersion: HOST_DAEMON_PROTOCOL_VERSION + 1,
             }),
             canRetryDaemonUpdate: false,
@@ -891,11 +870,7 @@ The canonical release summary.
 
     renderSection();
 
-    // "Offline" alone was true here and useless: it sends the reader to check
-    // a network that is working perfectly. The mark still says offline — that
-    // is the condition — but the row now names the fix beside the machine.
     expect(screen.getByText("Update this app to reconnect")).toBeDefined();
-    // Nothing on this machine can resolve it, so the row offers no action.
     expect(
       screen.queryByRole("button", { name: /Update homelab now/ }),
     ).toBeNull();
@@ -907,8 +882,6 @@ The canonical release summary.
       desktopInfo: null,
       isDesktop: false,
     });
-    // A server protocol bump rejects every enrolled daemon at once, so a
-    // broken rollout stalls the whole fleet rather than one machine.
     const stalled = ["workstation", "studio-mac", "homelab"].map(
       (name, index) =>
         makeHost({
@@ -939,7 +912,6 @@ The canonical release summary.
     for (const host of stalled) {
       expect(retryHostUpdateMutateMock).toHaveBeenCalledWith(host.id);
     }
-    // Each row keeps its own Retry: the sweep is an addition, not a takeover.
     expect(
       screen.getByRole("button", {
         name: "Failed · Retry on studio-mac now",
@@ -970,15 +942,11 @@ The canonical release summary.
     });
     const machineSection = machineHeading.closest("section");
     expect(machineSection).not.toBeNull();
-    // Settings chrome: the same caption weight every other settings section
-    // uses, so Updates does not read as a differently-built page.
     expect(machineHeading.className).toContain("font-semibold");
     expect(machineHeading.className).toContain("text-foreground");
     const machineName = screen.getByText("workstation");
     expect(machineHeading.querySelector('[data-icon="Laptop"]')).not.toBeNull();
     expect(machineName.nextElementSibling).toBeNull();
-    // No summary banner above the rows: with work outstanding the rows are
-    // the statement, and with none the settled card is the only thing shown.
     expect(screen.getByText("bb app")).toBeDefined();
     expect(screen.queryByLabelText(/available update/)).toBeNull();
     expect(screen.getAllByText("workstation")).toHaveLength(1);
@@ -993,8 +961,6 @@ The canonical release summary.
     expect(screen.queryByText("Cursor")).toBeNull();
     expect(screen.queryByText(/^Update available/)).toBeNull();
     expect(screen.queryByText("Choose an update below.")).toBeNull();
-    // The mark is the provider's served logo as a currentColor mask; it
-    // arrives with the roster and takes the row's muted colour.
     const providerIcon = await waitFor(() => {
       const node = document.querySelector('[data-provider-icon="codex"]');
       expect(node).not.toBeNull();
@@ -1002,23 +968,19 @@ The canonical release summary.
       return node;
     });
     expect(
-      providerIcon?.querySelector("[data-provider-logo]")?.getAttribute("class"),
+      providerIcon
+        ?.querySelector("[data-provider-logo]")
+        ?.getAttribute("class"),
     ).toContain("text-muted-foreground");
-    // Icon-only. The accessible name is the state and the verb — the row
-    // already prints the CLI, its versions, and the machine above it. Row and
-    // bulk actions share the same quiet treatment so neither competes with the
-    // update inventory itself.
+    expect(providerIcon?.classList.contains("flex")).toBe(true);
+    expect(providerIcon?.classList.contains("size-3.5")).toBe(true);
     const updateButton = screen.getAllByRole("button", {
       name: "Update available · Update Codex on workstation",
     })[0];
     expect(updateButton.textContent).toBe("");
-    // Drawn by the shared `ResourceActionButton`, so it carries that atom's
-    // muted treatment rather than a colour this page picked for itself.
     expect(updateButton.className).toContain("text-muted-foreground");
     expect(updateButton.className).not.toContain("bg-secondary");
     expect(updateButton.className).not.toContain("bg-foreground");
-    // Versions sit inline after the name rather than flushed to the right
-    // edge, and only the version you'd move to is recoloured and weighted.
     const versionMetadata = machineSection
       ?.querySelector('[data-provider-icon="codex"]')
       ?.closest("[data-resource-row]")
@@ -1026,8 +988,6 @@ The canonical release summary.
     expect(versionMetadata?.className).toContain("text-2xs");
     expect(versionMetadata?.className).not.toContain("text-right");
     expect(versionMetadata?.className).not.toContain("ml-auto");
-    // Not `font-mono`: that stack resolves to one face, so the target
-    // version's heavier weight rendered identically to the version you are on.
     expect(versionMetadata?.className).not.toContain("font-mono");
     const upgrade = versionMetadata?.querySelector(".text-version-upgrade");
     expect(upgrade?.textContent).toBe("1.0.1");
@@ -1130,20 +1090,15 @@ The canonical release summary.
 
     renderSection();
 
-    // The machine heads the group; its rows name only the tool. Repeating the
-    // hostname on every row was the redundancy this grouping removes.
     expect(screen.getAllByText("workstation")).toHaveLength(1);
     expect(screen.getByText("Codex")).toBeDefined();
     expect(screen.getByText("Claude Code")).toBeDefined();
-    // Versions stay per row: the same CLI is routinely a different version on
-    // each host, which is why the rows cannot collapse to one per provider.
     expect(
       document
         .querySelector('[data-updates-machine="host_1"]')
         ?.querySelectorAll("[data-resource-row] [data-version-metadata]")
         .length,
     ).toBe(2);
-    // Each row still drives its own host-scoped install.
     fireEvent.click(
       screen.getAllByRole("button", {
         name: /^Update available · Update/,
@@ -1170,8 +1125,6 @@ The canonical release summary.
 
     renderSection();
 
-    // Every row states its own condition, and a settled one says when that was
-    // established rather than going blank.
     await waitFor(() => {
       expect(screen.getByText(/^Up to date/)).toBeDefined();
     });
@@ -1181,9 +1134,6 @@ The canonical release summary.
   });
 
   it("offers a way out of a failed CLI check", async () => {
-    // The status query is session-static (staleTime Infinity, no refetch on
-    // mount/focus/reconnect), so an errored row used to be permanent for the
-    // life of the page: it named a problem with no affordance to clear it.
     useDesktopUpdateInfoMock.mockReturnValue({
       desktopApi: null,
       desktopInfo: null,
@@ -1208,10 +1158,6 @@ The canonical release summary.
   });
 
   it("keeps error red on the reason and off the recovery", () => {
-    // One rule for the whole page: red states what is wrong, never what fixes
-    // it. A destructive-tinted Retry reads as a second failure rather than a
-    // way out, and it drifted before because three branches each decided tone
-    // for themselves.
     useDesktopUpdateInfoMock.mockReturnValue({
       desktopApi: null,
       desktopInfo: null,
@@ -1253,10 +1199,6 @@ The canonical release summary.
   });
 
   it("leaves never-installed CLIs off an update page", () => {
-    // An update page lists things that have an update. A CLI you never
-    // installed has no version to be behind, so it is a first-install decision
-    // and belongs on Providers — it used to sit here permanently with a
-    // Download control and count toward "Update all".
     useDesktopUpdateInfoMock.mockReturnValue({
       desktopApi: null,
       desktopInfo: null,
@@ -1316,8 +1258,6 @@ The canonical release summary.
 
     expect(screen.queryByRole("button", { name: /Update all/ })).toBeNull();
     expect(screen.queryByText("2 updates in progress")).toBeNull();
-    // Running and queued are the same spinner: one is not a state the reader
-    // can act on differently from the other.
     expect(
       document.querySelectorAll(
         '[data-updates-machine="host_1"] [data-resource-row] [data-update-state="in-progress"]',
@@ -1413,24 +1353,18 @@ The canonical release summary.
     renderSection();
     expect(screen.getByText("npx bb-app@latest")).toBeDefined();
     expect(screen.getByText("0.0.6")).toBeDefined();
-    // Icon-only row action: the accessible name carries what the label used to.
     const copyButton = screen.getByRole("button", {
       name: "Update available · Copy the upgrade command",
     });
     expect(copyButton.textContent).toBe("");
-    // Row actions are plain regardless of domain.
     expect(copyButton.className).not.toContain("bg-secondary");
     const updateSurface = document.querySelector(
       '[data-updates-machine="host_primary"]',
     );
-    // The house settings card, with its rows on the house divider — the same
-    // chrome every other section of Settings is drawn in.
     expect(updateSurface?.querySelector(".bg-card")).not.toBeNull();
     expect(updateSurface?.querySelector(".divide-y")).not.toBeNull();
     expect(screen.queryByText(/^Update available/)).toBeNull();
 
-    // Opening the page is the check. Nothing to click, and the forced refresh
-    // still bypasses the cached version.
     await waitFor(() => {
       expect(sdk.system.version).toHaveBeenCalledWith({ force: true });
     });
@@ -1472,8 +1406,6 @@ The canonical release summary.
     fireEvent.click(relaunch);
     expect(installUpdate).toHaveBeenCalledOnce();
 
-    // On a desktop shell the load-time check goes through the bridge, not the
-    // server's version endpoint.
     await waitFor(() => {
       expect(checkForUpdates).toHaveBeenCalledTimes(1);
     });
@@ -1523,7 +1455,6 @@ The canonical release summary.
     useUpdateInventoryMock.mockReturnValue(makeInventory({ desktopInfo }));
 
     renderSection();
-    // The page already checked once on load; Retry is a second, explicit run.
     await waitFor(() => {
       expect(checkForUpdates).toHaveBeenCalledTimes(1);
     });
@@ -1561,13 +1492,13 @@ The canonical release summary.
     expect(useProviderCliInstallRunnerMock).toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "laptop" })).toBeDefined();
     expect(screen.getByRole("heading", { name: "homelab" })).toBeDefined();
-    // The count stays in the accessible name while the visible control uses
-    // the established update glyph and the concise requested label.
     const updateAll = screen.getByRole("button", {
       name: "Update all 2 CLI tools",
     });
     expect(updateAll.textContent).toBe("Update all");
-    expect(updateAll.querySelector('[data-icon="Download"]')).not.toBeNull();
+    expect(updateAll.firstElementChild?.getAttribute("data-icon")).toBe(
+      "Download",
+    );
 
     fireEvent.click(updateAll);
     expect(startInstallMock).toHaveBeenCalledTimes(2);
@@ -1599,8 +1530,6 @@ The canonical release summary.
 
     renderSection();
 
-    // Where to do it, not the category: bb has no installer it can drive for
-    // this install, so the next step is a terminal.
     expect(screen.getAllByText("Update in terminal").length).toBeGreaterThan(0);
     expect(screen.queryByText("1 update needs manual action")).toBeNull();
     expect(screen.queryByRole("button", { name: "Update" })).toBeNull();

@@ -1,21 +1,8 @@
-/**
- * `IconName` → SF Symbol. `Icon.ios.tsx` renders a mapped name through
- * expo-image's `sf:` source and falls back to the Hugeicons glyph for
- * unmapped names; header/menu/tab items (`Stack.Toolbar.*`, `Link.MenuAction`,
- * `MenuView`) take a symbol name directly, so they reuse the same table via
- * `sfSymbolFor`. Pure data: no React Native imports, so it is testable under
- * node (`sf-symbol-map.test.ts`).
- *
- * Every name maps to an outline symbol at most as new as SF Symbols 4
- * (iOS 16, the app's deployment target); the test guards both. Brand marks
- * (Discord, Github) have no SF Symbol and stay on Hugeicons.
- */
 import type { SFSymbol } from "sf-symbols-typescript";
 import type { IconName } from "./icon-map";
 
 export type { SFSymbol };
 
-/** Symbol weight names → the `fontWeight` values expo-image understands. */
 export const SF_SYMBOL_WEIGHTS = {
   ultralight: "100",
   thin: "200",
@@ -30,7 +17,6 @@ export const SF_SYMBOL_WEIGHTS = {
 
 export type SFSymbolWeight = keyof typeof SF_SYMBOL_WEIGHTS;
 
-/** Default symbol weight: optically closest to the 1.75 Hugeicons stroke. */
 export const SF_SYMBOL_WEIGHT: SFSymbolWeight = "medium";
 
 export const SF_SYMBOL_MAP = {
@@ -51,6 +37,7 @@ export const SF_SYMBOL_MAP = {
   ArrowTurnForward: "arrow.uturn.forward",
   ArrowUpRight: "arrow.up.right",
   Beaker: "testtube.2",
+  BellDot: "bell.badge",
   Bot: "cpu",
   Browser: "safari",
   Brain: "brain",
@@ -63,7 +50,6 @@ export const SF_SYMBOL_MAP = {
   ChevronLeft: "chevron.left",
   ChevronRight: "chevron.right",
   ChevronUp: "chevron.up",
-  // Diff header "expand all / collapse all" toggle.
   ChevronsDown: "rectangle.expand.vertical",
   ChevronsUp: "rectangle.compress.vertical",
   Circle: "circle",
@@ -117,6 +103,7 @@ export const SF_SYMBOL_MAP = {
   Info: "info.circle",
   Laptop: "laptopcomputer",
   Layers: "square.3.layers.3d",
+  Limitation: "hand.raised",
   ListView: "list.bullet",
   SectionAdd: "text.badge.plus",
   ListTodo: "checklist",
@@ -146,7 +133,6 @@ export const SF_SYMBOL_MAP = {
   Plus: "plus",
   Puzzle: "puzzlepiece.extension",
   Repeat: "repeat",
-  // Almost every use is "refresh / retry", so clockwise (not counterclockwise).
   RotateCcw: "arrow.clockwise",
   Rows2: "rectangle.split.1x2",
   Search: "magnifyingglass",
@@ -181,7 +167,6 @@ export const SF_SYMBOL_MAP = {
 
 const SYMBOL_BY_NAME: Partial<Record<IconName, SFSymbol>> = SF_SYMBOL_MAP;
 
-/** The SF Symbol for an icon name, or `undefined` for brand marks. */
 export function sfSymbolFor(name: IconName): SFSymbol | undefined {
   return SYMBOL_BY_NAME[name];
 }

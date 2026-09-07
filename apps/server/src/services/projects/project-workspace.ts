@@ -44,12 +44,6 @@ function resolveProjectSourceOnHost(
   return { hostId: source.hostId, path: source.path };
 }
 
-/**
- * Resolve a concrete project workspace for files, paths, and file content.
- * An environment selects its own host and workspace path; otherwise an
- * explicit host selects that host's project source; omission intentionally
- * falls back to the primary host's project source.
- */
 export function resolveProjectWorkspaceTarget(
   deps: Pick<AppDeps, "config" | "db" | "hub">,
   args: ResolveProjectWorkspaceArgs,
@@ -94,11 +88,6 @@ export interface ProjectCommandWorkspace {
   cwd: string | null;
 }
 
-/**
- * Resolve command discovery on the same selected host policy as concrete
- * project workspace reads. Commands may still discover user-home entries when
- * a selected host has no ready workspace, so `cwd` can be null.
- */
 export function resolveProjectCommandWorkspace(
   deps: Pick<AppDeps, "config" | "db" | "hub">,
   args: ResolveProjectWorkspaceArgs,

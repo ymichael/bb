@@ -17,12 +17,6 @@ type MainFailureHandler = (error: unknown) => void;
 
 const entrypointDir = dirname(fileURLToPath(import.meta.url));
 
-/**
- * In a packaged build the daemon bundle sits beside the provider bridge
- * worker (the bootstrap every bridge artifact runs under), so their directory
- * is the entrypoint directory; running from source it is not, and the
- * bootstrap resolves from its TypeScript source instead.
- */
 function resolveEntrypointBridgeBundleDir(): string | undefined {
   return existsSync(join(entrypointDir, "bb-provider-bridge-worker.mjs"))
     ? entrypointDir
@@ -43,9 +37,7 @@ function reportStartupFailure(args: ReportStartupFailureArgs): void {
       processName: "host-daemon",
       error: args.error,
     });
-  } catch {
-    // Keep the original startup failure visible even if diagnostic logging fails.
-  }
+  } catch {}
 
   const message =
     args.error instanceof Error
@@ -57,7 +49,6 @@ function reportStartupFailure(args: ReportStartupFailureArgs): void {
 
 async function runHostDaemonEntrypoint(): Promise<void> {
   const hostDaemonEntrypointConfig = loadHostDaemonEntrypointConfig();
-  // Keep this import after diagnostics so ESM evaluation failures are reported.
   const hostDaemonModule = await import("./start-host-daemon.js");
   const daemon = await hostDaemonModule.startHostDaemon({
     bbExecutableDirectory: hostDaemonEntrypointConfig.BB_CLI_DIR,

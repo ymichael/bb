@@ -1,19 +1,3 @@
-/**
- * Maps a validated plugin provider declaration (`bb.providers.register`) onto
- * the registry's shapes: the client-facing `ProviderInfo` — the ONE client
- * shape every provider projects to — and the backend-only
- * `ProviderServerCapabilities`. Declarations are the only source of provider
- * metadata, so every field a consumer reads must be declarable.
- *
- * Every declared fact a registry consumer reads lands in one of the two
- * shapes — client-facing facts on `ProviderInfo`, backend-only ones on
- * `ProviderServerCapabilities`. The per-command options hook and the
- * cold-cache fallback models are kept on the registration itself: the hook
- * is code, not data, and the fallback list is served by the model-list
- * route, never by clients reading the info. The raw declaration is NOT kept:
- * a registration that carries it invites consumers to read around the
- * projection, and then there are two answers to every capability question.
- */
 import {
   EMPTY_PROVIDER_NATIVE_ROOTS,
   isNamespacedGlyph,
@@ -38,12 +22,6 @@ import type {
   ProviderServerCapabilities,
 } from "./provider-registry.js";
 
-/**
- * Picker labels for the coarse reasoning ladder. A declaration that gives
- * only the ladder (ids) gets these labels; one that declares
- * `reasoningLevels` supplies its own. The same labels the app
- * rendered from its own table before providers declared them.
- */
 const REASONING_LEVEL_LABELS: Readonly<Record<string, string>> = {
   none: "None",
   low: "Low",
@@ -55,11 +33,6 @@ const REASONING_LEVEL_LABELS: Readonly<Record<string, string>> = {
   ultra: "Ultra",
 };
 
-/**
- * The two service tiers BB's execution options carry today. A provider that
- * declares `supportsServiceTier` without `serviceTiers` gets
- * this pair, which is what the fast-mode toggle offers.
- */
 const DEFAULT_SERVICE_TIERS: readonly ProviderOptionDescriptor[] = [
   { id: "default", label: "Default" },
   { id: "fast", label: "Fast" },
@@ -116,7 +89,6 @@ function projectExtensionKinds(
   return kinds;
 }
 
-/** The declared cold-cache fallback list in the model-list wire shape. */
 export function projectFallbackModels(
   declaration: PluginProviderDeclaration,
 ): AvailableModel[] {
@@ -137,17 +109,23 @@ export function projectFallbackModels(
   }));
 }
 
+function buildProviderLogoUrl(
+  providerId: string,
+  iconHash: string | null,
+): string {
+  const path = `/api/v1/system/providers/${providerId}/logo`;
+  return iconHash === null ? path : `${path}?h=${iconHash}`;
+}
+
 export function buildPluginProviderRegistration(args: {
   available: boolean;
   pluginId: string;
   declaration: NormalizedPluginProviderDeclaration;
-  /** The owning plugin's current non-secret settings, read per command. */
+  iconHash: string | null;
   readSettings: () => PluginProviderOptionsContext["settings"];
 }): Omit<ProviderRegistration, "pluginId" | "iconNames"> {
   const { declaration } = args;
   const { capabilities } = declaration;
-  // The declaration and `ProviderInfo` share one noun set, so these carry over
-  // by name; only `fork` still needs a projection (below).
   const {
     supportsThreadArchive,
     supportsThreadRename,
@@ -156,9 +134,6 @@ export function buildPluginProviderRegistration(args: {
     permissionModes,
   } = capabilities;
 
-  // Skills slash-command typeahead is universal (BB injects skills into every
-  // provider), so it always leads; declared actions carry the composer's own
-  // fixed command syntax, identical to the core catalog entries.
   const composerActions: ProviderComposerAction[] = [
     { kind: "skills", trigger: "/" },
   ];
@@ -184,23 +159,14 @@ export function buildPluginProviderRegistration(args: {
     id: declaration.id,
     pluginId: args.pluginId,
     displayName: declaration.displayName,
-    ...(declaration.family === undefined
-      ? {}
-      : { family: declaration.family }),
+    ...(declaration.family === undefined ? {} : { family: declaration.family }),
     available: args.available,
     maintenance: { ...declaration.maintenance },
-    // Served by the provider-logo route from the icon byte snapshot on the
-    // registration (see registerProvider in plugin-runtime.ts). The raw
-    // plugin-assets route serves only branding variants and built bundles, so
-    // declared icon paths are never exposed as URLs directly. A plugin
-    // declared icon (`"<pluginId>/<name>"`) is snapshotted the same way and
-    // projects to the same URL. A named host glyph has no bytes, so it gets
-    // no URL and travels by name instead.
     logoUrl:
       declaration.icon !== undefined &&
       (isPluginOwnedIconPath(declaration.icon) ||
         isNamespacedGlyph(declaration.icon))
-        ? `/api/v1/system/providers/${declaration.id}/logo`
+        ? buildProviderLogoUrl(declaration.id, args.iconHash)
         : null,
     ...(declaration.icon !== undefined &&
     !isPluginOwnedIconPath(declaration.icon) &&
@@ -213,15 +179,8 @@ export function buildPluginProviderRegistration(args: {
       supportsServiceTier,
       supportsNativeUserQuestion,
       permissionModes: [...permissionModes],
-      // The one projection left: the declared fork ladder becomes the two
-      // booleans clients read. Any cloning at all enables the fork affordance,
-      // while rewind (edit-past-message) needs a session recreated at an
-      // earlier point.
       supportsFork: capabilities.fork !== "none",
       supportsSessionRewind: capabilities.fork === "checkpoint",
-      // Filled once, at the plugin boundary: the validator normalizes every
-      // declaration before it reaches here, so a second default would only
-      // hide a declaration that skipped it.
       modelCatalogScope: declaration.models.scope,
     },
     composerActions,
@@ -258,13 +217,10 @@ export function buildPluginProviderRegistration(args: {
     info,
     serverCapabilities,
     bridgeOptions: declaration.experimental_bridgeOptions ?? {},
-    // The validators themselves, for the ingest route; clients learn only
-    // which kinds exist (`ProviderInfo.extensionKinds`, projected by WS2a).
     extensionKinds: declaration.extensionKinds ?? {},
     visibility: declaration.experimental_visibility ?? "always",
     fallbackModels: projectFallbackModels(declaration),
     envPassthrough: declaration.env?.passthrough ?? [],
-    // Normalized by the declaration validator; absent means no roots.
     nativeSkillRoots:
       declaration.experimental_nativeSkillRoots ?? EMPTY_PROVIDER_NATIVE_ROOTS,
     nativeCommandRoots:

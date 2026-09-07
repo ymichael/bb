@@ -32,9 +32,6 @@ afterEach(async () => {
 
 describe("builtin skills copy", () => {
   it("copies the bundled skills so the dist layout resolves beside the module", async () => {
-    // Mirrors scripts/copy-builtin-skills.ts plus the bundled server's
-    // module-relative resolution: copy into <moduleDir>/builtin-skills, then
-    // resolve from <moduleDir>.
     const moduleDir = await makeTempDir();
     const targetPath = path.join(moduleDir, BUILTIN_SKILLS_DIRECTORY_NAME);
 

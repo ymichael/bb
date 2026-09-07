@@ -450,8 +450,6 @@ describe("task thread detach", () => {
       taskId: task.id,
       threadId: "thr_live",
     });
-    // The same thread attached to a second task must survive a detach from
-    // the first one.
     await harness.callRpc("taskThreadsAttach", {
       taskId: otherTask.id,
       threadId: "thr_dead",
@@ -481,7 +479,6 @@ describe("task thread detach", () => {
       },
     ]);
 
-    // Detaching a thread that is not attached is an error, not a no-op.
     await expect(
       harness.callRpc("taskThreadsDetach", {
         taskId: task.id,

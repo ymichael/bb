@@ -7,7 +7,6 @@ import {
   TooltipTrigger,
 } from "@bb/shared-ui/tooltip";
 
-/** Shared passive provenance badge for resources managed by bb. */
 export function ProvenancePill({
   label,
   tooltip,

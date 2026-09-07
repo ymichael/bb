@@ -4,6 +4,9 @@ import { threadEventSchema, threadEventTypeSchema } from "./provider-event.js";
 import {
   systemMessageKindSchema,
   systemMessageSubjectSchema,
+} from "./system-message.js";
+import {
+  refineTurnRequestRetryMarker,
   turnRequestEventDataSchema,
   turnRequestTargetSchema,
 } from "./thread-events.js";
@@ -88,26 +91,14 @@ const LEGACY_TURN_REQUEST_TARGET = {
   kind: "new-turn",
 } satisfies TurnRequestTarget;
 
-// Read path: `senderThreadId` is a new field, so every pre-change persisted
-// `client/turn/requested` row lacks it — defaulting to null here lets old
-// rows load without a backfill migration. `initiator` was already always
-// written by every call site (the prior `.optional()` was schema slack),
-// so it does not need a default.
-const storedTurnRequestEventDataSchema = turnRequestEventDataSchema.extend({
-  senderThreadId: z.string().nullable().default(null),
-  target: turnRequestTargetSchema.default(LEGACY_TURN_REQUEST_TARGET),
-  // Family-B taxonomy fields are new, so pre-change rows lack them. Default to
-  // the generic `unlabeled` / no-subject shape here so old rows load without a
-  // backfill migration — same pattern as `senderThreadId`.
-  systemMessageKind: systemMessageKindSchema.default("unlabeled"),
-  systemMessageSubject: systemMessageSubjectSchema.nullable().default(null),
-});
-
-function parseStoredTurnRequestEventData(
-  args: StoredThreadEventParseArgs,
-): StoredThreadEventParseArgs["data"] {
-  return storedTurnRequestEventDataSchema.parse(args.data);
-}
+const storedTurnRequestEventDataSchema = turnRequestEventDataSchema
+  .extend({
+    senderThreadId: z.string().nullable().default(null),
+    target: turnRequestTargetSchema.default(LEGACY_TURN_REQUEST_TARGET),
+    systemMessageKind: systemMessageKindSchema.default("unlabeled"),
+    systemMessageSubject: systemMessageSubjectSchema.nullable().default(null),
+  })
+  .superRefine(refineTurnRequestRetryMarker);
 
 function toStoredThreadEventData<TEvent extends ThreadEvent>(
   event: TEvent,
@@ -131,15 +122,12 @@ export function parseStoredThreadEvent(
     throw new Error("Stored thread event is missing valid scope");
   }
   const scope = scopeResult.data;
-  // Read-time conversion: a row persisted under a vocabulary that has since
-  // moved (codex goals → the plugin's extension state) decodes into its
-  // current shape here, so no consumer ever sees the legacy type.
   const stored = convertLegacyStoredThreadEvent(
     { type: args.type, data: args.data },
     { turnId: getThreadEventScopeTurnId(scope) ?? null },
   );
   const eventData = storedTurnRequestTypeSet.has(stored.type)
-    ? parseStoredTurnRequestEventData({ ...args, data: stored.data })
+    ? storedTurnRequestEventDataSchema.parse(stored.data)
     : stored.data;
 
   return threadEventSchema.parse({

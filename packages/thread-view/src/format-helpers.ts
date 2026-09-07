@@ -1,4 +1,3 @@
-/** Get the effective start time of a message, falling back to createdAt. */
 export function getMessageStartedAt(message: {
   createdAt: number;
   startedAt?: number;
@@ -79,11 +78,6 @@ export function formatDiffCount(value: number): string {
   return DIFF_COUNT_FORMATTER.format(value);
 }
 
-/**
- * Renders an added/removed line tally as plain text (e.g. `+1,000 -42`).
- * With `hideZero`, sides equal to 0 are dropped — `{ added: 0, removed: 2 }`
- * becomes `"-2"` and `{ added: 0, removed: 0 }` becomes `""`.
- */
 export function formatDiffStatsText(input: {
   added: number;
   removed: number;

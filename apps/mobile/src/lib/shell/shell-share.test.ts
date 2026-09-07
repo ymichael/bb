@@ -3,8 +3,6 @@ import { buildBridgeSharePayload } from "./shell-share";
 
 describe("buildBridgeSharePayload", () => {
   it("gives iOS a real url item for a bare link", () => {
-    // Messages and Notes render a `url` item as a link; a `message` string
-    // with the same content arrives as plain text.
     expect(
       buildBridgeSharePayload("ios", {
         title: "Fix the flaky test",

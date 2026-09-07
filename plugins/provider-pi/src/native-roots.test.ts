@@ -20,7 +20,6 @@ function writeSettings(agentDir: string, settings: unknown): void {
   writeFileSync(join(agentDir, "settings.json"), JSON.stringify(settings));
 }
 
-/** The answer's skill paths, after the contract parsed it as the server would. */
 async function resolvedSkillPaths(
   env: Readonly<Record<string, string | undefined>>,
 ): Promise<string[]> {
@@ -28,7 +27,11 @@ async function resolvedSkillPaths(
   const parsed = experimental_nativeRootsResolveOutputSchema.parse(answer);
   expect(parsed.commands).toEqual([]);
   for (const root of parsed.skills) {
-    expect(root).toMatchObject({ origin: "user", shape: "skills", namePrefix: "" });
+    expect(root).toMatchObject({
+      origin: "user",
+      shape: "skills",
+      namePrefix: "",
+    });
   }
   return parsed.skills.map((root) => root.path);
 }
@@ -56,8 +59,6 @@ it("resolves plain skill entries against home, the agent dir, or as given, and d
       "/opt/team-skills",
     ],
   });
-  // The trailing slash is stripped, not fatal; a `.md` file entry (SKILL.md
-  // or any other single-skill file) has no directory root and is dropped.
   await expect(resolvedSkillPaths({})).resolves.toEqual(
     [
       "/opt/team-skills",
@@ -70,18 +71,23 @@ it("resolves plain skill entries against home, the agent dir, or as given, and d
 it("adds the moved agent dir's skills directory when PI_CODING_AGENT_DIR points elsewhere", async () => {
   const agentDir = join(homeDir, "custom-agent");
   writeSettings(agentDir, { skills: [] });
-  await expect(resolvedSkillPaths({ PI_CODING_AGENT_DIR: agentDir })).resolves.toEqual([
-    join(agentDir, "skills"),
-  ]);
-  // `~`-relative override, the way pi itself reads it.
-  await expect(resolvedSkillPaths({ PI_CODING_AGENT_DIR: "~/custom-agent" })).resolves.toEqual([
-    join(agentDir, "skills"),
-  ]);
+  await expect(
+    resolvedSkillPaths({ PI_CODING_AGENT_DIR: agentDir }),
+  ).resolves.toEqual([join(agentDir, "skills")]);
+  await expect(
+    resolvedSkillPaths({ PI_CODING_AGENT_DIR: "~/custom-agent" }),
+  ).resolves.toEqual([join(agentDir, "skills")]);
 });
 
 it("never answers a root the contract would refuse", async () => {
   writeSettings(join(homeDir, ".pi", "agent"), {
-    skills: ["/opt/../etc/skills", "/opt//skills", "relative/../escape", "/srv/skills/", "~/team-skills//"],
+    skills: [
+      "/opt/../etc/skills",
+      "/opt//skills",
+      "relative/../escape",
+      "/srv/skills/",
+      "~/team-skills//",
+    ],
   });
   await expect(resolvedSkillPaths({})).resolves.toEqual(
     [

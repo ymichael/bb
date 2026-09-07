@@ -1,13 +1,3 @@
-/**
- * The per-agent resolvers against fixture homes and workspaces: the cases the
- * host daemon's own discovery tests covered before this knowledge moved into
- * the plugin (env-moved config directories, config-file skill entries and
- * their origin, grok's compat switches and plugins, the Claude plugins omp
- * and grok read through the SDK's registry reader). Every answer is also run
- * through the host contract's output schema, because that is what core does
- * before it scans anything.
- */
-
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -55,7 +45,6 @@ function argsFor(
   return { cwd: workspace, homeDir, env };
 }
 
-/** Resolve, and prove the contract accepts the answer. */
 async function resolveSkills(
   resolver: AcpNativeRootsResolver,
   args: AcpNativeRootsResolverArgs,
@@ -140,8 +129,6 @@ describe("omp", () => {
     );
     expect(paths).toContain(home("pi-agent", "skills"));
     expect(paths).toContain(path.join(tempRoot, "codex-home", "skills"));
-    // Without a profile (or with "default"), PI_CODING_AGENT_DIR moves BOTH
-    // the omp agent dir and the pi agent dir.
     const fallback = await resolveSkills(
       resolveOmpNativeRoots,
       argsFor({ OMP_PROFILE: "default", PI_CODING_AGENT_DIR: "~/pi-agent" }),
@@ -184,11 +171,9 @@ describe("omp", () => {
       `skills:\n  customDirectories:\n    - ${skillRoot}\n`,
     );
     const roots = await resolveSkills(resolveOmpNativeRoots, argsFor());
-    // The project config replaces the user list rather than adding to it.
     expect(byPath(roots, path.join(tempRoot, "user-skills"))).toBeUndefined();
     expect(byPath(roots, skillRoot)).toMatchObject({ origin: "project" });
 
-    // Without a workspace the project config is never read.
     const userOnly = await resolveSkills(
       resolveOmpNativeRoots,
       argsFor({}, null),
@@ -211,7 +196,6 @@ describe("omp", () => {
       }),
     );
     expect(byPath(roots, path.join(tempRoot, "base", "team"))).toMatchObject({
-      // The extra config lives outside the repository: user origin.
       origin: "user",
     });
   });
@@ -251,7 +235,6 @@ describe("omp", () => {
       namePrefix: "tools:",
       shape: "skills",
     });
-    // Skills only: a plugin's commands are Claude's, not omp's.
     expect(roots.some((root) => root.path.includes("commands"))).toBe(false);
   });
 });
@@ -276,7 +259,6 @@ describe("hermes", () => {
         recursive: true,
         shape: "skills",
       },
-      // A relative entry is relative to the hermes directory.
       {
         path: home(".hermes", "shared"),
         origin: "user",
@@ -430,7 +412,6 @@ describe("grok", () => {
       recursive: true,
       shape: "skills",
     });
-    // A relative entry is relative to the workspace.
     expect(byPath(roots, projectSkills)).toMatchObject({
       origin: "project",
       recursive: true,
@@ -438,7 +419,6 @@ describe("grok", () => {
     expect(byPath(roots, home("one", "SKILL.md"))).toMatchObject({
       shape: "skill-file",
     });
-    // Without a workspace the absolute entries still count, as user roots.
     const userOnly = await resolveSkills(
       resolveGrokNativeRoots,
       argsFor({}, null),
@@ -457,7 +437,6 @@ describe("grok", () => {
     for (const name of ["release-tools", "unlisted"]) {
       await writeSkill(home(".grok", "plugins", name, "skills"), "release");
     }
-    // The manifest's name, not the directory's, is what the lists match.
     await writeFileEnsuringDir(
       home(".claude", "plugins", "renamed-dir", "plugin.json"),
       JSON.stringify({
@@ -511,10 +490,6 @@ describe("grok", () => {
   });
 
   it("reads a manifest that mistypes a Claude manifest field as absent", async () => {
-    // A grok manifest is the Claude manifest's shape, `defaultEnabled` and
-    // `commands` included: one that mistypes either fails the parse and the
-    // plugin reads as unmanifested — named after its directory, its `skills/`
-    // listed — exactly as the Claude plugin reader answers the same file.
     await writeFileEnsuringDir(
       home(".grok", "config.toml"),
       '[plugins]\nenabled = ["renamed", "dir-name", "flagged", "flag-dir"]\n',
@@ -598,7 +573,6 @@ describe("grok", () => {
       origin: "user",
       namePrefix: "registered:",
     });
-    // A plugin in an ancestor's `.grok/plugins` is a project plugin.
     expect(
       byPath(
         roots,

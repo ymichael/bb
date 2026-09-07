@@ -1,11 +1,3 @@
-/**
- * `@bb/provider-parity`: the parity harness wired to the real delta assembler
- * and the real timeline projection, plus the per-cell runner the CLI and the
- * self-suite share. The harness itself lives in
- * `@bb/provider-bridge-protocol/testing/parity`; this package exists because
- * the projection (`@bb/thread-view`) depends on the protocol package and
- * cannot be imported from it, and because the CLI needs a home of its own.
- */
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -47,7 +39,6 @@ export {
   type RecordedCell,
 } from "@bb/provider-bridge-protocol/testing/parity";
 
-/** The committed fixtures, relative to this checkout. */
 export const RECORDINGS_ROOT = resolve(
   dirname(fileURLToPath(import.meta.url)),
   "../../provider-bridge-protocol/recordings",
@@ -56,23 +47,20 @@ export const RECORDINGS_ROOT = resolve(
 export const ALLOWLIST_PATH = join(RECORDINGS_ROOT, "parity-allowlist.json");
 export const ROW_COUNTS_PATH = join(RECORDINGS_ROOT, "row-counts.json");
 
-/** The runtime adapter's exact translation, coalescing disabled (see
- * `bridge-delta-assembly.ts`): one event per delta, deterministic ids. */
 export const createParityAssembler: CreateParityAssembler = (providerId) => {
   const collector = createBridgeDeltaEventCollector(providerId);
   return { assembleMessage: (message) => collector.assembleMessage(message) };
 };
 
 const ROW_BASE_CREATED_AT = 1_700_000_000_000;
-const excludedEventTypes = new Set<ThreadEvent["type"]>(THREAD_TIMELINE_EXCLUDED_EVENT_TYPES);
+const excludedEventTypes = new Set<ThreadEvent["type"]>(
+  THREAD_TIMELINE_EXCLUDED_EVENT_TYPES,
+);
 
-/**
- * Mirror `apps/server/src/services/threads/timeline.ts`: the latest page of
- * the thread, nested rows included so every projected row is compared, with
- * the noise events the server's event query excludes and the same summary
- * compaction pass. Metadata is synthesized in stream order.
- */
-export const projectParityRows: ParityRowProjector = ({ events, providerId }) => {
+export const projectParityRows: ParityRowProjector = ({
+  events,
+  providerId,
+}) => {
   const withMeta: ThreadEventWithMeta[] = events
     .map((event, index) => ({
       event,
@@ -107,7 +95,9 @@ export const projectParityRows: ParityRowProjector = ({ events, providerId }) =>
   return JSON.parse(JSON.stringify(timeline.rows)) as unknown[];
 };
 
-export function readAllowlist(path: string = ALLOWLIST_PATH): ParityAllowlistEntry[] {
+export function readAllowlist(
+  path: string = ALLOWLIST_PATH,
+): ParityAllowlistEntry[] {
   if (!existsSync(path)) {
     return [];
   }
@@ -124,13 +114,21 @@ export interface CellInputs {
   grammarViolations: ParityGrammarViolation[];
 }
 
-/** The recording's own view: the recorded bridge output, no bridge in the loop. */
-export function recordedCellInputs(cell: RecordedCell): CellInputs & { invalidDeltas: string[] } {
+export function recordedCellInputs(
+  cell: RecordedCell,
+): CellInputs & { invalidDeltas: string[] } {
   const recording = withCurrentBridgeLane(readBridgeRecording(cell.dir));
-  const assembled = assembleRecordedEvents(recording, createParityAssembler, cell.provider);
+  const assembled = assembleRecordedEvents(
+    recording,
+    createParityAssembler,
+    cell.provider,
+  );
   return {
     ...assembled,
-    rows: projectParityRows({ events: assembled.events, providerId: cell.provider }),
+    rows: projectParityRows({
+      events: assembled.events,
+      providerId: cell.provider,
+    }),
   };
 }
 
@@ -138,9 +136,7 @@ export interface ReplayCellOptions {
   checkoutRoot: string;
   timeoutMs?: number;
   onStderr?: (text: string) => void;
-  /** See `ReplayRecordingOptions.planFromCurrentLane`. */
   planFromCurrentLane?: boolean;
-  /** The leg's own assembler and projector (see `leg.ts`); defaults to this checkout's. */
   createAssembler?: CreateParityAssembler;
   projectRows?: ParityRowProjector;
 }
@@ -155,18 +151,17 @@ export function isReplayable(providerId: string): boolean {
   }
 }
 
-/**
- * The first-party bridge module a leg would launch for the provider, when
- * the leg's checkout does not have it. A checkout from before a provider's
- * bridge moved (pi before its plugin) has nothing at the path and its own
- * bridge is not replayable, so the leg cannot take part in a comparison.
- */
-export function missingBridgeModule(checkoutRoot: string, providerId: string): string | null {
-  const entry = FIRST_PARTY_BRIDGE_MODULES[resolveReplayProfile(providerId).bridgeFamily]!;
-  return resolveFirstPartyBridgeModulePath(checkoutRoot, entry) === null ? entry.modulePath : null;
+export function missingBridgeModule(
+  checkoutRoot: string,
+  providerId: string,
+): string | null {
+  const entry =
+    FIRST_PARTY_BRIDGE_MODULES[resolveReplayProfile(providerId).bridgeFamily]!;
+  return resolveFirstPartyBridgeModulePath(checkoutRoot, entry) === null
+    ? entry.modulePath
+    : null;
 }
 
-/** Replay one cell through the bridge of one checkout. */
 export async function replayCell(
   cell: RecordedCell,
   options: ReplayCellOptions,
@@ -179,8 +174,12 @@ export async function replayCell(
     bridge: bridge.launch,
     profile: bridge.profile,
     createAssembler: options.createAssembler ?? createParityAssembler,
-    ...(options.planFromCurrentLane === undefined ? {} : { planFromCurrentLane: options.planFromCurrentLane }),
-    ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    ...(options.planFromCurrentLane === undefined
+      ? {}
+      : { planFromCurrentLane: options.planFromCurrentLane }),
+    ...(options.timeoutMs !== undefined
+      ? { timeoutMs: options.timeoutMs }
+      : {}),
     ...(options.onStderr !== undefined ? { onStderr: options.onStderr } : {}),
   });
   return {
@@ -203,11 +202,6 @@ export function compareCell(
   });
 }
 
-/**
- * The per-cell counts pinned beside the recordings. `unhandled` and
- * `grammarDrops` are the two guardrails that may only go down (G11): events
- * a bridge could not translate, and events the runtime's grammar refused.
- */
 export interface RowCountsEntry {
   events: number;
   rows: number;
@@ -219,7 +213,9 @@ export function countCellInputs(inputs: CellInputs): RowCountsEntry {
   return {
     events: inputs.events.length,
     rows: inputs.rows.length,
-    unhandled: inputs.events.filter((event) => event.type === "provider/unhandled").length,
+    unhandled: inputs.events.filter(
+      (event) => event.type === "provider/unhandled",
+    ).length,
     grammarDrops: inputs.grammarViolations.length,
   };
 }

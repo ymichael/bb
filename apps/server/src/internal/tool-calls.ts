@@ -20,11 +20,6 @@ import { requireAuthenticatedDaemonSession } from "./session-state.js";
 
 const textEncoder = new TextEncoder();
 
-/**
- * Return the response head before a plugin tool finishes. Interactive plugin
- * tools can wait for user input for minutes, while bb Connect requires an
- * origin response head within 30 seconds. The response body can stay open.
- */
 function streamToolCallResponse(result: Promise<ToolCallResponse>): Response {
   const body = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -72,10 +67,6 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
         );
       }
 
-      // Built-in tools win name lookups; then the native plugin-tool
-      // registry (bb.agents.registerTool). A tool whose plugin was
-      // disabled/reloaded away since the session started falls through to
-      // the unsupported-tool response below.
       if (payload.tool === UPDATE_ENVIRONMENT_DIRECTORY_TOOL_NAME) {
         return context.json(
           await handleUpdateEnvironmentDirectoryToolCall(deps, {
@@ -95,8 +86,6 @@ export function registerInternalToolCallRoutes(app: Hono, deps: AppDeps): void {
             ctx: {
               threadId: thread.id,
               projectId: thread.projectId,
-              // The request's own abort signal: it fires if the daemon
-              // round-trip is torn down while the tool runs.
               signal: context.req.raw.signal,
             },
           }),

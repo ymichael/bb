@@ -58,8 +58,6 @@ describe("acquireDaemonLock compromise handling", () => {
     });
     const lockDirPath = path.join(dataDir, `${DAEMON_LOCK_FILE_NAME}.lock`);
 
-    // Simulate the refresh failing (the incident: EPERM on the periodic mtime
-    // touch): removing the lock dir makes the next refresh tick compromise.
     await fs.rm(lockDirPath, { recursive: true, force: true });
 
     await waitFor(
@@ -90,10 +88,6 @@ describe("acquireDaemonLock compromise handling", () => {
     });
     const lockDirPath = path.join(dataDir, `${DAEMON_LOCK_FILE_NAME}.lock`);
 
-    // The incident's shape: the refresh fails but the lock dir stays on
-    // disk. A foreign fresh mtime makes the next refresh tick compromise,
-    // and re-acquisition must retry until the dir ages past the stale
-    // window before reclaiming it.
     const foreignMtime = new Date(Date.now() + 500);
     fsSync.utimesSync(lockDirPath, foreignMtime, foreignMtime);
 
@@ -124,19 +118,13 @@ describe("acquireDaemonLock compromise handling", () => {
     const lockPath = path.join(dataDir, DAEMON_LOCK_FILE_NAME);
     const lockDirPath = `${lockPath}.lock`;
 
-    // A contender takes over the lock: replace the lock dir and keep its
-    // mtime fresh. Our next refresh tick sees a foreign mtime and
-    // compromises, and every re-acquire attempt stays ELOCKED because the
-    // contender's lock never goes stale.
     await fs.rm(lockDirPath, { recursive: true, force: true });
     await fs.mkdir(lockDirPath);
     const keepContenderFresh = setInterval(() => {
       const now = new Date();
       try {
         fsSync.utimesSync(lockDirPath, now, now);
-      } catch {
-        // The dir only disappears once the test is over.
-      }
+      } catch {}
     }, 200);
 
     try {

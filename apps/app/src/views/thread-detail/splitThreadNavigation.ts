@@ -71,15 +71,6 @@ export function paneContentRoute(content: PaneContent): string {
   });
 }
 
-/**
- * The pane content a pathname addresses, or null when the page cannot live
- * in a split pane. The inverse of `paneContentRoute`, for callers that start
- * from a URL — a link in plugin UI, say — and need to know whether "open
- * this beside me" is even possible.
- *
- * Projectless thread URLs resolve to null: a thread pane needs its project,
- * and only the route-state layer knows how to look one up.
- */
 export function paneContentForPathname(pathname: string): PaneContent | null {
   if (pathname === APP_ROOT_ROUTE_PATH) {
     return { kind: "new-thread" };
@@ -111,7 +102,6 @@ export function paneContentForPathname(pathname: string): PaneContent | null {
   return null;
 }
 
-/** Reconciles any splittable page route into the focused pane. */
 export function reconcileLayoutForContent(
   layout: SplitLayout | null,
   content: PaneContent,
@@ -143,11 +133,6 @@ function threadOpenSplitZone(split: ThreadOpenSplit): SplitZone {
   return split === "replace" ? "center" : split === "down" ? "bottom" : split;
 }
 
-/**
- * Applies a CLI/SDK thread-open intent to the current layout. This deliberately
- * routes through the same drop decision as sidebar dragging so already-open
- * threads focus, and edge splits at the pane cap coerce to replacement.
- */
 export function applyThreadOpenToLayout(
   layout: SplitLayout | null,
   thread: ThreadRoutePathArgs,
@@ -180,11 +165,9 @@ export function applyThreadOpenToLayout(
 interface ThreadPaneActionLayoutResult {
   layout: SplitLayout;
   maximizedPaneId: string | null;
-  /** Explicit preference update requested by the action, or null when unchanged. */
   dimInactiveSplits: boolean | null;
 }
 
-/** Apply one CLI/SDK pane action without creating or replacing pane content. */
 export function applyThreadPaneActionToLayout(
   layout: SplitLayout,
   maximizedPaneId: string | null,

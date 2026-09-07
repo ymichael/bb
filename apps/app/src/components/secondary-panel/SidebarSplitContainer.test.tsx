@@ -20,6 +20,7 @@ import {
   createSidebarSplitState,
   focusSidebarPane,
   moveSidebarTab,
+  parseSidebarSplitState,
   serializeSidebarSplitState,
   sidebarSplitStorageKey,
   type SidebarSplitState,
@@ -32,6 +33,13 @@ const TABS: readonly SidebarSplitTabDescriptor[] = [
 ];
 const PANEL_STATE_ID = "sidebar-split-container-test";
 let nextPaneInstance = 0;
+
+function listPaneIds(): string[] {
+  return Array.from(
+    document.querySelectorAll<HTMLElement>("[data-split-pane-id]"),
+    (pane) => pane.dataset.splitPaneId,
+  ).filter((paneId): paneId is string => paneId !== undefined);
+}
 
 function createTwoPaneState(): SidebarSplitState {
   const initial = createSidebarSplitState(
@@ -70,12 +78,16 @@ function persistState(state: SidebarSplitState): void {
 
 function renderContainer({
   activeTabId = "tab-a",
+  isFullScreen = false,
   onActivateTab = vi.fn(),
+  onToggleFullScreen = vi.fn(),
   renderPane,
   tabs = TABS,
 }: {
   activeTabId?: string;
+  isFullScreen?: boolean;
   onActivateTab?: (tabId: string) => void;
+  onToggleFullScreen?: () => void;
   renderPane: (args: SidebarSplitPaneRenderArgs) => ReactNode;
   tabs?: readonly SidebarSplitTabDescriptor[];
 }) {
@@ -84,8 +96,10 @@ function renderContainer({
       <TooltipProvider>
         <SidebarSplitContainer
           activeTabId={activeTabId}
+          isFullScreen={isFullScreen}
           onActivateTab={onActivateTab}
           onGlobalTabReorder={vi.fn()}
+          onToggleFullScreen={onToggleFullScreen}
           panelStateId={PANEL_STATE_ID}
           renderPane={renderPane}
           tabs={tabs}
@@ -115,6 +129,32 @@ function StatefulPane({
   );
 }
 
+function MultiTabStatefulPane({
+  activeTabId,
+  canMove,
+  onMove,
+  paneId,
+  side,
+}: {
+  activeTabId: string;
+  canMove: boolean;
+  onMove: () => void;
+  paneId: string;
+  side: "left" | "right" | "top" | "bottom";
+}) {
+  const [instance] = useState(() => `${paneId}-${nextPaneInstance++}`);
+  return (
+    <div>
+      <span data-testid={`multi-instance-${paneId}`}>{instance}</span>
+      {canMove ? (
+        <button type="button" onClick={onMove}>
+          Move {activeTabId} {side}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 describe("SidebarSplitContainer", () => {
   beforeEach(() => {
     window.localStorage.clear();
@@ -128,7 +168,7 @@ describe("SidebarSplitContainer", () => {
     document.body.style.userSelect = "";
   });
 
-  it("activates a focused pane outside React's state updater", async () => {
+  it("activates a pane before a descendant stops pointer propagation", async () => {
     const split = createTwoPaneState();
     const firstPaneId =
       split.layout.root.type === "split"
@@ -157,14 +197,22 @@ describe("SidebarSplitContainer", () => {
       return (
         <SidebarSplitContainer
           activeTabId={activeTabId}
+          isFullScreen={false}
           onActivateTab={(tabId) => {
             activate(tabId);
             setActiveTabId(tabId);
           }}
           onGlobalTabReorder={vi.fn()}
+          onToggleFullScreen={vi.fn()}
           panelStateId={PANEL_STATE_ID}
           renderPane={({ paneId }) => (
-            <div data-testid={`pane-content-${paneId}`}>{paneId}</div>
+            <button
+              type="button"
+              data-testid={`pane-content-${paneId}`}
+              onPointerDown={(event) => event.stopPropagation()}
+            >
+              {paneId}
+            </button>
           )}
           tabs={TABS}
         />
@@ -191,6 +239,40 @@ describe("SidebarSplitContainer", () => {
         ),
       ),
     ).toBe(false);
+  });
+
+  it("activates a pane when keyboard focus enters it", async () => {
+    const split = createTwoPaneState();
+    const paneIds =
+      split.layout.root.type === "split"
+        ? split.layout.root.children.flatMap((child) =>
+            child.type === "pane" ? [child.paneId] : [],
+          )
+        : [];
+    expect(paneIds).toHaveLength(2);
+    const [firstPaneId, secondPaneId] = paneIds;
+    if (firstPaneId === undefined || secondPaneId === undefined) return;
+    persistState(focusSidebarPane(split, firstPaneId));
+    const activate = vi.fn();
+
+    renderContainer({
+      activeTabId: "tab-a",
+      onActivateTab: activate,
+      renderPane: ({ paneId }) => (
+        <button type="button" data-testid={`focus-target-${paneId}`}>
+          {paneId}
+        </button>
+      ),
+    });
+    fireEvent.focus(screen.getByTestId(`focus-target-${secondPaneId}`));
+
+    await waitFor(() => expect(activate).toHaveBeenCalledWith("tab-b"));
+    expect(activate).toHaveBeenCalledTimes(1);
+    expect(
+      document.querySelector(
+        `[data-split-pane-id="${secondPaneId}"][data-focused="true"]`,
+      ),
+    ).not.toBeNull();
   });
 
   it("assigns focus and outer controls to the appropriate panes", () => {
@@ -249,8 +331,10 @@ describe("SidebarSplitContainer", () => {
           </button>
           <SidebarSplitContainer
             activeTabId={terminalOpen ? "terminal-a" : "tab-b"}
+            isFullScreen={false}
             onActivateTab={vi.fn()}
             onGlobalTabReorder={vi.fn()}
+            onToggleFullScreen={vi.fn()}
             panelStateId={PANEL_STATE_ID}
             renderPane={({ group, paneId }) => (
               <div data-testid={`active-tab-${paneId}`}>
@@ -281,13 +365,13 @@ describe("SidebarSplitContainer", () => {
   });
 
   it.each([
-    ["left", "flex-row", "tab-a,tab-b"],
-    ["right", "flex-row", "tab-b,tab-a"],
-    ["top", "flex-col", "tab-a,tab-b"],
-    ["bottom", "flex-col", "tab-b,tab-a"],
+    ["left", "row", "tab-a,tab-b"],
+    ["right", "row", "tab-b,tab-a"],
+    ["top", "col", "tab-a,tab-b"],
+    ["bottom", "col", "tab-b,tab-a"],
   ] as const)(
     "moves the active tab to the supported %s position without dragging",
-    (side, directionClass, expectedOrder) => {
+    (side, expectedDirection, expectedOrder) => {
       renderContainer({
         renderPane: ({ group, onMoveActiveTabToSide }) => (
           <button type="button" onClick={() => onMoveActiveTabToSide?.(side)}>
@@ -305,9 +389,10 @@ describe("SidebarSplitContainer", () => {
         document.querySelectorAll<HTMLElement>("[data-split-pane-id]"),
       );
       expect(panes).toHaveLength(2);
-      expect(panes[0]?.parentElement?.parentElement?.className).toContain(
-        directionClass,
-      );
+      expect(
+        document.querySelector<HTMLElement>("[data-sidebar-split-container]")
+          ?.dataset.sidebarSplitRootDirection,
+      ).toBe(expectedDirection);
       expect(
         panes
           .map(
@@ -320,43 +405,111 @@ describe("SidebarSplitContainer", () => {
     },
   );
 
-  it("positions the focused active tab even when the control is in the outer pane", () => {
-    const split = createTwoPaneState();
-    const firstPane =
-      split.layout.root.type === "split" &&
-      split.layout.root.children[0]?.type === "pane"
-        ? split.layout.root.children[0]
-        : null;
-    expect(firstPane).not.toBeNull();
-    if (firstPane === null) return;
-    persistState(focusSidebarPane(split, firstPane.paneId));
+  it.each(["left", "right", "top", "bottom"] as const)(
+    "splits the active tab from an unfocused multi-tab pane to the %s",
+    (side) => {
+      const tabs = [...TABS, { id: "tab-c", label: "C" }];
+      const initial = createSidebarSplitState(
+        tabs.map((tab) => tab.id),
+        "tab-a",
+      );
+      const split = moveSidebarTab(
+        initial,
+        initial.layout.focusedPaneId,
+        "tab-c",
+        { paneId: initial.layout.focusedPaneId, zone: "right" },
+        { groupId: "group-c" },
+      );
+      persistState(split);
 
-    renderContainer({
-      renderPane: ({ group, onMoveActiveTabToSide, showOuterControls }) => (
-        <div>
-          <span data-testid="active-pane-tab">{group.activeTabId}</span>
-          {showOuterControls ? (
-            <button
-              type="button"
-              onClick={() => onMoveActiveTabToSide?.("bottom")}
-            >
-              Move focused bottom
-            </button>
-          ) : null}
-        </div>
-      ),
-    });
+      renderContainer({
+        tabs,
+        renderPane: ({ group, onMoveActiveTabToSide, paneId }) => (
+          <MultiTabStatefulPane
+            activeTabId={group.activeTabId}
+            canMove={group.tabIds.length > 1}
+            onMove={() => onMoveActiveTabToSide?.(side)}
+            paneId={paneId}
+            side={side}
+          />
+        ),
+      });
+      const originalPaneIds = listPaneIds();
+      const instancesBefore = new Map(
+        originalPaneIds.map((paneId) => [
+          paneId,
+          screen.getByTestId(`multi-instance-${paneId}`).textContent,
+        ]),
+      );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Move focused bottom" }),
-    );
-    expect(
-      screen
-        .getAllByTestId("active-pane-tab")
-        .map((tab) => tab.textContent)
-        .join(","),
-    ).toBe("tab-b,tab-a");
-  });
+      fireEvent.click(
+        screen.getByRole("button", { name: `Move tab-a ${side}` }),
+      );
+
+      expect(listPaneIds()).toHaveLength(3);
+      for (const paneId of originalPaneIds) {
+        expect(screen.getByTestId(`multi-instance-${paneId}`).textContent).toBe(
+          instancesBefore.get(paneId),
+        );
+      }
+    },
+  );
+
+  it.each([
+    ["left", "row", "tab-a,tab-b"],
+    ["right", "row", "tab-b,tab-a"],
+    ["top", "col", "tab-a,tab-b"],
+    ["bottom", "col", "tab-b,tab-a"],
+  ] as const)(
+    "moves the unfocused Info pane %s from its own control",
+    (side, expectedDirection, expectedOrder) => {
+      const split = createTwoPaneState();
+      const infoPane =
+        split.layout.root.type === "split" &&
+        split.layout.root.children[0]?.type === "pane"
+          ? split.layout.root.children[0]
+          : null;
+      const diffPane =
+        split.layout.root.type === "split" &&
+        split.layout.root.children[1]?.type === "pane"
+          ? split.layout.root.children[1]
+          : null;
+      expect(infoPane).not.toBeNull();
+      expect(diffPane).not.toBeNull();
+      if (infoPane === null || diffPane === null) return;
+      persistState(focusSidebarPane(split, diffPane.paneId));
+
+      renderContainer({
+        renderPane: ({ group, onMoveActiveTabToSide, paneId }) => (
+          <div>
+            <span data-testid="active-pane-tab">{group.activeTabId}</span>
+            {paneId === infoPane.paneId ? (
+              <button
+                type="button"
+                onClick={() => onMoveActiveTabToSide?.(side)}
+              >
+                Move Info {side}
+              </button>
+            ) : null}
+          </div>
+        ),
+      });
+
+      fireEvent.click(
+        screen.getByRole("button", { name: `Move Info ${side}` }),
+      );
+      expect(
+        document.querySelector<HTMLElement>("[data-sidebar-split-container]")
+          ?.dataset.sidebarSplitRootDirection,
+      ).toBe(expectedDirection);
+      expect(
+        screen
+          .getAllByTestId("active-pane-tab")
+          .map((tab) => tab.textContent)
+          .join(","),
+      ).toBe(expectedOrder);
+    },
+  );
 
   it("keeps stateful pane content attached to pane identity after a move", () => {
     const split = createTwoPaneState();
@@ -396,6 +549,146 @@ describe("SidebarSplitContainer", () => {
         before.get(paneId) ?? "missing-instance",
       );
     }
+  });
+
+  it("maximizes one pane while preserving the mounted split for restoration", async () => {
+    const split = createStackedPaneState();
+    const paneIds =
+      split.layout.root.type === "split"
+        ? split.layout.root.children.flatMap((child) =>
+            child.type === "pane" ? [child.paneId] : [],
+          )
+        : [];
+    const paneToMaximize = paneIds[0];
+    expect(paneToMaximize).toBeDefined();
+    if (paneToMaximize === undefined) return;
+    persistState(split);
+
+    function Pane({
+      isMaximized,
+      onToggleMaximize,
+      paneId,
+    }: Pick<
+      SidebarSplitPaneRenderArgs,
+      "isMaximized" | "onToggleMaximize" | "paneId"
+    >) {
+      const [instance] = useState(() => `${paneId}-${nextPaneInstance++}`);
+      return (
+        <div>
+          <span data-testid={`max-instance-${paneId}`}>{instance}</span>
+          <button type="button" onClick={onToggleMaximize}>
+            {isMaximized ? `Restore ${paneId}` : `Maximize ${paneId}`}
+          </button>
+        </div>
+      );
+    }
+
+    function Harness() {
+      const [isFullScreen, setIsFullScreen] = useState(false);
+      return (
+        <SidebarSplitContainer
+          activeTabId="tab-b"
+          isFullScreen={isFullScreen}
+          onActivateTab={vi.fn()}
+          onGlobalTabReorder={vi.fn()}
+          onToggleFullScreen={() => setIsFullScreen((current) => !current)}
+          panelStateId={PANEL_STATE_ID}
+          renderPane={(pane) => <Pane {...pane} />}
+          tabs={TABS}
+        />
+      );
+    }
+
+    render(
+      <SidebarProvider>
+        <TooltipProvider>
+          <Harness />
+        </TooltipProvider>
+      </SidebarProvider>,
+    );
+    const instancesBefore = new Map(
+      paneIds.map((paneId) => [
+        paneId,
+        screen.getByTestId(`max-instance-${paneId}`).textContent,
+      ]),
+    );
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Maximize ${paneToMaximize}` }),
+    );
+
+    await waitFor(() =>
+      expect(
+        document.querySelector(
+          `[data-split-pane-id="${paneToMaximize}"][data-maximized="true"]`,
+        ),
+      ).not.toBeNull(),
+    );
+    const hiddenPaneId = paneIds.find((paneId) => paneId !== paneToMaximize);
+    expect(hiddenPaneId).toBeDefined();
+    if (hiddenPaneId === undefined) return;
+    const hiddenPane = document.querySelector(
+      `[data-split-pane-id="${hiddenPaneId}"]`,
+    );
+    if (!(hiddenPane instanceof HTMLElement)) {
+      throw new Error("Expected the preserved hidden split pane");
+    }
+    expect(hiddenPane.getAttribute("aria-hidden")).toBe("true");
+    expect(hiddenPane.style.contentVisibility).toBe("hidden");
+    expect(hiddenPane.className).toContain("invisible");
+    expect(hiddenPane.className).toContain("pointer-events-none");
+    expect(document.querySelector('[role="separator"]')?.className).toContain(
+      "invisible",
+    );
+    for (const paneId of paneIds) {
+      expect(screen.getByTestId(`max-instance-${paneId}`).textContent).toBe(
+        instancesBefore.get(paneId),
+      );
+    }
+
+    fireEvent.click(
+      screen.getByRole("button", { name: `Restore ${paneToMaximize}` }),
+    );
+    await waitFor(() =>
+      expect(
+        document.querySelector('[data-split-pane-id][data-maximized="true"]'),
+      ).toBeNull(),
+    );
+    expect(hiddenPane.getAttribute("aria-hidden")).toBeNull();
+    expect(hiddenPane.style.contentVisibility).toBe("");
+    expect(screen.getByRole("separator")).not.toBeNull();
+    for (const paneId of paneIds) {
+      expect(screen.getByTestId(`max-instance-${paneId}`).textContent).toBe(
+        instancesBefore.get(paneId),
+      );
+    }
+  });
+
+  it("keeps a newly created split maximized while the right panel is full screen", () => {
+    const onToggleFullScreen = vi.fn();
+    renderContainer({
+      isFullScreen: true,
+      onToggleFullScreen,
+      renderPane: ({ onMoveActiveTabToSide, paneId }) => (
+        <button type="button" onClick={() => onMoveActiveTabToSide?.("bottom")}>
+          Split {paneId}
+        </button>
+      ),
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^Split / }));
+
+    const panes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-split-pane-id]"),
+    );
+    expect(panes).toHaveLength(2);
+    expect(
+      panes.filter((pane) => pane.dataset.maximized === "true"),
+    ).toHaveLength(1);
+    expect(
+      panes.filter((pane) => pane.getAttribute("aria-hidden") === "true"),
+    ).toHaveLength(1);
+    expect(onToggleFullScreen).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -509,11 +802,181 @@ describe("SidebarSplitContainer", () => {
     });
     expect(Number.parseFloat(previous.style.flex)).toBeCloseTo(0.749, 3);
     expect(Number.parseFloat(next.style.flex)).toBeCloseTo(0.251, 3);
+    const panes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-split-pane-id]"),
+    );
+    expect(Number.parseFloat(panes[0]?.style.height ?? "0")).toBeCloseTo(
+      74.9,
+      1,
+    );
+    expect(Number.parseFloat(panes[1]?.style.height ?? "0")).toBeCloseTo(
+      25.1,
+      1,
+    );
     fireEvent.pointerUp(hitTarget, {
       clientX: 700,
       clientY: 600,
       pointerId: 3,
     });
+  });
+
+  it("snaps a right-panel divider to its equal two-pane boundary and persists it", () => {
+    persistState(createTwoPaneState());
+    renderContainer({
+      renderPane: ({ paneId }) => <div>{paneId}</div>,
+    });
+    const separator = screen.getByRole("separator");
+    const hitTarget = separator.firstElementChild;
+    const previous = separator.previousElementSibling;
+    const next = separator.nextElementSibling;
+    if (
+      !(hitTarget instanceof HTMLElement) ||
+      !(previous instanceof HTMLElement) ||
+      !(next instanceof HTMLElement)
+    ) {
+      throw new Error("Expected adjacent right-panel split items");
+    }
+    const grid = separator.parentElement;
+    if (grid === null) throw new Error("Expected a right-panel split grid");
+    expect(separator.dataset.splitResizeGridBoundary).toBe("1");
+    expect(separator.dataset.splitResizeGridCount).toBe("2");
+    Object.defineProperties(hitTarget, {
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+      setPointerCapture: { configurable: true, value: vi.fn() },
+    });
+    vi.spyOn(previous, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 300,
+      right: 500,
+      top: 0,
+      width: 200,
+      x: 300,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(next, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 501,
+      right: 900,
+      top: 0,
+      width: 399,
+      x: 501,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(separator, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 500,
+      right: 501,
+      top: 0,
+      width: 1,
+      x: 500,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(grid, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 100,
+      right: 900,
+      top: 0,
+      width: 800,
+      x: 100,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    fireEvent.pointerDown(hitTarget, { clientX: 470, pointerId: 32 });
+    fireEvent.pointerMove(hitTarget, { clientX: 518, pointerId: 32 });
+
+    expect(Number.parseFloat(previous.style.flexGrow)).toBeCloseTo(
+      199.5 / 599,
+      5,
+    );
+    expect(
+      document.querySelector<HTMLElement>("[data-split-resize-snap-guide]")
+        ?.style.left,
+    ).toBe("500px");
+
+    fireEvent.pointerUp(hitTarget, { clientX: 518, pointerId: 32 });
+
+    const persisted = parseSidebarSplitState(
+      window.localStorage.getItem(sidebarSplitStorageKey(PANEL_STATE_ID)),
+      TABS.map((tab) => tab.id),
+      "tab-a",
+    );
+    expect(persisted.layout.root.type).toBe("split");
+    if (persisted.layout.root.type === "split") {
+      expect(persisted.layout.root.sizes[0]).toBeCloseTo(199.5 / 599, 5);
+      expect(persisted.layout.root.sizes[1]).toBeCloseTo(399.5 / 599, 5);
+    }
+    expect(document.querySelector("[data-split-resize-snap-guide]")).toBeNull();
+  });
+
+  it("clears the resize overlay when the divider loses pointer capture", () => {
+    persistState(createTwoPaneState());
+    renderContainer({
+      renderPane: ({ paneId }) => <div>{paneId}</div>,
+    });
+    const separator = screen.getByRole("separator");
+    const hitTarget = separator.firstElementChild;
+    const previous = separator.previousElementSibling;
+    const next = separator.nextElementSibling;
+    if (
+      !(hitTarget instanceof HTMLElement) ||
+      !(previous instanceof HTMLElement) ||
+      !(next instanceof HTMLElement)
+    ) {
+      throw new Error("Expected adjacent right-panel split items");
+    }
+    Object.defineProperties(hitTarget, {
+      releasePointerCapture: { configurable: true, value: vi.fn() },
+      setPointerCapture: { configurable: true, value: vi.fn() },
+    });
+    vi.spyOn(previous, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 0,
+      right: 400,
+      top: 0,
+      width: 400,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    vi.spyOn(next, "getBoundingClientRect").mockReturnValue({
+      bottom: 600,
+      height: 600,
+      left: 401,
+      right: 801,
+      top: 0,
+      width: 400,
+      x: 401,
+      y: 0,
+      toJSON: () => ({}),
+    });
+
+    fireEvent.pointerDown(hitTarget, { clientX: 400.5, pointerId: 34 });
+    expect(screen.getByTestId("iframe-drag-guard-overlay")).not.toBeNull();
+
+    fireEvent.lostPointerCapture(hitTarget, { pointerId: 34 });
+
+    expect(screen.queryByTestId("iframe-drag-guard-overlay")).toBeNull();
+  });
+
+  it("keeps right-panel separators out of the tab order", () => {
+    persistState(createTwoPaneState());
+    renderContainer({
+      renderPane: ({ paneId }) => <div>{paneId}</div>,
+    });
+
+    const separator = screen.getByRole("separator");
+    fireEvent.keyDown(separator, { key: "ArrowRight" });
+
+    expect(separator.tabIndex).toBe(-1);
+    expect(document.querySelector("[data-split-resize-snap-guide]")).toBeNull();
   });
 
   it("does not resize or persist when the divider is pressed and released in place", () => {
@@ -691,9 +1154,9 @@ describe("SidebarSplitContainer", () => {
     });
 
     fireEvent.pointerDown(hitTarget, { clientY: 400, pointerId: 9 });
-    expect(
-      screen.getByTestId("iframe-drag-guard-overlay").className,
-    ).toContain("cursor-row-resize");
+    expect(screen.getByTestId("iframe-drag-guard-overlay").className).toContain(
+      "cursor-row-resize",
+    );
 
     fireEvent.pointerCancel(hitTarget, { clientY: 400, pointerId: 9 });
     expect(screen.queryByTestId("iframe-drag-guard-overlay")).toBeNull();
@@ -776,5 +1239,55 @@ describe("SidebarSplitContainer", () => {
     expect(
       setItem.mock.calls.filter(([key]) => key === storageKey),
     ).toHaveLength(0);
+  });
+
+  it("uses the canonical layout when localStorage rejects the read", () => {
+    const storageKey = sidebarSplitStorageKey(PANEL_STATE_ID);
+    const getItem = vi
+      .spyOn(Storage.prototype, "getItem")
+      .mockImplementation((key) => {
+        if (key === storageKey) {
+          throw new DOMException("blocked", "SecurityError");
+        }
+        return null;
+      });
+
+    renderContainer({
+      renderPane: ({ paneId }) => <div data-testid="only-pane">{paneId}</div>,
+      tabs: [TABS[0] as SidebarSplitTabDescriptor],
+    });
+
+    expect(screen.getByTestId("only-pane")).not.toBeNull();
+    expect(getItem).toHaveBeenCalledWith(storageKey);
+  });
+
+  it("keeps a changed layout in memory when localStorage quota is exhausted", () => {
+    const storageKey = sidebarSplitStorageKey(PANEL_STATE_ID);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    renderContainer({
+      renderPane: ({ group, onMoveActiveTabToSide }) => (
+        <button type="button" onClick={() => onMoveActiveTabToSide?.("right")}>
+          Split {group.activeTabId}
+        </button>
+      ),
+    });
+
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation((key) => {
+        if (key === storageKey) {
+          throw new DOMException("quota", "QuotaExceededError");
+        }
+      });
+
+    expect(() =>
+      fireEvent.click(screen.getByRole("button", { name: "Split tab-a" })),
+    ).not.toThrow();
+
+    expect(document.querySelectorAll("[data-split-pane-id]")).toHaveLength(2);
+    expect(window.localStorage.getItem(storageKey)).toBeNull();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(setItem).toHaveBeenCalledWith(storageKey, expect.any(String));
   });
 });

@@ -346,13 +346,6 @@ function isSilentRun(run: AutomationRunResponse): boolean {
   );
 }
 
-/**
- * Glyphs and labels come from the shared run-state vocabulary in `@bb/domain`
- * — the same map Settings → Updates and `bb updates` read — so the two
- * surfaces cannot drift. Only the colour classes are local: a run history
- * colours success green because a succeeded run is its headline, where the
- * Updates page mutes it because up-to-date is its resting state.
- */
 const AUTOMATION_RUN_STATUS_VISUALS: Record<
   AutomationRunStatus,
   {
@@ -422,9 +415,6 @@ function RunRow({
   const visual = AUTOMATION_RUN_STATUS_VISUALS[run.status];
   const running = run.status === "running";
   const openable = run.runMode === "agent" && run.threadId !== null;
-  // The whole row is the affordance when there is a thread, so the destination
-  // stays keyboard-reachable without a separate visible button competing with
-  // the timestamp on every line.
   const RowTag = openable ? "button" : "div";
   const line = (
     <RowTag
@@ -730,12 +720,17 @@ export function AutomationDetailView({
     runCount: automation.runCount,
     lastRunStatus: automation.lastRunStatus,
   });
-  const lifecycleLocked = !oneShotLifecycleAllowsToggle(oneShotLifecycle);
-  const lifecycleDisabledReason = lifecycleLocked
-    ? oneShotLifecycle === "expired"
-      ? "Missed its run time. Edit to reschedule."
-      : "Already ran. Edit to reschedule."
-    : undefined;
+  const requiresPrompt =
+    automation.execution.mode === "agent" && automation.execution.prompt === "";
+  const lifecycleLocked =
+    requiresPrompt || !oneShotLifecycleAllowsToggle(oneShotLifecycle);
+  const lifecycleDisabledReason = requiresPrompt
+    ? "Add a prompt before changing this automation."
+    : lifecycleLocked
+      ? oneShotLifecycle === "expired"
+        ? "Missed its run time. Edit to reschedule."
+        : "Already ran. Edit to reschedule."
+      : undefined;
   const bodyLabel = automationBodyLabel(automation.execution);
   const execution = automation.execution;
   const projectContextLabel = projectLabel;
@@ -774,13 +769,15 @@ export function AutomationDetailView({
           disabled={actionPending || lifecycleLocked}
           disabledReason={lifecycleDisabledReason}
           label={
-            oneShotLifecycle === "expired"
-              ? "Expired automation; edit to reschedule"
-              : lifecycleLocked
-                ? `${formatScheduleStatusLabel(automation)} automation`
-                : automation.enabled
-                  ? "Pause automation"
-                  : "Resume automation"
+            requiresPrompt
+              ? "Add a prompt before changing this automation"
+              : oneShotLifecycle === "expired"
+                ? "Expired automation; edit to reschedule"
+                : lifecycleLocked
+                  ? `${formatScheduleStatusLabel(automation)} automation`
+                  : automation.enabled
+                    ? "Pause automation"
+                    : "Resume automation"
           }
           onCheckedChange={onToggle}
         />
@@ -790,7 +787,15 @@ export function AutomationDetailView({
           label={`${automation.name} actions`}
           disabled={actionPending}
           items={[
-            { label: "Run now", icon: "Play", onSelect: onRunNow },
+            {
+              label: "Run now",
+              icon: "Play",
+              disabled: requiresPrompt,
+              disabledReason: requiresPrompt
+                ? "Add a prompt before running this automation."
+                : undefined,
+              onSelect: onRunNow,
+            },
             { kind: "separator" },
             {
               label: "Delete",
@@ -814,6 +819,7 @@ export function AutomationDetailView({
                 execution.mode === "agent" ? "Edit prompt" : "Edit with chat"
               }
               icon="Edit"
+              disabled={editing}
               onClick={onEdit}
             />
           }
@@ -907,7 +913,7 @@ export function AutomationDetailView({
                   type="button"
                   variant="outline"
                   size="sm"
-                  disabled={actionPending}
+                  disabled={actionPending || requiresPrompt}
                   onClick={onRunNow}
                 >
                   <Icon name="Play" className="size-3.5" aria-hidden />

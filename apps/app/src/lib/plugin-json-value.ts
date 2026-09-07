@@ -1,7 +1,6 @@
 import { jsonValueSchema } from "@bb/domain";
 import type { JsonValue } from "@get-bb/plugin-sdk";
 
-/** Validate a plugin-provided value before it crosses into persisted tab state. */
 export function serializePluginPanelParams(
   params: JsonValue | undefined,
 ): string | null {
@@ -17,7 +16,6 @@ export function serializePluginPanelParams(
   return serialized;
 }
 
-/** Narrow persisted JSON before handing it back to plugin component code. */
 export function parsePersistedPluginPanelParams(
   paramsJson: string | null,
 ): JsonValue | null {

@@ -3,6 +3,7 @@ import type { ThreadQueuedMessage } from "@bb/domain";
 import type { QueuedMessageEditRequest } from "@/components/promptbox/banner/QueuedMessagesList";
 import type { PromptDraftState } from "@bb/client-core";
 import { queuedInputToDraft } from "@bb/client-core";
+import type { InlineComposerDraftSession } from "./useActiveComposerDraft";
 
 export interface InlineQueuedMessageEditState {
   draft: PromptDraftState;
@@ -18,33 +19,17 @@ export interface InlineQueuedMessageEditState {
 }
 
 interface UseInlineQueuedMessageEditingArgs {
-  /** The thread whose queue may be edited inline. */
   ownerThreadId: string;
   queuedMessages: readonly ThreadQueuedMessage[];
-  /** Called when an edit session starts (e.g. clear attachment errors, focus). */
   onBeginEdit?: () => void;
 }
 
 interface UseInlineQueuedMessageEditingResult {
-  /**
-   * The live edit session, already filtered against the current owner thread
-   * and queue contents — null the moment the edited message leaves the queue.
-   */
   inlineEditingQueuedMessage: InlineQueuedMessageEditState | null;
-  /**
-   * Ref kept authoritative synchronously on every commit. React batches state
-   * updates, while plugin composer actions may make back-to-back reads and
-   * writes in one event — reads through this ref always observe the prior
-   * action's draft.
-   */
   inlineEditingQueuedMessageRef: React.RefObject<InlineQueuedMessageEditState | null>;
   commitInlineQueuedMessage: (
     next: InlineQueuedMessageEditState | null,
   ) => void;
-  /**
-   * Functional variant applied against the latest state — for writes that must
-   * compose with concurrent (possibly not-yet-committed) updates.
-   */
   updateInlineQueuedMessage: (
     updater: (
       current: InlineQueuedMessageEditState | null,
@@ -52,15 +37,9 @@ interface UseInlineQueuedMessageEditingResult {
   ) => void;
   dismissInlineQueuedMessageEditor: () => void;
   beginEditQueuedMessage: (request: QueuedMessageEditRequest) => void;
+  queuedMessageDraftSession: InlineComposerDraftSession | null;
 }
 
-/**
- * The inline queued-message edit session shared by every thread-chat composer:
- * "Edit" on a queued card creates a transient draft for the queue's inline
- * composer. The persisted bottom-composer draft remains independent. The
- * session self-dismisses when the edited message leaves the queue (sent or
- * deleted elsewhere) or the owning thread changes.
- */
 export function useInlineQueuedMessageEditing({
   ownerThreadId,
   queuedMessages,
@@ -156,6 +135,25 @@ export function useInlineQueuedMessageEditing({
     [commitInlineQueuedMessage, onBeginEdit, ownerThreadId],
   );
 
+  const editSessionId = inlineEditingQueuedMessage?.editSessionId ?? null;
+  const queuedMessageDraftSession =
+    useMemo<InlineComposerDraftSession | null>(() => {
+      if (editSessionId === null) {
+        return null;
+      }
+      return {
+        editSessionId,
+        setDraft: (update) => {
+          const current = inlineEditingQueuedMessageRef.current;
+          if (current === null) return;
+          commitInlineQueuedMessage({
+            ...current,
+            draft: update(current.draft),
+          });
+        },
+      };
+    }, [commitInlineQueuedMessage, editSessionId]);
+
   return {
     inlineEditingQueuedMessage,
     inlineEditingQueuedMessageRef,
@@ -163,5 +161,6 @@ export function useInlineQueuedMessageEditing({
     updateInlineQueuedMessage,
     dismissInlineQueuedMessageEditor,
     beginEditQueuedMessage,
+    queuedMessageDraftSession,
   };
 }

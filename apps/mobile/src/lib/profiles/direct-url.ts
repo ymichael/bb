@@ -1,16 +1,3 @@
-/**
- * Validation for Direct-mode server URLs typed by the user.
- *
- * Policy (plan A2 / "Direct mode" decision):
- * - `http:` and `https:` only.
- * - `https:` is always fine.
- * - `http:` is allowed for hosts the platform lets us reach in cleartext:
- *   loopback, IP literals (LAN, Tailscale 100.x, Android emulator 10.0.2.2),
- *   `.local` / `.localhost` names, and unqualified hostnames. Non-loopback
- *   http carries an `insecure-http` warning the UI must surface.
- * - `http:` to a dotted domain name is rejected: iOS ATS blocks it and it is
- *   never what a Tailscale/Serve user wants (they need the https URL).
- */
 export type DirectUrlWarning = "insecure-http";
 
 export type DirectUrlErrorCode =
@@ -29,7 +16,6 @@ const IPV4_PATTERN = /^\d{1,3}(\.\d{1,3}){3}$/;
 
 function isIpLiteral(hostname: string): boolean {
   if (IPV4_PATTERN.test(hostname)) return true;
-  // WHATWG URL keeps IPv6 literals bracketed in `hostname`.
   return hostname.startsWith("[") && hostname.endsWith("]");
 }
 
@@ -43,11 +29,9 @@ function isCleartextAllowedHost(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   if (isLoopbackHost(lower) || isIpLiteral(lower)) return true;
   if (lower.endsWith(".local") || lower.endsWith(".localhost")) return true;
-  // Unqualified single-label hostnames (mDNS/DNS search domains).
   return !lower.includes(".");
 }
 
-/** Normalizes to `origin[/path-prefix]` with no trailing slash, search, or hash. */
 function normalizeServerUrl(url: URL): string {
   const path = url.pathname.replace(/\/+$/u, "");
   return `${url.origin}${path}`;

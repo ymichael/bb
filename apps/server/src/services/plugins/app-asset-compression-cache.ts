@@ -12,11 +12,6 @@ export interface AppAssetCompressionCache {
   }): Promise<Buffer>;
 }
 
-/**
- * Bounded LRU of encoded plugin asset variants. Promises enter the cache
- * before compression finishes so parallel requests share one zlib operation;
- * a changed content hash replaces every variant for that asset.
- */
 export function createAppAssetCompressionCache(
   maxEntries: number,
 ): AppAssetCompressionCache {
@@ -29,7 +24,6 @@ export function createAppAssetCompressionCache(
         entry = { hash: args.hash, variants: new Map() };
         entries.set(args.assetKey, entry);
       } else {
-        // Re-insert to mark this asset as most recently used.
         entries.delete(args.assetKey);
         entries.set(args.assetKey, entry);
       }

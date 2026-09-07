@@ -7,12 +7,6 @@ import { z } from "zod";
 import type { ThreadEventWithMeta } from "./build-event-projection.js";
 import { getOrderedThreadEvents } from "./group-event-projection-turns.js";
 
-/**
- * The codex goal state payload as the codex plugin declares it
- * (`provider-codex/goal`): the goal, or `null` once cleared. Legacy
- * `thread/goal/*` rows reach here already converted to this state
- * (@bb/domain read-time conversion), so this is the one shape to read.
- */
 const goalStatePayloadSchema = z.union([
   z.object({
     objective: z.string(),

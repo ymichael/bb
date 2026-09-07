@@ -1,40 +1,16 @@
-/**
- * The ACP agents bb ships knowledge of.
- *
- * Each entry is a launch spec plus the facts a provider declaration needs.
- * There is nothing privileged about them: a user-configured agent and a
- * third-party plugin's agent are the same shape, and every one of these
- * could be moved into a plugin of its own without a core change.
- */
-
 import type { AcpAgentDefinition } from "./agents.js";
+import { resolveCursorNativeRoots } from "./native-roots/cursor.js";
 import { resolveGrokNativeRoots } from "./native-roots/grok.js";
 import { resolveHermesNativeRoots } from "./native-roots/hermes.js";
 import { resolveOmpNativeRoots } from "./native-roots/omp.js";
 import { resolveOpenCodeNativeRoots } from "./native-roots/opencode.js";
 
-/**
- * The plugin id bb installs this plugin under; the namespace of its declared
- * icons.
- */
 const PLUGIN_ID = "provider-acp";
 
-/**
- * An agent logo as the namespaced glyph of an icon this plugin's manifest
- * declares (`bb.branding.experimental_icons`). Not a `./icons/x.svg` path:
- * the packaged build ships only the assets the manifest declares, so a path
- * named only here would be missing from the installed plugin and the
- * provider would register without a logo.
- */
 function declaredIcon(name: string): string {
   return `${PLUGIN_ID}/${name}`;
 }
 
-/**
- * A Claude plugin installed inside a `.claude/skills` directory is not a
- * skill of the agent reading that tree; the marker tells the daemon to skip
- * it (the claude-code plugin lists such plugins through their own roots).
- */
 const CLAUDE_SKILLS_ROOT = {
   path: ".claude/skills",
   skipIfManifest: ".claude-plugin/plugin.json",
@@ -49,12 +25,10 @@ function plainRoots(entries: readonly RootEntry[]) {
   return entries.map(entryOf);
 }
 
-/** Skill directories the agent scans recursively (nested skill directories). */
 function recursiveRoots(entries: readonly RootEntry[]) {
   return entries.map((entry) => ({ ...entryOf(entry), recursive: true }));
 }
 
-/** Workspace skill directories the agent also reads from every ancestor up to the repository root. */
 function ancestorRoots(entries: readonly RootEntry[]) {
   return entries.map((entry) => ({ ...entryOf(entry), ancestors: true }));
 }
@@ -70,10 +44,6 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     dialect: "cursor",
     providerUsage: true,
     providerInstallation: true,
-    // Cursor exposes bare session model ids plus effort and Fast options only
-    // when the ACP client opts into its parameterized model picker. Probe the
-    // Grok families first so the bounded discovery window captures their full
-    // effort ladders.
     parameterizedModelPicker: true,
     primaryModels: [
       "default",
@@ -84,17 +54,16 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
       "composer-2.5",
     ],
     reasoningProbePriorityModelIds: ["grok-4.6", "grok-4.5"],
-    // cursor-agent (2026.08.11) advertises `sessionCapabilities: { list }`
-    // only; no session/fork.
     fork: "none",
     launch: {
       displayName: "Cursor",
       command: "cursor-agent",
       args: ["acp"],
       env: {},
-      // The skill directories cursor-agent reads (its own, then the shared
-      // and cross-agent conventions), so bb lists them beside its own.
-      // cursor-agent scans each tree recursively.
+      modelCli: {
+        listArgs: ["--list-models"],
+        primaryModels: [],
+      },
       nativeSkillRoots: {
         user: recursiveRoots([
           ".cursor/skills",
@@ -102,9 +71,6 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
           CLAUDE_SKILLS_ROOT,
           ".codex/skills",
         ]),
-        // cursor-agent discovers these trees anywhere inside the repository,
-        // so the project roots walk every ancestor up to the .git root and a
-        // symlink out of one stays within the repository, not the cwd.
         project: ancestorRoots(
           recursiveRoots([
             ".cursor/skills",
@@ -115,6 +81,7 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
         ),
       },
     },
+    nativeRootsResolver: resolveCursorNativeRoots,
   },
   {
     id: "acp-opencode",
@@ -126,18 +93,12 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     visibility: "installed",
     dialect: "opencode",
     supportsManualCompaction: true,
-    // Unverified: bb has never read this agent's `initialize` reply, and this
-    // is the value the ACP tier declared for it. Q21's per-instance probe
-    // replaces the guess with what the agent answers.
     fork: "tip",
     launch: {
       displayName: "opencode",
       command: "opencode",
       args: ["acp"],
       env: {},
-      // opencode reads the workspace trees from every ancestor directory up
-      // to the repository root. Its config-directory skills follow
-      // XDG_CONFIG_HOME / OPENCODE_CONFIG_DIR, so the resolver names them.
       nativeSkillRoots: {
         user: [CLAUDE_SKILLS_ROOT, ".agents/skills"],
         project: ancestorRoots([
@@ -157,18 +118,13 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     signInCommand: "omp login",
     installUrl: "https://github.com/can1357/omp",
     visibility: "installed",
-    // Unverified; the ACP tier's value (see acp-opencode).
+    supportsManualCompaction: true,
     fork: "tip",
     launch: {
       displayName: "omp",
       command: "omp",
       args: ["acp"],
       env: {},
-      // omp reads its own, pi's and every cross-agent tree in the workspace
-      // and its ancestors. Its agent directory (profile- and env-moved), the
-      // pi, Codex and opencode user directories, its config's
-      // `skills.customDirectories` and the Claude plugins come from the
-      // resolver.
       nativeSkillRoots: {
         user: plainRoots([
           ".agent/skills",
@@ -196,8 +152,6 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     installUrl: "https://docs.x.ai/docs/grok-build",
     visibility: "installed",
     dialect: "grok",
-    // `grok agent stdio` advertises `sessionCapabilities: { list, resume,
-    // close }`; no session/fork.
     fork: "none",
     reasoningLevels: ["low", "medium", "high"],
     launch: {
@@ -225,10 +179,6 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
         },
         defaultLevel: "high",
       },
-      // Grok scans its trees recursively and walks the workspace ancestors.
-      // `~/.grok/skills` follows GROK_HOME, and the Claude and Cursor trees
-      // can be switched off per host, so the resolver names those along with
-      // `skills.paths`, the grok plugins and the Claude plugins.
       nativeSkillRoots: {
         user: recursiveRoots([".agents/skills"]),
         project: [
@@ -246,7 +196,6 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
     signInCommand: "hermes login",
     installUrl: "https://hermes-agent.nousresearch.com",
     visibility: "installed",
-    // Unverified; the ACP tier's value (see acp-opencode).
     fork: "tip",
     reasoningLevels: ["none", "low", "medium", "high", "xhigh", "max"],
     launch: {
@@ -260,22 +209,10 @@ export const KNOWN_ACP_AGENTS: readonly AcpAgentDefinition[] = [
         defaultLevel: "medium",
       },
     },
-    // Hermes reads no workspace directory: `<hermesDir>/skills` (HERMES_HOME
-    // aware) and its config's `skills.external_dirs` all come from the host.
     nativeRootsResolver: resolveHermesNativeRoots,
   },
 ];
 
-/**
- * The provider ids a user-configured agent may not take.
- *
- * Only the always-listed agents are reserved. An installed-only agent is one
- * bb hides unless its CLI is present, and overriding it — with a different
- * command, extra args, a private build — is a documented thing to do, so a
- * configured agent with that id REPLACES the shipped registration instead of
- * being rejected. The always-listed ones stay reserved because a user who
- * shadowed them would lose the agent bb guarantees is there.
- */
 export const RESERVED_ACP_PROVIDER_IDS: ReadonlySet<string> = new Set(
   KNOWN_ACP_AGENTS.filter(
     (agent) => (agent.visibility ?? "always") === "always",

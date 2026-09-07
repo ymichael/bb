@@ -17,9 +17,11 @@ import {
   closeAutomationRun,
   createAutomation,
   createManualRun,
+  decodeAutomationRow,
   getAutomation,
   getRunningAutomationRun,
   listAutomationsForProject,
+  listDueAutomations,
   listAutomationRuns,
   migrations,
   setAutomationEnabled,
@@ -113,6 +115,50 @@ function oneShotTrigger() {
   return { triggerType: "once" as const, runAt: Date.now() + 60_000 };
 }
 
+function legacyAutomationRow(
+  overrides: {
+    execution?: string;
+    runMode?: "agent" | "script";
+    targetThreadId?: string | null;
+    triggerType?: "schedule" | "once";
+  } = {},
+) {
+  return {
+    id: "auto_legacy",
+    projectId: "proj_test",
+    targetThreadId: null,
+    name: "Legacy",
+    enabled: true,
+    triggerType: "schedule" as const,
+    triggerConfig: JSON.stringify({
+      triggerType: "schedule",
+      cron: "* * * * *",
+      timezone: "UTC",
+    }),
+    runMode: "agent" as const,
+    execution: JSON.stringify({
+      mode: "agent",
+      prompt: "legacy",
+      providerId: "codex",
+      model: "gpt-5",
+      permissionMode: "readonly",
+    }),
+    environment: JSON.stringify({ type: "project-default" }),
+    autoArchive: false,
+    origin: "human" as const,
+    createdByThreadId: null,
+    nextRunAt: 1000,
+    lastRunAt: null,
+    runCount: 1,
+    lastRunStatus: "succeeded" as const,
+    lastRunThreadId: "thr_legacy",
+    lastError: null,
+    createdAt: 1,
+    updatedAt: 2,
+    ...overrides,
+  };
+}
+
 function createAutomationServiceBb() {
   return {
     sdk: {
@@ -204,9 +250,6 @@ describe("data migrations", () => {
   });
 
   it("settles older duplicate running rows so single-flight can be introduced on history", () => {
-    // Databases from before single-flight could hold several running rows for
-    // one automation (manual runs never checked). The migration must not fail
-    // closed on that history: it keeps the newest row and settles the rest.
     const db = new Database(":memory:");
     db.exec(migrations[0] ?? "");
     db.prepare(
@@ -243,7 +286,6 @@ describe("data migrations", () => {
       skipReason: string | null;
       finishedAt: number | null;
     }>;
-    // Newest by started_at, then id: run_third survives.
     expect(rows.map((row) => [row.id, row.status])).toEqual([
       ["run_first", "skipped"],
       ["run_second", "skipped"],
@@ -251,7 +293,6 @@ describe("data migrations", () => {
     ]);
     expect(rows[0]!.skipReason).toMatch(/single-flight/);
     expect(rows[0]!.finishedAt).not.toBeNull();
-    // And the invariant now holds: a second running row is refused.
     expect(() => insertRun.run("run_fourth", 2000)).toThrow(/UNIQUE/);
   });
 });
@@ -329,7 +370,6 @@ describe("startup reconciliation", () => {
       expect(settled.status).toBe("skipped");
       expect(settled.skipReason).toMatch(/interrupted/);
       expect(settled.finishedAt).not.toBeNull();
-      // Single-flight releases: a new run can start.
       expect(getRunningAutomationRun(db, run.automationId)).toBeNull();
     }
     expect(published.length).toBeGreaterThan(0);
@@ -396,7 +436,6 @@ describe("startup reconciliation", () => {
       })[0]!;
       expect([testCase.id, run.status]).toEqual([testCase.id, testCase.status]);
     }
-    // A failed turn counts like a live failure; an interruption does not.
     expect(getAutomation(db, "auto_error")!.consecutiveFailures).toBe(1);
     expect(getAutomation(db, "auto_gone")!.consecutiveFailures).toBe(0);
   });
@@ -810,6 +849,92 @@ describe("automation data access", () => {
     ).toHaveLength(0);
   });
 
+  it("does not repeatedly select degraded agent executions for sweeping", () => {
+    const db = createTestDb();
+    const emptyPrompt = createScheduledAutomation(db, 1000, "auto_empty");
+    const invalidJson = createScheduledAutomation(db, 1000, "auto_invalid");
+    const healthy = createScheduledAutomation(db, 1000, "auto_healthy");
+    db.prepare("UPDATE automations SET execution = ? WHERE id = ?").run(
+      JSON.stringify({
+        mode: "agent",
+        prompt: "",
+        providerId: "codex",
+        model: "gpt-5",
+        reasoningLevel: "medium",
+        permissionMode: "accept-edits",
+        environment: { type: "project-default" },
+      }),
+      emptyPrompt.id,
+    );
+    db.prepare("UPDATE automations SET execution = ? WHERE id = ?").run(
+      "not json",
+      invalidJson.id,
+    );
+
+    expect(
+      listDueAutomations(db, { now: 1000, limit: 100 }).map(
+        (automation) => automation.id,
+      ),
+    ).toEqual([healthy.id]);
+    expect(getAutomation(db, emptyPrompt.id)).toMatchObject({
+      enabled: true,
+      nextRunAt: 1000,
+    });
+    expect(getAutomation(db, invalidJson.id)).toMatchObject({
+      enabled: true,
+      nextRunAt: 1000,
+    });
+  });
+
+  it("finds healthy due work after a full batch of malformed rows", () => {
+    const db = createTestDb();
+    const updateExecution = db.prepare(
+      "UPDATE automations SET execution = ?, created_at = 1 WHERE id = ?",
+    );
+    for (let index = 0; index < 100; index += 1) {
+      const id = `auto_invalid_${index.toString().padStart(3, "0")}`;
+      createScheduledAutomation(db, 1000, id);
+      updateExecution.run(
+        JSON.stringify({ mode: "agent", prompt: "incomplete" }),
+        id,
+      );
+    }
+    const healthy = createScheduledAutomation(db, 1000, "auto_healthy");
+    db.prepare("UPDATE automations SET created_at = 2 WHERE id = ?").run(
+      healthy.id,
+    );
+
+    expect(
+      listDueAutomations(db, { now: 1000, limit: 100 }).map(
+        (automation) => automation.id,
+      ),
+    ).toEqual([healthy.id]);
+  });
+
+  it("rejects denormalized fields that disagree with stored JSON", () => {
+    const mismatches = [
+      "UPDATE automations SET trigger_type = 'once' WHERE id = ?",
+      "UPDATE automations SET run_mode = 'script' WHERE id = ?",
+      "UPDATE automations SET target_thread_id = 'thr_other' WHERE id = ?",
+    ];
+
+    for (const mismatch of mismatches) {
+      const db = createTestDb();
+      const automation = createScheduledAutomation(db, 1000);
+      db.prepare(mismatch).run(automation.id);
+      const row = getAutomation(db, automation.id);
+      expect(row).not.toBeNull();
+      if (row === null) throw new Error("Expected stored automation");
+
+      expect(decodeAutomationRow(row).automation).toEqual({
+        id: automation.id,
+        projectId: automation.projectId,
+        name: automation.name,
+        problem: "invalid-stored-data",
+      });
+    }
+  });
+
   it("dedupes manual runs by idempotency key", () => {
     const db = createTestDb();
     createScheduledAutomation(db, 1000);
@@ -1137,10 +1262,6 @@ describe("automation service", () => {
 });
 
 describe("automation CLI --script-file", () => {
-  // Regression for get-bb/bb#1649: `--script-file` stores a snapshot copy of
-  // the source, so later edits to the source do nothing. The CLI must read the
-  // file on the invoking host (relative to the caller's cwd), print both paths
-  // with a note, and expose the stored copy path in `show`.
   type FileReadCall = { hostId: string | undefined; path: string };
 
   async function setup() {
@@ -1170,7 +1291,6 @@ describe("automation CLI --script-file", () => {
             ? { id: threadId, environment: { hostId: "host_laptop" } }
             : { id: threadId, environment: null },
       },
-      // Fake host file API: records the host and reads the local disk.
       files: {
         read: async ({ hostId, path }: { hostId?: string; path: string }) => {
           reads.push({ hostId, path });
@@ -1222,8 +1342,6 @@ describe("automation CLI --script-file", () => {
     const sourcePath = join(t.srcDir, "hello.sh");
     await writeFile(sourcePath, '#!/bin/sh\necho "VERSION 1"\n');
     try {
-      // The plugin CLI runs server-side; a relative path must resolve against
-      // the invoking CLI's cwd, not the server process cwd.
       const created = await t.cli.run(
         [
           "create",
@@ -1240,7 +1358,6 @@ describe("automation CLI --script-file", () => {
       );
       expect(created.exitCode).toBe(0);
       const automationId = idFrom(created.stdout);
-      // Outside a thread the read targets the server's primary host.
       expect(t.reads).toEqual([{ hostId: undefined, path: sourcePath }]);
       const storedPath = join(
         automationScriptDir(t.pluginDataDir, automationId),
@@ -1269,7 +1386,6 @@ describe("automation CLI --script-file", () => {
         timeoutMs: 120_000,
         storedScriptPath: storedPath,
       });
-      // Every route that returns the automation carries the stored path.
       const listed = await t.cli.run(
         ["list", "--project", "proj_test", "--json"],
         {},
@@ -1285,8 +1401,6 @@ describe("automation CLI --script-file", () => {
         storedPath,
       );
 
-      // Editing the source does not change the stored copy; only a fresh
-      // `update --script-file` refreshes it.
       await writeFile(sourcePath, '#!/bin/sh\necho "VERSION 2"\n');
       await expect(readFile(storedPath, "utf8")).resolves.toContain(
         "VERSION 1",
@@ -1464,15 +1578,12 @@ describe("bb CLI injection for script runs", () => {
         BB_CLI_DIR: "/other/dir",
       })[0],
     ).toBe("/daemon/bundle/bb");
-    // The server process gets BB_CLI_DIR, not BB_CLI, from the launcher.
     expect(bbBinaryCandidates({ BB_CLI_DIR: "/daemon/bundle" })[0]).toBe(
       "/daemon/bundle/bb",
     );
   });
 
   it("expands PATH itself so every candidate is absolute", () => {
-    // The resolved value is handed to scripts as BB_CLI, which is documented
-    // as absolute; a bare "bb" would re-resolve if a script edits PATH.
     expect(bbBinaryCandidates({ PATH: "/usr/bin:/opt/tools" })).toEqual([
       "/usr/bin/bb",
       "/opt/tools/bb",
@@ -1485,15 +1596,12 @@ describe("bb CLI injection for script runs", () => {
   });
 
   it("drops entries that would resolve against the wrong directory", () => {
-    // An empty PATH entry means the cwd, which for a script run is the
-    // automation scripts directory — a `bb` dropped there is not the CLI.
     expect(bbBinaryCandidates({ PATH: "/usr/bin::/bin" })).toEqual([
       "/usr/bin/bb",
       "/bin/bb",
       "/opt/homebrew/bin/bb",
       "/usr/local/bin/bb",
     ]);
-    // Blank or relative env pointers are skipped, not resolved against cwd.
     expect(
       bbBinaryCandidates({ BB_CLI: "  ", BB_CLI_DIR: "", PATH: "" }),
     ).toEqual(["/opt/homebrew/bin/bb", "/usr/local/bin/bb"]);
@@ -1506,8 +1614,6 @@ describe("bb CLI injection for script runs", () => {
     expect(scriptPathEnv("/daemon/bundle/bb", "/usr/bin:/bin")).toBe(
       "/daemon/bundle:/usr/bin:/bin",
     );
-    // Guard against a relative path ever reaching here: dirname() would be "."
-    // and would put the scripts directory ahead of the system PATH.
     expect(scriptPathEnv("bb", "/usr/bin:/bin")).toBe("/usr/bin:/bin");
     expect(scriptPathEnv(null, "/usr/bin:/bin")).toBe("/usr/bin:/bin");
     expect(scriptPathEnv("/daemon/bundle/bb", undefined)).toBe(
@@ -1529,12 +1635,8 @@ async function isProcessRunning(pid: number): Promise<boolean> {
     const stat = await readFile(`/proc/${pid}/stat`, "utf8");
     const closingParen = stat.lastIndexOf(")");
     const state = stat.slice(closingParen + 2, closingParen + 3);
-    // Container PID 1 may leave a terminated descendant as a zombie briefly.
-    // A zombie cannot execute and therefore satisfies process containment.
     return state !== "Z" && state !== "X";
   } catch (error) {
-    // The process can exit between the signal probe above and this read;
-    // Linux then answers ESRCH (not ENOENT) for the vanished /proc entry.
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT" || code === "ESRCH") return false;
     throw error;
@@ -1561,13 +1663,9 @@ describe("script process containment", () => {
         projectId: "proj_test",
         scriptFile: "script.sh",
         interpreter: "bash",
-        // Leave enough startup headroom for loaded CI hosts while still proving
-        // that the timeout, rather than normal script completion, owns cleanup.
         timeoutMs: 1_000,
         serverUrl: "http://127.0.0.1:38886",
       });
-      // The runner prefixes a warning line when no bb CLI is on PATH (CI), so
-      // read the labeled pid line rather than assuming the pid comes first.
       const childPidMatch = result.output.match(/^child_pid=(\d+)$/mu);
       const childPid = Number.parseInt(childPidMatch?.[1] ?? "", 10);
       expect(result.timedOut).toBe(true);
@@ -1618,41 +1716,7 @@ describe("legacy import", () => {
     await writeFile(
       join(pluginDataDir, "import", "legacy-automations.json"),
       JSON.stringify({
-        automations: [
-          {
-            id: "auto_legacy",
-            projectId: "proj_test",
-            targetThreadId: null,
-            name: "Legacy",
-            enabled: true,
-            triggerType: "schedule",
-            triggerConfig: JSON.stringify({
-              triggerType: "schedule",
-              cron: "* * * * *",
-              timezone: "UTC",
-            }),
-            runMode: "agent",
-            execution: JSON.stringify({
-              mode: "agent",
-              prompt: "legacy",
-              providerId: "codex",
-              model: "gpt-5",
-              permissionMode: "readonly",
-            }),
-            environment: JSON.stringify({ type: "project-default" }),
-            autoArchive: false,
-            origin: "human",
-            createdByThreadId: null,
-            nextRunAt: 1000,
-            lastRunAt: null,
-            runCount: 1,
-            lastRunStatus: "succeeded",
-            lastRunThreadId: "thr_legacy",
-            lastError: null,
-            createdAt: 1,
-            updatedAt: 2,
-          },
-        ],
+        automations: [legacyAutomationRow()],
         runs: [
           {
             id: "arun_legacy",
@@ -1703,5 +1767,63 @@ describe("legacy import", () => {
       listAutomationRuns(db, { automationId: "auto_legacy", limit: 10 }),
     ).toHaveLength(1);
     expect(kv.get("legacy-import-done")).toBe(true);
+  });
+
+  it("rejects legacy rows with inconsistent execution metadata", async () => {
+    const cases = [
+      {
+        name: "run mode",
+        row: legacyAutomationRow({ runMode: "script" }),
+      },
+      {
+        name: "target thread",
+        row: legacyAutomationRow({
+          targetThreadId: "thr_row",
+          execution: JSON.stringify({
+            mode: "agent",
+            prompt: "legacy",
+            providerId: "codex",
+            model: "gpt-5",
+            permissionMode: "readonly",
+            targetThreadId: "thr_execution",
+          }),
+        }),
+      },
+    ];
+
+    for (const testCase of cases) {
+      const db = createTestDb();
+      const pluginDataDir = await mkdtemp(join(tmpdir(), "bb-auto-plugin-"));
+      try {
+        await mkdir(join(pluginDataDir, "import"), { recursive: true });
+        await writeFile(
+          join(pluginDataDir, "import", "legacy-automations.json"),
+          JSON.stringify({
+            automations: [testCase.row],
+            runs: [],
+            scripts: {},
+          }),
+        );
+        const kv = new Map<string, unknown>();
+        const bb = {
+          storage: {
+            kv: {
+              get: async <T>(key: string) => kv.get(key) as T | undefined,
+              set: async (key: string, value: unknown) => {
+                kv.set(key, value);
+              },
+            },
+          },
+          log: { info: () => undefined },
+        };
+
+        await expect(
+          ingestLegacyImport({ bb, db, pluginDataDir }),
+          testCase.name,
+        ).rejects.toThrow(/does not match/u);
+      } finally {
+        await rm(pluginDataDir, { recursive: true, force: true });
+      }
+    }
   });
 });

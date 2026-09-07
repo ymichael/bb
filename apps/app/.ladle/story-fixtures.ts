@@ -1,10 +1,9 @@
 import type {
-  Environment,
   Host,
   ProjectSource,
+  ProviderInfo,
   ReasoningLevel,
   Thread,
-  ThreadListEntry,
   WorkspaceStatus,
 } from "@bb/domain";
 import type {
@@ -12,6 +11,15 @@ import type {
   ProviderCliStatus,
 } from "@bb/host-daemon-contract";
 import type { ProjectResponse } from "@bb/server-contract";
+import { EMPTY_ORDERED_MENTION_SUGGESTIONS } from "@bb/client-core";
+import {
+  makeEnvironment as makeEnvironmentFixture,
+  makeHost as makeHostFixture,
+  makeProviderInfo,
+  makeThread as makeThreadFixture,
+  makeThreadListEntry as makeThreadListEntryFixture,
+} from "@bb/test-helpers/domain-fixtures";
+import { makeProjectResponse } from "../src/test/fixtures/projects";
 import { getProviderIconInfo } from "../src/lib/provider-icon";
 import type { PickerOption } from "../src/components/pickers/OptionPicker";
 import type { ModelPickerOption } from "../src/components/pickers/model-picker-option";
@@ -27,12 +35,6 @@ import {
 } from "../src/components/promptbox/PromptBoxInternal";
 
 const noop = () => {};
-
-// ---------------------------------------------------------------------------
-// A small set of realistic, shared constants so the fixture universe feels
-// coherent across stories. Keep this list short — when stories reach for a
-// host or project name, they should reach for one of these.
-// ---------------------------------------------------------------------------
 
 export const HOST_IDS = {
   local: "host_local",
@@ -61,18 +63,12 @@ export const BRANCH_NAMES = {
   feature: "feat/sidebar-rail",
 } as const;
 
-// ---------------------------------------------------------------------------
-// Promptbox config builders. PromptBoxInternal, NewThreadPromptBox, and
-// FollowUpPromptBox stories all reach for the same Mentions / Attachments
-// shapes — share them here so the inert defaults stay consistent.
-// ---------------------------------------------------------------------------
-
 export function makeTypeaheadConfig(
   mentionOverrides: Partial<TypeaheadMentionConfig> = {},
   commandOverrides: Partial<TypeaheadCommandConfig> = {},
 ): TypeaheadConfig {
   const mention: TypeaheadMentionConfig = {
-    suggestions: [],
+    results: EMPTY_ORDERED_MENTION_SUGGESTIONS,
     isLoading: false,
     isError: false,
     onQueryChange: noop,
@@ -101,23 +97,39 @@ export function makeAttachmentsConfig(
   return { ...base, ...overrides };
 }
 
-// ---------------------------------------------------------------------------
-// Provider + model + reasoning fixtures shared across every story that shows
-// the model & reasoning picker (directly, or via ExecutionControls). Match
-// the realistic catalog the prototype stories used so the picker looks like
-// production wherever it appears.
-//
-// Labels are the raw (un-stripped) form — `ModelReasoningPicker` applies the
-// brand-prefix strip at render via `stripModelBrandPrefix`, so callers don't
-// need to pre-format.
-// ---------------------------------------------------------------------------
-
-// Core vendors no brand marks (they come from the provider plugins' declared
-// logos), so stories draw each provider through a declared host glyph.
 function storyProviderIcon(providerId: string, glyph: string) {
   return getProviderIconInfo(providerId, { logoUrl: null, icon: { glyph } })
     ?.icon;
 }
+
+function makeStoryProvider(
+  id: string,
+  displayName: string,
+  glyph: string,
+): ProviderInfo {
+  return makeProviderInfo({
+    id,
+    displayName,
+    logoUrl: null,
+    icon: { glyph },
+  });
+}
+
+const storyCodexProvider = makeStoryProvider("codex", "Codex", "Code");
+const storyClaudeCodeProvider = makeStoryProvider(
+  "claude-code",
+  "Claude Code",
+  "Brain",
+);
+const storyCursorProvider = makeStoryProvider("acp-cursor", "Cursor", "Zap");
+export const STORY_CLAUDE_CODE_PROVIDER_ID = storyClaudeCodeProvider.id;
+export const STORY_CURSOR_PROVIDER_ID = storyCursorProvider.id;
+
+export const STORY_PROVIDERS_BY_ID: ReadonlyMap<string, ProviderInfo> = new Map(
+  [storyCodexProvider, storyClaudeCodeProvider, storyCursorProvider].map(
+    (provider) => [provider.id, provider],
+  ),
+);
 
 export const STORY_PROVIDER_OPTIONS: readonly PickerOption<string>[] = [
   { value: "codex", label: "Codex", icon: storyProviderIcon("codex", "Code") },
@@ -213,20 +225,11 @@ export const STORY_CLAUDE_REASONING: readonly PickerOption<ReasoningLevel>[] = [
   { value: "max", label: "Max" },
 ];
 
-/** Only codex supports the fast / standard service-tier toggle today. */
 export const STORY_SERVICE_TIER_SUPPORT: Record<string, boolean> = {
   codex: true,
   "claude-code": false,
   pi: false,
 };
-
-// ---------------------------------------------------------------------------
-// Host / source / branch / worktree / project catalog. Every story that
-// renders the env strip (EnvironmentOptions, NewThreadPromptBox), the project
-// selector (NewThreadPromptBox), or the follow-up env summary
-// (FollowUpPromptBox) pulls from the same lists so adding a new branch state
-// flows everywhere without each story growing its own copy.
-// ---------------------------------------------------------------------------
 
 export const STORY_PROJECT_SOURCES: readonly ProjectSource[] = [
   {
@@ -282,11 +285,6 @@ export const STORY_PROJECTS: readonly ProjectSelectorOption[] = [
   { id: PROJECT_IDS.pierre, name: PROJECT_NAMES.pierre },
 ];
 
-/**
- * Codex / gpt-5.5 / medium reasoning — the default starting point most
- * stories want. Spread + override individual sections for specific
- * scenarios (locked provider, claude-code selected, fast mode on, etc.).
- */
 export function makeExecutionControlsProps(
   overrides: Partial<ExecutionControlsProps> = {},
 ): ExecutionControlsProps {
@@ -321,109 +319,49 @@ export function makeExecutionControlsProps(
   return { ...base, ...overrides };
 }
 
-// ---------------------------------------------------------------------------
-// Typed-base builders. Each base is annotated with its strict T so TypeScript
-// contextually checks every field (literal enum values + missing fields).
-// `Partial<T>` overrides can only restate existing fields, never invent
-// missing ones.
-// ---------------------------------------------------------------------------
-
 export function makeThread(overrides: Partial<Thread> = {}): Thread {
-  const base: Thread = {
+  return makeThreadFixture({
     id: "thr_demo",
     projectId: PROJECT_IDS.bb,
     environmentId: "env_demo",
-    providerId: "codex",
     title: "Audit recurring permission failures",
     titleFallback: "Audit recurring permission failures",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
-    createdAt: 0,
-    updatedAt: 100,
-  };
-  return { ...base, ...overrides };
+    ...overrides,
+  });
 }
 
 export function makeThreadListEntry(
-  overrides: Partial<ThreadListEntry> = {},
-): ThreadListEntry {
-  const base: ThreadListEntry = {
+  overrides: Parameters<typeof makeThreadListEntryFixture>[0] = {},
+) {
+  return makeThreadListEntryFixture({
     id: "thr_demo",
     projectId: PROJECT_IDS.bb,
-    environmentId: null,
-    providerId: "codex",
     title: "Audit recurring permission failures",
     titleFallback: "Audit recurring permission failures",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
-    createdAt: 0,
-    updatedAt: 100,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
-  };
-  return { ...base, ...overrides };
+    ...overrides,
+  });
 }
 
 export function makeProject(
   overrides: Partial<ProjectResponse> = {},
 ): ProjectResponse {
-  const base: ProjectResponse = {
+  return makeProjectResponse({
     id: PROJECT_IDS.bb,
-    kind: "standard",
     name: PROJECT_NAMES.bb,
-    gitRemoteUrl: null,
-    sources: [],
     createdAt: 1,
     updatedAt: 2,
-  };
-  return { ...base, ...overrides };
+    ...overrides,
+  });
 }
 
 export function makeHost(overrides: Partial<Host> = {}): Host {
-  const base: Host = {
+  return makeHostFixture({
     id: HOST_IDS.local,
     name: HOST_NAMES.local,
-    type: "persistent",
-    status: "connected",
     lastSeenAt: 100,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
-    createdAt: 0,
     updatedAt: 100,
-  };
-  return { ...base, ...overrides };
+    ...overrides,
+  });
 }
 
 export function makeProviderCliStatus(
@@ -455,27 +393,19 @@ export function makeProviderCliStatus(
 }
 
 export function makeEnvironment(
-  overrides: Partial<Environment> = {},
-): Environment {
-  const base: Environment = {
+  overrides: Parameters<typeof makeEnvironmentFixture>[0] = {},
+) {
+  return makeEnvironmentFixture({
     id: "env_demo",
-    name: null,
     projectId: PROJECT_IDS.bb,
     hostId: HOST_IDS.local,
     path: "/Users/michael/Projects/bb",
-    managed: true,
-    isGitRepo: true,
-    isWorktree: true,
-    workspaceProvisionType: "managed-worktree",
     branchName: BRANCH_NAMES.feature,
     baseBranch: BRANCH_NAMES.default,
     defaultBranch: BRANCH_NAMES.default,
-    mergeBaseBranch: null,
-    status: "ready",
-    createdAt: 0,
     updatedAt: 100,
-  };
-  return { ...base, ...overrides };
+    ...overrides,
+  });
 }
 
 export function makeWorkspaceStatus(

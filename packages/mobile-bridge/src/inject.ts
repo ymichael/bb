@@ -1,25 +1,12 @@
 import type { NativeShellHandshake } from "./handshake.js";
 import { NATIVE_BRIDGE_GLOBAL } from "./version.js";
 
-/**
- * The script the shell installs before any page script runs, and the shape it
- * installs. Both sides import this file so the global can never drift.
- */
-
-/** What `window.bb.native` exposes to the page. */
 export interface NativeShellApi extends NativeShellHandshake {
-  /** Fire and forget. Unknown types on an older shell are dropped there. */
   post(message: unknown): void;
-  /** A promise for a native action. Rejects when the shell cannot answer. */
   request(kind: string, payload: unknown): Promise<unknown>;
-  /** Shell events: safe-area changes and resume. Returns an unsubscribe. */
   subscribe(listener: (event: unknown) => void): () => void;
 }
 
-/**
- * Embed a value in a script tag safely. `</script`, U+2028, and U+2029 all
- * terminate or break a script when a page is served as HTML.
- */
 function encodeForScript(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</gu, "\\u003c")
@@ -27,15 +14,6 @@ function encodeForScript(value: unknown): string {
     .replace(/\u2029/gu, "\\u2029");
 }
 
-/**
- * Build the `injectedJavaScriptBeforeContentLoaded` payload. The script is
- * idempotent, because a WebView can re-run it after a process reload, and it
- * never throws: a failure here would break the page for a user who only
- * wanted to read a thread.
- *
- * WebKit needs a trailing `true;` so it does not try to serialise the last
- * expression back across the bridge.
- */
 export function buildBridgeInjectionScript(
   handshake: NativeShellHandshake,
 ): string {
@@ -127,11 +105,6 @@ true;
 `;
 }
 
-/**
- * The script the shell evaluates to deliver one event. Returns a no-op string
- * when the page never installed the bridge, which happens while a page is
- * still loading.
- */
 export function buildBridgeEventScript(event: unknown): string {
   return `
 (function () {

@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { describePiVersionProbeFailure } from "./provider-maintenance.js";
 
-// The wording reaches the installation status users read, so it is pinned:
-// a probe that hit execFile's own timeout says so with the number, and an
-// external SIGTERM is named as a stop, never mistaken for a slow pi.
 describe("describePiVersionProbeFailure", () => {
   it("names execFile's own timeout with the 15 s budget", () => {
     expect(

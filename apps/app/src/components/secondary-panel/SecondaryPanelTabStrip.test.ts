@@ -46,6 +46,65 @@ describe("secondary panel tab-strip edge fades", () => {
     ).not.toContain("app-region");
   });
 
+  it("enlarges coarse-pointer close targets only for file previews", () => {
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    const { getByRole } = render(
+      createElement(SecondaryPanelTabStrip, {
+        activeTabId: "file-preview",
+        tabs: [
+          {
+            label: "preview.html",
+            isPinned: false,
+            leadingVisual: null,
+            statusLabel: null,
+            onSelect: vi.fn(),
+            onClose: vi.fn(),
+            renderContent: () => null,
+            tab: {
+              environmentId: null,
+              hostId: null,
+              id: "file-preview",
+              kind: "host-file-preview" as const,
+              lineRange: null,
+              path: "preview.html",
+              threadId: null,
+            },
+          },
+          {
+            label: "Browser",
+            isPinned: false,
+            leadingVisual: null,
+            statusLabel: null,
+            onSelect: vi.fn(),
+            onClose: vi.fn(),
+            renderContent: () => null,
+            tab: { id: "browser", kind: "new-tab" as const },
+          },
+        ],
+        onReorderTab: vi.fn(),
+        usesDesktopChrome: false,
+        isPanelOpen: true,
+      }),
+    );
+
+    expect(
+      getByRole("button", { name: "Close preview.html" }).classList.contains(
+        "max-md:pointer-coarse:min-h-9",
+      ),
+    ).toBe(true);
+    expect(
+      getByRole("button", { name: "Close Browser" }).classList.contains(
+        "max-md:pointer-coarse:min-h-9",
+      ),
+    ).toBe(false);
+  });
+
   it("observes the intrinsic tab row so async title changes refresh overflow", () => {
     const observed: Element[] = [];
     let resizeCallback: ResizeObserverCallback | undefined;

@@ -7,7 +7,6 @@ import {
 const HOUR_MS = 60 * 60 * 1000;
 const LEAD_MS = 5 * 60 * 1000;
 
-/** A promise the test releases by hand, to hold a call open mid-flight. */
 function createGate(): { promise: Promise<void>; release: () => void } {
   let release!: () => void;
   const promise = new Promise<void>((resolve) => {
@@ -16,7 +15,6 @@ function createGate(): { promise: Promise<void>; release: () => void } {
   return { promise, release };
 }
 
-/** Manual clock plus timer queue, so the tests never wait on real time. */
 function createHarness(
   authenticate: (
     remoteServerUrl: string,
@@ -54,7 +52,6 @@ function createHarness(
     advanceTo(target: number): void {
       now = target;
     },
-    /** Fire every timer that is due, the way an event loop would. */
     runDueTimers(): void {
       for (const [handle, timer] of [...timers]) {
         if (timer.at <= now) {
@@ -90,7 +87,6 @@ describe("createConnectSessionRenewal", () => {
       "https://laptop.getbb.app",
       expect.any(Function),
     );
-    // The new cookie runs to now + 1h05m, so the next renewal waits an hour.
     expect(harness.pendingDelays).toEqual([HOUR_MS]);
   });
 
@@ -110,7 +106,6 @@ describe("createConnectSessionRenewal", () => {
     });
     const renewing = harness.renewal.renewNow();
 
-    // The user switches to a custom server while the gate call is open.
     harness.renewal.stop();
     gate.release();
     await renewing;
@@ -161,7 +156,6 @@ describe("createConnectSessionRenewal", () => {
     gate.release();
     await renewing;
 
-    // The local-server fallback reads this before it starts a bb server.
     expect(seen).toEqual([true, false]);
   });
 
@@ -200,7 +194,6 @@ describe("createConnectSessionRenewal", () => {
     harness.renewal.renewIfDue();
     expect(authenticate).not.toHaveBeenCalled();
 
-    // A Mac that slept past the timer wakes with the session almost gone.
     harness.advanceTo(1_000_000 + HOUR_MS - 60_000);
     harness.renewal.renewIfDue();
     await harness.renewal.renewNow();
@@ -252,8 +245,6 @@ describe("createConnectSessionRenewal", () => {
     });
     const renewing = harness.renewal.renewNow();
 
-    // The switch to another Connect server lands while the old renewal is
-    // still open, which is what applyServerTarget does before it authenticates.
     harness.renewal.start({
       expiresAt: 1_000_000 + 3 * HOUR_MS,
       remoteServerUrl: "https://phone.getbb.app",
@@ -261,7 +252,6 @@ describe("createConnectSessionRenewal", () => {
     gate.release();
     await renewing;
 
-    // Only the new session's timer survives; the old renewal added nothing.
     expect(harness.pendingDelays).toEqual([3 * HOUR_MS - LEAD_MS]);
   });
 });

@@ -59,8 +59,8 @@ describe("HeightTransition", () => {
         <span data-testid="restored-child">Restored content</span>
       </HeightTransition>,
     );
-    const wrapper = view.getByTestId("restored-child").parentElement
-      ?.parentElement;
+    const wrapper =
+      view.getByTestId("restored-child").parentElement?.parentElement;
 
     expect(wrapper?.style.height).toBe("40px");
     offsetHeight.mockReturnValue(80);
@@ -106,9 +106,6 @@ describe("AutoHeightContainer", () => {
       throw new Error("AutoHeightContainer did not render");
     }
 
-    // A padded inner: the border box (offsetHeight's metric, used by the
-    // mount and snap paths) is taller than the content rect. Sizing the
-    // wrapper from the content rect would clip it.
     act(() => {
       observer.callback([makeResizeEntry(inner, 120, 112)], observer);
     });

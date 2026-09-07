@@ -37,6 +37,17 @@ Making your repo work with bb:
   "Running .bb-env-setup.sh" and then ".bb-env-setup.sh finished",
   ".bb-env-setup.sh failed", or ".bb-env-setup.sh cancelled".
 
+  Commit a .bb-env-teardown.sh script at the repo root when setup creates
+  resources outside the managed worktree. BB runs the hook as
+  `env bash .bb-env-teardown.sh` from the worktree before it removes the
+  worktree. The hook receives the same sanitized environment as the setup
+  hook, and stdin is closed.
+
+  Teardown has a separate 15-minute timeout. A non-zero exit, timeout, or
+  signal reports failure in the destroy transcript, but bb removes the
+  worktree regardless. The teardown hook runs only when bb destroys managed
+  worktrees. It does not run for unmanaged or personal environments.
+
   New worktrees do not contain untracked files such as .env.local. To copy
   them from the source checkout, commit a .worktreeinclude file at the repo
   root. It uses gitignore syntax: one pattern per line, # for comments, ! to
@@ -101,9 +112,6 @@ Making your repo work with bb:
     --clear-name                          Clear display name
 
   bb environment commit <id>              Create a commit in the environment
-
-  bb environment squash-merge <id>        Squash-merge into a target branch
-    --merge-base-branch <branch>          Target branch (required)
 
   bb environment archive-threads <id>     Archive all threads in an environment
 

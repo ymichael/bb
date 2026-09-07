@@ -32,19 +32,10 @@ import {
   type QuestionFormState,
 } from "./src/form-state.js";
 
-// Ported from BB's native user-question form
-// (apps/app/src/components/thread/user-questions/UserQuestionInteractionContent.tsx)
-// so the cross-provider tool looks and behaves identically to the Claude Code
-// one. Differences are only where the plugin surface differs: submit/cancel
-// arrive as props instead of mutations, the number-key shortcuts are bound
-// locally instead of through the app command registry, and option previews are
-// rendered (the native form does not surface them yet).
-
 const OTHER_OPTION_LABEL = "Other…";
 const FREE_TEXT_MIN_HEIGHT = 84;
 const FREE_TEXT_MAX_HEIGHT = 158;
 const PREVIEW_MAX_HEIGHT = 220;
-/** Matches BB's default `question.select.N` bindings: plain digits, 1-based. */
 const MAX_SHORTCUT_ROWS = 9;
 
 interface QuestionOptionRowProps {
@@ -126,14 +117,6 @@ function QuestionOptionRow({
   );
 }
 
-/**
- * Claude's intent for `preview` is "rendered when the option is focused" — to
- * compare before committing. Selection is the accessible stand-in for focus
- * that also works on touch, and it bounds how much of the composer previews can
- * take. Preformatted mono, capped and scrollable, so a long preview cannot push
- * the buttons off screen. Rendered as a sibling of the option button because a
- * `<pre>` cannot nest inside a `<button>`.
- */
 function QuestionOptionPreview({ preview }: { preview: string }) {
   return (
     <pre
@@ -160,9 +143,7 @@ function QuestionTabs({
 }: QuestionTabsProps) {
   return (
     <div className="mb-2 flex shrink-0 items-center gap-2">
-      {/* A plain button group, not an ARIA tablist: these toggle which question
-          is shown but aren't tab/tabpanel widgets, so role="tablist" would be
-          malformed without role="tab" children + panels. */}
+      {}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {questions.map((question, index) => {
           const answered = isQuestionAnswered(
@@ -215,7 +196,6 @@ interface QuestionInputBlockProps {
   onToggleOption: (optionValue: string) => void;
   onSelectOther: () => void;
   onFreeTextChange: (value: string) => void;
-  /** Cmd/Ctrl+Enter in the free-text box advances/submits (see handleAdvance). */
   onShortcutSubmit: () => void;
 }
 
@@ -245,8 +225,6 @@ function QuestionInputBlock({
   const handleFreeTextKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
   ): void => {
-    // Cmd/Ctrl+Enter submits/advances, but never mid-IME-composition (e.g.
-    // selecting a Japanese candidate with Enter must not submit).
     if (
       event.nativeEvent.isComposing ||
       event.key !== "Enter" ||
@@ -343,11 +321,6 @@ function AskUserQuestionInteraction({
     interaction.id,
   );
 
-  // Reset only when a different interaction takes over. Keyed on the stable
-  // interaction id rather than the payload, whose reference churns on
-  // background refetch — depending on that would wipe in-progress answers.
-  // React's "adjust state during render" pattern always reads the current
-  // questions, so no effect (or stale closure) is needed.
   if (activeInteractionId !== interaction.id) {
     setActiveInteractionId(interaction.id);
     setFormState(createInitialFormState(questions));
@@ -414,7 +387,6 @@ function AskUserQuestionInteraction({
       try {
         await submit(buildInteractionResponse(questions, formState));
       } catch {
-        // The host renders the submission error outside this plugin form.
       } finally {
         setBusy(false);
       }
@@ -433,15 +405,10 @@ function AskUserQuestionInteraction({
     void (async () => {
       try {
         await cancel();
-      } catch {
-        // The host renders the cancellation error outside this plugin form.
-      }
+      } catch {}
     })();
   };
 
-  // Number-key answer selection, matching BB's default `question.select.N`
-  // bindings (plain digits, inactive while an editable is focused so typing a
-  // free-text answer never picks an option).
   useEffect(() => {
     if (busy || currentQuestion === null) return;
     const onKeyDown = (event: globalThis.KeyboardEvent): void => {
@@ -472,9 +439,6 @@ function AskUserQuestionInteraction({
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // handleToggleOption/handleSelectOther only close over the stable
-    // setFormState and their question argument, so the current question and
-    // busy flag are the whole dependency set.
     // oxlint-disable-next-line react/exhaustive-deps
   }, [busy, currentQuestion]);
 

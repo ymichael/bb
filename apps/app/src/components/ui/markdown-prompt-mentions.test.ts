@@ -52,8 +52,6 @@ describe("substitutePromptMentions", () => {
       spanAt(text, "@thread:thr_child", THREAD_RESOURCE),
     ]);
 
-    // The literal source token is gone (replaced by an inert sentinel), but the
-    // surrounding text is preserved verbatim.
     expect(result.content).not.toContain("@thread:thr_child");
     expect(result.content.startsWith("See ")).toBe(true);
     expect(result.content.endsWith(" here.")).toBe(true);
@@ -90,7 +88,6 @@ describe("substitutePromptMentions", () => {
       spanAt(text, "@src/foo_bar.ts", PATH_RESOURCE),
       spanAt(text, "@thread:thr_child", THREAD_RESOURCE),
     ]);
-    // Sorted by offset, so the thread mention (earlier in the text) is index 0.
     expect(result.mentions.map((mention) => mention.resource.kind)).toEqual([
       "thread",
       "path",
@@ -101,7 +98,6 @@ describe("substitutePromptMentions", () => {
     const text = "@src/foo_bar.ts";
     const result = substitutePromptMentions(text, [
       spanAt(text, "@src/foo_bar.ts", PATH_RESOURCE),
-      // A second mention starting inside the first is dropped.
       { start: 1, end: 5, resource: THREAD_RESOURCE },
     ]);
     expect(result.mentions).toHaveLength(1);
@@ -119,9 +115,6 @@ describe("substitutePromptMentions", () => {
 });
 
 describe("remarkPromptMentions", () => {
-  // A `data.hName` of "bb-prompt-mention" is what `mdast-util-to-hast` turns
-  // into the custom element the component renders; asserting it directly checks
-  // the plugin without needing a DOM.
   function mentionNodes(children: readonly PhrasingContent[]) {
     return children.filter(
       (child) => child.data?.hName === "bb-prompt-mention",

@@ -1,43 +1,3 @@
-/**
- * Keeps foreign DOM mutation from killing the app.
- *
- * React owns every node it renders and remembers which parent each one belongs
- * to. On unmount it calls `parent.removeChild(node)` directly. When another
- * agent in the page — a browser extension's content script, a plugin content
- * script, the browser's own page translator, a bookmarklet — moves or removes
- * one of those nodes first, React's call throws:
- *
- *   NotFoundError: Failed to execute 'removeChild' on 'Node': The node to be
- *   removed is not a child of this node.
- *
- * React catches that throw in the commit phase and escalates it to the nearest
- * error boundary. List updates are worse: `insertBefore` during placement is
- * not wrapped, so a stolen reference node blanks the window even when
- * `AppErrorBoundary` would have caught a deletion. This guard keeps both
- * faults from reaching that boundary.
- *
- * `removeChild` returns the node instead of throwing when it already has a
- * different parent. `insertBefore` appends instead of throwing when the
- * reference node has moved away. `replaceChild` does the same when the node
- * it would replace is gone. Wrappers only change the case that would throw.
- *
- * Plugin content scripts are a second, tighter layer. While one of those
- * scripts runs, the guard also refuses to move a React-owned node to a new
- * parent. Continuations the script schedules — MutationObserver callbacks,
- * timers, microtasks, `await`, and event listeners — keep the same rule.
- * The plugin can still insert its own sibling controls, but it cannot steal
- * a host button or link out of React's tree.
- *
- * This is the workaround React's own maintainers publish for translated pages
- * (facebook/react#11538), plus a host-side fence for trusted plugin scripts
- * that still share the document.
- *
- * Suppressed calls are counted and the first few are logged, because a burst
- * of them from a build where no extension or plugin is involved would point
- * at a real bug in our own rendering instead.
- */
-
-/** Log at most this many suppressions, then only keep counting. */
 const MAX_LOGGED_SUPPRESSIONS = 3;
 
 const REACT_FIBER_PREFIXES = [
@@ -63,15 +23,10 @@ let loggedRefusalCount = 0;
 let isolationDepth = 0;
 let isolationLabel: string | null = null;
 
-/** How many throwing DOM calls the guard has absorbed this session. */
 export function foreignDomMutationCount(): number {
   return suppressedCount;
 }
 
-/**
- * How many times a plugin content script was stopped from moving a React-owned
- * node out of the tree.
- */
 export function pluginHostNodeMoveRefusalCount(): number {
   return refusedMoveCount;
 }
@@ -139,12 +94,6 @@ function recordRefusedMove(node: Node, attemptedParent: Node): void {
   );
 }
 
-/**
- * True when a plugin script is trying to adopt a React-owned node into a
- * different parent. Same-parent reorders stay allowed. A detached React node
- * may still attach to another React host (a plugin-triggered commit). It may
- * not attach to a foreign parent after `remove` / `replaceWith`.
- */
 function refusePluginReparent(node: Node, newParent: Node): boolean {
   if (isolationDepth === 0) return false;
   if (node.parentNode === newParent) return false;
@@ -174,12 +123,6 @@ function leaveIsolation(previousLabel: string | null): void {
   isolationLabel = previousLabel;
 }
 
-/**
- * Run `fn` as plugin content-script DOM. React-owned nodes cannot be moved to
- * a new parent for the duration of the synchronous call. Work the script
- * schedules from here — observers, timers, and listeners — keeps the same
- * rule.
- */
 export function runWithPluginDomIsolation<T>(fn: () => T, label?: string): T {
   const previousLabel = enterIsolation(label);
   try {
@@ -199,12 +142,6 @@ function whenAborted(signal: AbortSignal): Promise<void> {
   });
 }
 
-/**
- * Same rule as {@link runWithPluginDomIsolation}, held across the returned
- * promise so an `async` mount or disposer cannot steal a node after `await`.
- * Abort `signal` to drop the fence if the host gives up on a stuck mount.
- * The original work still runs; it is just no longer isolated.
- */
 export async function runWithPluginDomIsolationAsync<T>(
   fn: () => T | Promise<T>,
   label?: string,
@@ -240,10 +177,6 @@ function filterAppendNodes(
   return kept;
 }
 
-/**
- * Wrap the DOM methods React (and plugins) use to move nodes. Safe to call
- * more than once; only the first call installs.
- */
 export function installForeignDomMutationGuard(): void {
   if (installed !== null || typeof Node !== "function") return;
 
@@ -286,9 +219,6 @@ export function installForeignDomMutationGuard(): void {
     EventListenerOrEventListenerObject
   >();
 
-  // Wrappers return their own argument rather than the native return value:
-  // the DOM spec defines each of these as returning the node it was handed,
-  // so this keeps the generic result type without an `as` cast.
   const guardedRemoveChild: RemoveChild = function removeChild<T extends Node>(
     this: Node,
     child: T,
@@ -599,7 +529,6 @@ export function installForeignDomMutationGuard(): void {
   };
 }
 
-/** Restore the native methods and the counters. Test-only. */
 export function uninstallForeignDomMutationGuardForTest(): void {
   if (installed !== null) {
     installed.restore();

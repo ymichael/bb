@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  getLatestThreadSequence,
-  listQueuedThreadMessages,
-} from "@bb/db";
+import { getLatestThreadSequence, listQueuedThreadMessages } from "@bb/db";
 import {
   createStandaloneBuiltinCompactCommandInput,
   turnScope,
@@ -141,6 +138,41 @@ describe("public thread compaction", () => {
     });
   });
 
+  it("routes ACP agent compaction onto the bridge's /compact turn", async () => {
+    await withTestHarness(async (harness) => {
+      const { host, session, thread } = seedCompactableThread(harness, {
+        providerId: "acp-omp",
+        providerThreadId: "provider-thread-acp",
+      });
+      const responder = registerSuccessfulTurnResponder(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/threads/${thread.id}/compact`,
+        { method: "POST" },
+      );
+      expect(
+        response.status,
+        JSON.stringify(await readJson(response.clone())),
+      ).toBe(200);
+      const turnSubmitRequests = responder.requests.filter(
+        ({ command }) => command.type === "turn.submit",
+      );
+      expect(turnSubmitRequests).toHaveLength(1);
+      expect(turnSubmitRequests[0]?.command).toMatchObject({
+        type: "turn.submit",
+        threadId: thread.id,
+        input: createStandaloneBuiltinCompactCommandInput(),
+        resumeContext: {
+          providerId: "acp-omp",
+          providerThreadId: "provider-thread-acp",
+        },
+      });
+    });
+  });
+
   it("queues sends and defers send-now while manual compaction is active", async () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedCompactableThread(harness, {
@@ -242,12 +274,14 @@ describe("public thread compaction", () => {
         }),
       ).toBe(true);
       expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(0);
-      await expect.poll(
-        () =>
-          responder.requests.filter(
-            ({ command }) => command.type === "turn.submit",
-          ).length,
-      ).toBe(2);
+      await expect
+        .poll(
+          () =>
+            responder.requests.filter(
+              ({ command }) => command.type === "turn.submit",
+            ).length,
+        )
+        .toBe(2);
     });
   });
 

@@ -18,9 +18,6 @@ function Stage({ children }: { children: ReactNode }) {
   );
 }
 
-// Click the "…" trigger to open the menu. It carries icons and grouping
-// dividers: status toggles (read/pin), open + edit, then lifecycle
-// (archive/delete). The read toggle uses an envelope icon and reflects state.
 export function Overview() {
   const readThread = makeThreadListEntry({
     id: "thr_read",

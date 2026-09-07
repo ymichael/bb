@@ -15,7 +15,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function resolveManifestPath(
+export function resolveManifestPath(
   rootDir: string,
   entry: string,
   label: string,
@@ -84,19 +84,12 @@ export async function validatePluginBuildManifest(
     if (label === "bb.branding.icon") {
       assertValidPluginCompactIconSvg(await readFile(realAsset), label);
     } else if (/\.svg$/iu.test(entry)) {
-      // An SVG logo is checked for script vectors here and nowhere else:
-      // install and load take the file as declared (a logo is usually a
-      // tool export, and the response headers keep it inert), so the build
-      // is where an author hears about a stray <script>. A raster logo is
-      // taken as declared.
       assertValidPluginLogoSvg(
         await readFile(realAsset),
         `manifest ${label} (${JSON.stringify(entry)})`,
       );
     }
   }
-  // Declared icons: the same filesystem rules as the branding assets, then
-  // the stricter icon validator over the exact bytes the server will serve.
   for (const [name, entry] of Object.entries(
     parsed.data.bb.branding.experimental_icons ?? {},
   )) {

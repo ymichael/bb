@@ -119,7 +119,10 @@ function findCodeSpanEnd(value: string, openingIndex: number): number | null {
     value,
   });
   const closingMarker = "`".repeat(markerLength);
-  const closingIndex = value.indexOf(closingMarker, openingIndex + markerLength);
+  const closingIndex = value.indexOf(
+    closingMarker,
+    openingIndex + markerLength,
+  );
 
   return closingIndex === -1 ? null : closingIndex + markerLength;
 }
@@ -451,9 +454,6 @@ function normalizeLocalFileMarkdownLinksInLine(line: string): string {
   return output + line.slice(lastCopiedIndex);
 }
 
-// CommonMark requires angle brackets around link destinations with literal
-// spaces. Agents often emit local absolute paths without them, so repair only
-// those local destinations before react-markdown parses the message.
 export function normalizeLocalFileMarkdownLinks(content: string): string {
   if (!content.includes(MARKDOWN_LINK_DESTINATION_OPEN)) {
     return content;

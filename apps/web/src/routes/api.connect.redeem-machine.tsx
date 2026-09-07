@@ -2,8 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { depsFromEnv, redeemMachineCode } from "@/server/api";
 import { getEnv } from "@/server/env";
 
-// Unauthenticated by design — the machine-pair code is the credential. Called by
-// the daemon join to obtain its bb-connect machine credential.
 export const Route = createFileRoute("/api/connect/redeem-machine")({
   server: {
     handlers: {

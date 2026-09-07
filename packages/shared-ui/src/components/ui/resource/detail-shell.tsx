@@ -32,18 +32,10 @@ export function ResourceDetailPanel({
 }
 
 export interface ResourcePromptContextItem {
-  /** Omitted where the composer's own footer carries no leading glyph. */
   icon?: IconName;
   label: ReactNode;
 }
 
-/**
- * Read-only preview of the saved input to an AI composer.
- *
- * The instruction stays visually connected to the context it will run with,
- * while the absence of input and send controls keeps this distinct from the
- * real editing composer.
- */
 export function ResourcePromptPreview({
   children,
   className,
@@ -56,9 +48,6 @@ export function ResourcePromptPreview({
   disabled?: boolean;
 }) {
   return (
-    // Match the production follow-up composer's geometry while keeping this
-    // read-only detail surface flat: same rounded-xl card, 68px minimum prompt
-    // area, text inset, and action-row spacing, without the composer's shadow.
     <div
       className={cn(
         "overflow-hidden rounded-xl border border-border bg-background",
@@ -115,13 +104,6 @@ export function ResourceDetailList({
   );
 }
 
-/**
- * A quiet, divided group of peer resources within a detail section.
- *
- * Use this for files, capabilities, services, schedules, and historical
- * events. The section supplies the hierarchy; the collection supplies row
- * structure without introducing another card.
- */
 export function ResourceDetailCollection({
   children,
   className,
@@ -219,8 +201,6 @@ export function ResourceDetailStack({
   );
 }
 
-/** Human-readable purpose and orientation. Keep this open and lightweight. */
-
 export function ResourceProperty({
   label,
   children,
@@ -236,11 +216,6 @@ export function ResourceProperty({
   );
 }
 
-/**
- * Prompt editing treatment for resources whose stored contract is plain text.
- * It borrows the composer hierarchy without implying attachments, mentions,
- * provider controls, or a send action that the resource cannot persist.
- */
 export function ResourcePromptEditor({
   value,
   ariaLabel,

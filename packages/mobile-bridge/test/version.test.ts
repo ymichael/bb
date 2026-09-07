@@ -13,8 +13,6 @@ describe("compareBridgeVersions", () => {
   });
 
   it("keeps working when the server serves an older page", () => {
-    // The shell must not refuse a server that has not shipped the new page
-    // yet. It simply receives fewer message kinds.
     const compatibility = compareBridgeVersions(1, 3);
     expect(compatibility.kind).toBe("older-peer");
     expect(isBridgeUsable(compatibility)).toBe(true);

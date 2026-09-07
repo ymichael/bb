@@ -130,7 +130,7 @@ async function startDesktopSmokeServer(
             changelogPreview: false,
             editMessages: false,
             mobileApp: false,
-            providerSessionReaping: false,
+            sidebarProgressiveDisclosure: false,
             timelineWindowing: false,
           },
           featureFlags: {
@@ -315,15 +315,6 @@ async function readDesktopPackageVersion(): Promise<string> {
   return desktopPackageJsonSchema.parse(JSON.parse(packageJsonText)).version;
 }
 
-// The desktop bundle has shape requirements electron-builder and the runtime
-// rely on but the typechecker can't see: main must be CJS (electron-universal
-// builds the entry asar around it), the preload must have the desktop version
-// baked in at build time (not read from `process.env` at runtime, which is
-// empty in packaged builds), the bb-app bridge must be ESM (it imports
-// `bb-app/dist/bb-app.js`), every entry needs its source map alongside it
-// for crash-symbolication in shipped builds, and the compiled Electron entry
-// must launch far enough for the preload bridge to answer from a real window.
-// One smoke test asserts all of those artifact-level contracts.
 describe("desktop build", () => {
   it("emits package-compatible Electron entries", async () => {
     const desktopVersion = await readDesktopPackageVersion();
@@ -345,22 +336,15 @@ describe("desktop build", () => {
       "utf8",
     );
 
-    // main.js must be CJS — no top-level ESM imports — so electron-universal
-    // can wrap it in the entry asar.
     expect(mainSource).toContain('"use strict";');
     expect(mainSource).not.toMatch(/^import\s/mu);
 
-    // The preload reads its version at *build* time. In a packaged build the
-    // env vars are empty, so any residual `process.env.BB_DESKTOP_VERSION`
-    // lookup would surface as "undefined" in the title bar / about dialog.
     expect(preloadSource).toContain(desktopVersion);
     expect(preloadSource).not.toContain("BB_DESKTOP_VERSION");
     expect(preloadSource).not.toContain("getDesktopVersion(process.env");
 
-    // The bridge must stay ESM — it pulls bb-app via the package's ESM entry.
     expect(bridgeSource).toContain('import "bb-app/dist/bb-app.js"');
 
-    // Source maps must ship for every entry so crash reports symbolicate.
     for (const mapPath of [
       "main.js.map",
       "preload.cjs.map",

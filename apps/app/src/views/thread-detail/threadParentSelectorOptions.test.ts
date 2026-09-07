@@ -1,5 +1,6 @@
 import type { ThreadListEntry } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import {
   buildParentSelectorOptions,
   isRootThread,
@@ -8,46 +9,17 @@ import {
 type ThreadListEntryOverrides = Partial<ThreadListEntry>;
 
 function makeThread(overrides: ThreadListEntryOverrides = {}): ThreadListEntry {
-  return {
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    archivedAt: null,
+  return makeThreadListEntry({
     createdAt: 1,
-    deletedAt: null,
-    environmentBranchName: null,
-    environmentHostId: null,
-    environmentId: null,
-    environmentName: null,
-    environmentWorkspaceDisplayKind: "other",
-    hasPendingInteraction: false,
     id: "thr_1",
     lastReadAt: null,
     latestAttentionAt: 1,
-    parentThreadId: null,
-    pinnedAt: null,
-    pinSortKey: null,
     projectId: "proj_1",
-    providerId: "codex",
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    sourceThreadId: null,
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-    status: "idle",
     title: "Thread",
     titleFallback: "Thread",
-    sectionId: null,
     updatedAt: 1,
     ...overrides,
-  };
+  });
 }
 
 describe("thread parent selector options", () => {
@@ -69,6 +41,40 @@ describe("thread parent selector options", () => {
       { value: "none", label: "None" },
       { value: "thr_standard_parent", label: "Standard parent" },
       { value: "thr_review_parent", label: "Review parent" },
+    ]);
+  });
+
+  it("prioritizes threads with children while preserving group order", () => {
+    const options = buildParentSelectorOptions({
+      currentThreadId: "thr_current",
+      parentThreadDisplayName: null,
+      parentThreadId: null,
+      parentThreads: [
+        makeThread({ id: "thr_leaf_new", title: "New leaf" }),
+        makeThread({
+          id: "thr_child_two",
+          parentThreadId: "thr_parent_two",
+          title: "Child two",
+        }),
+        makeThread({ id: "thr_parent_two", title: "Parent two" }),
+        makeThread({ id: "thr_parent_one", title: "Parent one" }),
+        makeThread({
+          id: "thr_child_one",
+          parentThreadId: "thr_parent_one",
+          title: "Child one",
+        }),
+        makeThread({ id: "thr_leaf_old", title: "Old leaf" }),
+      ],
+    });
+
+    expect(options).toEqual([
+      { value: "none", label: "None" },
+      { value: "thr_parent_two", label: "Parent two" },
+      { value: "thr_parent_one", label: "Parent one" },
+      { value: "thr_leaf_new", label: "New leaf" },
+      { value: "thr_child_two", label: "Child two" },
+      { value: "thr_child_one", label: "Child one" },
+      { value: "thr_leaf_old", label: "Old leaf" },
     ]);
   });
 

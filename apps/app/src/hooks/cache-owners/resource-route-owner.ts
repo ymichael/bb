@@ -51,7 +51,8 @@ function isDeletedEnvironmentMessage(
 export function useDeletedResourceRouteOwner(): DeletedResourceRouteChangeHandler {
   const navigate = useNavigate();
   const setCollapsedProjectIdList = useSetAtom(collapsedProjectIdsAtom);
-  const { projectId: routeProjectId, threadId: routeThreadId } = useRouteState();
+  const { projectId: routeProjectId, threadId: routeThreadId } =
+    useRouteState();
 
   return useCallback(
     (message: ChangedMessage) => {

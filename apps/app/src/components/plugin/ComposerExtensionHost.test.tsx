@@ -16,6 +16,7 @@ import {
 } from "./ComposerExtensionHost";
 
 const mocks = vi.hoisted(() => ({
+  collapseIfFocused: vi.fn(() => false),
   focusDefault: vi.fn(() => true),
   focusHost: vi.fn(),
 }));
@@ -98,6 +99,7 @@ function Harness({
     view,
     isFocused,
     isPrimary,
+    collapseIfFocused: mocks.collapseIfFocused,
     focusDefault: mocks.focusDefault,
   });
   return (
@@ -132,6 +134,17 @@ describe("ComposerExtensionHost", () => {
     fireEvent.keyDown(window, { key: "c", ctrlKey: true });
 
     expect(mocks.focusHost).toHaveBeenCalledOnce();
+    expect(mocks.focusDefault).not.toHaveBeenCalled();
+  });
+
+  it("collapses an already-focused composer instead of focusing it again", () => {
+    mocks.collapseIfFocused.mockReturnValueOnce(true);
+    renderHarness();
+
+    fireEvent.keyDown(window, { key: "c", ctrlKey: true });
+
+    expect(mocks.collapseIfFocused).toHaveBeenCalledOnce();
+    expect(mocks.focusHost).not.toHaveBeenCalled();
     expect(mocks.focusDefault).not.toHaveBeenCalled();
   });
 

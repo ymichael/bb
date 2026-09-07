@@ -11,7 +11,9 @@ import {
 describe("PRIORITY_MENU_ORDER", () => {
   it("lists No priority first (0) and covers every priority once", () => {
     expect(PRIORITY_MENU_ORDER[0]).toBe("none");
-    expect([...PRIORITY_MENU_ORDER].sort()).toEqual([...TASK_PRIORITIES].sort());
+    expect([...PRIORITY_MENU_ORDER].sort()).toEqual(
+      [...TASK_PRIORITIES].sort(),
+    );
   });
 });
 
@@ -44,7 +46,12 @@ describe("priorityForShortcut", () => {
 });
 
 describe("isBareKey", () => {
-  const base = { metaKey: false, ctrlKey: false, altKey: false, shiftKey: false };
+  const base = {
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+  };
   it("is true only with no modifier held", () => {
     expect(isBareKey(base)).toBe(true);
     expect(isBareKey({ ...base, metaKey: true })).toBe(false);

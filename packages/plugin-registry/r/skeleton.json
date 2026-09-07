@@ -10,7 +10,7 @@
   "files": [
     {
       "path": "registry/components/ui/skeleton.tsx",
-      "content": "/* shadcn/ui-derived */\nimport type { HTMLAttributes } from \"react\";\nimport { cn } from \"../../lib/utils\";\n\nexport function Skeleton({\n  className,\n  ...props\n}: HTMLAttributes<HTMLDivElement>) {\n  return (\n    <div\n      className={cn(\"animate-pulse rounded-md bg-surface-selected\", className)}\n      {...props}\n    />\n  );\n}\n",
+      "content": "import type { HTMLAttributes } from \"react\";\nimport { cn } from \"../../lib/utils\";\n\nexport function Skeleton({\n  className,\n  ...props\n}: HTMLAttributes<HTMLDivElement>) {\n  return (\n    <div\n      className={cn(\"animate-pulse rounded-md bg-surface-selected\", className)}\n      {...props}\n    />\n  );\n}\n",
       "type": "registry:ui",
       "target": "components/ui/skeleton.tsx"
     }

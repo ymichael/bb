@@ -106,7 +106,6 @@ export function usePluginComposerActionUsage(): Readonly<
   return useSyncExternalStore(subscribe, getSnapshot, () => EMPTY_USAGE_COUNTS);
 }
 
-/** Test-only: reload the module snapshot after a test changes localStorage. */
 export function resetPluginComposerActionUsageForTest(): void {
   initialized = false;
   snapshot = EMPTY_USAGE_COUNTS;

@@ -15,16 +15,12 @@ function usage(
   return { usedTokens, modelContextWindow: WINDOW, estimated };
 }
 
-// Tone thresholds (shared by the ring stroke and the menu bar/percentage):
-//   < 75%  → muted, 75–89% → warning, ≥ 90% → destructive.
-const low = usage(36_000); // 18% — muted
-const moderate = usage(110_000); // 55% — muted
-const approachingLimit = usage(166_000); // 83% — warning
-const critical = usage(192_000); // 96% — destructive
-const estimated = usage(150_000, true); // 75% — warning, "Estimated" label
+const low = usage(36_000);
+const moderate = usage(110_000);
+const approachingLimit = usage(166_000);
+const critical = usage(192_000);
+const estimated = usage(150_000, true);
 
-// The popover anchors to the top of the ring, so bottom-align the trigger and
-// leave headroom above for the open menu.
 function OpenMenuRow({
   label,
   hint,
@@ -43,13 +39,14 @@ function OpenMenuRow({
   );
 }
 
-// Everything in one place: the ring trigger across fill levels (hover any to
-// open its menu), then the usage menu rendered open at each tone.
 export function Overview() {
   return (
     <>
       <StoryCard>
-        <StoryRow label="Low (18%)" hint="muted ring — hover for the usage menu">
+        <StoryRow
+          label="Low (18%)"
+          hint="muted ring — hover for the usage menu"
+        >
           <ThreadContextWindowIndicator usage={low} />
         </StoryRow>
         <StoryRow label="Moderate (55%)" hint="muted ring">

@@ -112,7 +112,9 @@ function classifySlowCommandWaitFailure(
   };
 }
 
-export function runLiveCommandAndWait<TType extends HostDaemonSettledCommandType>(
+export function runLiveCommandAndWait<
+  TType extends HostDaemonSettledCommandType,
+>(
   deps: LoggedWorkSessionDeps,
   args: RunLiveCommandAndWaitArgs<TType>,
 ): Promise<HostDaemonCommandResult<TType>>;

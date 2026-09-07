@@ -41,16 +41,11 @@ interface TimedStatementOperationArgs<TValue> {
 }
 
 const DEFAULT_SLOW_DB_QUERY_LOG_THRESHOLD_MS = 100;
-/** 256 MiB page cache. Negative cache_size is kibibytes. */
 export const SQLITE_CACHE_SIZE_KIB = 262_144;
-/** Memory-map the first 1 GiB of the database file. */
 export const SQLITE_MMAP_SIZE_BYTES = 1_073_741_824;
 export const SQLITE_BUSY_TIMEOUT_MS = 5_000;
 const MAX_LOGGED_SQL_LENGTH = 1_000;
 const SQL_TRUNCATION_SUFFIX = "...";
-// Keep ORM-generated quoted identifiers intact. SQLite accepts double-quoted
-// strings in some legacy cases, but broad redaction would erase table/column
-// names from Drizzle SQL and make the slow-query log much less useful.
 const SQL_STRING_LITERAL_PATTERN = /'(?:''|[^'])*'/gu;
 const SQL_WHITESPACE_PATTERN = /\s+/gu;
 
@@ -79,8 +74,6 @@ function runTimedStatementOperation<TValue>(
   } finally {
     const durationMs = performance.now() - startedAt;
     if (durationMs >= args.config.thresholdMs) {
-      // `info`, not `debug`: the packaged app runs at `info`, so a debug
-      // line never appears next to the stall reports it is meant to explain.
       args.config.logger.info(
         {
           bindingArgumentCount: args.bindingArgumentCount,
@@ -152,8 +145,6 @@ function instrumentSqliteClient(
     return instrumentStatement(originalPrepare(source), source, config);
   }
 
-  // Drizzle and our data helpers all prepare statements through this client.
-  // Wrapping here instruments both ORM and raw prepared-statement call paths.
   Object.defineProperty(sqlite, "prepare", {
     configurable: true,
     value: prepare,
@@ -161,30 +152,15 @@ function instrumentSqliteClient(
   });
 }
 
-/**
- * Opens the database at `source`. A path (or `:memory:`) opens a file or a
- * fresh in-memory database; a `Buffer` opens an in-memory copy of a
- * serialized database image (`db.$client.serialize()`), which is how the test
- * harnesses clone a migrated template instead of replaying every migration.
- */
 export function createConnection(
   source: string | Buffer = "bb.db",
   options: CreateConnectionOptions = {},
 ) {
   const sqlite = new Database(source);
 
-  // Reclaim freed pages incrementally (via PRAGMA incremental_vacuum in the
-  // periodic maintenance sweep) instead of relying on a full-file VACUUM. This
-  // only takes effect for a brand-new database (set before any tables exist);
-  // existing databases convert on their next full VACUUM (see compactDatabase).
   sqlite.pragma("auto_vacuum = INCREMENTAL");
-  // Enable WAL mode for better concurrent read performance
   sqlite.pragma("journal_mode = WAL");
-  // Enable foreign keys
   sqlite.pragma("foreign_keys = ON");
-  // WAL + NORMAL: no fsync per commit. Power loss can drop the last
-  // transactions; it cannot corrupt the file. cache_size/mmap_size replace
-  // the 2 MiB default cache so a multi-GB database is not re-read per query.
   sqlite.pragma("synchronous = NORMAL");
   sqlite.pragma(`cache_size = -${SQLITE_CACHE_SIZE_KIB}`);
   sqlite.pragma(`mmap_size = ${SQLITE_MMAP_SIZE_BYTES}`);

@@ -17,6 +17,7 @@ import {
   createConnection,
   getPluginSettingsValues,
   migrate,
+  setPluginSettingsValues,
   type DbConnection,
 } from "@bb/db";
 import type { Logger } from "@bb/logger";
@@ -32,22 +33,23 @@ import { createNoopTelemetryService } from "../../../src/services/system/telemet
 
 const logger = testLogger as unknown as Logger;
 
-/** Count the open fds of this process that point at `file` (Linux only). */
 async function countOpenFdsFor(file: string): Promise<number> {
   let count = 0;
   for (const fd of await readdir("/proc/self/fd")) {
     try {
       if ((await readlink(join("/proc/self/fd", fd))) === file) count += 1;
-    } catch {
-      // The fd closed between readdir and readlink.
-    }
+    } catch {}
   }
   return count;
 }
 
 async function writePlugin(
   dir: string,
-  options: { name: string; serverSource: string },
+  options: {
+    name: string;
+    serverSource: string;
+    dependencies?: Record<string, string>;
+  },
 ): Promise<string> {
   const rootDir = join(dir, options.name);
   await mkdir(rootDir, { recursive: true });
@@ -56,6 +58,7 @@ async function writePlugin(
     JSON.stringify({
       name: options.name,
       version: "0.1.0",
+      dependencies: options.dependencies,
       bb: {
         name: "Settings storage fixture",
         description: "Settings and storage plugin fixture.",
@@ -115,6 +118,7 @@ describe("plugin settings + storage", () => {
               teamKey: { type: "string", label: "Team key", default: "ENG" },
               mode: { type: "select", label: "Mode", options: ["fast", "slow"], default: "fast" },
               autoSync: { type: "boolean", label: "Sync automatically", default: true },
+              retries: { type: "number", label: "Retries", default: 3 },
               note: { type: "string", label: "Note" },
             });
             const g = globalThis as any;
@@ -146,8 +150,20 @@ describe("plugin settings + storage", () => {
         teamKey: "ENG",
         mode: "fast",
         autoSync: true,
+        retries: 3,
         apiKey: undefined,
         note: undefined,
+      });
+    });
+
+    it("reads a legacy stored numeric string as a number", async () => {
+      await installConfigurable();
+      setPluginSettingsValues(db, "configurable", {
+        retries: JSON.stringify(" 5 "),
+      });
+
+      await expect(state().settings.get()).resolves.toMatchObject({
+        retries: 5,
       });
     });
 
@@ -156,6 +172,7 @@ describe("plugin settings + storage", () => {
       const view = await service.updateSettings("configurable", {
         apiKey: "sk-secret-123",
         autoSync: false,
+        retries: 4.5,
         note: "hello",
       });
 
@@ -169,10 +186,10 @@ describe("plugin settings + storage", () => {
       expect(await readFile(secretPath, "utf8")).toBe("sk-secret-123");
       expect((await stat(secretPath)).mode & 0o777).toBe(0o600);
 
-      // Secrets never leave as values — only { set: boolean }.
       expect(view?.values.apiKey).toEqual({ set: true });
       expect(JSON.stringify(view)).not.toContain("sk-secret-123");
       expect(view?.values.autoSync).toBe(false);
+      expect(view?.values.retries).toBe(4.5);
       expect(view?.values.note).toBe("hello");
 
       expect(await state().settings.get()).toEqual({
@@ -180,6 +197,7 @@ describe("plugin settings + storage", () => {
         teamKey: "ENG",
         mode: "fast",
         autoSync: false,
+        retries: 4.5,
         note: "hello",
       });
 
@@ -190,11 +208,9 @@ describe("plugin settings + storage", () => {
       expect(change.next.autoSync).toBe(false);
       expect(change.next.apiKey).toBe("sk-secret-123");
 
-      // A no-op write does not fire onChange again.
       await service.updateSettings("configurable", { note: "hello" });
       expect(state().changes).toHaveLength(1);
 
-      // Unset deletes the secret file and falls back to undefined.
       const cleared = await service.updateSettings("configurable", {
         apiKey: null,
       });
@@ -213,12 +229,82 @@ describe("plugin settings + storage", () => {
         systemBroadcasts.filter((kinds) => kinds.includes("plugins-changed")),
       ).toHaveLength(1);
 
-      // Writing the same effective values again must not broadcast.
       systemBroadcasts.length = 0;
       await service.updateSettings("configurable", { note: "hi" });
       expect(
         systemBroadcasts.some((kinds) => kinds.includes("plugins-changed")),
       ).toBe(false);
+    });
+
+    it("lets plugin server code validate and persist its own settings", async () => {
+      const rootDir = await writePlugin(workDir, {
+        name: "bb-plugin-self-configuring",
+        dependencies: { zod: "^4.3.6" },
+        serverSource: `
+          import { z } from "zod";
+
+          export default async function plugin(bb: any) {
+            const settings = bb.settings.define({
+              notes: {
+                type: "string",
+                label: "Notes",
+                experimental_schema: z.string().max(4, "Notes must be at most 4 characters").regex(/^[a-z]*$/, "Notes must contain lowercase letters only"),
+                default: "",
+              },
+            });
+            const g = globalThis as any;
+            g.__selfConfiguring = { changes: [], settings };
+            settings.onChange((next: any) => g.__selfConfiguring.changes.push(next));
+          }
+        `,
+      });
+      const entry = await service.installPath(rootDir);
+      expect(entry.status).toBe("running");
+      const state = (globalThis as Record<string, unknown>)
+        .__selfConfiguring as {
+        changes: Array<{ notes: string }>;
+        settings: {
+          experimental_set(values: {
+            notes: string;
+          }): Promise<{ notes: string }>;
+          get(): Promise<{ notes: string }>;
+        };
+      };
+      systemBroadcasts.length = 0;
+
+      await expect(
+        state.settings.experimental_set({ notes: "test" }),
+      ).resolves.toEqual({ notes: "test" });
+      expect(state.changes).toEqual([{ notes: "test" }]);
+      await expect(state.settings.get()).resolves.toEqual({ notes: "test" });
+      expect(
+        systemBroadcasts.filter((kinds) => kinds.includes("plugins-changed")),
+      ).toHaveLength(1);
+      await expect(
+        state.settings.experimental_set({ notes: "longer" }),
+      ).rejects.toThrow("at most 4 characters");
+      await expect(
+        state.settings.experimental_set({ notes: "1234" }),
+      ).rejects.toThrow("lowercase letters only");
+
+      const app = new Hono();
+      registerPluginRoutes(app, { config: { serverPort: 3334 }, db }, service);
+      const got = await app.request("/plugins/self-configuring/settings");
+      const body = (await got.json()) as {
+        schema: Record<string, Record<string, unknown>>;
+      };
+      expect(body.schema.notes).not.toHaveProperty("experimental_schema");
+
+      const invalid = await app.request("/plugins/self-configuring/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ values: { notes: "1234" } }),
+      });
+      expect(invalid.status).toBe(400);
+      expect(((await invalid.json()) as { error: string }).error).toContain(
+        "lowercase letters only",
+      );
+      await expect(state.settings.get()).resolves.toEqual({ notes: "test" });
     });
 
     it("rejects unknown keys and type mismatches", async () => {
@@ -229,6 +315,9 @@ describe("plugin settings + storage", () => {
       await expect(
         service.updateSettings("configurable", { autoSync: "yes" }),
       ).rejects.toThrow(/expects a boolean/);
+      await expect(
+        service.updateSettings("configurable", { retries: "4" }),
+      ).rejects.toThrow(/expects a finite number/);
       await expect(
         service.updateSettings("configurable", { mode: "warp" }),
       ).rejects.toThrow(/must be one of/);
@@ -355,7 +444,6 @@ describe("plugin settings + storage", () => {
       await expect(kv.set("big", "x".repeat(256 * 1024))).rejects.toThrow(
         /256KB/,
       );
-      // LIKE wildcards in prefixes match literally.
       expect(await kv.list("issue%")).toEqual([]);
     });
   });
@@ -401,22 +489,75 @@ describe("plugin settings + storage", () => {
       const staleDb = sqler().db;
       await service.reload("sqler");
 
-      // The pre-reload handle was closed by the host; using it throws.
       expect(() =>
         staleDb.prepare("SELECT COUNT(*) AS count FROM items").get(),
       ).toThrow(/not open/);
 
-      // The factory re-ran migrate against the same file: still exactly one
-      // seed row (idempotent), on a fresh usable handle.
       const rerunRow = sqler()
         .db.prepare("SELECT COUNT(*) AS count FROM items")
         .get();
       expect(rerunRow.count).toBe(1);
     });
 
-    // Regression for #1919: every database() call opened a new better-sqlite3
-    // connection and only the dispose/reload path closed them, so a plugin
-    // that calls database() per request leaked fds without bound.
+    it("rejects a changed migration statement at an applied index", async () => {
+      const rootDir = await writePlugin(workDir, {
+        name: "bb-plugin-migration-collision",
+        serverSource: `
+          export default function plugin(bb: any) {
+            const db = bb.storage.database();
+            bb.storage.migrate(db, [
+              "CREATE TABLE items (id INTEGER PRIMARY KEY, name TEXT NOT NULL)",
+            ]);
+          }
+        `,
+      });
+      await service.installPath(rootDir);
+
+      const api = service.getApi("migration-collision");
+      expect(api).toBeDefined();
+      if (!api) throw new Error("migration-collision plugin did not load");
+      const database = api.storage.database();
+      expect(() =>
+        api.storage.migrate(database, [
+          "CREATE TABLE replacements (id INTEGER PRIMARY KEY)",
+        ]),
+      ).toThrow(/migration 0 does not match the recorded statement/);
+    });
+
+    it("reserves unknown legacy indexes before later statements can reuse them", async () => {
+      const rootDir = await writePlugin(workDir, {
+        name: "bb-plugin-legacy-migrations",
+        serverSource: `export default function plugin() {}`,
+      });
+      await service.installPath(rootDir);
+
+      const api = service.getApi("legacy-migrations");
+      expect(api).toBeDefined();
+      if (!api) throw new Error("legacy-migrations plugin did not load");
+      const database = api.storage.database();
+      database.exec(
+        "CREATE TABLE items (id INTEGER PRIMARY KEY); CREATE TABLE _bb_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL); INSERT INTO _bb_migrations VALUES (0, 1), (2, 1)",
+      );
+      api.storage.migrate(database, [
+        "CREATE TABLE items (id INTEGER PRIMARY KEY)",
+      ]);
+
+      const rows = database
+        .prepare("SELECT id, statement_hash FROM _bb_migrations ORDER BY id")
+        .all();
+      expect(rows).toEqual([
+        { id: 0, statement_hash: expect.stringMatching(/^[a-f0-9]{64}$/) },
+        { id: 2, statement_hash: "legacy-unknown" },
+      ]);
+      expect(() =>
+        api.storage.migrate(database, [
+          "CREATE TABLE items (id INTEGER PRIMARY KEY)",
+          "SELECT 1",
+          "SELECT 2",
+        ]),
+      ).toThrow(/migration 2 does not match the recorded statement/);
+    });
+
     it("returns one reused handle per plugin load instead of a connection per call", async () => {
       const CALLS = 200;
       const rootDir = await writePlugin(workDir, {
@@ -450,16 +591,12 @@ describe("plugin settings + storage", () => {
       };
       expect(state.handles).toHaveLength(CALLS);
       expect(new Set(state.handles).size).toBe(1);
-      // The first close round closes the shared handle; every later call
-      // vends a new handle, never a closed one: 1 shared + 2 reopened + final.
       expect(
         new Set([...state.handles, ...state.reopened, state.final]).size,
       ).toBe(4);
       expect(state.final.open).toBe(true);
       expect(state.final.prepare("SELECT 1 AS one").get()).toEqual({ one: 1 });
 
-      // procfs is Linux-only and not always mounted; the identity assertion
-      // above already covers the regression without it.
       if (existsSync("/proc/self/fd")) {
         const dbFile = join(dataDir, "plugins", "chatty", "data.db");
         expect(await countOpenFdsFor(dbFile)).toBeLessThanOrEqual(1);
@@ -493,7 +630,6 @@ describe("plugin settings + storage", () => {
     expect(globals.__needsKeyLoads).toBe(1);
 
     await service.updateSettings("needs-key", { apiKey: "shhh" });
-    // The save reloaded the plugin; the fresh factory saw the key.
     expect(globals.__needsKeyLoads).toBe(2);
     expect(service.list().find((p) => p.id === "needs-key")?.status).toBe(
       "running",

@@ -88,7 +88,9 @@ export function useAudioInputDevices() {
   const [devices, setDevices] = useState<AudioInputDeviceOption[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSupported, setIsSupported] = useState(() => getMediaDevices() !== null);
+  const [isSupported, setIsSupported] = useState(
+    () => getMediaDevices() !== null,
+  );
 
   const refresh = useCallback(
     async (options: RefreshAudioInputDevicesOptions = {}) => {

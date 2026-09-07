@@ -40,12 +40,6 @@ export type ThreadContextWindowUsage = z.infer<
 export { gitBranchNameSchema };
 export type { GitBranchName };
 
-/**
- * Pre-thread checkout intent for an unmanaged workspace. Omitting this from
- * the workspace request means "don't touch HEAD"; including it asks the
- * daemon to switch to the named branch or create a server-named branch from
- * `baseBranch` before the thread starts.
- */
 export const unmanagedBranchSpecSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -62,21 +56,9 @@ export type UnmanagedBranchSpec = z.infer<typeof unmanagedBranchSpecSchema>;
 export const unmanagedWorkspaceSchema = z.object({
   type: z.literal("unmanaged"),
   path: z.string().min(1).nullable(),
-  /**
-   * If set, the daemon checks out this branch in the unmanaged workspace
-   * before the thread starts. `existing` switches to a named branch; `new`
-   * asks the server to mint a thread-scoped branch name and create it from
-   * the requested base branch.
-   */
   branch: unmanagedBranchSpecSchema.optional(),
 });
 
-/**
- * Identifies the base branch a managed worktree should be created from.
- * `named` carries an explicit branch name; `default` defers to the source's
- * default branch (resolved server-side so the daemon always receives a real
- * branch name).
- */
 export const baseBranchSpecSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("named"), name: gitBranchNameSchema }),
   z.object({ kind: z.literal("default") }),
@@ -85,7 +67,6 @@ export type BaseBranchSpec = z.infer<typeof baseBranchSpecSchema>;
 
 export const managedWorktreeWorkspaceSchema = z.object({
   type: z.literal("managed-worktree"),
-  /** Branch the new worktree should be based on. */
   baseBranch: baseBranchSpecSchema,
 });
 
@@ -127,15 +108,6 @@ export const environmentArgsSchema = z.discriminatedUnion("type", [
 ]);
 export type EnvironmentArgs = z.infer<typeof environmentArgsSchema>;
 
-/**
- * Server-resolved environment default for thread creation: the server picks
- * the host and workspace using its own defaulting policy (personal workspace
- * for the personal project; otherwise a managed worktree when the primary
- * source has a usable base branch, or that source checkout when it does not).
- * For callers — plugins, scripts — that should not re-derive compose-flow
- * policy. Accepted only by thread creation; other surfaces keep the explicit
- * {@link environmentArgsSchema}.
- */
 export const projectDefaultEnvironmentSchema = z.object({
   type: z.literal("project-default"),
 });
@@ -162,26 +134,8 @@ export const branchListQuerySchema = z.object({
 export const serverMessageSchema = changedMessageSchema;
 export type ServerMessage = z.infer<typeof serverMessageSchema>;
 
-/**
- * Lenient counterpart of {@link serverMessageSchema} for INBOUND parsing on
- * clients. The strict schema guards the server's outgoing boundary; clients
- * (SDK consumers, the web app) may be older than the server they talk to, so
- * they strip unknown fields and filter unknown change kinds instead of
- * dropping whole messages on additive server changes. Output stays assignable
- * to {@link ServerMessage}.
- */
 export const serverMessageLenientSchema = changedMessageLenientSchema;
 
-/**
- * Ephemeral server→client WebSocket message carrying a plugin's
- * `bb.realtime.publish(channel, payload)` signal. V1 broadcasts to every
- * connected client — there is no per-channel subscription yet (client-side
- * consumption lands with the plugin frontend runtime). Nothing is persisted;
- * clients that predate this message type ignore it. `payload` is a
- * JSON-serializable value (publish normalizes `undefined` to `null`). Strict
- * schema guards the server's outgoing boundary (mirrors the thread-open signal
- * in threads.ts).
- */
 export const pluginSignalSchema = z
   .object({
     type: z.literal("plugin-signal"),
@@ -192,11 +146,6 @@ export const pluginSignalSchema = z
   .strict();
 export type PluginSignal = z.infer<typeof pluginSignalSchema>;
 
-/**
- * Lenient counterpart of {@link pluginSignalSchema} for INBOUND parsing on
- * clients (mirrors threadOpenSignalLenientSchema): unknown fields from a
- * newer server are stripped instead of dropping the whole signal.
- */
 export const pluginSignalLenientSchema = z.object({
   type: z.literal("plugin-signal"),
   pluginId: z.string().min(1),
@@ -236,3 +185,15 @@ export const workspacePathListResponseSchema = z.object({
 export type WorkspacePathListResponse = z.infer<
   typeof workspacePathListResponseSchema
 >;
+
+export function rejectMultipleWorkspaceSelectors(
+  query: { environmentId?: string; hostId?: string },
+  context: z.RefinementCtx,
+): void {
+  if (query.environmentId !== undefined && query.hostId !== undefined) {
+    context.addIssue({
+      code: "custom",
+      message: "hostId and environmentId are mutually exclusive",
+    });
+  }
+}

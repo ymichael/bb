@@ -46,8 +46,6 @@ interface TerminalStartOptions
   title?: string;
 }
 
-interface TerminalAttachOptions extends TerminalJsonOptions {}
-
 interface TerminalSendOptions extends TerminalJsonOptions {
   enter?: boolean;
   stdin?: boolean;
@@ -169,7 +167,7 @@ export function registerTerminalCommands(
     .description("Attach to a running terminal session")
     .option("--json", "Print machine-readable JSON output")
     .action(
-      action(async (terminalId: string, opts: TerminalAttachOptions) => {
+      action(async (terminalId: string, opts: TerminalJsonOptions) => {
         if (opts.json) {
           const session = await createCliBbSdk(getUrl()).terminals.get({
             terminalId,

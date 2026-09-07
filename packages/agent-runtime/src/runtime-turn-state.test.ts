@@ -105,7 +105,6 @@ describe("RuntimeTurnState", () => {
 
     await expect(firstWaiter).resolves.toBe("turn-1");
     await expect(secondWaiter).resolves.toBe("turn-1");
-    // Resolution must clear the timeout timers, not leave them dangling.
     expect(vi.getTimerCount()).toBe(0);
   });
 
@@ -167,4 +166,3 @@ describe("RuntimeTurnState", () => {
     await expect(otherWaiter).resolves.toBeNull();
   });
 });
-

@@ -16,13 +16,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Real web-fetch rows pulled from live threads in ~/.bb-dev/bb.db.
-// webFetch events emit only `item/completed`, so startedAt == createdAt
-// unless an explicit `item/started` exists (e.g. the Anthropic toolu_ row).
-// ---------------------------------------------------------------------------
-
-// thr_yr83zs2m7f — sequence 7470. URL only (Codex provider — prompt/pattern null).
 const urlOnlyFetch: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:web-fetch:ws_0e85bcec855f8f510169eff1846b0c81989bfa5e67bb99a484",
   threadId: "thr_yr83zs2m7f",
@@ -39,7 +32,6 @@ const urlOnlyFetch: TimelineRow = webFetchRow({
   durationMs: 0,
 });
 
-// thr_p93awt656h — TanStack docs URL only.
 const tanstackFetch: TimelineRow = webFetchRow({
   id: "thr_p93awt656h:web-fetch:ws_034f339785f02f2b0169f23ac4f1d8819085d6c92cbdb71e5e",
   threadId: "thr_p93awt656h",
@@ -56,8 +48,6 @@ const tanstackFetch: TimelineRow = webFetchRow({
   durationMs: 0,
 });
 
-// thr_3vw9r8igrb — sequence 1202/1203. Anthropic web-fetch with a real prompt.
-// item/started at 1777481783565, item/completed at 1777481786285.
 const fetchWithPrompt: TimelineRow = webFetchRow({
   id: "thr_3vw9r8igrb:web-fetch:toolu_01GVztZgXKMtefajWjMwANng",
   threadId: "thr_3vw9r8igrb",
@@ -75,7 +65,6 @@ const fetchWithPrompt: TimelineRow = webFetchRow({
   durationMs: 2720,
 });
 
-// thr_fjav9z98vu — sequence 1705. Real fetch with a `pattern` (grep-style hint).
 const fetchWithPattern: TimelineRow = webFetchRow({
   id: "thr_fjav9z98vu:web-fetch:ws_006e4116502b07000169f92e9c91748191820718192d32c819",
   threadId: "thr_fjav9z98vu",
@@ -92,8 +81,6 @@ const fetchWithPattern: TimelineRow = webFetchRow({
   durationMs: 0,
 });
 
-// Running — based on the same Cursor docs URL, but mid-flight: status=pending,
-// completedAt null. startedAt/createdAt = Date.now() so the "running" timing reads live.
 const runningFetch: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:web-fetch:ws_running",
   threadId: "thr_yr83zs2m7f",
@@ -110,9 +97,6 @@ const runningFetch: TimelineRow = webFetchRow({
   durationMs: null,
 });
 
-// Error — same shape as urlOnlyFetch but flipped to status=error.
-// No real "errored" web-fetch rows exist in ~/.bb-dev/bb.db; we reuse a real
-// URL payload and surface the error state.
 const erroredFetch: TimelineRow = webFetchRow({
   id: "thr_yr83zs2m7f:web-fetch:ws_errored",
   threadId: "thr_yr83zs2m7f",
@@ -129,7 +113,6 @@ const erroredFetch: TimelineRow = webFetchRow({
   durationMs: 0,
 });
 
-// Interrupted — agent cancelled mid-fetch.
 const interruptedFetch: TimelineRow = webFetchRow({
   id: "thr_fjav9z98vu:web-fetch:ws_interrupted",
   threadId: "thr_fjav9z98vu",

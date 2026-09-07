@@ -35,13 +35,6 @@ function findDelegationRow(
   throw new Error(`no delegation row for ${callId}`);
 }
 
-/**
- * A grammar v3 `delegation` item (codex native sub-agents today, every
- * provider's delegated work as its bridge migrates) projects to the
- * delegation row with the child turn's content nested under it, exactly as
- * the legacy `spawnAgent` tool call did. Without this the row would vanish
- * and the child content — whose only anchor is the parent call — with it.
- */
 describe("delegation item projection", () => {
   it("renders a delegation item as a delegation row with its child content nested", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
@@ -99,7 +92,6 @@ describe("delegation item projection", () => {
         child.kind === "conversation" ? child.text : child.kind,
       ),
     ).toContain("README says hello.");
-    // The child content renders only under its delegation, never at the root.
     const rootConversationTexts = timeline.rows.flatMap((row) =>
       row.kind === "turn"
         ? (row.children ?? []).flatMap((child) =>

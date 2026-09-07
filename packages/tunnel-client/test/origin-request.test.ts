@@ -34,7 +34,6 @@ beforeAll(async () => {
       response.end(JSON.stringify({ ok: true }));
     });
   });
-  // A framing error answers an empty 400, which is the bug this guards.
   server.on("clientError", (_error, socket) => {
     socket.end("HTTP/1.1 400 Bad Request\r\n\r\n");
   });
@@ -51,8 +50,6 @@ afterAll(async () => {
 });
 
 describe("requestOriginHttp", () => {
-  // The relay drops the visitor's Content-Length, so the client must restore
-  // it. Node skips chunked encoding for DELETE, GET, and HEAD.
   it.each(["DELETE", "GET", "PATCH", "POST", "PUT"])(
     "delivers a %s body to the origin",
     async (method) => {

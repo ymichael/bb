@@ -97,12 +97,6 @@ export interface MigrationWarningLogger {
 }
 
 export interface MigrateOptions {
-  /**
-   * Apply logical backfills for legacy lifecycle cleanup migrations while
-   * leaving large retired tables/columns in place. This keeps startup fast for
-   * already-created databases; strict migrations still physically remove those
-   * artifacts when this option is omitted.
-   */
   deferDestructiveLegacyCleanup?: boolean;
   logger?: MigrationWarningLogger;
 }
@@ -584,9 +578,6 @@ function hasPublishedTimestampFallback(
     return false;
   }
 
-  // Published squash-era migrations can already exist with historical hashes.
-  // Drizzle uses created_at as its high-water mark, so those released rows must
-  // be accepted by their pinned tag/timestamp when the current file hash differs.
   return appliedCreatedAts.has(expectedMigration.createdAt);
 }
 
@@ -1102,9 +1093,6 @@ function applyReorderedCleanupMigrations(
   }
 }
 
-// 0031 externalized large event JSON and 0032 restored it inline, leaving no
-// persistent schema change. If neither migration started, current event rows
-// already match the final state, so only the migration ledger needs repair.
 function skipEventLargeValuesRoundTripForInlineEvents(
   db: DbConnection,
   migrationsFolder: string,
@@ -1302,8 +1290,6 @@ function seedKeepAwakePluginConfiguration(db: DbConnection): void {
   ) {
     return;
   }
-  // Idempotently preserve the retired core preference in the plugin's one
-  // configuration record. Once plugin-owned state exists, never overwrite it.
   db.$client.exec(`
     INSERT INTO plugin_kv (plugin_id, key, value, updated_at)
     SELECT
@@ -1361,10 +1347,6 @@ function repairBranchLocalThreadSearchMigrations(db: DbConnection): void {
     .run(...branchLocalThreadSearchMigrationCreatedAts);
 }
 
-// A branch-local tab migration briefly occupied the 0059 journal slot before
-// the published pending-interactions migration landed. Those databases have a
-// newer migration row, so Drizzle would otherwise skip the published 0059
-// migration and leave pending_interactions on its old shape.
 function repairBranchLocalThreadTabsBeforePendingInteractionsMigration(
   db: DbConnection,
   migrationsFolder: string,

@@ -1,49 +1,3 @@
-/**
- * The scripted echo provider bridge: the runtime and integration suites' test
- * double, speaking the real Provider Bridge Protocol through the real
- * bridge-protocol adapter and delta assembler.
- *
- * It is the echo example bridge (`examples/plugins/echo-provider`) with the
- * scripted behaviour a test needs to drive lifecycle, interaction, and
- * tool-call paths. A prompt's text carries the directives; nothing else about
- * the provider is special:
- *
- * - `delay:<ms>` — hold the turn open that long before it settles (a stop
- *   can interrupt it, siblings can run beside it).
- * - `approve:<command|file_change|permission_grant|plan>` — raise an approval
- *   on the `interaction/request` channel before answering; a denied approval
- *   answers `Denied`.
- * - `ask_user` — raise a user question; the answer is echoed back.
- * - `call_tool:<name>` / `call_tool_unresolved:<name>` — call a dynamic tool
- *   on `item/tool/call` with a resolved (vouched) or unresolved (null) turn id
- *   and answer `Tool called: <name>`.
- * - `hold_turn` — open the turn and never settle it (a stop interrupts it).
- * - `fail_turn:<text>` / `prestart_fail:<text>` — raise a provider error
- *   carrying the text (underscores read as spaces) and settle the turn as
- *   failed, after or before the turn opens.
- * - `recover:<kind>` — send an unsolicited `provider/recovery` notification
- *   of that kind (`retryable: false`) for the thread right after the plan's
- *   deltas: after the terminal delta of a failed or completed turn, after
- *   `turn.open` for a held turn. `recover_now:<kind>` sends it right after
- *   `turn.open` instead, while the turn is still running.
- * - `bg_task` — open a `backgroundTask` item in the turn and leave it open
- *   after the turn settles (a workflow that outlives its turn);
- *   `bg_task_done` settles every task the thread left open.
- * - otherwise the turn answers `Response to: <prompt text>`.
- *
- * Process- and session-level behaviour (archived sessions, failing commands,
- * crashes at a chosen method, slow starts) is scripted through
- * {@link ScriptedEchoOptions}: either `options.providerOptions.scripted` on
- * a session/turn command (the runtime merges a bridge launch's
- * `providerOptions` into every command) or the `SCRIPTED_ECHO_OPTIONS` env
- * JSON for behaviour that must apply before any session exists. With
- * `SCRIPTED_ECHO_RECORD_PATH` set, every handled request is appended to that
- * JSONL file so a suite can assert on what reached the provider.
- *
- * Turns are vouched: every delta names the bridge's own `turn-N` id and every
- * bridge → runtime request marks `providerNativeIds`, so the suites exercise
- * the assembler's provider↔bb id maps the way codex does.
- */
 import {
   type ClientTurnRequestId,
   type PendingInteractionPayload,
@@ -79,10 +33,6 @@ import {
 import { appendFileSync } from "node:fs";
 import { z } from "zod";
 
-// ---------------------------------------------------------------------------
-// Scripted options
-// ---------------------------------------------------------------------------
-
 const scriptedMethodSchema = z.enum([
   "initialize",
   "model/list",
@@ -99,50 +49,18 @@ const scriptedMethodSchema = z.enum([
   "thread/goal/clear",
   "skills/configure",
 ]);
-export type ScriptedMethod = z.infer<typeof scriptedMethodSchema>;
-
 export const scriptedEchoOptionsSchema = z
   .object({
-    /** Every session construction answers after this many ms. */
     startDelayMs: z.number().int().nonnegative().optional(),
-    /**
-     * Open the turn, play its deltas and settle it first, and answer the
-     * `turn/start` request only after this many ms — so a recovery hint the
-     * turn raises reaches the runtime while its turn/start is still in
-     * flight, whatever the read batching.
-     */
     turnStartResponseDelayMs: z.number().int().nonnegative().optional(),
-    /**
-     * Answer thread/start, thread/resume and thread/fork with `{ threadId }`
-     * instead of an identity.
-     */
     answerStartWithoutIdentity: z.boolean().optional(),
-    /**
-     * Reject resume/fork/turn.start/turn.steer with the codex-shaped
-     * "session … is archived" error until `thread/unarchive` names the
-     * session.
-     */
     archivedSession: z.boolean().optional(),
-    /** `thread/unarchive` fails. */
     unarchiveFails: z.boolean().optional(),
-    /** Exit the process right after answering the archived error. */
     exitAfterArchivedError: z.boolean().optional(),
-    /** The first `thread/discard` fails; later ones succeed. */
     discardFailsOnce: z.boolean().optional(),
-    /** Exit the process when this method arrives (before answering). */
     crashOn: scriptedMethodSchema.optional(),
-    /** Exit the process right after answering this method. */
     exitAfter: scriptedMethodSchema.optional(),
-    /** Answer these methods with METHOD_NOT_FOUND. */
     unsupportedMethods: z.array(scriptedMethodSchema).optional(),
-    /**
-     * Answer these methods with a JSON-RPC error carrying this message and
-     * `code` (default -32000; e.g. NO_ACTIVE_TURN to reject a steer the way a
-     * provider with no live turn does). With `times`, only the first that
-     * many calls of the method fail (counted per process); later calls fall
-     * through to the next entry for the method, or are handled normally — a
-     * transient failure.
-     */
     failMethods: z
       .array(
         z.object({
@@ -150,10 +68,6 @@ export const scriptedEchoOptionsSchema = z
           message: z.string(),
           code: z.number().int().optional(),
           times: z.number().int().positive().optional(),
-          /**
-           * Attach a typed recovery hint to the rejection
-           * (`error.data.recovery`, the message is the entry's message).
-           */
           recovery: z
             .object({
               kind: providerRecoveryKindSchema,
@@ -163,70 +77,23 @@ export const scriptedEchoOptionsSchema = z
         }),
       )
       .optional(),
-    /** Delay the goal-cleared state delta by this many ms after the answer. */
     goalClearNotifyDelayMs: z.number().int().nonnegative().optional(),
-    /**
-     * The `cleared` value `thread/goal/clear` answers (default true). The
-     * goal-cleared state delta is emitted either way: a false answer models
-     * a provider that persisted the clear after it had already responded.
-     */
     goalClearReportsCleared: z.boolean().optional(),
-    /** Accept `turn/start` but never open the turn (the watchdog case). */
     swallowTurnStart: z.boolean().optional(),
-    /** Report `sessionRestorable` on every identity result. */
     sessionRestorable: z.boolean().optional(),
-    /** Prefix the echoed user message as a provider warning (test noise). */
     warnOnTurn: z.boolean().optional(),
-    /**
-     * The bb thread id the bridge puts on its `item/tool/call` requests
-     * instead of the session's own — a provider whose thread hint disagrees
-     * with its provider-thread identity.
-     */
     toolCallThreadIdHint: z.string().min(1).optional(),
-    /**
-     * The bb thread id the bridge puts on its unsolicited `provider/recovery`
-     * notifications instead of the session's own — a provider hinting about
-     * a thread its process does not host.
-     */
     recoveryThreadIdHint: z.string().min(1).optional(),
-    /**
-     * The `approvalEnforcedBy` the handshake reports (default `runtime`).
-     * Process-level only (`SCRIPTED_ECHO_OPTIONS`): `initialize` carries no
-     * session options.
-     */
     approvalEnforcedBy: z.enum(["runtime", "provider"]).optional(),
-    /**
-     * Mint provider thread ids as `prov-<pid>-<n>` and prefix every answer
-     * with `pid:<pid>:`, so a test can tell which bridge process served a
-     * thread (process-per-thread providers, restarts, reaping).
-     */
     identifyProcess: z.boolean().optional(),
-    /** Refuse `thread/stop` for these bb thread ids (-32000). */
     failStopForThreadIds: z.array(z.string().min(1)).optional(),
-    /**
-     * On SIGTERM, emit a late `thread/identity` for every open session
-     * before exiting — a provider that keeps talking while it is shut down.
-     * Process-level (`SCRIPTED_ECHO_OPTIONS`).
-     */
     emitIdentityOnSigterm: z.boolean().optional(),
   })
   .strict();
 export type ScriptedEchoOptions = z.infer<typeof scriptedEchoOptionsSchema>;
 
 const SCRIPTED_OPTIONS_ENV = "SCRIPTED_ECHO_OPTIONS";
-/**
- * When set, every request the bridge handles is appended to this JSONL file
- * as `{ method, params }` — the suites' view of what reached the provider
- * (session construction options, dynamic tools, skill roots, turn input).
- */
 const SCRIPTED_RECORD_PATH_ENV = "SCRIPTED_ECHO_RECORD_PATH";
-/**
- * When set, the bridge appends one line per process-lifecycle step to this
- * file: `spawn:<pid>`, `exit:<pid>` (on SIGTERM), and
- * `<method>:<pid>:<threadId>` for thread/start, thread/resume, turn/start
- * and thread/stop — the per-process view the request record (which has no
- * pid) cannot give.
- */
 const SCRIPTED_PROCESS_LOG_PATH_ENV = "SCRIPTED_ECHO_PROCESS_LOG_PATH";
 
 function logProcessStep(step: string): void {
@@ -255,7 +122,6 @@ try {
   );
 }
 
-/** Per-command scripted options win over the process-level env options. */
 function scriptedOptionsFor(
   providerOptions: Record<string, unknown> | undefined,
 ): ScriptedEchoOptions {
@@ -272,10 +138,6 @@ function scriptedOptionsFor(
   }
   return { ...processOptions, ...parsed.data };
 }
-
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
 
 type JsonRpcId = string | number;
 
@@ -306,11 +168,8 @@ type PendingReply =
 const sessions = new Map<string, Session>();
 const pendingReplies = new Map<JsonRpcId, PendingReply>();
 const unarchivedSessionIds = new Set<string>();
-/** Sessions `thread/archive` archived at runtime (until `thread/unarchive`). */
 const archivedSessionIds = new Set<string>();
-/** How many times each `failMethods` entry (by index) has fired. */
 const scriptedFailureCounts = new Map<number, number>();
-/** `bg_task` items still open per bb thread id, until `bg_task_done`. */
 const openBackgroundTasks = new Map<
   string,
   { providerItemId: string; familyId: string }[]
@@ -319,17 +178,8 @@ let discardFailed = false;
 let providerThreadCounter = 0;
 let outboundRequestCounter = 0;
 
-// ---------------------------------------------------------------------------
-// Wire helpers
-// ---------------------------------------------------------------------------
-
-/** A message this bridge writes on its own: a notification or a request. */
 type OutboundMessage = { jsonrpc: "2.0" } & Record<string, unknown>;
 
-/**
- * The single stdout writer — protocol traffic only, never stray logs. The
- * kit's `sendResult`/`sendError` answer requests; `send` carries the rest.
- */
 const io = createBridgeIo<OutboundMessage>();
 
 function notify(method: string, params: Record<string, unknown>): void {
@@ -366,14 +216,8 @@ function sendRequest(
 }
 
 function exitProcess(): void {
-  // Flush ordering: stdout is a pipe here, so the writes above are already
-  // handed to the kernel; exiting synchronously mirrors a crashed provider.
   process.exit(0);
 }
-
-// ---------------------------------------------------------------------------
-// Directives
-// ---------------------------------------------------------------------------
 
 type ApprovalKind = "command" | "file_change" | "permission_grant" | "plan";
 const APPROVAL_KINDS: readonly ApprovalKind[] = [
@@ -390,21 +234,11 @@ interface TurnPlan {
   responseText: string;
   toolName: string | null;
   toolTurnResolved: boolean;
-  /** `hold_turn`: open the turn and never settle it (until a stop). */
   holdTurn: boolean;
-  /**
-   * `fail_turn:<text>`: open the turn, raise a provider error carrying the
-   * text, and settle the turn as failed. `prestart_fail:<text>`: raise the
-   * error before the turn opens (a turnless, thread-scoped error).
-   */
   failure: { text: string; beforeTurn: boolean } | null;
-  /** `recover:<kind>`: an unsolicited recovery hint after the plan's deltas. */
   recoverKind: ProviderRecoveryHint["kind"] | null;
-  /** `recover_now:<kind>`: the hint right after `turn.open`, mid-turn. */
   recoverNowKind: ProviderRecoveryHint["kind"] | null;
-  /** `bg_task`: open a background task the turn's settlement leaves open. */
   backgroundTask: boolean;
-  /** `bg_task_done`: settle every background task the thread left open. */
   settleBackgroundTasks: boolean;
 }
 
@@ -460,14 +294,12 @@ function parseTurnPlan(inputText: string): TurnPlan {
       failureText === undefined
         ? null
         : {
-            // Underscores stand in for spaces so the text rides one token.
             text: failureText.replaceAll("_", " "),
             beforeTurn: prestartFailMatch !== null,
           },
   };
 }
 
-// Deterministic fixture subjects so UI and e2e flows can assert on them.
 function approvalPayload(
   kind: ApprovalKind,
   itemId: string,
@@ -556,10 +388,6 @@ function userQuestionPayload(requestId: JsonRpcId): PendingInteractionPayload {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Turn lifecycle, in deltas
-// ---------------------------------------------------------------------------
-
 function clearActiveTurn(session: Session): void {
   if (session.activeTurn?.timer) {
     clearTimeout(session.activeTurn.timer);
@@ -585,8 +413,6 @@ function completeTurn(
   if (status === "completed") {
     session.messageCount += 1;
     const key = { providerItemId: `msg-${session.messageCount}` };
-    // A provider-named message item: opened empty, closed with the final
-    // text (item/started → item/completed, like codex).
     deltas.push(
       {
         kind: "item.open",
@@ -611,12 +437,6 @@ function completeTurn(
   emitDeltas(session.threadId, deltas);
 }
 
-/**
- * `bg_task`: a background task opened inside the turn, the way claude opens a
- * workflow. Nothing settles it — not the turn's own boundary — until a later
- * `bg_task_done`, so a thread can be idle while the process still holds its
- * live work.
- */
 function openBackgroundTask(session: Session, providerTurnId: string): void {
   const providerItemId = `bg-${session.turnCount}`;
   const familyId = `bg-family-${session.threadId}-${session.turnCount}`;
@@ -642,7 +462,6 @@ function openBackgroundTask(session: Session, providerTurnId: string): void {
   logProcessStep(`bg_task/open:${process.pid}:${session.threadId}`);
 }
 
-/** `bg_task_done`: the thread's open background tasks settle as completed. */
 function settleBackgroundTasks(session: Session): void {
   const open = openBackgroundTasks.get(session.threadId) ?? [];
   openBackgroundTasks.delete(session.threadId);
@@ -689,8 +508,6 @@ function beginTurn(args: {
   clearActiveTurn(session);
   const plan = parseTurnPlan(promptText(args.input));
   if (plan.failure !== null && plan.failure.beforeTurn) {
-    // The provider refused before any turn opened: a thread-scoped error
-    // that claims the accepted input, never a started turn.
     if (args.clientRequestId !== undefined) {
       emitDeltas(session.threadId, [
         { kind: "input.accepted", clientRequestId: args.clientRequestId },
@@ -820,12 +637,13 @@ function beginTurn(args: {
     });
     return;
   }
-  scheduleCompletion(session, plan.responseText, plan.delayMs, plan.recoverKind);
+  scheduleCompletion(
+    session,
+    plan.responseText,
+    plan.delayMs,
+    plan.recoverKind,
+  );
 }
-
-// ---------------------------------------------------------------------------
-// Responses to the bridge's own requests
-// ---------------------------------------------------------------------------
 
 function describeAnswer(result: unknown): string {
   const parsed = z
@@ -863,13 +681,6 @@ const jsonRpcErrorSchema = z
   .object({ code: z.number(), message: z.string() })
   .passthrough();
 
-/**
- * The runtime answered one of this bridge's requests. A result resumes the
- * turn per the request kind; an error (the tool handler threw, the
- * interaction was unsupported or malformed) fails the turn with the error's
- * message, the way a real provider surfaces a failed tool or approval — so a
- * test can observe the runtime's error answer on the timeline.
- */
 function handleResponse(
   id: JsonRpcId,
   result: unknown,
@@ -926,20 +737,10 @@ function handleResponse(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Session construction
-// ---------------------------------------------------------------------------
-
 function archivedSessionError(providerThreadId: string): string {
   return `session ${providerThreadId} is archived. Run codex unarchive ${providerThreadId} to unarchive it first.`;
 }
 
-/**
- * The archived-session gate: a fork reads its source session, everything
- * else acts on the thread's own session. A session is archived when the
- * `archivedSession` script says so from the start (until the first
- * `thread/unarchive`) or when `thread/archive` archived it at runtime.
- */
 function rejectIfArchived(
   id: JsonRpcId,
   options: ScriptedEchoOptions,
@@ -952,8 +753,6 @@ function rejectIfArchived(
     return false;
   }
   const message = archivedSessionError(providerThreadId);
-  // The codex shape: the text for the user-visible failure, the typed hint
-  // on the error for the runtime's unarchive-and-retry action.
   io.sendError(id, -32000, message, {
     recovery: {
       kind: "sessionArchived",
@@ -1019,14 +818,9 @@ function afterStartDelay(options: ScriptedEchoOptions, run: () => void): void {
   setTimeout(run, options.startDelayMs);
 }
 
-// ---------------------------------------------------------------------------
-// Request handlers
-// ---------------------------------------------------------------------------
-
 type RequestHandler = (id: JsonRpcId, params: unknown) => void;
 
 function invalidParams(id: JsonRpcId, method: string, issues: unknown): void {
-  // The issues ride `error.data` as the validator produced them.
   io.send({
     jsonrpc: "2.0",
     id,
@@ -1280,8 +1074,6 @@ const handlers: Record<string, RequestHandler> = {
       });
       return;
     }
-    // The steer is acknowledged into the live turn; the echo answers the
-    // original prompt (steer text is consumed, not echoed).
     emitDeltas(session.threadId, [
       {
         kind: "input.accepted",
@@ -1310,12 +1102,8 @@ const handlers: Record<string, RequestHandler> = {
       parsed.data.intent === "interrupt" &&
       session.activeTurn !== null
     ) {
-      // The boundary goes out before the answer: the runtime detaches the
-      // thread once thread/stop is answered.
       completeTurn(session, "interrupted", "");
     }
-    // Protocol rule: after thread/stop (either intent) the bridge holds
-    // nothing for the thread.
     sessions.delete(parsed.data.threadId);
     openBackgroundTasks.delete(parsed.data.threadId);
     io.sendResult(id, {});
@@ -1408,9 +1196,6 @@ const handlers: Record<string, RequestHandler> = {
     const session = sessions.get(parsed.data.threadId);
     const options = session?.options ?? processOptions;
     const notifyCleared = (): void => {
-      // `thread/goal/clear` models codex's Goal, whose cleared state is the
-      // codex plugin's `provider-codex/goal` thread state with a null
-      // snapshot — the signal the runtime waits for before it answers.
       emitDeltas(parsed.data.threadId, [
         {
           kind: "extension.state",
@@ -1421,7 +1206,6 @@ const handlers: Record<string, RequestHandler> = {
     };
     const answer = { cleared: options.goalClearReportsCleared ?? true };
     if (options.goalClearNotifyDelayMs === undefined) {
-      // The cleared signal precedes the answer, as codex persists it.
       notifyCleared();
       io.sendResult(id, answer);
       return;
@@ -1430,10 +1214,6 @@ const handlers: Record<string, RequestHandler> = {
     setTimeout(notifyCleared, options.goalClearNotifyDelayMs);
   },
 };
-
-// ---------------------------------------------------------------------------
-// Line handling
-// ---------------------------------------------------------------------------
 
 function recordRequest(method: string, params: unknown): void {
   const recordPath = process.env[SCRIPTED_RECORD_PATH_ENV];
@@ -1446,7 +1226,6 @@ function recordRequest(method: string, params: unknown): void {
   );
 }
 
-/** Process-level scripted failures a handler shares. */
 function applyScriptedMethodPolicy(
   id: JsonRpcId,
   method: string,
@@ -1467,9 +1246,6 @@ function applyScriptedMethodPolicy(
     );
     return "handled";
   }
-  // Entries for one method apply in order: a bounded entry (`times`) hands
-  // over to the next once exhausted, so a script can spell a sequence such
-  // as "rate limited once, then auth required".
   const failureIndex = (options.failMethods ?? []).findIndex(
     (entry, index) =>
       entry.method === scripted.data &&
@@ -1550,7 +1326,6 @@ export function handleLine(line: string): void {
     error?: unknown;
   };
   if (typeof method !== "string") {
-    // A response to one of this bridge's own requests, or noise.
     if (typeof id === "string" || typeof id === "number") {
       handleResponse(id, result, error);
     }
@@ -1573,10 +1348,6 @@ export function handleLine(line: string): void {
     );
     return;
   }
-  // A handler that throws answers an error instead of taking the bridge
-  // down; a thrown `experimental_BridgeRecoveryError` answers with its typed
-  // hint as `error.data.recovery`. The handlers are synchronous, so the
-  // answer is on the wire before a scripted exit below.
   runBridgeRequest({
     request: { id, method, params },
     sendError: io.sendError,

@@ -58,13 +58,14 @@ afterEach(async () => {
   );
 });
 
-/** The one staged root (every provider receives the same shape). */
 function requireSkillRoot(
   roots: readonly AgentRuntimeSkillRoot[],
 ): AgentRuntimeSkillRoot {
   const [root, ...rest] = roots;
   if (root === undefined || rest.length > 0) {
-    throw new Error(`Expected exactly one staged skill root, got ${roots.length}`);
+    throw new Error(
+      `Expected exactly one staged skill root, got ${roots.length}`,
+    );
   }
   return root;
 }
@@ -454,9 +455,6 @@ describe("injected skill staging", () => {
       ],
     });
 
-    // One generic root for every provider: the staged skills directory plus
-    // the skill list. No provider-native manifest is staged; each bridge
-    // maps the root to its own layout.
     const root = requireSkillRoot(staged.skillRoots);
     const stageRootPath = path.join(
       dataDir,
@@ -515,10 +513,9 @@ describe("injected skill staging", () => {
       readFile(path.join(root.path, "workflow-help", "SKILL.md"), "utf8"),
     ).resolves.toContain("name: workflow-help");
     await expect(
-      readFile(
-        path.join(path.dirname(root.path), "catalog.json"),
-        "utf8",
-      ).then((content) => JSON.parse(content)),
+      readFile(path.join(path.dirname(root.path), "catalog.json"), "utf8").then(
+        (content) => JSON.parse(content),
+      ),
     ).resolves.toMatchObject({
       catalogHash: staged.catalogHash,
       skills: [

@@ -11,14 +11,11 @@ function hasGetSetCookie(headers: Headers): headers is HeadersWithGetSetCookie {
 }
 
 function getSetCookies(headers: Headers): string[] {
-  // Node implements the standard API; the Workerd types/runtime expose the
-  // older getAll API for preserving separate Set-Cookie field values.
   return hasGetSetCookie(headers)
     ? headers.getSetCookie()
     : headers.getAll("set-cookie");
 }
 
-/** Let the account worker's Better Auth route own refresh and cookie policy. */
 export async function refreshAccountSessionCookies(
   cookieHeader: string,
   accountAppUrl: string,

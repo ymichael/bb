@@ -1,3 +1,4 @@
+import { DiffLoadingSkeleton } from "@/components/code/code-loading-skeletons";
 import {
   type CSSProperties,
   type RefCallback,
@@ -20,7 +21,6 @@ import {
   ImageLightbox,
   IMAGE_TRANSPARENCY_CHECKER_STYLE,
 } from "@/components/ui/image-lightbox.js";
-import { Skeleton } from "@bb/shared-ui/skeleton";
 import {
   formatGitDiffFileLabel,
   isPreviewableImagePath,
@@ -29,12 +29,6 @@ import {
   type ParsedGitDiffFile,
 } from "./git-diff-parsing";
 
-/**
- * One side of a diff file resolved for the card. `text` carries UTF-8 contents
- * for `@pierre/diffs` context expansion; `image` carries a data URL the card
- * renders directly instead of a text diff, plus the byte size used for the
- * header's `+/-` size delta.
- */
 export type DiffFileContentsResult =
   | { kind: "text"; file: FileContents }
   | { kind: "image"; dataUrl: string; sizeBytes: number };
@@ -44,12 +38,6 @@ export type RequestDiffFileContents = (
   side: "old" | "new",
 ) => Promise<DiffFileContentsResult | null>;
 
-/**
- * Header size indicator for an image card. An image change swaps the whole
- * binary, so rather than netting the two sizes the card surfaces them like a
- * text diff's `+/-` tally: the new file's bytes as added, the old file's bytes
- * as removed.
- */
 export interface DiffImageSizeStat {
   addedBytes: number | null;
   removedBytes: number | null;
@@ -96,21 +84,6 @@ type DiffFileEnrichmentState =
   | { status: "unavailable" }
   | { status: "error" };
 
-/**
- * The app-owned expand-context affordance for a text card. Full old/new file
- * contents are only needed so `@pierre/diffs` can offer expand-context buttons
- * between hunks; fetching them eagerly costs two whole-file reads and a second
- * tokenize/render pass per card, which phones cannot afford. So the card
- * renders from the patch alone and fetches the contents on demand (`request`),
- * or during idle time on fine-pointer devices where the eager behavior is
- * cheap enough to keep.
- *
- * - `unavailable`: no fetcher, no patch text, or the change kind has nothing
- *   to expand (added/deleted files already carry every line) — render nothing.
- * - `idle`: offer the "Expand context" action.
- * - `loading` / `error`: show progress or a retry.
- * - `ready`: pierre now owns expansion; the affordance retires.
- */
 type DiffContextExpansionStatus =
   | "unavailable"
   | "idle"
@@ -123,11 +96,6 @@ interface DiffContextExpansionState {
   request: () => void;
 }
 
-/**
- * Change kinds whose patch omits lines the user might want to see. Added and
- * deleted files carry the whole file in the patch, so there is no surrounding
- * context to reach for.
- */
 function canExpandContextForChangeKind(
   changeKind: GitDiffFileChangeKind,
 ): boolean {
@@ -138,11 +106,6 @@ function canExpandContextForChangeKind(
   );
 }
 
-/**
- * Run `work` when the main thread is idle. Falls back to a short timeout where
- * `requestIdleCallback` is unavailable so the fine-pointer auto-expansion still
- * happens, just after the current paint.
- */
 function scheduleIdleWork(work: () => void): () => void {
   if (typeof window.requestIdleCallback === "function") {
     const handle = window.requestIdleCallback(work, { timeout: 2_000 });
@@ -223,14 +186,6 @@ function toDiffFullFileContents(
   };
 }
 
-/**
- * An image change is conveyed as a single-binary swap rather than text hunks,
- * so the card renders inline `<img>` previews instead of a `<DiffView>`. A card
- * is an image preview when the file parses to zero hunks (binary diffs have
- * none), is not a pure rename (those stay body-less like their text
- * counterparts), has a content fetcher to source the preview bytes, and carries
- * a browser-renderable image extension.
- */
 function isImagePreviewCard(
   fileDiff: ParsedGitDiffFile,
   onRequestFileContents: RequestDiffFileContents | undefined,
@@ -263,10 +218,8 @@ function svgTextToDataUrl(contents: string): string | null {
 interface UseGitDiffCardBodyArgs {
   fileDiff: ParsedGitDiffFile;
   changeKind: GitDiffFileChangeKind;
-  /** When true, holds the body at a skeleton (queued render slots). */
   isRendering: boolean;
   onRequestFileContents: RequestDiffFileContents | undefined;
-  /** Raw per-file patch text, used to reparse with full old/new contents. */
   patchText?: string;
 }
 
@@ -280,28 +233,12 @@ interface GitDiffCardBodyState {
   shouldGateDeletedDiff: boolean;
   shouldRenderDiffView: boolean;
   loadDeletedDiff: () => void;
-  /** The header's `+/-` byte delta for an image card; `null` for text cards. */
   imageSizeStat: DiffImageSizeStat | null;
-  /** On-demand full-file context for text cards; see {@link DiffContextExpansionState}. */
   contextExpansion: DiffContextExpansionState;
-  /** Resolved text sides forwarded through the public renderer contract. */
   fullFileContents: ExperimentalDiffFullFileContents | null;
-  /**
-   * The raw per-file patch the caller supplied, forwarded to the host diff
-   * boundary so a plugin replacement gets the caller's own bytes instead of a
-   * reconstruction.
-   */
   patchText: string | undefined;
 }
 
-/**
- * The diff-card body's data layer, owned by the hook so a card can read the
- * derived state (notably {@link DiffImageSizeStat} for the header, a sibling of
- * the body) synchronously in the same render as the body — lifting it through an
- * effect would lag the header behind the preview by a tick. Drives the lazy
- * content fetch (text or image), the deleted-file load gate, and the
- * in-viewport render skeleton. Pass the result to {@link GitDiffCardBody}.
- */
 export function useGitDiffCardBody({
   fileDiff,
   changeKind,
@@ -325,10 +262,6 @@ export function useGitDiffCardBody({
       initialIsIntersecting: false,
       rootMargin: "200px",
     });
-  // The caller's `onRequestFileContents` may be a fresh function reference on
-  // every render. We keep the latest in a ref so the fetch effect doesn't re-run
-  // every panel re-render — a re-run would cancel the in-flight promise via its
-  // cleanup before `setEnrichment` could apply.
   const fetcherRef = useRef(onRequestFileContents);
   useEffect(() => {
     fetcherRef.current = onRequestFileContents;
@@ -339,14 +272,8 @@ export function useGitDiffCardBody({
   const enrichmentStatusRef = useRef<DiffFileEnrichmentState["status"]>("idle");
   const [hasBodyEnteredViewport, setHasBodyEnteredViewport] = useState(false);
   const [hasLoadedDeletedDiff, setHasLoadedDeletedDiff] = useState(false);
-  // Bumped by each explicit (or idle-scheduled) expand-context request. Zero
-  // means nobody has asked for context yet; the fetch effect keys on the
-  // version so a retry after an error re-runs it.
   const [contextRequestVersion, setContextRequestVersion] = useState(0);
   const isPointerCoarse = usePointerCoarse();
-  // Reset cached enrichment when the body swaps to different diff contents. Keep
-  // the viewport-entry flag: an already-visible sentinel does not emit another
-  // intersection change when only the diff hunk identity changes.
   useEffect(() => {
     enrichmentStatusRef.current = "idle";
     setEnrichment({ status: "idle" });
@@ -358,17 +285,10 @@ export function useGitDiffCardBody({
       setHasBodyEnteredViewport(true);
     }
   }, [isBodyVisible]);
-  // The deleted-file gate defers the expensive text-diff renderer (and the old
-  // file fetch behind it) until the user asks for it. Image/SVG previews load
-  // on viewport entry like added/modified images, so the header size and
-  // preview appear without a "Load diff" step.
   const shouldGateDeletedDiff =
     isDeletedFile && !isImageCard && !isSvgCard && !hasLoadedDeletedDiff;
   const shouldRenderDiffView =
     hasBodyEnteredViewport && !isRendering && !shouldGateDeletedDiff;
-  // Image and SVG cards cannot render anything without the file contents, so
-  // they fetch on viewport entry. Text cards render from the patch alone; their
-  // contents are only fetched once context expansion is requested.
   const needsContentsToRender = isImageCard || isSvgCard;
   const canExpandContext =
     !needsContentsToRender &&
@@ -379,9 +299,6 @@ export function useGitDiffCardBody({
   const shouldFetchContents =
     shouldRenderDiffView &&
     (needsContentsToRender || (canExpandContext && contextRequestVersion > 0));
-  // Fine-pointer devices keep the zero-click expand-context experience: once
-  // the card is renderable, request the contents during idle time. Coarse
-  // pointers (phones, tablets) wait for the explicit affordance.
   useEffect(() => {
     if (
       isPointerCoarse ||
@@ -400,10 +317,6 @@ export function useGitDiffCardBody({
     isPointerCoarse,
     shouldRenderDiffView,
   ]);
-  // Fire the fetch once the diff view is actually renderable and the contents
-  // are wanted. Effect deps deliberately exclude `onRequestFileContents` (we
-  // read the latest via the ref) so stable visibility doesn't re-trigger when
-  // the panel re-renders.
   useEffect(() => {
     if (!shouldFetchContents || enrichmentStatusRef.current !== "idle") {
       return;
@@ -481,8 +394,6 @@ export function useGitDiffCardBody({
   ]);
 
   const requestContextExpansion = useCallback(() => {
-    // A retry after a failed fetch must clear the terminal error first so the
-    // fetch effect sees an idle slot when the version bump re-runs it.
     if (enrichmentStatusRef.current === "error") {
       enrichmentStatusRef.current = "idle";
       setEnrichment({ status: "idle" });
@@ -564,22 +475,6 @@ function getDiffContextExpansionStatus({
   }
 }
 
-export function GitDiffCardBodySkeleton() {
-  return (
-    <div className="space-y-1.5 px-3 py-3">
-      <Skeleton className="h-3 w-full rounded-sm" />
-      <Skeleton className="h-3 w-[96%] rounded-sm" />
-      <Skeleton className="h-3 w-[93%] rounded-sm" />
-      <Skeleton className="h-3 w-[90%] rounded-sm" />
-      <Skeleton className="h-3 w-[87%] rounded-sm" />
-      <Skeleton className="h-3 w-[84%] rounded-sm" />
-    </div>
-  );
-}
-
-// Image add/delete (and net resize on modify) is conveyed by the header's
-// `+/- size` delta and the card tint, so per-image captions only earn their
-// keep when there are two images to tell apart (a modified file's old vs new).
 interface GitDiffCardImageSide {
   url: string;
   caption: string | null;
@@ -750,7 +645,7 @@ function GitDiffCardImageBody({
   fitToFrame = false,
 }: GitDiffCardImageBodyProps) {
   if (enrichment.status === "idle" || enrichment.status === "loading") {
-    return <GitDiffCardBodySkeleton />;
+    return <DiffLoadingSkeleton />;
   }
   const preview = getGitDiffCardImageUrls(enrichment);
   if (preview === null) {
@@ -811,25 +706,10 @@ interface GitDiffCardBodyProps {
   state: GitDiffCardBodyState;
   presentation: DiffPresentation;
   svgDisplayMode: GitDiffCardSvgDisplayMode;
-  /**
-   * Whether the surrounding card reserves a collapse-chevron gutter. The deleted
-   * file message aligns to that gutter so its text lines up with the diff body.
-   */
   reservesCollapseGutter: boolean;
   onSelectionAddToChat?: (text: string) => void;
 }
 
-/**
- * The single shared diff-card body for both the timeline ({@link GitDiffCard})
- * and the diff tab (`DiffFileCard`). It owns everything around the text diff —
- * the lazy enrichment that unlocks context expansion, the deleted-file load
- * gate, the in-viewport render skeleton, and inline `<img>` previews for binary
- * image changes or SVGs — and hands the text diff itself to
- * {@link DiffHost}, so an `experimental_diffRenderer` replacement covers this
- * surface too. The data layer lives in {@link useGitDiffCardBody}; both callers
- * feed its result in as `state` so the card can also read the image header stat
- * synchronously.
- */
 export function GitDiffCardBody({
   state,
   presentation,
@@ -877,7 +757,7 @@ export function GitDiffCardBody({
           </span>
         </div>
       ) : !shouldRenderDiffView ? (
-        <GitDiffCardBodySkeleton />
+        <DiffLoadingSkeleton />
       ) : isImageCard ? (
         <GitDiffCardImageBody
           enrichment={enrichment}
@@ -901,7 +781,7 @@ export function GitDiffCardBody({
             patchText={patchText}
             fullFileContents={fullFileContents}
             {...presentation}
-            fallback={<GitDiffCardBodySkeleton />}
+            fallback={<DiffLoadingSkeleton />}
             onSelectionAddToChat={onSelectionAddToChat}
           />
           <GitDiffCardContextExpansionFooter
@@ -919,11 +799,6 @@ interface GitDiffCardContextExpansionFooterProps {
   reservesCollapseGutter: boolean;
 }
 
-/**
- * The on-demand "Expand context" row under a text diff. Once the contents are
- * in (`ready`) pierre renders its own expand buttons between hunks, so the row
- * retires; when there is nothing to expand (`unavailable`) it never shows.
- */
 function GitDiffCardContextExpansionFooter({
   contextExpansion,
   reservesCollapseGutter,

@@ -100,12 +100,6 @@ export interface FindForeignManagedEnvironmentAtHostPathArgs {
   projectId: string;
 }
 
-/**
- * A live bb-managed workspace at this directory owned by another project.
- * The environment claim is project-scoped, but the directory is physical:
- * destroying a managed environment deletes it, so no other project may attach
- * to it in place.
- */
 export function findForeignManagedEnvironmentAtHostPath(
   db: DbConnection,
   args: FindForeignManagedEnvironmentAtHostPathArgs,
@@ -291,11 +285,6 @@ export interface RecordProvisionedEnvironmentWorkspaceInput extends DiscoveredWo
   mergeBaseBranch?: string | null;
 }
 
-/**
- * Persists the workspace properties a provision result discovered. Pure
- * metadata — the status change rides the separate `provision.succeeded`
- * lifecycle event.
- */
 export function recordProvisionedEnvironmentWorkspace(
   db: EnvironmentWriteConnection,
   notifier: DbNotifier,
@@ -319,10 +308,6 @@ export interface ListStaleDestroyingManagedEnvironmentsArgs {
   updatedBefore: number;
 }
 
-/**
- * Managed environments stuck in "destroying" whose destroy RPC result was
- * presumably lost. The sweep applies `destroy.lost` to each.
- */
 export function listStaleDestroyingManagedEnvironments(
   db: DbConnection,
   args: ListStaleDestroyingManagedEnvironmentsArgs,
@@ -381,11 +366,6 @@ export class EnvironmentLifecycleEventNotAppliedError extends Error {
   }
 }
 
-/**
- * For boundary callers where a no-op outcome is a real error (e.g. a 4xx
- * response): returns the updated row, or throws
- * EnvironmentLifecycleEventNotAppliedError.
- */
 export function requireEnvironmentLifecycleEventApplied(
   outcome: ApplyEnvironmentLifecycleEventOutcome,
 ) {
@@ -446,16 +426,9 @@ export function applyEnvironmentLifecycleEventInTransaction(
   }
   if (evaluation.to === "destroyed") {
     set.destroyAttemptId = null;
-    // The workspace no longer exists. Release its path claim and avoid
-    // retaining stale host-local filesystem data on the terminal row.
     set.path = null;
   }
 
-  // Compare-and-set on the loaded status: belt-and-braces under
-  // better-sqlite3's synchronous transactions, and the contract that survives
-  // any future executor change. The destroy claim additionally re-asserts the
-  // cross-table thread conditions the row cannot express, atomically with the
-  // status write.
   const conditions = [
     eq(environments.id, args.environmentId),
     eq(environments.status, environment.status),
@@ -493,15 +466,6 @@ export function applyEnvironmentLifecycleEventInTransaction(
   return { applied: true, changes: ["status-changed"], environment: updated };
 }
 
-/**
- * Single writer for environment lifecycle events: loads the row, evaluates
- * the event against ENVIRONMENT_LIFECYCLE and its supersession predicates,
- * applies the transition with a status compare-and-set, and stamps or clears
- * destroyAttemptId on start/settlement — all in one transaction. Never throws on stale or
- * illegal events; returns a typed outcome for the caller to log. Use
- * applyEnvironmentLifecycleEventInTransaction from inside an existing
- * transaction (the caller then owns notification of `outcome.changes`).
- */
 export function applyEnvironmentLifecycleEvent(
   db: DbConnection,
   notifier: DbNotifier,

@@ -1,11 +1,5 @@
-// Regression for get-bb/bb#1924: archiving a thread must succeed after
-// pruneDestroyedEnvironments removed its environment row. threads.environment_id
-// is ON DELETE SET NULL, so the live thread keeps no environment pointer.
-//
-// A pointer-less thread whose setup is still in flight is different: its
-// environment row does not exist yet. Archive keeps refusing that state so setup
-// cannot create an environment for an archived thread.
 import {
+  DEFAULT_DESTROYED_ENVIRONMENT_EVENT_DETACH_BATCH_SIZE,
   DEFAULT_DESTROYED_ENVIRONMENT_PRUNE_BATCH_SIZE,
   DESTROYED_ENVIRONMENT_TTL_MS,
   environments,
@@ -43,8 +37,6 @@ function seedThreadWithPrunedEnvironment(
     projectId: project.id,
     status: "idle",
   });
-  // The environment was destroyed while the thread stayed unarchived, and the
-  // 7-day prune TTL elapsed.
   deps.db
     .update(environments)
     .set({ status: "destroyed", updatedAt: Date.now() - EIGHT_DAYS_MS })
@@ -53,6 +45,7 @@ function seedThreadWithPrunedEnvironment(
   expect(
     pruneDestroyedEnvironments(deps.db, deps.hub, {
       updatedBefore: Date.now() - DESTROYED_ENVIRONMENT_TTL_MS,
+      eventBatchSize: DEFAULT_DESTROYED_ENVIRONMENT_EVENT_DETACH_BATCH_SIZE,
       limit: DEFAULT_DESTROYED_ENVIRONMENT_PRUNE_BATCH_SIZE,
     }).deleted,
   ).toBe(1);

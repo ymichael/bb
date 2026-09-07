@@ -224,8 +224,6 @@ describe("createAppVersionService", () => {
   });
 
   it("returns latestVersion=null after TTL expiry even if the prior cache held a value (no stale fallback)", async () => {
-    // Locks in Sawyer's iteration decision (2026-05-20): choice A —
-    // null on failure rather than serving the stale cached value.
     const calls: FetchCall[] = [];
     let currentTime = 1_000;
     const service = createAppVersionService({
@@ -251,8 +249,6 @@ describe("createAppVersionService", () => {
   });
 
   it("treats a published prerelease latest as an update when local is the stable predecessor", async () => {
-    // semver.gt("0.0.6-alpha.1", "0.0.5") === true. If npm `latest` is a
-    // prerelease, trust npm.
     const service = createAppVersionService({
       config: { appVersion: "0.0.5", isDevelopment: false },
       fetchImpl: createStubFetch([{ body: { version: "0.0.6-alpha.1" } }], []),
@@ -264,7 +260,6 @@ describe("createAppVersionService", () => {
   });
 
   it("does not flag updateAvailable when local is the stable that follows a published prerelease", async () => {
-    // semver.gt("0.0.5-alpha.1", "0.0.5") === false.
     const service = createAppVersionService({
       config: { appVersion: "0.0.5", isDevelopment: false },
       fetchImpl: createStubFetch([{ body: { version: "0.0.5-alpha.1" } }], []),
@@ -276,8 +271,6 @@ describe("createAppVersionService", () => {
   });
 
   it("ignores semver build metadata when comparing equal versions", async () => {
-    // semver.gt("0.0.5+build.1", "0.0.5") === false; build metadata is
-    // ignored by precedence rules.
     const service = createAppVersionService({
       config: { appVersion: "0.0.5", isDevelopment: false },
       fetchImpl: createStubFetch([{ body: { version: "0.0.5+build.1" } }], []),

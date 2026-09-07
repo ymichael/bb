@@ -3,12 +3,6 @@ import { readJson } from "../helpers/json.js";
 import { configuredAcpProvider } from "../helpers/provider-registry.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-/**
- * The logo route serves the icon snapshot a plugin's provider registration
- * captured. There is no second source: the deprecated `customAcpAgents`
- * config array carried a file path the server read and served itself, and it
- * is gone with the ACP tier.
- */
 describe("provider logos", () => {
   it("serves the icon a plugin registered", async () => {
     await withTestHarness({}, async (harness) => {
@@ -25,8 +19,6 @@ describe("provider logos", () => {
   });
 
   it("returns 404 for a provider that registered no icon bytes", async () => {
-    // Every agent bb ships declares an SVG asset now; a user-configured ACP
-    // agent declares a host glyph instead, which has no bytes to serve.
     await withTestHarness(
       {
         extraProviders: [
@@ -39,13 +31,13 @@ describe("provider logos", () => {
         ],
       },
       async (harness) => {
-      const response = await harness.app.request(
-        "/api/v1/system/providers/acp-example-agent/logo",
-      );
-      expect(response.status).toBe(404);
-      expect(await readJson(response)).toMatchObject({
-        code: "provider_logo_not_found",
-      });
+        const response = await harness.app.request(
+          "/api/v1/system/providers/acp-example-agent/logo",
+        );
+        expect(response.status).toBe(404);
+        expect(await readJson(response)).toMatchObject({
+          code: "provider_logo_not_found",
+        });
       },
     );
   });

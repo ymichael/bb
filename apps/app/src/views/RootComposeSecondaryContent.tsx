@@ -1,4 +1,5 @@
 import { useState, type ComponentProps, type ReactNode } from "react";
+import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { Skeleton } from "@bb/shared-ui/skeleton";
 import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
 import { cn } from "@bb/shared-ui/lib/utils";
@@ -14,30 +15,12 @@ import {
   MACOS_WINDOW_DRAG_CLASS,
   shouldUseMacosDesktopChrome,
 } from "@/lib/bb-desktop";
+import { RootComposeCompactHome } from "./RootComposeCompactHome";
 import { useOptionalPaneContext } from "./thread-detail/PaneContext";
+import { getCompactPanelPresentation } from "@/components/secondary-panel/panelToggleControlState";
 
 const ROOT_COMPOSE_MAX_WIDTH_CLASS = "max-w-[760px]";
 
-// Where root compose pins its right-panel toggle in the viewport corner (see
-// rootPanelToggle in RootComposeView, which passes its selected position here).
-// The window
-// drag strip below must carve this same footprint back out of the macOS drag
-// region while the panel is closed: Electron resolves app-regions in DOM order
-// (later wins), and the strip renders after the fixed toggle, so a no-drag on
-// the toggle itself would just be re-added by the strip's own drag rect. The
-// carve has to live inside the strip, and this constant keeps the two footprints
-// from drifting apart.
-// The toggle is `fixed`, so it positions against the viewport, whose origin
-// is under the translucent status bar in an iOS standalone PWA. Without the
-// safe-area insets it lands on the status bar and collides with the battery.
-// The insets are 0 everywhere else, so desktop and Safari keep the same
-// offsets.
-//
-// The top offset centers the toggle on the same axis as the pinned sidebar
-// trigger, which CHROME_ROW_CLASS box-centers in a 48px row (center = 24px).
-// The button box is 28px normally and 36px under a coarse pointer, so the
-// offset has to change with it: 24 - 28/2 = 10px, and 24 - 36/2 = 6px. A single
-// offset lines up in one pointer mode and sits 4px low in the other.
 export const ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS =
   "right-[calc(1rem+env(safe-area-inset-right))] top-[calc(0.625rem+env(safe-area-inset-top))] max-md:pointer-coarse:top-[calc(0.375rem+env(safe-area-inset-top))]";
 
@@ -60,6 +43,7 @@ type RootSecondaryPanelProps = Omit<
 
 interface RootComposeSecondaryContentProps {
   children: ReactNode;
+  compactScrollContent: ReactNode;
   contentClassName?: string;
   isSecondaryPanelOpen: boolean;
   onToggleSecondaryPanel: () => void;
@@ -81,6 +65,7 @@ function DrawerPanelLoadingSkeleton() {
 
 export function RootComposeSecondaryContent({
   children,
+  compactScrollContent,
   contentClassName,
   isSecondaryPanelOpen,
   onToggleSecondaryPanel,
@@ -91,12 +76,12 @@ export function RootComposeSecondaryContent({
   const composerHost = usePluginComposerHost();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
-  // A bounded pane below a horizontal split is not part of the native window
-  // chrome. Marking its top as draggable creates an invisible Electron hit-test
-  // strip that consumes pointer input over portaled menus.
   const rendersWindowDragStrip =
     usesDesktopChrome && paneContext?.isTopRow !== false;
   const { renderBrowserDeck, ...threadSecondaryPanelProps } = secondaryPanel;
+  const isCompactViewport = useIsCompactViewport();
+  const usesCompactHomeLayout =
+    isCompactViewport && compactScrollContent !== null;
 
   const mainContent = (
     <div className="relative flex h-full min-h-0 flex-1 flex-col overflow-hidden">
@@ -123,19 +108,32 @@ export function RootComposeSecondaryContent({
           ) : null}
         </div>
       ) : null}
-      <div className="@container/page min-h-0 flex-1 overflow-y-auto">
+      {usesCompactHomeLayout ? (
         <div
-          className={cn(
-            "mx-auto flex w-full flex-col px-4 pb-4 pt-2",
-            ROOT_COMPOSE_MAX_WIDTH_CLASS,
-            contentClassName,
-          )}
+          className="@container/page flex min-h-0 flex-1 flex-col"
           style={PAGE_SHELL_CONTENT_STYLE}
         >
-          {children}
-          <PluginHomepageSections />
+          <RootComposeCompactHome composer={children}>
+            {compactScrollContent}
+            <PluginHomepageSections />
+          </RootComposeCompactHome>
         </div>
-      </div>
+      ) : (
+        <div className="@container/page min-h-0 flex-1 overflow-y-auto">
+          <div
+            className={cn(
+              "mx-auto flex w-full flex-col px-4 pb-4 pt-2",
+              ROOT_COMPOSE_MAX_WIDTH_CLASS,
+              contentClassName,
+            )}
+            style={PAGE_SHELL_CONTENT_STYLE}
+          >
+            {children}
+            {compactScrollContent}
+            <PluginHomepageSections />
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -152,6 +150,13 @@ export function RootComposeSecondaryContent({
         mainPanelId="root-compose-main-panel"
         main={mainContent}
         composerHost={composerHost}
+        compactPresentation={getCompactPanelPresentation(
+          threadSecondaryPanelProps.activeTab?.kind,
+          threadSecondaryPanelProps.fixedTabs[0]?.tab.kind ??
+            threadSecondaryPanelProps.tabs.find(
+              (tab) => tab.isHidden !== true,
+            )?.tab.kind,
+        )}
         renderPanel={({
           presentation,
           canShowNativeBrowserView,

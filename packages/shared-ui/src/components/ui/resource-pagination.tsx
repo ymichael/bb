@@ -15,7 +15,6 @@ export const RESOURCE_GRID_PAGE_SIZE = 12;
 
 interface ResourcePaginationOptions {
   pageSize?: number;
-  /** Changes when search, filters, or sorting define a new projection. */
   resetKey?: string;
 }
 
@@ -30,12 +29,6 @@ interface ResourcePaginationResult<Item> {
 
 interface ResourceViewportPageSizeOptions {
   fallbackPageSize?: number;
-  /**
-   * Changes when search, filters, or sorting define a new projection — the
-   * same key {@link useResourcePagination} resets the selected page on. A new
-   * projection measures row heights from scratch, because the rows that set
-   * the current height may not be in it.
-   */
   resetKey?: string;
 }
 
@@ -46,7 +39,6 @@ function cssPixelValue(value: string): number {
 
 interface ResourceViewportMeasurement {
   pageSize: number;
-  /** The tallest row height the measurement used, carried to the next one. */
   rowHeight: number;
 }
 
@@ -78,14 +70,6 @@ function measureResourceViewportPageSize(
       cssPixelValue(panelStyle.borderTopWidth) +
       cssPixelValue(panelStyle.borderBottomWidth)
     : 0;
-  // Only rows the current page size selected are on screen to measure, so the
-  // measurement reads back its own output. A page whose tallest row is taller
-  // than the last one shrinks the page size, which drops that row, which
-  // measures a shorter row, which grows the page size back — the two sizes
-  // then trade places forever, re-rendering the list and re-running this
-  // measurement as fast as the microtask queue allows until the tab stops
-  // responding. Keeping the tallest row seen makes the page size monotonic:
-  // it can change at most once per distinct row height, so it always settles.
   const rowHeight = Math.max(tallestRowHeight, ...rowHeights);
   return {
     pageSize: Math.max(
@@ -96,16 +80,6 @@ function measureResourceViewportPageSize(
   };
 }
 
-/**
- * Fits complete resource rows into a measured collection scroll viewport.
- *
- * Row heights are remembered, so the page size only shrinks while the same
- * rows can be on the page: growing it back is the loop described in
- * {@link measureResourceViewportPageSize}. Anything that is not the page
- * itself — a new projection through `resetKey`, a width change that re-wraps
- * text, a different viewport element — starts the measurement over, and none
- * of those can be caused by the page size.
- */
 export function useResourceViewportPageSize(
   viewport: HTMLElement | null,
   options: ResourceViewportPageSizeOptions = {},
@@ -139,11 +113,6 @@ export function useResourceViewportPageSize(
 
     function measure() {
       observeCurrentPanel();
-      // A row is as tall as its text needs at this width, so a resize makes
-      // every remembered height wrong — a wider window unwraps a description
-      // and the rows that forced a small page size are short again. Nothing
-      // the page size does changes this width (the viewport hides its native
-      // scrollbar), so starting over here cannot restart the loop.
       const width = viewportElement.clientWidth;
       if (width !== measuredWidth) {
         measuredWidth = width;
@@ -160,9 +129,6 @@ export function useResourceViewportPageSize(
       );
     }
 
-    // Every mutation inside the viewport asks for a measurement, and each one
-    // reads layout back. Browser extensions and plugin content scripts mutate
-    // this subtree too, so coalesce them into one measurement per frame.
     function scheduleMeasure() {
       if (typeof requestAnimationFrame !== "function") {
         measure();
@@ -199,20 +165,11 @@ export function useResourceViewportPageSize(
         cancelAnimationFrame(scheduledFrame);
       }
     };
-    // A new projection re-runs this effect, which drops the remembered row
-    // height with it. Paging never changes the key, so the loop stays closed.
   }, [fallbackPageSize, resetKey, viewport]);
 
   return viewport === null ? fallbackPageSize : pageSize;
 }
 
-/**
- * Client-side pagination for the bounded arrays returned by resource APIs.
- * The selected page resets with the projection and clamps when live data
- * shrinks, while retaining the current page across ordinary data refreshes.
- * A changing page size rescales the selection to keep the same rows in view
- * rather than resetting it.
- */
 export function useResourcePagination<Item>(
   items: readonly Item[],
   options: ResourcePaginationOptions = {},
@@ -223,15 +180,8 @@ export function useResourcePagination<Item>(
   );
   const resetKey = options.resetKey ?? "";
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
-  // Anchors the selected page to the page size it was selected under. Only an
-  // explicit setPage or a new projection writes it; the rendered page is derived
-  // from it. Mirroring the derived page back from an effect used to drop clicks:
-  // a viewport measurement that changed pageSize left a queued write-back
-  // holding the pre-click page, which then overwrote the interaction.
   const [anchor, setAnchor] = useState({ resetKey, page: 0, pageSize });
 
-  // A new projection starts at its first page. This adjusts state during render
-  // rather than from an effect so the reset cannot land after an interaction.
   if (anchor.resetKey !== resetKey) {
     setAnchor({ resetKey, page: 0, pageSize });
   }
@@ -270,19 +220,12 @@ export function useResourcePagination<Item>(
 }
 
 interface ResourceInfiniteItemsResult<Item> {
-  /** Every loaded page's rows, in order. */
   items: readonly Item[];
   total: number;
   hasMore: boolean;
   loadMore: () => void;
 }
 
-/**
- * The infinite-scroll projection of {@link useResourcePagination}: the same
- * page machinery (page size, projection reset keys), but pages accumulate as
- * the user scrolls instead of replacing each other. Pair with
- * {@link ResourceInfiniteScrollSentinel} at the end of the list.
- */
 export function useResourceInfiniteItems<Item>(
   items: readonly Item[],
   options: ResourcePaginationOptions = {},
@@ -292,12 +235,6 @@ export function useResourceInfiniteItems<Item>(
     Math.floor(options.pageSize ?? RESOURCE_LIST_PAGE_SIZE),
   );
   const resetKey = options.resetKey ?? "";
-  // Render-phase reset, mirroring useResourcePagination's anchor: a new
-  // projection (search, filter, sort) starts back at one page's worth. The
-  // anchor holds the item count reached through loadMore rather than a page
-  // count so a viewport remeasure that shrinks the page size never hides rows
-  // the user already scrolled through; zero means "one page's worth at the
-  // current page size", which tracks remeasures until the first loadMore.
   const [anchor, setAnchor] = useState({ resetKey, loadedCount: 0 });
   if (anchor.resetKey !== resetKey) {
     setAnchor({ resetKey, loadedCount: 0 });
@@ -321,11 +258,6 @@ export function useResourceInfiniteItems<Item>(
   return { items: visibleItems, total: items.length, hasMore, loadMore };
 }
 
-/**
- * Fires `onLoadMore` when scrolled into view inside the nearest resource
- * collection scroll viewport. Renders a small status row while more rows are
- * loading so the list visibly grows rather than silently stalling.
- */
 export function ResourceInfiniteScrollSentinel({
   hasMore,
   loading = false,
@@ -333,13 +265,11 @@ export function ResourceInfiniteScrollSentinel({
   className,
 }: {
   hasMore: boolean;
-  /** Shows the loading row and pauses further loadMore calls. */
   loading?: boolean;
   onLoadMore: () => void;
   className?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  // The latest callback without re-observing per render.
   const onLoadMoreRef = useRef(onLoadMore);
   onLoadMoreRef.current = onLoadMore;
 
@@ -349,14 +279,10 @@ export function ResourceInfiniteScrollSentinel({
       element === null ||
       !hasMore ||
       loading ||
-      // jsdom has no IntersectionObserver; tests drive loadMore directly.
       typeof IntersectionObserver === "undefined"
     ) {
       return;
     }
-    // The observer roots at the nearest scroll container that owns the
-    // list: collection viewports tag themselves, and other scrollers (e.g.
-    // the skill-detail content panel) opt in with data-infinite-scroll-root.
     const root = element.closest(
       "[data-resource-collection-scroll], [data-infinite-scroll-root]",
     );
@@ -368,7 +294,6 @@ export function ResourceInfiniteScrollSentinel({
       },
       {
         root: root instanceof HTMLElement ? root : null,
-        // Start the next page before the user actually hits the end.
         rootMargin: "240px 0px",
       },
     );
@@ -410,7 +335,6 @@ function scrollToResults(scrollTargetId: string | undefined): void {
   });
 }
 
-/** Shared footer for both client- and server-paginated resource collections. */
 export function ResourcePagination({
   page,
   pageSize,

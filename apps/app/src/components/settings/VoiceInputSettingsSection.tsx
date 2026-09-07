@@ -113,6 +113,7 @@ export function VoiceInputSettingsSectionContent({
   return (
     <SettingsSection
       title="Voice Input"
+      actionPlacement="inline"
       action={
         <Tooltip delayDuration={300} disableHoverableContent>
           <TooltipTrigger asChild>

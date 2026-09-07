@@ -56,9 +56,6 @@ describe("resolveToolsBreadcrumbs", () => {
   });
 
   it("resolves literal browse paths as Browse, not as a resource named browse", () => {
-    // /extensions/plugins/:pluginId also matches /extensions/plugins/browse, so if the
-    // detail patterns are tested first this reads "Plugins / Installed /
-    // browse" and the document title becomes "browse · Plugins".
     expect(resolveToolsBreadcrumbs("/extensions/plugins/browse")).toEqual([
       { label: "Plugins", to: "/extensions/plugins" },
       { label: "Browse" },
@@ -103,7 +100,7 @@ describe("resolveToolsBreadcrumbs", () => {
       ),
     ).toEqual([
       { label: "Plugins", to: "/extensions/plugins" },
-      { label: "Installed", to: "/extensions/plugins?view=installed" },
+      { label: "Installed", to: "/settings/plugins" },
       { label: "UI Patterns" },
     ]);
     expect(

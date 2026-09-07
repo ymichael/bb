@@ -8,35 +8,12 @@ import {
   withoutBridgeRuntimeEnv,
 } from "@get-bb/plugin-sdk/provider-bridge";
 
-/**
- * One `pi --mode rpc` child: JSON lines in on stdin (commands), JSON lines
- * out on stdout (responses, raw AgentSessionEvents, extension UI requests),
- * stderr captured
- * for the construction error, and the bb extension's private channel on
- * fd 3 (child → bridge) / fd 4 (bridge → child).
- *
- * LF-only framing, like pi's own `jsonl` reader: a line is one message,
- * read by the bridge kit's bounded line reader. Never `readline`: it also
- * splits on U+2028/U+2029, which pi emits raw inside JSON strings (tool
- * results, file contents), and a fragmented event line is dropped on both
- * halves.
- */
-
 export const PI_BRIDGE_COMMAND_ENV = "BB_PI_BRIDGE_COMMAND";
 export const PI_BRIDGE_ARGS_ENV = "BB_PI_BRIDGE_ARGS";
 
-/**
- * How the extension channel appears in a bridge recording. The recorder
- * tees a child's stdin and stdout; the channel (fd 3 / fd 4) is a third
- * pair, so each channel message is recorded on the same two provider lanes
- * wrapped as `{ "bbChannel": <message> }`, which no pi RPC line ever is.
- * The parity replay child (`pi-rpc` dialect) unwraps them onto fd 3 and
- * wraps what it reads on fd 4.
- */
 export const PI_CHANNEL_RECORDING_KEY = "bbChannel";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
-/** `request(..., NO_REQUEST_TIMEOUT)`: the caller owns the wait. */
 export const NO_REQUEST_TIMEOUT = 0;
 const STDERR_TAIL_BYTES = 4_096;
 const SIGTERM_GRACE_MS = 4_000;
@@ -46,7 +23,6 @@ export interface PiRpcChildExitInfo {
   code: number | null;
   signal: NodeJS.Signals | null;
   stderrTail: string;
-  /** True when no response ever arrived: the child failed to start. */
   beforeFirstResponse: boolean;
 }
 
@@ -66,7 +42,6 @@ export interface SpawnPiRpcChildArgs {
   onEvent: (event: Record<string, unknown>) => void;
   onChannelMessage: (message: Record<string, unknown>) => void;
   onExit: (info: PiRpcChildExitInfo) => void;
-  /** The bb thread this child serves, for record mode. */
   recordThreadId: string | null;
 }
 
@@ -90,7 +65,6 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout> | null;
 }
 
-/** The pi launch: the test seam first, `pi` on PATH otherwise. */
 export function resolvePiLaunch(env: NodeJS.ProcessEnv): {
   command: string;
   args: string[];
@@ -113,7 +87,6 @@ export function resolvePiLaunch(env: NodeJS.ProcessEnv): {
   return { command, args: parsed };
 }
 
-/** The environment a pi child runs in: the host's, minus bb's own wiring. */
 export function buildPiChildEnv(
   overrides: Record<string, string>,
 ): NodeJS.ProcessEnv {
@@ -136,19 +109,12 @@ export class PiRpcChild {
   private readonly channelWriter: Writable | null;
   private readonly channelRecorder: ChannelRecorder | null;
   private killEscalation: ReturnType<typeof setTimeout> | null = null;
-  /**
-   * Pi's stdout lines, handled one per event-loop turn. One read can carry a
-   * response and the events pi wrote after it; handled in one synchronous
-   * loop, the next event's delivery would run before the request's
-   * continuation (a steer's ack after `await request("prompt")`), so the
-   * bridge's order would depend on pipe chunking. Yielding between lines
-   * lets the continuation finish first, the order a line-at-a-time read has.
-   */
   private readonly stdoutLines: string[] = [];
   private stdoutDraining = false;
 
   constructor(private readonly args: SpawnPiRpcChildArgs) {
-    let resolveSettledExit: (info: PiRpcChildExitInfo) => void = () => undefined;
+    let resolveSettledExit: (info: PiRpcChildExitInfo) => void = () =>
+      undefined;
     this.settledExit = new Promise((resolve) => {
       resolveSettledExit = resolve;
     });
@@ -156,7 +122,6 @@ export class PiRpcChild {
     this.child = spawn(launch.command, [...launch.args, ...args.args], {
       cwd: args.cwd,
       env: args.env,
-      // fd 3: child → bridge, fd 4: bridge → child.
       stdio: ["pipe", "pipe", "pipe", "pipe", "pipe"],
     });
     experimental_recordProviderChildIo(this.child, {
@@ -167,8 +132,6 @@ export class PiRpcChild {
     const stderr = this.child.stderr;
     const channelIn = this.child.stdio[3] as Readable | null | undefined;
     this.channelWriter = (this.child.stdio[4] as Writable | null) ?? null;
-    // A write to a child that just died is EPIPE on the writer, never an
-    // uncaught exception that takes the whole bridge (every pi thread) down.
     this.child.stdin?.on("error", () => undefined);
     this.channelWriter?.on("error", () => undefined);
     if (stdout) {
@@ -176,7 +139,9 @@ export class PiRpcChild {
         input: stdout,
         onLine: (line) => this.queueStdoutLine(line),
         onOverflow: (bytes) => {
-          process.stderr.write(`pi bridge: dropped a ${bytes}-byte stdout line\n`);
+          process.stderr.write(
+            `pi bridge: dropped a ${bytes}-byte stdout line\n`,
+          );
         },
       });
     }
@@ -184,8 +149,6 @@ export class PiRpcChild {
       stderr.on("data", (chunk: Buffer | string) => {
         const text = chunk.toString();
         this.stderrTail = (this.stderrTail + text).slice(-STDERR_TAIL_BYTES);
-        // Pi's diagnostics (model resolution, extension load errors) are
-        // the bridge's diagnostics too; the runtime logs bridge stderr.
         process.stderr.write(`pi[${String(this.child.pid ?? "?")}]: ${text}`);
       });
     }
@@ -194,7 +157,9 @@ export class PiRpcChild {
         input: channelIn,
         onLine: (line) => this.handleChannelLine(line),
         onOverflow: (bytes) => {
-          process.stderr.write(`pi bridge: dropped a ${bytes}-byte channel line\n`);
+          process.stderr.write(
+            `pi bridge: dropped a ${bytes}-byte channel line\n`,
+          );
         },
       });
     }
@@ -225,9 +190,6 @@ export class PiRpcChild {
       this.stderrTail = `${this.stderrTail}${error.message}`;
     });
     this.child.on("exit", settleExit);
-    // A spawn failure (ENOENT, EACCES) emits `error` and `close` but never
-    // `exit`: settle on close so a missing executable is an immediate exit
-    // with the spawn error, not a readiness timeout.
     this.child.on("close", (code, signal) => settleExit(code, signal));
   }
 
@@ -239,12 +201,10 @@ export class PiRpcChild {
     return this.child.pid;
   }
 
-  /** Resolve after the operating system reports this child exited. */
   waitForExit(): Promise<PiRpcChildExitInfo> {
     return this.settledExit;
   }
 
-  /** Send one RPC command and wait for its response (success or error). */
   request(
     command: Record<string, unknown>,
     timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
@@ -260,7 +220,9 @@ export class PiRpcChild {
           ? null
           : setTimeout(() => {
               this.pending.delete(id);
-              reject(new Error(`pi did not answer ${String(command.type)} in time`));
+              reject(
+                new Error(`pi did not answer ${String(command.type)} in time`),
+              );
             }, timeoutMs);
       timer?.unref?.();
       this.pending.set(id, { resolve, reject, timer });
@@ -268,21 +230,17 @@ export class PiRpcChild {
     });
   }
 
-  /** Like `request`, but a `success: false` response rejects. */
   async requestOk(
     command: Record<string, unknown>,
     timeoutMs?: number,
   ): Promise<unknown> {
     const response = await this.request(command, timeoutMs);
     if (!response.success) {
-      throw new Error(
-        response.error ?? `pi rejected ${String(command.type)}`,
-      );
+      throw new Error(response.error ?? `pi rejected ${String(command.type)}`);
     }
     return response.data;
   }
 
-  /** Write one message to the extension's channel (fd 4). */
   sendChannel(message: Record<string, unknown>): void {
     const writer = this.channelWriter;
     if (!writer || writer.destroyed || writer.writableEnded) {
@@ -292,11 +250,6 @@ export class PiRpcChild {
     writer.write(`${JSON.stringify(message)}\n`);
   }
 
-  /**
-   * Close stdin and the channel writer (pi exits on stdin EOF; the
-   * extension's fd-4 reader needs its EOF too, or pi's exit would wait on
-   * it), then SIGTERM after the grace period, SIGKILL after another.
-   */
   closeGracefully(): void {
     if (this.exitInfo !== null) {
       return;
@@ -310,7 +263,6 @@ export class PiRpcChild {
     timer.unref?.();
   }
 
-  /** SIGTERM now, SIGKILL if the child is still there after the grace. */
   kill(): void {
     if (this.exitInfo !== null) {
       return;
@@ -331,14 +283,10 @@ export class PiRpcChild {
   private endWriters(): void {
     try {
       this.child.stdin?.end();
-    } catch {
-      // Already closed.
-    }
+    } catch {}
     try {
       this.channelWriter?.end();
-    } catch {
-      // Already closed.
-    }
+    } catch {}
   }
 
   private writeStdin(line: string): void {
@@ -379,8 +327,6 @@ export class PiRpcChild {
     try {
       parsed = JSON.parse(trimmed);
     } catch {
-      // Pi writes only JSON lines on stdout in RPC mode; anything else is a
-      // stray log line.
       return;
     }
     if (typeof parsed !== "object" || parsed === null) {
@@ -399,8 +345,6 @@ export class PiRpcChild {
       return;
     }
     if (message.type === "extension_ui_request") {
-      // Headless: every dialog another extension raises is cancelled, the
-      // way the in-process bridge's rpc mode binding answered them.
       this.writeStdin(
         `${JSON.stringify({
           type: "extension_ui_response",
@@ -411,8 +355,6 @@ export class PiRpcChild {
       return;
     }
     if (typeof message.type === "string") {
-      // Pi writes each AgentSessionEvent as its own JSON line, unwrapped:
-      // everything that is not a response or a UI request is the stream.
       this.args.onEvent(message);
     }
   }
@@ -428,9 +370,7 @@ export class PiRpcChild {
         this.channelRecorder?.fromChild(parsed);
         this.args.onChannelMessage(parsed as Record<string, unknown>);
       }
-    } catch {
-      // A malformed channel line is the extension's bug; ignore it.
-    }
+    } catch {}
   }
 }
 
@@ -439,13 +379,9 @@ interface ChannelRecorder {
   toChild(message: unknown): void;
 }
 
-/**
- * Tee the channel into the recording through the same recorder entry the
- * child's stdio uses, on a synthetic stream pair: lines pushed into
- * `stdout` are the child's, lines written to `stdin` are the bridge's.
- * Null when the process does not record, so nothing buffers.
- */
-function createChannelRecorder(threadId: string | null): ChannelRecorder | null {
+function createChannelRecorder(
+  threadId: string | null,
+): ChannelRecorder | null {
   if (!experimental_isProviderBridgeRecording()) {
     return null;
   }

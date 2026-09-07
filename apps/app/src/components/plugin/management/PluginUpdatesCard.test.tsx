@@ -18,37 +18,18 @@ import {
   PluginDetailReleaseStatus,
   pluginHasUpdateSurfaces,
 } from "./PluginUpdatesCard";
+import { makePluginListItem } from "@/test/fixtures/plugins";
 
 function plugin(overrides: Partial<PluginListItem> = {}): PluginListItem {
-  return {
+  return makePluginListItem({
     id: "linear",
     source: "npm:@example/linear@^1.6.0",
     rootDir: "/plugins/linear",
     version: "1.6.2",
-    enabled: true,
-    status: "running",
-    statusDetail: null,
-    description: null,
     name: "Linear",
-    icon: null,
-    compactIconUrl: null,
-    logoUrl: null,
-    logoDarkUrl: null,
-    hasSettings: false,
-    provenance: "direct",
-    isOrphanedBuiltin: false,
-    catalogEntryId: null,
-    publisherLabel: null,
     sourceDisplay: "npm · @bb-plugins/linear · pinned",
-    updateState: EMPTY_PLUGIN_UPDATE_STATE,
-    handlerStats: { count: 0, totalMs: 0, maxMs: 0, errorCount: 0 },
-    services: [],
-    schedules: [],
-    cliCommand: null,
-    capabilities: [],
-    app: { hasApp: false, bundle: null },
     ...overrides,
-  };
+  });
 }
 
 afterEach(() => {
@@ -59,7 +40,6 @@ afterEach(() => {
 
 describe("pluginHasUpdateSurfaces", () => {
   it("hides update surfaces for bundled plugins regardless of provenance", () => {
-    // A store-installed official: catalog provenance over a bundled source.
     expect(
       pluginHasUpdateSurfaces(
         plugin({ provenance: "catalog", source: "builtin:github" }),
@@ -70,7 +50,6 @@ describe("pluginHasUpdateSurfaces", () => {
         plugin({ provenance: "builtin", source: "builtin:secrets" }),
       ),
     ).toBe(false);
-    // Managed direct/catalog installs keep manual update controls.
     expect(pluginHasUpdateSurfaces(plugin({ provenance: "direct" }))).toBe(
       true,
     );

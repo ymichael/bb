@@ -14,13 +14,6 @@ const LOGO = 'manifest bb.branding.logo.light ("./logo.svg")';
 const encode = (text: string): Uint8Array => new TextEncoder().encode(text);
 const REPO_ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
-/**
- * Every SVG a first-party or example plugin ships under `icons/`: the
- * provider plugins' `bb.branding.icon` files and path-shaped provider icons,
- * plus declared icons from other first-party and example plugins. Pinned so
- * the list cannot silently go empty; the discovery test checks it against the
- * tree.
- */
 const FIRST_PARTY_BRANDING_SVGS = [
   "examples/plugins/echo-provider/icons/receipt.svg",
   "plugins/plugin-api-docs/icons/ai-generative.svg",
@@ -51,17 +44,11 @@ function discoverFirstPartyBrandingSvgs(): string[] {
   return files.sort();
 }
 
-/** A Latin-1 file: the `é` is the single byte 0xE9, which is not UTF-8. */
 const LATIN1_SVG: Uint8Array = Buffer.from(
   '<svg xmlns="http://www.w3.org/2000/svg"><title>Café</title><path d="M0 0h4v4z"/></svg>',
   "latin1",
 );
 
-/**
- * What the drawing tools write, each trimmed to the constructs a stricter
- * validator would trip on. Every one is an ordinary logo export and must
- * pass the build rules unchanged.
- */
 const TOOL_EXPORTS: Array<[string, Uint8Array]> = [
   [
     "an Illustrator export: XML declaration, generator comment, legacy public doctype, SaveForWeb metadata, a switch/foreignObject fallback, an Illustrator-namespace attribute",
@@ -144,11 +131,23 @@ describe("assertValidPluginCompactIconSvg (bb.branding.icon, marketplace icons)"
   });
 
   it.each([
-    ["a doctype", '<!DOCTYPE svg [<!ENTITY m "x">]><svg>&m;</svg>', /must not contain a doctype declaration/],
-    ["a processing instruction", '<?xml-stylesheet href="x.css"?><svg/>', /must not contain processing instructions/],
+    [
+      "a doctype",
+      '<!DOCTYPE svg [<!ENTITY m "x">]><svg>&m;</svg>',
+      /must not contain a doctype declaration/,
+    ],
+    [
+      "a processing instruction",
+      '<?xml-stylesheet href="x.css"?><svg/>',
+      /must not contain processing instructions/,
+    ],
     ["malformed XML", "<svg><g></svg>", /is not valid SVG XML/],
     ["a non-svg root", "<html/>", /must have an <svg> root element/],
-    ["a root outside the SVG namespace", '<svg xmlns="http://www.w3.org/1999/xhtml"/>', /must have an <svg> root element/],
+    [
+      "a root outside the SVG namespace",
+      '<svg xmlns="http://www.w3.org/1999/xhtml"/>',
+      /must have an <svg> root element/,
+    ],
   ])("rejects %s and names the field", (_case, svg, expected) => {
     expect(() => assertValidPluginCompactIconSvg(encode(svg), "icon")).toThrow(
       expected,
@@ -171,19 +170,71 @@ describe("assertValidPluginLogoSvg (SVG logos and provider icons, at build)", ()
   });
 
   it.each([
-    ["script", '<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>', /must not contain a <script> element/],
-    ["an upper-cased SCRIPT under an un-namespaced root", "<svg><SCRIPT>1</SCRIPT></svg>", /must not contain a <SCRIPT> element/],
-    ["a script in another namespace", '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:script>1</h:script></svg>', /must not contain a <h:script> element/],
-    ["a script under an unbound prefix", "<svg><x:script>1</x:script></svg>", /must not contain a <x:script> element/],
-    ["an SVG-Tiny handler", '<svg xmlns="http://www.w3.org/2000/svg"><handler type="text/ecmascript">1</handler></svg>', /must not contain a <handler> element/],
-    ["an SVG-Tiny listener", '<svg xmlns="http://www.w3.org/2000/svg"><listener event="click" handler="#h"/></svg>', /must not contain a <listener> element/],
-    ["an on* attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path onclick="x()" d="M0 0"/></svg>', /must not contain a <path onclick> event handler attribute/],
-    ["a mixed-case on* attribute on the root", '<svg OnLoad="x()"/>', /must not contain a <svg OnLoad> event handler attribute/],
-    ["a SMIL event attribute", '<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="opacity" onbegin="x()"/></svg>', /must not contain a <animate onbegin> event handler attribute/],
-    ["a javascript: href", '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><path d="M0 0"/></a></svg>', /must not contain a javascript: URL in <a href>/],
-    ["a javascript: xlink:href in mixed case behind leading whitespace", '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="  JavaScript:alert(1)"/></svg>', /must not contain a javascript: URL in <use xlink:href>/],
-    ["a javascript: href split by an encoded newline and tab", '<svg xmlns="http://www.w3.org/2000/svg"><a href="java&#10;scr&#9;ipt:alert(1)"><path d="M0 0"/></a></svg>', /must not contain a javascript: URL in <a href>/],
-    ["a javascript: href on an image", '<svg xmlns="http://www.w3.org/2000/svg"><image href="javascript:alert(1)"/></svg>', /must not contain a javascript: URL in <image href>/],
+    [
+      "script",
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>',
+      /must not contain a <script> element/,
+    ],
+    [
+      "an upper-cased SCRIPT under an un-namespaced root",
+      "<svg><SCRIPT>1</SCRIPT></svg>",
+      /must not contain a <SCRIPT> element/,
+    ],
+    [
+      "a script in another namespace",
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:script>1</h:script></svg>',
+      /must not contain a <h:script> element/,
+    ],
+    [
+      "a script under an unbound prefix",
+      "<svg><x:script>1</x:script></svg>",
+      /must not contain a <x:script> element/,
+    ],
+    [
+      "an SVG-Tiny handler",
+      '<svg xmlns="http://www.w3.org/2000/svg"><handler type="text/ecmascript">1</handler></svg>',
+      /must not contain a <handler> element/,
+    ],
+    [
+      "an SVG-Tiny listener",
+      '<svg xmlns="http://www.w3.org/2000/svg"><listener event="click" handler="#h"/></svg>',
+      /must not contain a <listener> element/,
+    ],
+    [
+      "an on* attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path onclick="x()" d="M0 0"/></svg>',
+      /must not contain a <path onclick> event handler attribute/,
+    ],
+    [
+      "a mixed-case on* attribute on the root",
+      '<svg OnLoad="x()"/>',
+      /must not contain a <svg OnLoad> event handler attribute/,
+    ],
+    [
+      "a SMIL event attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="opacity" onbegin="x()"/></svg>',
+      /must not contain a <animate onbegin> event handler attribute/,
+    ],
+    [
+      "a javascript: href",
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><path d="M0 0"/></a></svg>',
+      /must not contain a javascript: URL in <a href>/,
+    ],
+    [
+      "a javascript: xlink:href in mixed case behind leading whitespace",
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="  JavaScript:alert(1)"/></svg>',
+      /must not contain a javascript: URL in <use xlink:href>/,
+    ],
+    [
+      "a javascript: href split by an encoded newline and tab",
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="java&#10;scr&#9;ipt:alert(1)"><path d="M0 0"/></a></svg>',
+      /must not contain a javascript: URL in <a href>/,
+    ],
+    [
+      "a javascript: href on an image",
+      '<svg xmlns="http://www.w3.org/2000/svg"><image href="javascript:alert(1)"/></svg>',
+      /must not contain a javascript: URL in <image href>/,
+    ],
   ])("refuses %s and opens with the subject", (_case, svg, expected) => {
     expect(() => assertValidPluginLogoSvg(encode(svg), LOGO)).toThrow(expected);
     expect(() => assertValidPluginLogoSvg(encode(svg), LOGO)).toThrow(LOGO);
@@ -199,7 +250,10 @@ describe("assertValidPluginLogoSvg (SVG logos and provider icons, at build)", ()
       ),
     ).toThrow(/must not contain a <script> element/);
     expect(() =>
-      assertValidPluginLogoSvg(encode("<svg><g><script>1</script></svg>"), LOGO),
+      assertValidPluginLogoSvg(
+        encode("<svg><g><script>1</script></svg>"),
+        LOGO,
+      ),
     ).toThrow(/must not contain a <script> element/);
   });
 
@@ -214,10 +268,13 @@ describe("assertValidPluginLogoSvg (SVG logos and provider icons, at build)", ()
     ).not.toThrow();
   });
 
-  it.each(FIRST_PARTY_BRANDING_SVGS)("passes the build rules for the shipped %s", (relative) => {
-    const bytes = new Uint8Array(readFileSync(join(REPO_ROOT, relative)));
-    expect(() => assertValidPluginLogoSvg(bytes, relative)).not.toThrow();
-  });
+  it.each(FIRST_PARTY_BRANDING_SVGS)(
+    "passes the build rules for the shipped %s",
+    (relative) => {
+      const bytes = new Uint8Array(readFileSync(join(REPO_ROOT, relative)));
+      expect(() => assertValidPluginLogoSvg(bytes, relative)).not.toThrow();
+    },
+  );
 
   it("covers every SVG a first-party or example plugin ships under icons/", () => {
     expect(discoverFirstPartyBrandingSvgs()).toEqual(FIRST_PARTY_BRANDING_SVGS);
@@ -239,43 +296,158 @@ describe("assertValidPluginIconSvg", () => {
         LABEL,
       ),
     ).not.toThrow();
-    // An un-namespaced root still counts as SVG (the compact-icon rule).
     expect(() =>
       assertValidPluginIconSvg(encode('<svg><circle r="4"/></svg>'), LABEL),
     ).not.toThrow();
   });
 
   it.each([
-    ["script", '<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>', /<script> element/],
-    ["an upper-cased SCRIPT under an un-namespaced root", "<svg><SCRIPT>1</SCRIPT></svg>", /<SCRIPT> element/],
+    [
+      "script",
+      '<svg xmlns="http://www.w3.org/2000/svg"><script>1</script></svg>',
+      /<script> element/,
+    ],
+    [
+      "an upper-cased SCRIPT under an un-namespaced root",
+      "<svg><SCRIPT>1</SCRIPT></svg>",
+      /<SCRIPT> element/,
+    ],
     ["iframe", "<svg><iframe/></svg>", /<iframe> element/],
-    ["an SVG-Tiny handler", '<svg xmlns="http://www.w3.org/2000/svg"><handler type="text/ecmascript">1</handler></svg>', /<handler> element/],
-    ["an SVG-Tiny listener", '<svg xmlns="http://www.w3.org/2000/svg"><listener event="click" handler="#h"/></svg>', /<listener> element/],
-    ["foreignObject", '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>', /<foreignObject> element/],
-    ["image", '<svg xmlns="http://www.w3.org/2000/svg"><image href="#x"/></svg>', /<image> element/],
-    ["a", '<svg xmlns="http://www.w3.org/2000/svg"><a><path d="M0 0"/></a></svg>', /<a> element/],
-    ["style", '<svg xmlns="http://www.w3.org/2000/svg"><style>*{}</style></svg>', /<style> element/],
-    ["an on* attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path onclick="x()" d="M0 0"/></svg>', /onclick> event handler/],
-    ["an external href", '<svg xmlns="http://www.w3.org/2000/svg"><use href="https://example.com/x.svg#p"/></svg>', /only same-document "#" references/],
-    ["an external xlink:href", '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="x.svg#p"/></svg>', /only same-document "#" references/],
-    ["an element outside the SVG namespace", '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:div/></svg>', /outside the SVG namespace/],
-    ["an external url() in a style attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:url(https://example.com/p.svg#g)" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external url() in a paint attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path fill="url(\'https://example.com/p.svg#g\')" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external url() in a filter attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path filter="url(//example.com/f.svg#f)" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external url() in a mask attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path mask="url(data:image/svg+xml,x)" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external url() in a marker attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path marker-start="url(https://example.com/m.svg#m)" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external url() in a cursor attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path cursor="url(https://example.com/c.cur)" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["a CSS-escaped url() in a style attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:u\\72l(https://example.com/x.svg#g)" d="M0 0"/></svg>', /CSS escape in <path style>/],
-    ["a CSS-escaped url() in a paint attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path fill="u\\72l(https://example.com/x.svg#g)" d="M0 0"/></svg>', /CSS escape in <path fill>/],
-    ["a CSS-escaped url() in a SMIL set of style", '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"><set attributeName="style" to="fill:u\\72l(https://example.com/x.svg#g)"/></path></svg>', /CSS escape in <set to>/],
-    ["a CSS-escaped url() in SMIL animate values of fill", '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"><animate attributeName="fill" values="u\\72l(https://example.com/x.svg#g);red" dur="1s"/></path></svg>', /CSS escape in <animate values>/],
-    ["an external image-set() in a style attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path style="mask-image:image-set(\'https://example.com/m.svg\' 1x)" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external image() in a style attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path style="mask-image:image(\'https://example.com/m.svg\')" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["an external src() in a style attribute", '<svg xmlns="http://www.w3.org/2000/svg"><path style="mask-image:src(\'https://example.com/m.svg\')" d="M0 0"/></svg>', /only same-document "url\(#…\)" references/],
-    ["a SMIL animation of href", '<svg xmlns="http://www.w3.org/2000/svg"><use href="#p"><animate attributeName="href" to="https://example.com/x.svg#p"/></use></svg>', /must not animate "href"/],
-    ["a SMIL set of an event handler", '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="onload" to="x()"/></svg>', /must not animate "onload"/],
-    ["a SMIL animation of xlink:href", '<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="xlink:href" to="#p"/></svg>', /must not animate "xlink:href"/],
-    ["xml:base", '<svg xmlns="http://www.w3.org/2000/svg" xml:base="https://example.com/"><use href="#p"/></svg>', /<svg xml:base> attribute/],
+    [
+      "an SVG-Tiny handler",
+      '<svg xmlns="http://www.w3.org/2000/svg"><handler type="text/ecmascript">1</handler></svg>',
+      /<handler> element/,
+    ],
+    [
+      "an SVG-Tiny listener",
+      '<svg xmlns="http://www.w3.org/2000/svg"><listener event="click" handler="#h"/></svg>',
+      /<listener> element/,
+    ],
+    [
+      "foreignObject",
+      '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject/></svg>',
+      /<foreignObject> element/,
+    ],
+    [
+      "image",
+      '<svg xmlns="http://www.w3.org/2000/svg"><image href="#x"/></svg>',
+      /<image> element/,
+    ],
+    [
+      "a",
+      '<svg xmlns="http://www.w3.org/2000/svg"><a><path d="M0 0"/></a></svg>',
+      /<a> element/,
+    ],
+    [
+      "style",
+      '<svg xmlns="http://www.w3.org/2000/svg"><style>*{}</style></svg>',
+      /<style> element/,
+    ],
+    [
+      "an on* attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path onclick="x()" d="M0 0"/></svg>',
+      /onclick> event handler/,
+    ],
+    [
+      "an external href",
+      '<svg xmlns="http://www.w3.org/2000/svg"><use href="https://example.com/x.svg#p"/></svg>',
+      /only same-document "#" references/,
+    ],
+    [
+      "an external xlink:href",
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"><use xlink:href="x.svg#p"/></svg>',
+      /only same-document "#" references/,
+    ],
+    [
+      "an element outside the SVG namespace",
+      '<svg xmlns="http://www.w3.org/2000/svg" xmlns:h="http://www.w3.org/1999/xhtml"><h:div/></svg>',
+      /outside the SVG namespace/,
+    ],
+    [
+      "an external url() in a style attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:url(https://example.com/p.svg#g)" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external url() in a paint attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path fill="url(\'https://example.com/p.svg#g\')" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external url() in a filter attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path filter="url(//example.com/f.svg#f)" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external url() in a mask attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path mask="url(data:image/svg+xml,x)" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external url() in a marker attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path marker-start="url(https://example.com/m.svg#m)" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external url() in a cursor attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path cursor="url(https://example.com/c.cur)" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "a CSS-escaped url() in a style attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path style="fill:u\\72l(https://example.com/x.svg#g)" d="M0 0"/></svg>',
+      /CSS escape in <path style>/,
+    ],
+    [
+      "a CSS-escaped url() in a paint attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path fill="u\\72l(https://example.com/x.svg#g)" d="M0 0"/></svg>',
+      /CSS escape in <path fill>/,
+    ],
+    [
+      "a CSS-escaped url() in a SMIL set of style",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"><set attributeName="style" to="fill:u\\72l(https://example.com/x.svg#g)"/></path></svg>',
+      /CSS escape in <set to>/,
+    ],
+    [
+      "a CSS-escaped url() in SMIL animate values of fill",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0"><animate attributeName="fill" values="u\\72l(https://example.com/x.svg#g);red" dur="1s"/></path></svg>',
+      /CSS escape in <animate values>/,
+    ],
+    [
+      "an external image-set() in a style attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path style="mask-image:image-set(\'https://example.com/m.svg\' 1x)" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external image() in a style attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path style="mask-image:image(\'https://example.com/m.svg\')" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "an external src() in a style attribute",
+      '<svg xmlns="http://www.w3.org/2000/svg"><path style="mask-image:src(\'https://example.com/m.svg\')" d="M0 0"/></svg>',
+      /only same-document "url\(#…\)" references/,
+    ],
+    [
+      "a SMIL animation of href",
+      '<svg xmlns="http://www.w3.org/2000/svg"><use href="#p"><animate attributeName="href" to="https://example.com/x.svg#p"/></use></svg>',
+      /must not animate "href"/,
+    ],
+    [
+      "a SMIL set of an event handler",
+      '<svg xmlns="http://www.w3.org/2000/svg"><set attributeName="onload" to="x()"/></svg>',
+      /must not animate "onload"/,
+    ],
+    [
+      "a SMIL animation of xlink:href",
+      '<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="xlink:href" to="#p"/></svg>',
+      /must not animate "xlink:href"/,
+    ],
+    [
+      "xml:base",
+      '<svg xmlns="http://www.w3.org/2000/svg" xml:base="https://example.com/"><use href="#p"/></svg>',
+      /<svg xml:base> attribute/,
+    ],
     ["a doctype", '<!DOCTYPE svg [<!ENTITY m "x">]><svg>&m;</svg>', /doctype/],
     ["a non-svg root", "<html/>", /<svg> root element/],
   ])("rejects %s and names the icon", (_case, svg, expected) => {

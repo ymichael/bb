@@ -1,4 +1,4 @@
-import type { MouseEvent as ReactMouseEvent } from "react";
+import { type MouseEvent as ReactMouseEvent } from "react";
 import { PluginIcon } from "@/components/plugin/PluginIcon";
 import {
   SectionSidebar,
@@ -8,29 +8,22 @@ import {
   SectionSidebarRow,
 } from "@/components/sidebar/SectionSidebar";
 import { canOpenNativeScreen, shellOpenNative } from "@/lib/native-shell";
-import {
-  SETTINGS_ROUTE_PATH,
-  getPluginConfigurationRoutePath,
-  getSettingsRoutePath,
-} from "@/lib/route-paths";
+import { getPluginConfigurationRoutePath } from "@/lib/route-paths";
 import { useSettingsNavState } from "./settings-nav";
 import type { SettingsNavState } from "./settings-nav";
+import { getSettingsSectionRoutePath } from "./settings-sections";
 
 interface SettingsSidebarProps {
   onResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   isResizing: boolean;
   showTopReserve: boolean;
   appRoutePath: string;
-  /** Render the body only, inside a compact drawer panel owned by the caller. */
   mobileHosted?: boolean;
 }
 
 type SettingsSidebarNavigation = Pick<
   SettingsNavState,
-  | "activePluginId"
-  | "activeSection"
-  | "pluginEntries"
-  | "sections"
+  "activePluginId" | "activeSection" | "pluginEntries" | "sections"
 >;
 
 interface SettingsSidebarContentProps extends SettingsSidebarProps {
@@ -38,7 +31,6 @@ interface SettingsSidebarContentProps extends SettingsSidebarProps {
   testIdPrefix?: string;
 }
 
-/** Shared Settings navigation renderer for production and full-page stories. */
 export function SettingsSidebarContent({
   onResizeMouseDown,
   isResizing,
@@ -48,8 +40,8 @@ export function SettingsSidebarContent({
   navigation,
   testIdPrefix = "settings",
 }: SettingsSidebarContentProps) {
-  const { activePluginId, activeSection, pluginEntries, sections } =
-    navigation;
+  const { activePluginId, activeSection, pluginEntries, sections } = navigation;
+  const hasPlugins = pluginEntries.length > 0;
 
   return (
     <SectionSidebar
@@ -70,17 +62,13 @@ export function SettingsSidebarContent({
               key={section.id}
               active={activeSection === section.id}
               label={section.label}
-              to={
-                section.id === "general"
-                  ? SETTINGS_ROUTE_PATH
-                  : getSettingsRoutePath(section.id)
-              }
+              to={getSettingsSectionRoutePath(section.id)}
             >
               <SectionSidebarIcon name={section.icon} />
             </SectionSidebarRow>
           ))}
       </div>
-      {pluginEntries.length > 0 ? (
+      {hasPlugins ? (
         <>
           <div className="mt-4">
             <SectionSidebarLabel>Plugins</SectionSidebarLabel>
@@ -132,7 +120,7 @@ export function SettingsSidebarContent({
                   key={section.id}
                   active={activeSection === section.id}
                   label={section.label}
-                  to={getSettingsRoutePath(section.id)}
+                  to={getSettingsSectionRoutePath(section.id)}
                 >
                   <SectionSidebarIcon name={section.icon} />
                 </SectionSidebarRow>
@@ -144,7 +132,6 @@ export function SettingsSidebarContent({
   );
 }
 
-/** Focused Settings navigation using the shared section-sidebar shell. */
 export function SettingsSidebar({
   onResizeMouseDown,
   isResizing,

@@ -43,7 +43,6 @@ export interface ThreadPaletteNavigationItem {
   optionId: string;
   projectId: string;
   threadId: string;
-  /** The matched message sequence, or null for a title or recent result. */
   messageSeq: number | null;
 }
 
@@ -280,7 +279,7 @@ export function ThreadPaletteResults({
             <div
               className={cn(
                 CHROME_SECTION_LABEL_CLASS,
-                "sticky top-0 z-10 rounded-none bg-popover px-2",
+                "sticky top-0 z-10 flex items-center gap-2 rounded-none bg-popover px-2",
               )}
             >
               <span className="min-w-0 truncate">{section.label}</span>
@@ -413,6 +412,7 @@ function ThreadPaletteResultRowComponent({
     isBackgroundAgentActive: hasActiveBackgroundAgentActivity(thread),
     isBackgroundCommandActive: hasActiveBackgroundCommandActivity(thread),
     isGoalActive: hasActiveGoalActivity(thread),
+    queuedWork: thread.queuedWork,
     isPlanModeActive: hasActivePlanModeActivity(thread),
     isRuntimeActive: isRuntimeBusyThread(thread),
     isWorkflowActive: hasActiveWorkflowActivity(thread),

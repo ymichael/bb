@@ -11,7 +11,6 @@ export interface EmptyStateProps {
   className?: string;
 }
 
-/** Inline zero-state hint (packages/shared-ui empty-state.tsx `EmptyState`). */
 export function EmptyState({ message, icon, className }: EmptyStateProps) {
   const { tokens } = useTheme();
   return (
@@ -29,10 +28,6 @@ export interface EmptyStatePanelProps {
   className?: string;
 }
 
-/**
- * Boxed zero-state placeholder: dashed outline, centered muted copy, no fill
- * (`EmptyStatePanel` on the web). Strings get the default typography.
- */
 export function EmptyStatePanel({ children, className }: EmptyStatePanelProps) {
   return (
     <View

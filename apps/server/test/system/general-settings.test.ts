@@ -12,7 +12,6 @@ describe("general settings", () => {
       expect(response.status).toBe(200);
       const body = systemConfigResponseSchema.parse(await readJson(response));
       expect(body.generalSettings).toEqual(defaultAppSettings);
-      // A fresh server with no enrolled host is the only null-primary case.
       expect(body.primaryHostId).toBeNull();
     });
   });

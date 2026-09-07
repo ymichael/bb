@@ -19,9 +19,6 @@ import {
   isMarkdownFilePreview,
 } from "@bb/client-core";
 
-// Generic HTML comes from arbitrary worktree/storage files. Allow scripts for
-// realistic previews, but omit allow-same-origin so the frame gets an opaque
-// origin and cannot read bb app cookies, storage, or same-origin APIs.
 const GENERIC_HTML_IFRAME_SANDBOX = "allow-scripts";
 
 interface FilePreviewBaseProps {

@@ -49,8 +49,6 @@ export function createNodeTransport(
   args: CreateNodeTransportArgs = {},
 ): BbSdkTransport {
   return createHttpTransport({
-    // Only fall back to CLI config when no base URL is given, so explicitly
-    // configured SDKs work in environments without BB_SERVER_URL.
     baseUrl: args.baseUrl ?? resolveCliConfig(args.cliConfig).BB_SERVER_URL,
     fetch:
       args.fetch ??

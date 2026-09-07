@@ -89,10 +89,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   };
 
   const providerRegistry = createProviderRegistryService({
-    // Providers arrive with plugin startup, which runs after the listener is
-    // up; provider-routed work waits for it instead of failing on boot.
     deferRegistrationsSettled: true,
-    // Picker order and the default provider are the user's settings.
     readUserProviderPreferences: () => {
       const settings = getAppSettings(db);
       return {
@@ -123,8 +120,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     logger,
   });
 
-  // Telemetry only operates in production runs (the bb-app launcher and the
-  // desktop app both set NODE_ENV=production); dev/source runs never send.
   const telemetry = await createTelemetryService({
     apiKey: serverConfig.BB_POSTHOG_API_KEY,
     appSurface: serverConfig.BB_APP_SURFACE,
@@ -209,6 +204,7 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     aiServices,
     skillTreeRegistry,
     pluginSchedules: pluginService,
+    plugins: pluginService,
     telemetry,
     terminalSessions,
   };
@@ -239,9 +235,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
   );
   telemetry.capture({ name: "app_started" });
 
-  // Plugins load after the listener is up: they are additive, and a slow
-  // plugin must not delay serving. Bind the loopback SDK first so bb.sdk is
-  // usable from the moment factories run.
   pluginService.bindSdk({
     baseUrl: `http://127.0.0.1:${serverConfig.BB_SERVER_PORT}`,
   });
@@ -251,15 +244,9 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
       logger.error({ err: error }, "Plugin startup failed");
     })
     .finally(() => {
-      // Success or failure, the registry now holds whatever loaded: release
-      // the requests waiting for providers rather than stalling them out.
       providerRegistry.markRegistrationsSettled();
-      // Check installed plugins for updates every 6 hours. A check only
-      // records what is available; it never installs or runs plugin code.
       pluginService.startPeriodicUpdateChecks();
     });
-  // Discovery metadata only: a refresh never installs, updates, or runs
-  // plugin code, and a failure keeps the last-known-good catalog.
   pluginCatalogService.startPeriodicRefresh();
 
   const sweepInterval = setInterval(() => {
@@ -295,13 +282,6 @@ export async function runServer(serverConfig: ServerConfig): Promise<void> {
     return shutdownPromise;
   };
 
-  // Plugins run in-process. An error a plugin service raises outside its
-  // start() promise (an unlistened EventEmitter 'error', a throw in a timer
-  // callback, a detached rejection) arrives here, not in the service
-  // supervisor; without this listener Node exits, the process manager
-  // restarts the server, the plugin reloads, and the crash loops. A claimed
-  // error restarts that one service. Anything else keeps Node's default:
-  // the diagnostics monitor in index.ts has already written its report.
   process.on("uncaughtException", (error: unknown) => {
     if (pluginService.handleUncaughtException(error)) return;
     const message =

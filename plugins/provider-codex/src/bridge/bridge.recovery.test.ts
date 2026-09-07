@@ -8,16 +8,6 @@ import { experimental_createBridgeJsonRpcTestHarness as createBridgeJsonRpcTestH
 import type { BridgeJsonRpcTestHarness } from "@get-bb/plugin-sdk/provider-bridge/testing";
 import { handleLine } from "./bridge.js";
 
-/**
- * The codex bridge's own recovery: a terminal account error on a turn raises
- * an unsolicited `provider/recovery` hint (the runtime acts on the kind, never
- * on codex's wording) and marks the session so its next turn rebuilds the
- * app-server child from the rollout — codex caches credentials per process,
- * and that rebuild is how an external `codex login` takes effect. The rename
- * retry for a not-yet-flushed rollout lives here too: the runtime never
- * retries a rename.
- */
-
 const THREAD_ID = "thr_codex_recovery_1";
 const PROVIDER_THREAD_ID = "codex-recovery-session";
 
@@ -136,7 +126,6 @@ afterEach(async () => {
 it("raises authRequired on a terminal 401 and rebuilds the child before the next turn", async () => {
   stubFakeAppServer({
     turns: [UNAUTHORIZED_TURN, OK_TURN],
-    // The second turn runs on the rebuilt child; the cursor must follow.
     turnCursorPath: join(workspaceDir, "turn-cursor"),
   });
   harness = createBridgeJsonRpcTestHarness(handleLine);
@@ -169,8 +158,6 @@ it("raises authRequired on a terminal 401 and rebuilds the child before the next
     message: expect.stringContaining("401 Unauthorized"),
     retryable: false,
   });
-  // Unsolicited only: the hint rides no request, and the turn's own
-  // provider.error row still carries the user-visible failure.
   expect(
     threadDeltas().filter(
       (delta) => (delta as { kind?: string }).kind === "provider.error",
@@ -189,8 +176,6 @@ it("raises authRequired on a terminal 401 and rebuilds the child before the next
   });
   expect((await harness.waitForResponse(3)).error).toBeUndefined();
 
-  // The next turn ran on a rebuilt child: the bridge announced the
-  // replacement, and the scripted second turn answered on the new process.
   const replaced = notifications(BRIDGE_NOTIFICATION_METHODS.sessionReplaced);
   expect(replaced).toEqual([
     expect.objectContaining({
@@ -209,7 +194,6 @@ it("raises authRequired on a terminal 401 and rebuilds the child before the next
         (delta as { status?: string }).status === "completed",
     );
   });
-  // One hint per failure, not one per turn.
   expect(
     notifications(BRIDGE_NOTIFICATION_METHODS.providerRecovery),
   ).toHaveLength(1);
@@ -234,8 +218,6 @@ it("retries a rename inside the bridge while the rollout is not ready", async ()
     title: "renamed while flushing",
   });
   const response = await harness.waitForResponse(2);
-  // Two failures fit inside the 50/200 ms ladder; the final attempt succeeds
-  // and the runtime sees one plain success.
   expect(response.error).toBeUndefined();
   expect(response.result).toEqual({ ok: true });
 }, 30_000);
@@ -260,6 +242,5 @@ it("fails a rename with a plain error once the ladder is exhausted", async () =>
   });
   const response = await harness.waitForResponse(2);
   expect(response.error?.message).toMatch(/rollout at .+ is empty/);
-  // A not-ready rollout is no recovery kind: plain error, no hint.
   expect(response.error?.data).toBeUndefined();
 }, 30_000);

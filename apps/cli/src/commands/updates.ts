@@ -32,15 +32,6 @@ interface MachineUpdatesEntry {
   statusError: string | null;
 }
 
-/**
- * The same state ladder Settings → Updates draws, printed as words.
- *
- * Both surfaces read `UPDATE_STATE_PRESENTATION` so a CLI that reads "Update
- * in terminal" reads the same way in the app. This used to
- * be a second, hand-maintained list of phrases here, and the two had already
- * drifted — the app said "Update needed" where the CLI said "update needed"
- * for one case and "update manually" for another.
- */
 function providerState(status: ProviderCliStatus): UpdateState {
   if (!status.installed) return "not-installed";
   if (status.needsUpdate || status.versionUnsupported) {

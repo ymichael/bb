@@ -36,17 +36,10 @@ interface ProviderConfig {
   providerId: string;
   signInHint: string;
   expiredHint: string;
-  /** The declared `strings`, kept for the icon tint. */
   strings: ProviderInfo["strings"];
-  /** The roster entry: the declared mark (logo, glyph, family). Absent for a
-   * provider the usage response names but the roster no longer lists. */
   provider: ProviderInfo | undefined;
 }
 
-/**
- * Usage copy comes from the provider's declared `strings`; a provider that
- * declares none (a dynamic ACP agent) gets generic copy built from its name.
- */
 function providerConfig(
   providerId: string,
   info: ProviderInfo | undefined,
@@ -385,9 +378,11 @@ export function UsageLimitsSettingsSectionContent({
       (providerId) => !providerById.has(providerId),
     ),
   ];
-  const providerConfigs = orderedProviderIds.map((providerId) =>
-    providerConfig(providerId, providerById.get(providerId)),
-  );
+  const providerConfigs = orderedProviderIds
+    .filter((providerId) => usage[providerId]?.status !== "not_installed")
+    .map((providerId) =>
+      providerConfig(providerId, providerById.get(providerId)),
+    );
   const emptyMessage =
     isLoading || isProviderListLoading
       ? "Loading providers and usage…"
@@ -396,6 +391,7 @@ export function UsageLimitsSettingsSectionContent({
         : "No providers available.";
   return (
     <SettingsSection
+      actionPlacement={showMachinePicker ? "responsive" : "inline"}
       title="Usage limits"
       description="Your provider subscription usage."
       action={

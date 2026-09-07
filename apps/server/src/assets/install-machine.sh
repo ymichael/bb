@@ -375,6 +375,20 @@ complete_step "Using local host-daemon port $host_daemon_port"
 package_url="${server_url%/}/install/bb-app.tgz"
 package_dir=$(mktemp -d "${TMPDIR:-/tmp}/bb-app.XXXXXX")
 package_file="$package_dir/bb-app.tgz"
+package_headers="$package_dir/headers"
+host_artifact_digest_file="$data_dir/host-artifact.sha256"
+installed_artifact_digest=
+if [ -x "$machine_npm_prefix/bin/bb-app" ] && \
+   [ -x "$machine_npm_prefix/bin/bb" ] && \
+   [ -f "$machine_npm_prefix/lib/node_modules/bb-app/host-daemon/dist/daemon-bundle.mjs" ]; then
+  installed_artifact_digest=$(node -e '
+    const fs = require("node:fs");
+    try {
+      const digest = fs.readFileSync(process.argv[1], "utf8").trim();
+      if (/^[a-f0-9]{64}$/u.test(digest)) process.stdout.write(digest);
+    } catch {}
+  ' "$host_artifact_digest_file")
+fi
 # curl's numeric meter shows bytes, rate, percentage, and ETA without the
 # animated ASCII bar. Keep redirected installs quiet while preserving errors.
 curl_output_mode=--progress-meter
@@ -382,19 +396,58 @@ if [ ! -t 2 ]; then
   curl_output_mode=--silent
 fi
 active_step "Downloading the server's bb-app package (timeout: 5 minutes)"
-package_status=$(curl "$curl_output_mode" --show-error --location \
-  --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" \
-  --max-time "$PACKAGE_DOWNLOAD_TIMEOUT_SECONDS" \
-  --output "$package_file" \
-  --write-out '%{http_code}' \
-  "$package_url") || package_status=000
+if [ -n "$installed_artifact_digest" ]; then
+  package_status=$(curl "$curl_output_mode" --show-error --location \
+    --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" \
+    --max-time "$PACKAGE_DOWNLOAD_TIMEOUT_SECONDS" \
+    --header "If-None-Match: \"sha256-$installed_artifact_digest\"" \
+    --dump-header "$package_headers" \
+    --output "$package_file" \
+    --write-out '%{http_code}' \
+    "$package_url") || package_status=000
+else
+  package_status=$(curl "$curl_output_mode" --show-error --location \
+    --connect-timeout "$CURL_CONNECT_TIMEOUT_SECONDS" \
+    --max-time "$PACKAGE_DOWNLOAD_TIMEOUT_SECONDS" \
+    --dump-header "$package_headers" \
+    --output "$package_file" \
+    --write-out '%{http_code}' \
+    "$package_url") || package_status=000
+fi
+
+package_digest=$(node -e '
+  const fs = require("node:fs");
+  try {
+    const headers = fs.readFileSync(process.argv[1], "utf8");
+    const matches = [...headers.matchAll(/^x-bb-artifact-sha256:\s*([a-f0-9]{64})\s*$/gimu)];
+    const digest = matches.at(-1)?.[1];
+    if (digest) process.stdout.write(digest);
+  } catch {}
+' "$package_headers")
 
 bb_app=
 bb_app_npm_prefix=
-if [ "$package_status" -ge 200 ] && [ "$package_status" -lt 300 ]; then
+if [ "$package_status" = 304 ] && [ -n "$installed_artifact_digest" ]; then
+  bb_app_npm_prefix=$machine_npm_prefix
+  complete_step "The identical server host artifact is already installed"
+elif [ "$package_status" -ge 200 ] && [ "$package_status" -lt 300 ]; then
+  if [ -n "$package_digest" ]; then
+    downloaded_digest=$(node -e '
+      const crypto = require("node:crypto");
+      const fs = require("node:fs");
+      process.stdout.write(crypto.createHash("sha256").update(fs.readFileSync(process.argv[1])).digest("hex"));
+    ' "$package_file")
+    if [ "$downloaded_digest" != "$package_digest" ]; then
+      rm -rf "$package_dir"
+      fail_step "The downloaded bb host artifact failed SHA-256 verification."
+      detail "Expected $package_digest but received $downloaded_digest." >&2
+      exit 1
+    fi
+  fi
   require_npm
   complete_step "Downloaded the server's bb-app package"
   active_step "Installing the server's bb-app build"
+  rm -f "$host_artifact_digest_file"
   if ! npm install -g "$bb_app_allow_scripts" --prefix "$machine_npm_prefix" "$package_file"; then
     rm -rf "$package_dir"
     fail_step "Could not install bb-app for this machine. Check the npm error above, then rerun this command."
@@ -403,6 +456,7 @@ if [ "$package_status" -ge 200 ] && [ "$package_status" -lt 300 ]; then
   bb_app_npm_prefix=$machine_npm_prefix
   complete_step "Installed the server's bb-app build"
 elif command -v bb-app >/dev/null 2>&1; then
+  rm -f "$host_artifact_digest_file"
   bb_app=$(command -v bb-app)
   if [ "$package_status" = 404 ]; then
     warning_step "The server does not provide its bb-app package; using bb-app at $bb_app"
@@ -411,6 +465,7 @@ elif command -v bb-app >/dev/null 2>&1; then
   fi
 elif [ "$package_status" = 404 ]; then
   require_npm
+  rm -f "$host_artifact_digest_file"
   warning_step "The server does not provide its bb-app package"
   active_step "Installing bb-app from the npm registry"
   if ! npm install -g "$bb_app_allow_scripts" --prefix "$machine_npm_prefix" bb-app; then
@@ -439,12 +494,17 @@ if [ -n "$bb_app_npm_prefix" ]; then
   bb_app_root="$bb_app_npm_prefix/lib/node_modules/bb-app"
   if ! node -e '
     const root = process.argv[1];
-    require(root + "/node_modules/better-sqlite3");
     require(root + "/node_modules/node-pty");
+    require(root + "/node_modules/@parcel/watcher");
   ' "$bb_app_root" >/dev/null 2>&1; then
-    fail_step "npm installed bb-app, but its native add-ons (better-sqlite3, node-pty) did not load."
+    fail_step "npm installed bb-app, but its host native add-ons (node-pty, @parcel/watcher) did not load."
     detail "npm did not run their install scripts. Check the npm warnings above. If they mention allowScripts or ignore-scripts, rerun this command with: npm_config_allow_scripts=$bb_app_native_modules npm_config_ignore_scripts=false" >&2
     exit 1
+  fi
+  if [ "$package_status" -ge 200 ] && [ "$package_status" -lt 300 ] && [ -n "$package_digest" ]; then
+    host_artifact_digest_temp="$host_artifact_digest_file.$$.tmp"
+    (umask 077 && printf '%s\n' "$package_digest" >"$host_artifact_digest_temp")
+    mv "$host_artifact_digest_temp" "$host_artifact_digest_file"
   fi
 fi
 
@@ -581,10 +641,29 @@ fi
 # Tests and source-development smoke runs can leave the enrolled daemon in the
 # foreground-supervised process without modifying the user's service manager.
 if [ "${BB_INSTALL_SKIP_SERVICE:-0}" = 1 ]; then
+  if [ -z "$join_pid" ] && ! daemon_status_matches "$host_daemon_port" no; then
+    daemon_log="$data_dir/install-daemon.log"
+    active_step "Starting the host daemon"
+    detail "Host daemon output is logged to $daemon_log"
+    BB_APP_NPM_PREFIX="$bb_app_npm_prefix" BB_DATA_DIR="$data_dir" nohup "$bb_app" host-daemon \
+      --auto-update \
+      --host-daemon-port "$host_daemon_port" \
+      --server-url "$server_url" >"$daemon_log" 2>&1 &
+    join_pid=$!
+    echo "$join_pid" >"$data_dir/install-daemon.pid"
+    if ! wait_for_daemon_connection "the host daemon"; then
+      kill "$join_pid" 2>/dev/null || true
+      wait "$join_pid" 2>/dev/null || true
+      fail_step "The bb host daemon did not connect to $server_url."
+      detail "See $daemon_log" >&2
+      exit 1
+    fi
+    complete_step "Host daemon connected"
+  fi
   if [ -n "$join_pid" ]; then
     warning_step "Service installation skipped; daemon PID $join_pid is still running."
   else
-    warning_step "Service installation skipped."
+    warning_step "Service installation skipped; the daemon is already running."
   fi
   exit 0
 fi
@@ -653,12 +732,6 @@ EOF
   if ! launchctl_error=$(launchctl bootstrap "gui/$(id -u)" "$service_file" 2>&1); then
     fail_step "Could not register the bb host-daemon launch agent $service_label."
     [ -z "$launchctl_error" ] || detail "launchctl: $launchctl_error" >&2
-    exit 1
-  fi
-  if ! launchctl_error=$(launchctl kickstart -k "gui/$(id -u)/$service_label" 2>&1); then
-    fail_step "The bb host-daemon launch agent was registered, but the daemon did not start."
-    [ -z "$launchctl_error" ] || detail "launchctl: $launchctl_error" >&2
-    detail "See $data_dir/logs/launchd.log for the daemon error." >&2
     exit 1
   fi
   if ! wait_for_daemon_connection "the launch agent"; then

@@ -14,7 +14,6 @@ interface TestHarness extends LoadRemoteServerPageArgs {
   warnings: string[];
 }
 
-// What `BrowserWindow.loadURL` rejects with when nothing answers at the target.
 function createElectronLoadError(url: string): Error {
   const error = new Error(`ERR_CONNECTION_REFUSED (-102) loading '${url}/'`);
   error.stack =

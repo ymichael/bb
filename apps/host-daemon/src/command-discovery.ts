@@ -15,67 +15,35 @@ const SKILL_FILE_NAME = "SKILL.md";
 const MARKDOWN_FILE_EXTENSION = ".md";
 const FRONTMATTER_DELIMITER = "---";
 
-// Bound each discovery request so a pathological tree cannot stall discovery
-// or exhaust memory.
 const MAX_SCAN_DEPTH = 24;
 const MAX_SCAN_ENTRY_COUNT = 1_000;
 
 interface CommandScanRootBase {
-  /** Prefix prepended to the derived invocation name, e.g. `plugin-name:`. */
   namePrefix: string;
-  /**
-   * A file, relative to a skill directory, that marks it as a vendor plugin
-   * rather than a skill; such a directory is skipped. Declared by the plugin
-   * that knows the vendor layout — discovery names no vendor path.
-   */
   skipIfManifest?: string;
   source: HostCommandSource;
   origin: HostCommandOrigin;
-  /** Stable root identity for native skill roots that share one root kind. */
   skillIdentitySeed?: string;
 }
 
 interface CommandScanDirectoryRoot extends CommandScanRootBase {
-  /** Optional boundary that a project-origin recursive root must stay within. */
   boundaryPath?: string;
-  /** Absolute directory to scan. Missing dir -> no records (no throw). */
   rootPath: string;
   shape: "skill" | "skill-recursive" | "skill-directory" | "command";
 }
 
 interface CommandScanFileRoot extends CommandScanRootBase {
-  /** Absolute file to scan. Missing file -> no record (no throw). */
   filePath: string;
   shape: "command-file";
 }
 
 interface CommandScanSkillFileRoot extends CommandScanRootBase {
-  /** Fallback command name used when the file has no frontmatter `name`. */
   fallbackName: string;
-  /** Absolute SKILL.md file to scan. Missing file -> no record (no throw). */
   filePath: string;
   shape: "skill-file";
   source: "skill";
 }
 
-/**
- * Scan shape for a root:
- * - `skill`: one level of `<root>/<dir>/SKILL.md`; the command name is the
- *   parent directory name. User-origin skill entries/files may be symlinks
- *   because personal provider skill installs commonly use them; project-origin
- *   skill entry/file symlinks are skipped.
- * - `skill-recursive`: every `SKILL.md` below `<root>`; the command name is the
- *   name of the directory that contains the file. Symlinks are not followed.
- * - `skill-directory`: a single `<root>/SKILL.md` skill directory; the command
- *   name is the root directory name.
- * - `skill-file`: a single `SKILL.md`; the command name comes from frontmatter
- *   `name`, with `fallbackName` when absent. This covers plugin-root skills.
- * - `command`: recursive `<root>/**​/*.md`; the command name is the path under
- *   the root with `/` replaced by `:` and the `.md` extension dropped
- *   (namespacing, e.g. `frontend/component.md` -> `frontend:component`).
- * - `command-file`: a single command markdown file; the command name is the
- *   file name without `.md`.
- */
 export type CommandScanRoot =
   | CommandScanDirectoryRoot
   | CommandScanFileRoot
@@ -114,25 +82,9 @@ interface ParsedFrontmatter {
   argumentHint: string | null;
 }
 
-/**
- * One SKILL.md a skill walker found, carrying what both consumers project
- * from it: the typeahead keeps the name and frontmatter; the skills page also
- * the path and whether a symlink was crossed to reach the file.
- */
 interface SkillFileMatch {
-  /**
-   * The SKILL.md path as the root addresses it. For a recursive root that is
-   * the declared root's path rather than its realpath: the skills page shows
-   * the file where the provider looks for it.
-   */
   filePath: string;
   frontmatter: ParsedFrontmatter;
-  /**
-   * A symlink stands between the root as declared and the SKILL.md: the root
-   * itself, the skill entry, or the file. Which of these a shape can inspect
-   * follows from how it walks — a recursive walk never follows links, so only
-   * its root can be one.
-   */
   linked: boolean;
   name: string;
 }
@@ -159,18 +111,10 @@ async function readDirEntries(
     }
     return entries.sort(sortDirentsByName);
   } catch {
-    // Any directory that can't be enumerated — missing (ENOENT), not a
-    // directory (ENOTDIR), or unreadable (EACCES/EPERM) — contributes no
-    // records. Discovery degrades per-root rather than failing the whole
-    // command list, so one locked-down dir never blanks the typeahead.
     return null;
   }
 }
 
-// Conservative, intentional gate: only the canonical `---\n` / `---\r\n` opener
-// is treated as frontmatter before handing off to gray-matter. Anything else
-// (incl. BOM-prefixed or `---<tab>` openers) yields a name-only record rather
-// than risking gray-matter's looser, historically-quirky delimiter detection.
 function hasSupportedFrontmatterDelimiter(content: string): boolean {
   const trimmed = content.trimStart();
   return (
@@ -191,11 +135,6 @@ function readFrontmatterString(
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/**
- * Parse a file's YAML frontmatter for `description` and `argument-hint`.
- * Malformed/absent frontmatter yields a name-only record (both fields null) —
- * discovery never throws on a single bad file.
- */
 async function parseFrontmatter(filePath: string): Promise<ParsedFrontmatter> {
   let content: string;
   try {
@@ -243,11 +182,6 @@ async function isSkillDirectory(
   }
 }
 
-/**
- * Whether a SKILL.md candidate is a usable skill file, and whether it is
- * reached through a symlink. A symlinked file counts only where the root
- * follows symlinks (user-origin skill roots); elsewhere it is no skill file.
- */
 async function statSkillFile(
   filePath: string,
   root: CommandScanRoot,
@@ -313,12 +247,6 @@ async function hasManifestMarker(
   }
 }
 
-/**
- * One-level skill scan: each `<root>/<dir>/SKILL.md` is a skill named for its
- * parent directory. Project-origin entry/file symlinks are skipped.
- * User-origin skill symlinks are followed so personal provider skill installs
- * show in typeahead and on the skills page.
- */
 async function scanSkillRootFiles(
   root: CommandScanDirectoryRoot,
 ): Promise<SkillFileMatch[]> {
@@ -351,12 +279,6 @@ async function scanSkillRootFiles(
   return matches;
 }
 
-/**
- * Bounded recursive skill walk for providers that support category folders.
- * Symlinks stay disabled because recursive symlink traversal can escape the
- * declared root or form cycles. Direct user skill roots retain their existing
- * one-level symlink support through the `skill` shape.
- */
 async function walkMarkdownTree(args: WalkMarkdownTreeArgs): Promise<void> {
   if (args.depth > MAX_SCAN_DEPTH || args.budget.remainingEntries === 0) {
     return;
@@ -417,11 +339,6 @@ async function resolveRecursiveRootPath(
     : null;
 }
 
-/**
- * Every `SKILL.md` below the root, walked through the root's realpath so a
- * symlinked root is followed once (the walk itself follows no link); each
- * match is reported under the root as declared.
- */
 async function scanRecursiveSkillRootFiles(
   root: CommandScanDirectoryRoot,
   budget: ScanBudget,
@@ -452,7 +369,6 @@ async function scanRecursiveSkillRootFiles(
   );
 }
 
-/** A single `<root>/SKILL.md`, named for the root directory. */
 async function scanSingleSkillDirectoryFiles(
   root: CommandScanDirectoryRoot,
 ): Promise<SkillFileMatch[]> {
@@ -471,7 +387,6 @@ async function scanSingleSkillDirectoryFiles(
   ];
 }
 
-/** A single SKILL.md, named by its frontmatter with the declared fallback. */
 async function scanSkillFileRootFiles(
   root: CommandScanSkillFileRoot,
 ): Promise<SkillFileMatch[]> {
@@ -490,10 +405,6 @@ async function scanSkillFileRootFiles(
   ];
 }
 
-/**
- * The SKILL.md files a skill-shaped root holds. Command-shaped roots hold
- * none: their markdown files are commands, never skills.
- */
 async function scanSkillFiles(args: ScanRootArgs): Promise<SkillFileMatch[]> {
   const { root } = args;
   switch (root.shape) {
@@ -577,12 +488,6 @@ async function scanRoot(args: ScanRootArgs): Promise<HostProviderCommand[]> {
   }
 }
 
-/**
- * Scan each root and concatenate the raw discovered records in root order. No
- * filtering, sorting, limiting, or de-duplication is applied here — that is
- * server policy. Missing dirs contribute nothing; a malformed file contributes
- * a name-only record.
- */
 export async function discoverProviderCommands(
   args: DiscoverProviderCommandsArgs,
 ): Promise<HostProviderCommand[]> {
@@ -594,13 +499,7 @@ export async function discoverProviderCommands(
   return records;
 }
 
-/**
- * A scan root tagged with the originating-root identity the skills page needs.
- * The typeahead path (`discoverProviderCommands`) ignores `rootKind`; only
- * `discoverSkills` consumes it.
- */
 export type SkillScanRoot = CommandScanRoot & {
-  /** Logical root identity used to keep IDs stable when host paths move. */
   identitySeed: string;
   rootKind: SkillRootKind;
 };
@@ -631,13 +530,6 @@ function buildSkillRecord(
   };
 }
 
-/**
- * Skill-only sibling of {@link discoverProviderCommands}: the same SKILL.md
- * walk, projected to the absolute `filePath`, originating `rootKind` and
- * `linked` flag the management page needs. Legacy `command`-source roots
- * contribute nothing. Like the command walk, this never throws on a
- * bad/locked root — it degrades to a partial list.
- */
 export async function discoverSkills(
   args: DiscoverSkillsArgs,
 ): Promise<DiscoveredSkill[]> {

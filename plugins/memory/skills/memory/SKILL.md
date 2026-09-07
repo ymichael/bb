@@ -1,12 +1,12 @@
 ---
 name: memory
-description: Use durable BB memory when prior project knowledge or cross-project user preferences can improve the current task, and save durable new learning through the bb memory CLI.
+description: "Retrieve relevant durable BB memories or save verified knowledge useful to future threads."
 ---
 
 # BB memory
 
-This plugin is provider-independent. Recommend disabling provider-native
-memory under Settings → Providers to avoid duplicated or conflicting stores.
+This plugin is provider-independent. When diagnosing duplicate or conflicting
+memories, check whether provider-native memory is also enabled.
 
 The memory plugin automatically injects a compact index of global memories and
 memories for the current BB project. The index contains summaries only.

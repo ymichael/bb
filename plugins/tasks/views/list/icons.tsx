@@ -1,10 +1,6 @@
 import type { TaskPriority, TaskStatus } from "../../shared/contract.js";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-// Linear-style status/priority glyphs from the design mock. Hugeicons has no
-// pie-progress or priority-bars glyphs, so these are tiny local SVGs drawn
-// with theme tokens (currentColor via text-* utilities).
-
 const STATUS_COLOR_CLASS: Record<TaskStatus, string> = {
   backlog: "text-subtle-foreground",
   todo: "text-subtle-foreground",
@@ -80,7 +76,6 @@ export function StatusIcon({
   );
 }
 
-/** How many of the three bars light up per priority. */
 const ACTIVE_BARS: Record<Exclude<TaskPriority, "urgent">, number> = {
   none: 0,
   low: 1,
@@ -102,8 +97,22 @@ export function PriorityIcon({
         aria-hidden
         className={cn("size-3.5 shrink-0 text-warning", className)}
       >
-        <rect x="0.5" y="0.5" width="13" height="13" rx="3" fill="currentColor" />
-        <rect x="6.2" y="3" width="1.6" height="5.2" rx="0.8" fill="var(--background)" />
+        <rect
+          x="0.5"
+          y="0.5"
+          width="13"
+          height="13"
+          rx="3"
+          fill="currentColor"
+        />
+        <rect
+          x="6.2"
+          y="3"
+          width="1.6"
+          height="5.2"
+          rx="0.8"
+          fill="var(--background)"
+        />
         <circle cx="7" cy="10.6" r="1" fill="var(--background)" />
       </svg>
     );

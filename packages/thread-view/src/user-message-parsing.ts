@@ -114,6 +114,9 @@ function shouldRenderClientRequestedInput(
     case "idle":
     case "active":
     case "stopping":
+    // A pending thread's first message is queued and has not been accepted,
+    // so the requested input is the only record of it there is to show.
+    case "pending":
       return true;
     default:
       return assertNever(threadStatus);
@@ -127,6 +130,9 @@ export function shouldPreservePendingMessages(
   switch (threadStatus) {
     case "starting":
     case "active":
+    // The queued first message is exactly what must survive: nothing has been
+    // accepted yet, so dropping it would leave the timeline empty.
+    case "pending":
       return true;
     case "error":
     case "idle":
@@ -286,9 +292,6 @@ function buildClientUserMessage({
     acceptedClientRequest && turnRequest.kind === "steer"
       ? acceptedClientRequest.meta
       : meta;
-  // Recover the structured source for legacy cross-thread requests that were
-  // persisted as ordinary user turns. The reserved envelope is written by BB,
-  // so an exact match is authoritative even when old event metadata is absent.
   const agentEnvelope = parseAgentMessageEnvelope(parsedInput.text);
   const initiator =
     decoded.initiator === "user" && agentEnvelope !== null
@@ -314,10 +317,6 @@ function buildClientUserMessage({
       : { scope: decoded.scope }),
     initiator,
     senderThreadId,
-    // Legacy defaulting lives in `storedTurnRequestEventDataSchema`, so decoded
-    // rows always carry concrete values at runtime. These `??` fallbacks only
-    // satisfy the base in-flight schema's `.optional()` static type; they never
-    // fire for a decoded stored event.
     systemMessageKind: decoded.systemMessageKind ?? "unlabeled",
     systemMessageSubject: decoded.systemMessageSubject ?? null,
     turnRequest,
@@ -469,19 +468,6 @@ export function parseRejectedUsersFromClientRequest(
   return messages;
 }
 
-/**
- * Input the provider injected into the turn on its own (a Pi extension's
- * `sendMessage` custom message that woke or steered the agent). There is no
- * `client/turn/requested` behind it, so the runtime records it as a
- * `userMessage` item; project it as a system-initiated row so the transcript
- * shows what the model was answering.
- *
- * The row is an accepted `steer`, never a `message`: the runtime only records
- * provider input inside an already-open turn, and the server's timeline
- * pagination anchors segments on `message` rows backed by a stored
- * `client/turn/requested` event. A `message` row with no such event would
- * make the page drop every segment before it.
- */
 export function parseProviderUserMessage(
   decoded: ThreadEvent,
   meta: EventMeta,

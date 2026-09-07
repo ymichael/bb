@@ -1,30 +1,7 @@
 /// <reference types="vitest/jsdom" />
 
-// `Icon` renders extended-registry glyphs as an empty placeholder until
-// `@bb/shared-ui/icon-extended` has evaluated; in the app every route chunk
-// imports it statically. Load it once here so component tests see the same
-// synchronous icons a mounted route does, instead of a placeholder that fills
-// in outside `act`. `components/ui/icon.test.tsx` resets modules to cover the
-// cold path.
 import "@bb/shared-ui/icon-extended";
 
-/**
- * Shared vitest setup.
- *
- * jsdom doesn't implement `window.matchMedia`, `ResizeObserver`,
- * `IntersectionObserver`, or `Element.scrollIntoView`. Several of our hooks and
- * detail blocks (`useMediaQuery`, `useHoverPopover`, `ToolCallDetailBlock`
- * overflow probe, `GitDiffCard` sticky-header sentinel,
- * `SecondaryPanelTabStrip` active-tab auto-scroll) reach for them during mount;
- * without polyfills they throw in every test that indirectly renders such a
- * component.
- */
-
-// `@pierre/diffs` (CodeView) reads `navigator.userAgent` at module load for
-// feature detection. Vitest's default `node` environment exposes no
-// `navigator`, so any node-env test that transitively imports the diff renderer
-// (e.g. via the `components/thread/timeline` barrel) crashes at import. Provide a
-// minimal stub where one is absent; jsdom tests already have a real `navigator`.
 if (typeof globalThis.navigator === "undefined") {
   Object.defineProperty(globalThis, "navigator", {
     configurable: true,
@@ -33,11 +10,6 @@ if (typeof globalThis.navigator === "undefined") {
 }
 
 if (typeof window !== "undefined" && typeof jsdom !== "undefined") {
-  /**
-   * Node 26 defines global storage accessors. Vitest keeps existing globals
-   * when it overlays jsdom, then aliases `window` to `globalThis`, so browser
-   * tests need the jsdom storage objects restored explicitly.
-   */
   Object.defineProperty(window, "localStorage", {
     configurable: true,
     value: jsdom.window.localStorage,
@@ -96,10 +68,7 @@ if (
   });
 }
 
-if (
-  typeof Text !== "undefined" &&
-  !("getClientRects" in Text.prototype)
-) {
+if (typeof Text !== "undefined" && !("getClientRects" in Text.prototype)) {
   Object.defineProperty(Text.prototype, "getClientRects", {
     configurable: true,
     value: () => [],

@@ -14,8 +14,6 @@ import {
   type TestAppHarness,
 } from "../../helpers/test-app.js";
 
-// The harness config uses serverPort 3334, so this host is on the local-app
-// origin allowlist (asset routes take no auth, but keep requests realistic).
 const BASE = "http://127.0.0.1:3334";
 
 const run = promisify(execFile);
@@ -57,8 +55,6 @@ function npmPersistence(packageName: string, version: string) {
 }
 
 const SERVER_SOURCE = `export default function plugin(bb: any) { bb.log.info("loaded"); }`;
-// Minimal real frontend entry: the automatic JSX transform exercises the
-// react/jsx-runtime shim, and the utility class exercises the Tailwind pass.
 const APP_SOURCE = `export default function App() {\n  return <div className="line-clamp-2">hi</div>;\n}\n`;
 const COMPRESSIBLE_APP_SOURCE = `const payload = ${JSON.stringify(
   "compressible plugin bundle payload ".repeat(200),
@@ -131,13 +127,10 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     expect(bundle.cssUrl).toBe(
       `/api/v1/plugins/appy/assets/app.css?h=${bundle.hash}`,
     );
-    // The install-time build materialized the dist outputs.
     const jsStat = await stat(join(rootDir, "dist", "app.js"));
     await stat(join(rootDir, "dist", "app.meta.json"));
-    // Frontend load ordering reads this; it must be the served file's size.
     expect(bundle.jsBytes).toBe(jsStat.size);
 
-    // Matching content hash → served immutable, correct content type.
     const js = await harness.app.request(`${BASE}${bundle.jsUrl}`);
     expect(js.status).toBe(200);
     expect(js.headers.get("content-type")).toContain("text/javascript");
@@ -175,8 +168,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     expect(rejectedCompression.headers.get("content-encoding")).toBeNull();
     expect(await rejectedCompression.text()).toBe(jsText);
 
-    // HEAD carries the representation headers a GET would have returned,
-    // without transferring the compressed body.
     const brotliJsHead = await harness.app.request(`${BASE}${bundle.jsUrl}`, {
       method: "HEAD",
       headers: { "accept-encoding": "br, gzip" },
@@ -192,23 +183,10 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     expect(css.headers.get("content-type")).toContain("text/css");
     const cssText = await css.text();
     expect(cssText).toContain("line-clamp-2");
-    // Regression (plugin CSS leak): every selector in the utilities layer
-    // must be confined to this plugin's own mounts, so plugin utility
-    // rules apply neither to host elements nor to other plugins' panes.
-    // Unscoped, a plugin's plain `.flex-col` (same `utilities` layer, later
-    // stylesheet) overrides the host's `sm:flex-row` on every host element —
-    // media queries add no specificity, so the later plain rule wins
-    // page-wide; generically scoped, the same collision plays out between
-    // plugins (a later sheet's `.grid` beating an earlier sheet's
-    // `@md:flex`). The second arm keeps portals styled on hosts whose
-    // portal-scope predates the per-plugin id attribute.
-    // (Minified selector text: no quotes around an identifier attribute
-    // value, no space after the list comma.)
     const scope =
       ":where([data-bb-plugin=appy],[data-bb-plugin-root]:not([data-bb-plugin]))";
     expect(cssText).toContain(`${scope} .line-clamp-2`);
     expect(cssText).toContain(`${scope}.line-clamp-2`);
-    // And no utility rule sits in the utilities layer outside that scope.
     expect(cssText).not.toMatch(/@layer utilities\{\./);
 
     const gzipCss = await harness.app.request(`${BASE}${bundle.cssUrl}`, {
@@ -219,7 +197,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     expect(gzipCssBytes.length).toBeLessThan(Buffer.byteLength(cssText));
     expect(gunzipSync(gzipCssBytes).toString()).toBe(cssText);
 
-    // Wrong/absent hash still serves current bytes, but uncached.
     const staleHash = await harness.app.request(
       `${BASE}/api/v1/plugins/appy/assets/app.js?h=deadbeefdeadbeef`,
     );
@@ -231,7 +208,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     expect(noHash.status).toBe(200);
     expect(noHash.headers.get("cache-control")).toBe("no-store");
 
-    // Unknown plugin / unknown asset file → 404.
     const unknownPlugin = await harness.app.request(
       `${BASE}/api/v1/plugins/nope/assets/app.js`,
     );
@@ -311,12 +287,11 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-bad");
     await writeAppPluginFixture(rootDir, {
       name: "bb-plugin-bad",
-      appSource: "export default function App( {\n", // syntax error
+      appSource: "export default function App( {\n",
     });
     await expect(
       harness.pluginService.installPath(rootDir),
     ).rejects.toThrowError(/frontend bundle build for "bad" failed/);
-    // The failed install registered nothing.
     expect(harness.pluginService.list()).toHaveLength(0);
   }, 60_000);
 
@@ -325,7 +300,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     await writeAppPluginFixture(rootDir, { name: "bb-plugin-aged" });
     await harness.pluginService.installPath(rootDir);
 
-    // Simulate a bundle built by an older BB: same major, older version.
     const metaPath = join(rootDir, "dist", "app.meta.json");
     await writeFile(
       metaPath,
@@ -352,8 +326,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       join(rootDir, "dist", "app.meta.json"),
       JSON.stringify({ sdkMajor: staleMajor, sdkVersion: `${staleMajor}.0.0` }),
     );
-    // Registered as an npm source (the managed-materialization step is not
-    // under test); load must serve the published dist verbatim.
     upsertInstalledPlugin(harness.db, {
       ...npmPersistence("bb-plugin-oldie", "0.1.0"),
       id: "oldie",
@@ -374,13 +346,10 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       sdkVersion: `${staleMajor}.0.0`,
       compatible: false,
     });
-    // npm bundles are never rebuilt — the published meta is untouched.
     const meta = JSON.parse(
       await readFile(join(rootDir, "dist", "app.meta.json"), "utf8"),
     );
     expect(meta.sdkVersion).toBe(`${staleMajor}.0.0`);
-    // The backend (and even the asset) stays served; the frontend skips it
-    // based on compatible:false.
     const js = await harness.app.request(
       `${BASE}${entry?.app.bundle?.jsUrl ?? ""}`,
     );
@@ -388,10 +357,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
   });
 
   it("refreshes the served bundle hash on reload-by-id after dist changes (bb plugin dev cycle)", async () => {
-    // The P3.4 dev loop depends on exactly this: rebuild dist on disk, then
-    // POST /plugins/reload?id=<id> must serve a fresh content hash so open
-    // pages re-import the bundle. npm-style registration (handwritten dist,
-    // current SDK meta) keeps the test off the slow esbuild path.
     const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-devy");
     await writeAppPluginFixture(rootDir, { name: "bb-plugin-devy" });
     await mkdir(join(rootDir, "dist"), { recursive: true });
@@ -450,11 +415,9 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       .find((plugin) => plugin.id === "brittle");
     expect(before?.app.bundle).not.toBeNull();
 
-    // Stale meta forces a rebuild at the next load; the broken source makes
-    // it fail. The stale dist must NOT keep being advertised/served.
     await writeFile(
       join(rootDir, "app.tsx"),
-      "export default function App( {\n", // syntax error
+      "export default function App( {\n",
     );
     await writeFile(
       join(rootDir, "dist", "app.meta.json"),
@@ -465,7 +428,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
     const entry = harness.pluginService
       .list()
       .find((plugin) => plugin.id === "brittle");
-    // Degraded-style: backend keeps running, detail explains the bundle.
     expect(entry?.status).toBe("running");
     expect(entry?.statusDetail).toContain("frontend bundle rebuild failed");
     expect(entry?.app).toEqual({ hasApp: true, bundle: null });
@@ -501,8 +463,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       .find((plugin) => plugin.id === "meta")?.app.bundle;
     expect(before?.compatible).toBe(true);
 
-    // Same js, no css — only the meta flips to an incompatible major. The
-    // hash must change so the frontend's hash-keyed reconcile re-evaluates.
     const staleMajor = PLUGIN_SDK_MAJOR + 1;
     await writeFile(
       join(rootDir, "dist", "app.meta.json"),
@@ -533,13 +493,10 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       version: "0.1.0",
       enabled: true,
     });
-    // The same parse gates npm install validation (registerInstalled uses
-    // readPluginAppBundleMeta), so covering it here covers both boundaries.
     const badMetas = [
-      { sdkMajor: -1, sdkVersion: "0.0.0" }, // negative major
-      { sdkMajor: 0.5, sdkVersion: "0.5.0" }, // non-integer major
-      { sdkMajor: PLUGIN_SDK_MAJOR, sdkVersion: "banana" }, // not semver
-      // internally inconsistent: major field disagrees with the version
+      { sdkMajor: -1, sdkVersion: "0.0.0" },
+      { sdkMajor: 0.5, sdkVersion: "0.5.0" },
+      { sdkMajor: PLUGIN_SDK_MAJOR, sdkVersion: "banana" },
       { sdkMajor: PLUGIN_SDK_MAJOR, sdkVersion: `${PLUGIN_SDK_MAJOR + 1}.0.0` },
     ];
     for (const badMeta of badMetas) {
@@ -624,11 +581,9 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
       async () => {
         const workDir = join(harness.config.dataDir, "npm-work");
 
-        // Package 1: declares bb.app but ships no dist → refused.
         const noDistDir = join(workDir, "no-dist");
         await writeAppPluginFixture(noDistDir, { name: "bb-plugin-nodist" });
 
-        // Package 2: ships a prebuilt dist stamped with the current SDK.
         const prebuiltDir = join(workDir, "prebuilt");
         await writeAppPluginFixture(prebuiltDir, {
           name: "bb-plugin-prebuilt",
@@ -646,9 +601,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
           }),
         );
 
-        // Package 3: backend metadata is compatible, but the frontend was
-        // built for a different SDK major. Install must reject the whole
-        // package rather than accepting only its backend half.
         const partialDir = join(workDir, "partial");
         await writeAppPluginFixture(partialDir, {
           name: "bb-plugin-partial",
@@ -691,7 +643,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
           );
         }
 
-        // Minimal loopback npm registry (packument + tarball per package).
         const registry = await new Promise<Server>((resolvePromise) => {
           const server = createServer((request, response) => {
             const url = request.url ?? "";
@@ -748,7 +699,6 @@ describe("plugin app bundles (build policy, inventory, asset routes)", () => {
               kind: "root",
             }),
           ).rejects.toThrowError(/must publish a prebuilt bundle/);
-          // The refused install cleaned up its managed prefix and row.
           expect(harness.pluginService.list()).toHaveLength(0);
           const prefix = join(
             harness.config.dataDir,

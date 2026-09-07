@@ -21,7 +21,6 @@ describe("parseConnectPairingPayload", () => {
       apexUrl: "https://getbb.app",
       expiresAt: Date.UTC(2026, 7, 19, 10),
     });
-    // Optional fields that do not parse are dropped, not fatal.
     expect(
       parseConnectPairingPayload(
         '{"code":"ABCD-EFGH","serverUrl":"not a url","expiresAt":1700000000000}',

@@ -94,6 +94,7 @@ describe("bb environment command output", () => {
     expect(help).toContain("diff-file [options] <id>");
     expect(help).toContain("diff-patch [options] <id>");
     expect(help).toContain("pull-request");
+    expect(help).not.toContain("squash-merge");
   });
 
   it("bb environment status inspects an arbitrary environment id", async () => {

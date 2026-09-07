@@ -270,8 +270,6 @@ describe("desktop window factory", () => {
     expect(createdWindows[0]?.webContents.spellCheckerEnabledValues).toEqual([
       true,
     ]);
-    // Equal x/y inset places the traffic lights on a 45° diagonal from the
-    // window's top-left corner (see MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET).
     expect(createdWindows[0]?.options.trafficLightPosition).toEqual({
       x: 18,
       y: 18,

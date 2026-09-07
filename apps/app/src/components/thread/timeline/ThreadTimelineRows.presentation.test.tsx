@@ -8,6 +8,7 @@ import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { PluginTimelineRendererProps } from "@get-bb/plugin-sdk";
 import {
+  commandRow,
   ECHO_RECEIPT_PRESENTATION,
   extensionRow,
   planStepsRow,
@@ -16,7 +17,6 @@ import {
 import {
   resetPluginSlotStoreForTest,
   setPluginSlotRegistrations,
-  type PluginRegistrationSet,
 } from "@/lib/plugin-slots";
 import {
   resetPluginLogoStoreForTest,
@@ -25,21 +25,7 @@ import {
 import { resetAllCrashedPluginSlotsForTest } from "../../plugin/PluginSlotMount";
 import { ThreadProviderContext } from "../thread-provider-context";
 import { ThreadTimelineRows } from "./ThreadTimelineRows";
-
-function registrationSet(
-  overrides: Partial<PluginRegistrationSet>,
-): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    ...overrides,
-  };
-}
+import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
 
 const toMarkup = (ui: ReactElement) =>
   renderToStaticMarkup(<MemoryRouter>{ui}</MemoryRouter>);
@@ -71,7 +57,6 @@ afterEach(() => {
 
 describe("presentation-driven timeline rows", () => {
   it("renders an extension row from its declarative base: label, headline, glyph, tint, detail", () => {
-    // A host glyph here; the canary's declared-icon form is covered below.
     const row = extensionRow({
       presentation: { ...ECHO_RECEIPT_PRESENTATION, icon: { glyph: "Check" } },
     });
@@ -84,13 +69,10 @@ describe("presentation-driven timeline rows", () => {
         initialExpanded={new Set([row.id])}
       />,
     );
-    // Label + headline from the presentation, not from any tool-name table.
     expect(markup).toContain("Wrote receipt");
     expect(markup).toContain("hello world");
-    // The bridge's glyph leads the row; its tint colours it per theme.
     expect(markup).toContain('data-icon="Check"');
     expect(markup).toContain("light-dark(#047857, #6ee7b7)");
-    // The expanded body is the presentation detail (Markdown).
     expect(markup).toContain("Echoed <strong>2</strong> items");
   });
 
@@ -123,11 +105,56 @@ describe("presentation-driven timeline rows", () => {
     expect(markup).not.toContain("Ran tool");
   });
 
+  it("renders a presentation badge as a labelled icon on command and exploration rows", () => {
+    const presentation = {
+      label: { pending: "Running command", completed: "Ran command" },
+      icon: { glyph: "Terminal" },
+      title: "ls -la ~/.claude/ide",
+      badge: {
+        glyph: "SquareUnlock02",
+        label: "Outside of sandbox",
+        hint: "Outside of sandbox",
+        tone: "destructive" as const,
+      },
+    };
+    const markup = toMarkup(
+      <ThreadTimelineRows
+        threadId="thr_main"
+        threadRuntimeDisplayStatus="idle"
+        workspaceRootPath={undefined}
+        timelineRows={[
+          commandRow({
+            id: "cmd_escaped",
+            command: "ls -la ~/.claude/ide",
+            presentation,
+          }),
+          commandRow({
+            id: "cmd_search",
+            command: "grep -rn pid ~/.claude/ide",
+            activityIntents: [
+              {
+                type: "search",
+                command: "grep -rn pid ~/.claude/ide",
+                query: "pid",
+                path: "~/.claude/ide",
+              },
+            ],
+            presentation,
+          }),
+          commandRow({ id: "cmd_plain", command: "ls -la src" }),
+        ]}
+      />,
+    );
+    expect(markup.match(/data-icon="SquareUnlock02"/g) ?? []).toHaveLength(2);
+    expect(markup).toContain('aria-label="Outside of sandbox"');
+    expect(markup).toContain('title="Outside of sandbox"');
+    expect(markup).toContain("text-destructive-text");
+  });
+
   it("draws a plugin-declared icon as a tinted mask when the inventory has it, else the per-kind glyph", () => {
-    // The canary's receipt row as the echo bridge emits it: the plugin's
-    // declared icon by its namespaced glyph.
     const row = extensionRow();
-    const iconUrl = "/api/v1/plugins/echo-provider/assets/icons/receipt.svg?h=abc";
+    const iconUrl =
+      "/api/v1/plugins/echo-provider/assets/icons/receipt.svg?h=abc";
     setPluginLogoUrls(
       new Map([
         [
@@ -151,14 +178,10 @@ describe("presentation-driven timeline rows", () => {
         timelineRows={[row]}
       />,
     );
-    // Resolved before any mask is emitted, drawn as a currentColor mask so
-    // the bridge's tint still applies.
     expect(withIcon).toContain(`data-plugin-icon-asset="${iconUrl}"`);
     expect(withIcon).toContain("light-dark(#047857, #6ee7b7)");
     expect(withIcon).not.toContain('data-icon="Puzzle"');
 
-    // The plugin renamed or dropped the icon (or is gone): not found, so the
-    // per-kind glyph draws and no mask URL that would 404 is emitted.
     resetPluginLogoStoreForTest();
     const withoutIcon = toMarkup(
       <ThreadTimelineRows
@@ -206,9 +229,9 @@ describe("presentation-driven timeline rows", () => {
     );
     const list = screen.getByTestId("plan-steps-body");
     const items = within(list).getAllByRole("listitem");
-    expect(items.map((item) => item.getAttribute("data-plan-step-status"))).toEqual(
-      ["completed", "active", "pending"],
-    );
+    expect(
+      items.map((item) => item.getAttribute("data-plan-step-status")),
+    ).toEqual(["completed", "active", "pending"]);
     expect(list.textContent).toContain("Wire the renderer");
   });
 });
@@ -256,7 +279,6 @@ describe("plugin timeline renderers", () => {
     expect(rendered.textContent).toContain(
       "echo-provider/receipt · hello world · 2 items · Wrote receipt · echo-agent",
     );
-    // `Original` renders the declarative base inside the plugin's body.
     expect(rendered.textContent).toContain("Echoed 2 items");
   });
 
@@ -284,7 +306,6 @@ describe("plugin timeline renderers", () => {
     expect(screen.getByTestId("tool-renderer").textContent).toBe("echo_stamp");
     cleanup();
 
-    // A thread of another provider: the plugin's renderer does not apply.
     renderRows(
       <ThreadTimelineRows
         threadId="thr_main"
@@ -305,9 +326,7 @@ describe("plugin timeline renderers", () => {
     setPluginSlotRegistrations(
       "echo-provider",
       registrationSet({
-        timelineRenderers: [
-          { kind: "echo-provider/receipt", component: Boom },
-        ],
+        timelineRenderers: [{ kind: "echo-provider/receipt", component: Boom }],
       }),
     );
     const row = extensionRow();
@@ -320,7 +339,6 @@ describe("plugin timeline renderers", () => {
         initialExpanded={new Set([row.id])}
       />,
     );
-    // Header from the presentation is untouched; the body fell back.
     expect(screen.getByText("Wrote receipt")).toBeTruthy();
     expect(screen.getByText("Echoed", { exact: false })).toBeTruthy();
   });

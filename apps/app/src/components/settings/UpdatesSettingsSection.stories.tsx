@@ -21,6 +21,7 @@ import {
   BbAppUpdateRows,
   BbDaemonUpdateRow,
   ChangelogPreviewCard,
+  MachineUpdatesFleetSection,
   MachineUpdatesRows,
   MachineUpdatesSection,
   ProviderCliCheckRow,
@@ -125,17 +126,22 @@ function StoryPage({ children }: { children: ReactNode }) {
   );
 }
 
-/** The default-off changelog preview experiment in its enabled state. */
 export function ChangelogPreviewExperiment() {
-  // A review story must always expose the initial state, even when this
-  // browser already exercised dismissal for the same bundled release.
   window.localStorage.removeItem(
     "bb.settings.updates.dismissed-changelog-version",
   );
+  const workstation = machineOf({
+    host: makeHost({ id: "changelog-workstation", name: "workstation" }),
+    isPrimary: true,
+    issues: [updateIssue("codex", "0.145.0", "0.146.0")],
+  });
   return (
-    <SettingsStoryChrome activeSection="updates">
+    <StoryPage>
       <ChangelogPreviewCard />
-    </SettingsStoryChrome>
+      <MachineUpdatesFleetSection>
+        <StoryMachineSection machine={workstation} app />
+      </MachineUpdatesFleetSection>
+    </StoryPage>
   );
 }
 
@@ -143,21 +149,15 @@ function StoryMachineSection({
   machine,
   app = false,
   appUpdate = false,
-  action,
 }: {
   machine: UpdateInventoryMachine;
   app?: boolean;
   appUpdate?: boolean;
-  action?: ReactNode;
 }) {
   const showDaemon =
     machine.canRetryDaemonUpdate || machine.host.status !== "connected";
   return (
-    <MachineUpdatesSection
-      machine={machine}
-      isThisMachine={false}
-      action={action}
-    >
+    <MachineUpdatesSection machine={machine} isThisMachine={false}>
       {app ? (
         <BbAppUpdateRows
           systemVersion={appUpdate ? undefined : NPM_VERSION}
@@ -266,11 +266,6 @@ function missingProviderIssue(provider: ProviderCliKey): ProviderCliIssue {
   };
 }
 
-/**
- * Every state Settings → Updates can reach, once, using the production rows.
- * Keep this separate from the representative page stories: this is the
- * reviewed vocabulary catalogue, while those stories exercise page density.
- */
 export function UpdateStates() {
   const providerUpdate = machineOf({
     host: makeHost({ id: "state-provider-update", name: "workstation" }),
@@ -523,7 +518,6 @@ export function UpdateStates() {
   );
 }
 
-/** Multiple machines, each owning its app, daemon, or provider update rows. */
 export function MultiMachine() {
   const workstation = machineOf({
     host: makeHost({ id: "host-primary", name: "workstation" }),
@@ -550,31 +544,28 @@ export function MultiMachine() {
 
   return (
     <StoryPage>
-      <StoryMachineSection
-        machine={workstation}
-        app
-        appUpdate
+      <MachineUpdatesFleetSection
         action={
           <div role="toolbar" aria-label="Bulk update actions">
             <UpdateActionButton
               label="Update all 3 CLI tools"
               tooltipLabel="Update all"
               icon={UPDATE_ACTION_ICON}
-              iconPosition="end"
               visibleLabel="Update all"
               variant="default"
               onClick={noop}
             />
           </div>
         }
-      />
-      <StoryMachineSection machine={studioMac} />
-      <StoryMachineSection machine={ciRunner} />
+      >
+        <StoryMachineSection machine={workstation} app appUpdate />
+        <StoryMachineSection machine={studioMac} />
+        <StoryMachineSection machine={ciRunner} />
+      </MachineUpdatesFleetSection>
     </StoryPage>
   );
 }
 
-/** The same hierarchy without a redundant all-machines wrapper. */
 export function SingleMachine() {
   const workstation = machineOf({
     host: makeHost({ id: "host-primary", name: "workstation" }),
@@ -588,7 +579,6 @@ export function SingleMachine() {
   );
 }
 
-/** A settled machine keeps the existing explicit bb app confirmation. */
 export function NoUpdatesAvailable() {
   const workstation = machineOf({
     host: makeHost({ id: "host-primary", name: "workstation" }),

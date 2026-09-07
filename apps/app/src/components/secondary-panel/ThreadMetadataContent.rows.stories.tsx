@@ -44,10 +44,6 @@ function RowStage({ children }: { children: ReactNode }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Parent selector row.
-// ---------------------------------------------------------------------------
-
 export function ParentSelector() {
   return (
     <StoryCard>
@@ -132,10 +128,6 @@ export function ParentSelector() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Environment — the "Environment" row.
-// ---------------------------------------------------------------------------
-
 export function Environment() {
   return (
     <StoryCard>
@@ -189,10 +181,6 @@ export function Environment() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Directory row.
-// ---------------------------------------------------------------------------
-
 export function WorkspacePath() {
   return (
     <StoryCard>
@@ -239,10 +227,6 @@ export function WorkspacePath() {
     </StoryCard>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Branch + merge base.
-// ---------------------------------------------------------------------------
 
 export function Branch() {
   return (
@@ -331,11 +315,6 @@ export function MergeBase() {
     </StoryCard>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Pull request — PR state and check status are separate. "Open" does not mean
-// ready to merge; the checks/review/mergeability summary determines that.
-// ---------------------------------------------------------------------------
 
 export function PullRequest() {
   const readyPullRequest = makePullRequest();
@@ -601,10 +580,6 @@ export function PullRequest() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Git status — permutations of the "Git status" row.
-// ---------------------------------------------------------------------------
-
 export function GitStatus() {
   return (
     <StoryCard>
@@ -795,10 +770,6 @@ export function GitStatus() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Archived + Changed files — small lifecycle/diff rows.
-// ---------------------------------------------------------------------------
-
 export function Archived() {
   return (
     <StoryCard>
@@ -810,11 +781,6 @@ export function Archived() {
     </StoryCard>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Commits ahead of the merge base. Hidden entirely when nothing is ahead;
-// truncates with "Show N more" when the list is long.
-// ---------------------------------------------------------------------------
 
 const aheadCommits = Array.from({ length: 7 }, (_, index) => ({
   sha: `${index}`.padEnd(40, "0"),

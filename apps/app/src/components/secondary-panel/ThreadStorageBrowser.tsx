@@ -82,8 +82,6 @@ export function ThreadStorageBrowser({
   } else if (filteredFiles.length === 0) {
     body = <EmptyState message="No files match search." />;
   } else if (model === null) {
-    // The tree chunk is still on its way; the controller hands over the model
-    // once it lands.
     body = loadingState;
   } else {
     body = <LazyThreadStorageFileTree fallback={loadingState} model={model} />;

@@ -10,13 +10,10 @@ export default {
   title: "thread/Pending Interaction/Approval",
 };
 
-// Match production: ThreadDetailPromptArea renders inside PageShell's footer
-// (max-w-[760px]). Without it the banner stretches the full row width.
 function PromptStage({ children }: { children: React.ReactNode }) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
 
-// The common fields; each story pairs its own payload with its resolution.
 function basePendingInteraction(): Omit<
   ProviderPendingInteraction,
   "payload" | "resolution"
@@ -69,6 +66,33 @@ const longCommandApproval: PendingInteraction = {
       sessionGrant: null,
     },
     reason: "Run a long monorepo typecheck across multiple packages",
+    availableDecisions: ["allow_once", "allow_for_session", "deny"],
+  },
+};
+
+const multiLineCommandApproval: PendingInteraction = {
+  ...basePendingInteraction(),
+  resolution: null,
+  id: "pi_demo_multiline",
+  providerId: "acp-cursor",
+  payload: {
+    kind: "approval",
+    subject: {
+      kind: "command",
+      itemId: "item_cmd_multiline",
+      command:
+        "`python3 -m unittest discover -s tests 2>&1 | tail -20\necho '=== bash -n ==='\nbash -n install.sh && echo OK\necho '=== watcher untouched ==='\ngit diff --stat -- watcher.py\necho '=== live telemetry flag untouched? ==='\nif [ -f \"$HOME/.immortal-agents/telemetry\" ]; then echo LIVE_FLAG_EXISTS; else echo LIVE_FLAG_ABSENT; fi`",
+      cwd: "/Users/michael/Projects/immortal-agents",
+      actions: [
+        {
+          type: "unknown",
+          command:
+            "`python3 -m unittest discover -s tests 2>&1 | tail -20\necho '=== bash -n ==='\nbash -n install.sh && echo OK\necho '=== watcher untouched ==='\ngit diff --stat -- watcher.py\necho '=== live telemetry flag untouched? ==='\nif [ -f \"$HOME/.immortal-agents/telemetry\" ]; then echo LIVE_FLAG_EXISTS; else echo LIVE_FLAG_ABSENT; fi`",
+        },
+      ],
+      sessionGrant: null,
+    },
+    reason: "Not in allowlist: bash -n install.sh",
     availableDecisions: ["allow_once", "allow_for_session", "deny"],
   },
 };
@@ -207,7 +231,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="command approval"
-        hint="agent wants to run a shell command; default selection is the first decision"
+        hint="arrives as a one-line strip: reason, first command line, decisions; the chevron opens the card and Esc collapses it"
       >
         <PromptStage>
           <ThreadPendingInteractionBanner
@@ -224,6 +248,21 @@ export function Overview() {
           <ThreadPendingInteractionBanner
             interaction={longCommandApproval}
             threadId={longCommandApproval.threadId}
+          />
+        </PromptStage>
+      </StoryRow>
+      <StoryRow
+        label="command approval (multi-line script from a child)"
+        hint="open the card: the preview caps at four lines with a Show more control, and the script is not repeated as an action line"
+      >
+        <PromptStage>
+          <ThreadPendingInteractionBanner
+            interaction={multiLineCommandApproval}
+            sourceThread={{
+              href: "/projects/proj-1/threads/thr_blocked",
+              title: "Telemetry option in installer",
+            }}
+            threadId={multiLineCommandApproval.threadId}
           />
         </PromptStage>
       </StoryRow>

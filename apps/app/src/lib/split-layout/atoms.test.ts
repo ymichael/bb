@@ -23,7 +23,6 @@ function singlePane(threadId: string): SplitLayout {
   };
 }
 
-// pane-1 = thread-1, pane-2 = thread-2 (focused — splitPane focuses the new pane).
 function twoPanes(): SplitLayout {
   return splitPane(singlePane("thread-1"), "pane-1", "right", {
     kind: "thread",
@@ -37,7 +36,6 @@ afterEach(() => {
   window.sessionStorage.clear();
 });
 
-/** A write by another tab: same origin storage, then the cross-tab event. */
 function writeFromOtherTab(key: string, value: string): void {
   const previous = window.localStorage.getItem(key);
   window.localStorage.setItem(key, value);
@@ -51,10 +49,6 @@ function writeFromOtherTab(key: string, value: string): void {
   );
 }
 
-/**
- * A fresh page load: atomWithStorage only re-reads storage when the atom is
- * mounted, so subscribe first, exactly like a rendered component does.
- */
 function hydrateLayoutOnLoad(): SplitLayout | null {
   const store = createStore();
   const unsubscribe = store.sub(splitLayoutAtom, () => {});
@@ -66,7 +60,6 @@ function hydrateLayoutOnLoad(): SplitLayout | null {
 describe("tab-scoped workspace state", () => {
   it("keeps this tab's panes when another tab opens a different thread", () => {
     const store = createStore();
-    // Mounting is what would install a cross-tab subscription.
     const unsubscribe = store.sub(splitLayoutAtom, () => {});
     store.set(splitLayoutAtom, singlePane("thread-1"));
 
@@ -92,15 +85,12 @@ describe("tab-scoped workspace state", () => {
   });
 
   it("seeds a new tab from the last arrangement, then reloads its own", () => {
-    // A tab that has never had a layout starts from the shared seed.
     window.localStorage.setItem(
       SPLIT_LAYOUT_STORAGE_KEY,
       serializeSplitLayout(twoPanes()),
     );
     expect(countPanes(hydrateLayoutOnLoad()!.root)).toBe(2);
 
-    // Once this tab owns a layout, its reload restores that one even though
-    // another tab wrote the shared key afterwards.
     const store = createStore();
     store.set(splitLayoutAtom, singlePane("thread-3"));
     window.localStorage.setItem(
@@ -130,11 +120,9 @@ describe("closePanesForThreadsAtom", () => {
     const store = createStore();
     store.set(splitLayoutAtom, twoPanes());
 
-    // thread-1 is the unfocused pane; thread-2 stays focused.
     const result = store.set(closePanesForThreadsAtom, ["thread-1"]);
 
     expect(result.removedAny).toBe(true);
-    // Focused survivor is unchanged, so the provider will not navigate.
     expect(result.focusedRoute).toEqual({
       projectId: "project-1",
       threadId: "thread-2",
@@ -149,7 +137,6 @@ describe("closePanesForThreadsAtom", () => {
     store.set(splitLayoutAtom, twoPanes());
     store.set(maximizedPaneIdAtom, "pane-2");
 
-    // thread-2 is focused; closing it must surface thread-1 as the new focus.
     const result = store.set(closePanesForThreadsAtom, ["thread-2"]);
 
     expect(result.removedAny).toBe(true);
@@ -172,7 +159,6 @@ describe("closePanesForThreadsAtom", () => {
     ]);
 
     expect(result.removedAny).toBe(true);
-    // No pane can survive, so the caller falls back to navigate-away.
     expect(result.focusedRoute).toBeNull();
     expect(store.get(splitLayoutAtom)).toBeNull();
   });

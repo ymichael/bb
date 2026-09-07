@@ -31,17 +31,10 @@ export type ScopedExecutionInputSources =
 export interface UsePromptModelReasoningOptions {
   enabled?: boolean;
   environmentId?: string;
-  /**
-   * The machine the environment lives on. Component-local composers route
-   * host-scoped provider catalogs by host so threads in different
-   * environments on one machine share a single execution-options query.
-   */
   environmentHostId?: string;
   scope?: ThreadCreationOptionsScope;
   resetKey?: string | number | null;
   initialProviderId?: string;
-  /** When no project default or persisted choice exists, select the first
-   * ready provider reported by the routed machine. */
   preferReadyProviderWhenUnset?: boolean;
   initialModel?: string;
   initialServiceTier?: ServiceTier;
@@ -234,8 +227,6 @@ export function buildExecutionInputSources({
     touchedFields.has("serviceTier") ||
     touchedFields.has("reasoningLevel") ||
     touchedFields.has("permissionMode");
-  // Existing-thread submissions are all-or-nothing once an execution control is
-  // touched, so the server never merges stale last-run values with new UI picks.
   const forcesExplicitExecutionFields =
     scope === "component-local" && hasTouchedExecutionField;
 
@@ -309,9 +300,6 @@ export function resolvePermissionModeSelection({
   if (permissionModes.includes(rawPermissionMode)) {
     return rawPermissionMode;
   }
-  // Auto is the product default. Providers without native automatic review
-  // fall back to Full Access rather than implying that Accept Edits provides
-  // equivalent automatic approval behavior.
   if (permissionModes.includes("auto")) {
     return "auto";
   }
@@ -322,10 +310,6 @@ export function resolvePermissionModeSelection({
 }
 
 export function formatModelLabel(value: string): string {
-  // Case-normalises a raw model id into a displayable label. The brand prefix
-  // strip ("Claude " / "GPT-") is a presentation rule applied by the picker
-  // itself (see `stripModelBrandPrefix`) so stories and prod render identically
-  // without anyone having to remember to format.
   return value
     .split("-")
     .map((part) => {

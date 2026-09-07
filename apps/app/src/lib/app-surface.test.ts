@@ -59,9 +59,6 @@ describe("app surface request metadata", () => {
   });
 
   it("marks requests from the bb mobile shell as mobile", () => {
-    // The phone renders this same page in a WebView. Its traffic must not
-    // land in the `web` bucket: the server reads the surface to reason about
-    // which client a person is using.
     const fakeWindow: Record<string, unknown> = {
       ReactNativeWebView: { postMessage: () => {} },
     };

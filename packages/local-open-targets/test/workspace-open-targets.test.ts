@@ -28,9 +28,7 @@ describe("default workspace open-target runtime", () => {
       ["-e", "process.stdout.write(process.env.PATH ?? '')"],
       { env: runtime.env },
     );
-    expect(userExecutableResult.stdout).toBe(
-      "/Users/test/.local/bin:/usr/bin",
-    );
+    expect(userExecutableResult.stdout).toBe("/Users/test/.local/bin:/usr/bin");
   });
 });
 
@@ -234,6 +232,7 @@ describe("workspace open targets", () => {
         "[Desktop Entry]",
         "Type=Application",
         "Name=Mock Edit",
+        "Categories=Utility;TextEditor;",
         "Exec=mockedit --open %f",
         "",
       ].join("\n"),
@@ -245,7 +244,38 @@ describe("workspace open targets", () => {
         "Type=Application",
         "Name=Hidden App",
         "NoDisplay=true",
+        "Categories=TextEditor;",
         "Exec=hidden %f",
+        "",
+      ].join("\n"),
+    );
+    await Promise.all(
+      [
+        ["files", "Files", "FileManager"],
+        ["terminal", "Terminal", "TerminalEmulator"],
+      ].map(async ([id, name, category]) =>
+        writeFile(
+          path.join(desktopDirectory, `${id}.desktop`),
+          [
+            "[Desktop Entry]",
+            "Type=Application",
+            `Name=${name}`,
+            `Categories=System;${category};`,
+            `Exec=${id} %f`,
+            "",
+          ].join("\n"),
+        ),
+      ),
+    );
+    await writeFile(
+      path.join(desktopDirectory, "unrelated.desktop"),
+      [
+        "[Desktop Entry]",
+        "Type=Application",
+        "Name=Music Player",
+        "Categories=AudioVideo;Player;",
+        "MimeType=audio/mpeg;inode/directory;",
+        "Exec=music-player %f",
         "",
       ].join("\n"),
     );
@@ -258,8 +288,12 @@ describe("workspace open targets", () => {
         }),
       );
 
-      expect(targets).toEqual([
-        {
+      expect(targets).toEqual(
+        [
+          ["desktop-app:files", "Files"],
+          ["desktop-app:mockedit", "Mock Edit"],
+          ["desktop-app:terminal", "Terminal"],
+        ].map(([id, label]) => ({
           capabilities: {
             openDirectory: true,
             openFile: true,
@@ -267,11 +301,11 @@ describe("workspace open targets", () => {
             openFileAtLine: false,
           },
           icon: { kind: "symbol", name: "app" },
-          id: "desktop-app:mockedit",
+          id,
           kind: "native-app",
-          label: "Mock Edit",
-        },
-      ]);
+          label,
+        })),
+      );
     } finally {
       await rm(root, { force: true, recursive: true });
     }
@@ -445,9 +479,8 @@ describe("workspace open targets", () => {
         env: { PATH: "/Users/test/.local/bin:/usr/bin" },
       });
       expect(
-        calls.find(
-          (call) => call.file === "which" && call.args[0] === "code",
-        )?.env,
+        calls.find((call) => call.file === "which" && call.args[0] === "code")
+          ?.env,
       ).toEqual({ PATH: "/Users/test/.local/bin:/usr/bin" });
     } finally {
       await rm(workspacePath, { force: true, recursive: true });
@@ -472,6 +505,7 @@ describe("workspace open targets", () => {
           "[Desktop Entry]",
           "Type=Application",
           "Name=Mock Edit",
+          "Categories=TextEditor;",
           "Exec=mockedit --open %f",
           "",
         ].join("\n"),
@@ -733,8 +767,7 @@ describe("workspace open targets", () => {
         expect(calls.some((call) => call.file === target.cli)).toBe(false);
         expect(
           calls.find(
-            (call) =>
-              call.file === "open" && call.args[1] === target.appName,
+            (call) => call.file === "open" && call.args[1] === target.appName,
           ),
         ).toEqual({
           file: "open",
@@ -798,7 +831,10 @@ describe("workspace open targets", () => {
   it("advertises and uses column support for IntelliJ IDEA", async () => {
     const root = await mkdtemp(path.join(tmpdir(), "bb-intellij-idea-"));
     const applicationsDirectory = path.join(root, "Applications");
-    const intellijAppPath = path.join(applicationsDirectory, "IntelliJ IDEA.app");
+    const intellijAppPath = path.join(
+      applicationsDirectory,
+      "IntelliJ IDEA.app",
+    );
     const intellijExecutable = path.join(
       intellijAppPath,
       "Contents",
@@ -823,16 +859,17 @@ describe("workspace open targets", () => {
         }),
       );
 
-      expect(targets.find((target) => target.id === "intellij-idea"))
-        .toMatchObject({
-          capabilities: {
-            openDirectory: true,
-            openFile: true,
-            openFileAtColumn: true,
-            openFileAtLine: true,
-          },
-          label: "IntelliJ IDEA",
-        });
+      expect(
+        targets.find((target) => target.id === "intellij-idea"),
+      ).toMatchObject({
+        capabilities: {
+          openDirectory: true,
+          openFile: true,
+          openFileAtColumn: true,
+          openFileAtLine: true,
+        },
+        label: "IntelliJ IDEA",
+      });
 
       await openPathInTargetWithRuntime(
         {

@@ -1,45 +1,20 @@
 import type { ThreadListEntry } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { toPluginSidebarThread } from "./plugin-sidebar-threads";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 
 function makeThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
-  return {
+  return makeThreadListEntry({
     id: "thr_1",
     projectId: "proj_1",
-    environmentId: null,
-    providerId: "codex",
     title: "A thread",
     titleFallback: "A thread",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
     lastReadAt: 10,
     latestAttentionAt: 5,
     createdAt: 1,
     updatedAt: 2,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
     ...overrides,
-  };
+  });
 }
 
 describe("toPluginSidebarThread", () => {
@@ -64,8 +39,6 @@ describe("toPluginSidebarThread", () => {
     });
   });
 
-  // The contract's whole promise: plugins inherit bb's precedence instead of
-  // reimplementing it. Attention outranks the spinner even while running.
   it("resolves the indicator with the host's precedence", () => {
     expect(
       toPluginSidebarThread(
@@ -123,8 +96,6 @@ describe("toPluginSidebarThread", () => {
     expect(mapped.isUnread).toBe(true);
   });
 
-  // `isUnreadDoneThread` deliberately excludes child threads, but a plugin
-  // list may show them, so plain read state drives `isUnread`.
   it("reports unread child threads as unread", () => {
     const mapped = toPluginSidebarThread(
       makeThread({
@@ -151,6 +122,7 @@ describe("toPluginSidebarThread", () => {
         environmentId: "env_1",
         environmentName: "Worktree",
         environmentBranchName: "bb/feature",
+        queuedWork: "none",
         environmentWorkspaceDisplayKind: "managed-worktree",
       }),
     );
@@ -172,8 +144,6 @@ describe("toPluginSidebarThread", () => {
     expect(toPluginSidebarThread(makeThread()).providerId).toBe("codex");
   });
 
-  // A personal-project thread has a machine but no worktree, so the machine
-  // is the only place-of-work a row can show.
   it("resolves the machine name for the thread's host", () => {
     const mapped = toPluginSidebarThread(
       makeThread({ environmentHostId: "host_1" }),

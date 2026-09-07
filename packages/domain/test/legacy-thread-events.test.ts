@@ -45,8 +45,6 @@ describe("legacy thread event conversion", () => {
   });
 
   it("reads a persisted thread/goal/cleared row as a null goal state", () => {
-    // Rows carry providerThreadId inside data as well as on the column; the
-    // converted data keeps it so either source still satisfies the schema.
     const row = parseThreadEventRow({
       id: "evt-2",
       type: "thread/goal/cleared",
@@ -184,12 +182,6 @@ describe("legacy thread event conversion", () => {
   });
 });
 
-/**
- * The legacy tool-item adapter: a persisted `toolCall` with no
- * `presentation` (a row minted before grammar v3) upgrades to the shape the
- * bridge emits today; a presented item is never legacy data, whatever its
- * name. Delete with `LEGACY_TOOL_ITEM_BACKFILL_MIGRATION`.
- */
 describe("legacy tool-item adapter", () => {
   const presented = {
     label: { pending: "Reading", completed: "Read" },
@@ -225,10 +217,8 @@ describe("legacy tool-item adapter", () => {
         presentation: presented,
         result: "agentId: 1\nreal output",
       });
-      // Same object back: no copy, no field touched.
       expect(upgradeLegacyToolItem(item)).toBe(item);
     }
-    // And through the stored-event path, whichever provider wrote the row.
     for (const providerThreadId of ["claude-1", "codex-1", "acp-1", "pi-1"]) {
       const event = parseStoredThreadEvent({
         type: "item/completed",
@@ -284,7 +274,6 @@ describe("legacy tool-item adapter", () => {
       mode: "path",
       query: "**/*.ts",
     });
-    // Pi's lowercase names and its ls / find.
     expect(
       upgradeLegacyToolItem(toolItem("read", { path: "/repo/b.ts" })),
     ).toMatchObject({
@@ -298,14 +287,12 @@ describe("legacy tool-item adapter", () => {
       mode: "list",
       path: "/repo/src",
     });
-    // A server-prefixed name still resolves by its tool segment.
     expect(
       upgradeLegacyToolItem(toolItem("fs:Read", { path: "/repo/c.ts" })),
     ).toMatchObject({
       type: "fileRead",
       cmd: "fs:Read { path: /repo/c.ts }",
     });
-    // Without the argument the old tables also needed, the call stays generic.
     const pathless = toolItem("Read", { offset: 3 });
     expect(upgradeLegacyToolItem(pathless)).toBe(pathless);
   });
@@ -335,7 +322,6 @@ describe("legacy tool-item adapter", () => {
         presentation: { suppress: true },
       });
     }
-    // A failed or interrupted call always rendered; it stays untouched.
     for (const status of ["failed", "interrupted"]) {
       const item = toolItem("AskUserQuestion", {}, { status });
       expect(upgradeLegacyToolItem(item)).toBe(item);
@@ -354,7 +340,6 @@ describe("legacy tool-item adapter", () => {
       ...item,
       result: "Found 3 issues.\nDone.",
     });
-    // Nothing to strip, nothing copied; a structured result is left alone.
     const clean = toolItem("Agent", {}, { result: "Done." });
     expect(upgradeLegacyToolItem(clean)).toBe(clean);
     const structured = toolItem("Agent", {}, { result: { ok: true } });
@@ -362,10 +347,6 @@ describe("legacy tool-item adapter", () => {
   });
 
   it("classifies a presentation-less call by the pre-change delegation name set", () => {
-    // The exact set the deleted tool-name table held (Agent/Task for
-    // Claude, bb's spawnAgent/resumeAgent), matched on the base name behind
-    // any server prefix. The item itself stays a toolCall: the projection
-    // asks this rule for a call no child row names as its parent.
     for (const tool of [
       "Agent",
       "Task",
@@ -384,7 +365,6 @@ describe("legacy tool-item adapter", () => {
     ]) {
       expect(isLegacyDelegationToolCall({ tool }), tool).toBe(false);
     }
-    // A presented call is not legacy data, whatever its name.
     expect(
       isLegacyDelegationToolCall({ tool: "Agent", presentation: presented }),
     ).toBe(false);

@@ -1,27 +1,6 @@
-/**
- * The event grammar rules that hold WITHIN one thread's event stream, as a
- * streaming state machine.
- *
- * The conformance kit checks these statically over a recorded log, which only
- * covers bridges someone ran the kit against. Third-party bridges ship as
- * artifacts and are never run through it, so the host applies the same rules
- * live at its event intake — same rule ids, same reasoning, one implementation
- * (`checkItemOpensBeforeDelta` is this machine fed a log).
- *
- * Deliberately cheap: four bounded per-thread id sets. Nothing here
- * reconstructs item payloads or turn history.
- */
 import type { ThreadEvent } from "@bb/domain";
 import { getThreadEventScopeTurnId } from "@bb/domain";
 
-/**
- * Every ThreadEvent that streams into an already-open item by `itemId`. Listed
- * explicitly rather than matched by name suffix: only two of the six streaming
- * deltas end in "/delta" (the rest are "/outputDelta", "/summaryTextDelta",
- * "/textDelta"), and the two progress events carry an `itemId` as well.
- * Keep in sync with the itemId-carrying members of the ThreadEvent union in
- * @bb/domain (packages/domain/src/provider-event.ts).
- */
 export const ITEM_STREAMING_EVENT_TYPES = new Set<ThreadEvent["type"]>([
   "item/agentMessage/delta",
   "item/plan/delta",
@@ -33,11 +12,6 @@ export const ITEM_STREAMING_EVENT_TYPES = new Set<ThreadEvent["type"]>([
   "item/toolCall/progress",
 ]);
 
-/**
- * Item ids are unique for the life of a thread, so both id sets would grow
- * with it. Past the cap the oldest ids are forgotten, which can only make the
- * checks more permissive (a forgotten id reads as "never seen"), never less.
- */
 const MAX_ITEM_IDS_PER_THREAD = 512;
 
 export const THREAD_EVENT_GRAMMAR_RULES = {
@@ -64,11 +38,6 @@ interface ThreadGrammarState {
   completedTurnIds: Set<string>;
 }
 
-/**
- * Streaming grammar checker for one or more threads' event streams. `observe`
- * both checks the event and advances the state; a violating event does NOT
- * advance it, so the caller is free to drop the event and keep going.
- */
 export class ThreadEventGrammar {
   readonly #byThreadId = new Map<string, ThreadGrammarState>();
 
@@ -198,11 +167,6 @@ function violation(
   return { kind: "violation", rule, reason };
 }
 
-/**
- * Turn lifecycle events carry their turn id in the event scope. A bridge that
- * scopes one to the thread instead is malformed in a way the scope validator
- * already owns, so the grammar simply has nothing to say about it.
- */
 function turnIdOf(event: ThreadEvent): string | undefined {
   return "scope" in event ? getThreadEventScopeTurnId(event.scope) : undefined;
 }

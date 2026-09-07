@@ -26,7 +26,6 @@ describe("connect URL helpers", () => {
     expect(serverUrlForHandle("https://getbb.app", "phone")).toBe(
       "https://phone.getbb.app",
     );
-    // Self-hosted apex, non-default port kept.
     expect(deriveConnectBaseUrl("https://laptop.bb.example:8443")).toBe(
       "https://bb.example:8443",
     );
@@ -91,8 +90,6 @@ describe("redeemMachineCredential", () => {
           JSON.stringify({
             credential: "bbcm_desktop",
             machineId: "machine-1",
-            // The account's primary handle, which is not the server the code
-            // targeted. serverUrl names that server.
             handle: "sawyer",
             serverUrl: "https://laptop.getbb.app",
           }),

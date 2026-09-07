@@ -1,5 +1,3 @@
-/** Provider integration tests using createAgentRuntime. */
-
 import { rmSync, writeFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { dirname, join } from "node:path";

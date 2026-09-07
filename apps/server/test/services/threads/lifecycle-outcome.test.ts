@@ -28,8 +28,6 @@ import { createMockHubSocket } from "../../helpers/mock-hub-socket.js";
 import { createTestProviderRegistry } from "../../helpers/provider-registry.js";
 import { testLogger } from "../../helpers/test-app.js";
 
-// Plan-mode activity is gated on the provider's declared plan command, so the
-// broadcast needs the real first-party declarations.
 const providerRegistry = await createTestProviderRegistry();
 
 const NO_ACTIVITY = {
@@ -62,7 +60,6 @@ const planPromptInput: PromptInput[] = [
   },
 ];
 
-/** Records an accepted, still-open plan turn and an active goal for the thread. */
 function seedOpenPlanTurnWithGoal(db: DbConnection, threadId: string): void {
   const requestId = formatClientTurnRequestIdSuffix({ suffix: "23456789ab" });
   appendStoredThreadEvent(db, noopNotifier, {
@@ -235,9 +232,6 @@ describe("applyLoggedThreadLifecycleEvent", () => {
   });
 
   it("carries the status-gated plan and goal activity of the post-transition row", () => {
-    // The sidebar's plan-mode and goal indicators come from this activity
-    // and nothing else pushes them to list rows: without it the patch would
-    // leave a finished plan turn's indicator lit until some unrelated refetch.
     const { db, hostId, hub, threadId } = setup("idle");
     connectDaemon(db, hub, hostId);
     seedOpenPlanTurnWithGoal(db, threadId);
@@ -256,7 +250,6 @@ describe("applyLoggedThreadLifecycleEvent", () => {
       { db, hub, logger: testLogger, providerRegistry },
       { event: { type: "run.succeeded" }, threadId },
     );
-    // Plan mode is gated on an active thread; the goal outlives the turn.
     expect(
       lastThreadListMessage(socket.messages).metadata?.statusChange,
     ).toMatchObject({
@@ -272,7 +265,6 @@ describe("applyLoggedThreadLifecycleEvent", () => {
 
     const outcome = applyLoggedThreadLifecycleEvent(
       { db, hub, logger: testLogger, providerRegistry },
-      // idle has no run.succeeded cell.
       { event: { type: "run.succeeded" }, threadId },
     );
 

@@ -18,7 +18,6 @@ import { CONTROL_HOVER_TRANSITION } from "@bb/shared-ui/motion";
 
 const EXPANDABLE_PANEL_TRANSITION_MS = 200;
 
-/** Read half of the panel height sync, staged for the shared write phase. */
 interface PanelHeightSync {
   isToggleAnimating: boolean;
   heightPx: number;
@@ -30,8 +29,7 @@ interface ChevronProps {
   className?: string;
 }
 
-const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS =
-  `text-muted-foreground ${CONTROL_HOVER_TRANSITION} hover:text-foreground focus-visible:text-foreground`;
+const COLLAPSIBLE_HEADER_COLLAPSED_TONE_CLASS = `text-muted-foreground ${CONTROL_HOVER_TRANSITION} hover:text-foreground focus-visible:text-foreground`;
 const COLLAPSIBLE_HEADER_EXPANDED_TONE_CLASS = "text-foreground";
 export const COLLAPSIBLE_HEADER_STATIC_TONE_CLASS = "text-muted-foreground";
 const COLLAPSIBLE_HEADER_BUTTON_BASE_CLASS =
@@ -111,11 +109,7 @@ export function CollapsibleHeader({
             ? "rotate-90"
             : forceChevronVisible
               ? "opacity-100"
-              : // Furled carets reveal only on hover/focus of their own row header
-                // (the toggle button), not the wrapping timeline-row group —
-                // so hovering a row's body or a nested child doesn't surface a
-                // sibling/parent caret.
-                "opacity-0 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
+              : "opacity-0 group-hover/toggle:opacity-100 group-focus-visible/toggle:opacity-100 max-md:pointer-coarse:opacity-100",
         )}
       />
     </button>
@@ -140,7 +134,6 @@ interface ExpandablePanelProps {
 interface AnimatedExpandablePanelContentProps {
   collapsedContent: ReactNode;
   contentClassName?: string;
-  /** The body is mounted; see `ExpandablePanel`'s `isBodyExpanded`. */
   isBodyExpanded: boolean;
   renderedBody: ReactNode;
 }
@@ -153,11 +146,6 @@ function AnimatedExpandablePanelContent({
 }: AnimatedExpandablePanelContentProps) {
   const regionRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-  // Only an expand/collapse toggle eases the region height. Content growth
-  // inside an already-open body (a streaming tool result, a todo list gaining
-  // rows) snaps: easing it would restart the 200ms tween on every delta, and
-  // that tween never registers with `layoutAnimationInFlightCountAtom`, so the
-  // timeline's AutoHeightContainer would run its own tween on top of it.
   const toggleAnimationDeadlineRef = useRef(0);
   const isFirstToggleEffectRef = useRef(true);
   useBrowserLayoutEffect(() => {
@@ -179,8 +167,6 @@ function AnimatedExpandablePanelContent({
     const readHeightSync = (
       entry: ResizeObserverEntry | undefined,
     ): PanelHeightSync => {
-      // The entry's border box is offsetHeight's metric without the layout
-      // read; the mount sync below has no entry and pays that read once.
       const observedHeight =
         entry === undefined ? undefined : observedBorderBoxBlockSize(entry);
       return {
@@ -250,13 +236,6 @@ export function ExpandablePanel({
   const headerRootClassName = cn("px-2 py-1", headerClassName);
   const [isClosing, setIsClosing] = useState(false);
   const renderedBodyRef = useRef<ReactNode>(null);
-  // The header/chevron flip stays urgent (it reads `isExpanded` directly),
-  // but the body realizes off the deferred value: an expand tap's discrete
-  // commit paints the caret in the first frame, and the body subtree — the
-  // expensive part of a large tool section — mounts in a follow-up
-  // interruptible commit. On first render the deferred value equals
-  // `isExpanded`, so rows that mount already expanded render their body
-  // immediately.
   const deferredIsExpanded = useDeferredValue(isExpanded);
   const expandedBody = useMemo(() => {
     if (!deferredIsExpanded) {
@@ -264,23 +243,8 @@ export function ExpandablePanel({
     }
     return renderBody ? renderBody() : children;
   }, [children, deferredIsExpanded, renderBody]);
-  // The body region follows the body, not the tap: its content branch,
-  // transition classes, height tween, toggle deadline and in-flight window
-  // all key on this flag. It opens in the commit that mounts the body — the
-  // deferred one, or the reopen tap's own commit while the close window
-  // still retains the subtree (`isClosing` holds only while
-  // `renderedBodyRef` does) — and closes in the collapse tap's commit.
-  // Opening it on the urgent `isExpanded` would swap the collapsed preview
-  // for an empty wrapper and tween toward that, with the body landing a
-  // commit later, possibly after the 200ms window has already closed.
   const isBodyExpanded = isExpanded && (deferredIsExpanded || isClosing);
 
-  // Signal to AutoHeightContainer / HeightTransition wrappers that a
-  // CSS-driven layout animation is in flight, so they snap their wrapper to
-  // inner.height each frame instead of running their own lagging 180ms
-  // transition. Without this, parent height wrappers can compound with the
-  // row's own animation and make the bottom-anchored timeline slide longer
-  // than the row's intended 200ms.
   const setLayoutAnimationInFlightCount = useSetAtom(
     layoutAnimationInFlightCountAtom,
   );
@@ -304,10 +268,6 @@ export function ExpandablePanel({
     };
   }, [isBodyExpanded, setLayoutAnimationInFlightCount]);
 
-  // Retain the last realized body for the close window. Gated on the
-  // deferred value: between an expand tap and its body commit `expandedBody`
-  // is still null, and writing that would drop the subtree a reopen inside
-  // the close window reuses.
   useBrowserLayoutEffect(() => {
     if (!deferredIsExpanded) {
       return;
@@ -334,9 +294,6 @@ export function ExpandablePanel({
     }, EXPANDABLE_PANEL_TRANSITION_MS);
     return () => clearTimeout(timeout);
   }, [hasCollapsedContent, isExpanded]);
-  // While the deferred value still says expanded the realized body is the
-  // freshest subtree (a collapse tap animates out from it without a
-  // remount); otherwise the close window's retained one.
   const renderedBody = deferredIsExpanded
     ? expandedBody
     : isClosing
@@ -345,10 +302,7 @@ export function ExpandablePanel({
 
   return (
     <div className={cn("rounded-md text-muted-foreground", className)}>
-      {/* Scope the hover group to the header line only. Putting it on the
-          whole panel would let a hover on a nested bundle child (which lives
-          in the body below) reveal every sibling row's chevron, since they
-          share this panel as a hovered ancestor. */}
+      {}
       <div className="group/timeline-row">
         <CollapsibleHeader
           isExpanded={isExpanded}
@@ -367,8 +321,6 @@ export function ExpandablePanel({
           collapsedContent={collapsedContent}
           contentClassName={contentClassName}
           isBodyExpanded={isBodyExpanded}
-          // The preview replaces the body the moment the region closes, so
-          // a body it would not show must not re-run its height sync.
           renderedBody={isBodyExpanded ? renderedBody : null}
         />
       ) : (
@@ -384,9 +336,6 @@ export function ExpandablePanel({
           <div className="overflow-hidden">
             <div
               className={cn(
-                // No `will-change-transform` here: it would pin a compositing
-                // layer on every collapsed body in the timeline for the
-                // lifetime of the row, only to speed a 200ms toggle.
                 "px-2 pb-1 pt-0 transition-[transform,opacity] duration-200 ease-out",
                 isBodyExpanded
                   ? "translate-y-0 opacity-100"

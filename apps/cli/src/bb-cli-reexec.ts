@@ -1,26 +1,13 @@
-/**
- * When agent shells rewrite PATH, a user-global or stale `bb` may win over the
- * daemon-managed binary. The host daemon injects absolute `BB_CLI` pointing at
- * that binary; official CLI entrypoints hop there once so bare `bb` still works.
- */
-
 import { spawnSync } from "node:child_process";
 import { realpathSync } from "node:fs";
 import { resolve } from "node:path";
 
-/** Set on the re-exec child so a shell-script → node hop cannot loop. */
 export const BB_CLI_REEXEC_ENV = "BB_CLI_REEXEC";
 
 interface MaybeReexecViaBbCliArgs {
   env?: NodeJS.ProcessEnv;
-  /** Arguments after the node/script path (default: process.argv.slice(2)). */
   argv?: string[];
-  /** Current CLI entry (default: process.argv[1]). */
   currentExecutablePath?: string;
-  /**
-   * Test seam: when provided, called instead of spawnSync + process.exit.
-   * Must not return if it fully replaces the process.
-   */
   reexec?: (args: {
     target: string;
     argv: string[];
@@ -36,11 +23,6 @@ function tryRealpath(path: string): string | null {
   }
 }
 
-/**
- * If `BB_CLI` names a different executable than the one currently running,
- * re-exec it with the same argv. No-op when unset, equal, missing, or already
- * in a re-exec hop.
- */
 export function maybeReexecViaBbCli(
   options: MaybeReexecViaBbCliArgs = {},
 ): void {

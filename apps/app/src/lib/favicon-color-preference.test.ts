@@ -56,9 +56,10 @@ describe("favicon color server sync", () => {
     renderHook(() => useFaviconColorSync(), { wrapper });
 
     await waitFor(() =>
-      expect(mocks.updateAppearance).toHaveBeenCalledWith(
-        { themeId: "default", faviconColor: "teal" },
-      ),
+      expect(mocks.updateAppearance).toHaveBeenCalledWith({
+        themeId: "default",
+        faviconColor: "teal",
+      }),
     );
     expect(window.localStorage.getItem(FAVICON_COLOR_STORAGE_KEY)).toBe("teal");
     expect(
@@ -93,8 +94,6 @@ describe("favicon rendering", () => {
   const originalGetContext = HTMLCanvasElement.prototype.getContext;
 
   beforeEach(() => {
-    // jsdom has no 2D context; a null context ends the draw after the image
-    // load, which is all these tests observe.
     Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
       configurable: true,
       value: () => null,
@@ -148,7 +147,8 @@ describe("favicon rendering", () => {
 
     const initialProps: { badge: "none" | "unread" } = { badge: "unread" };
     const { rerender, unmount } = renderHook(
-      ({ badge }: { badge: "none" | "unread" }) => module.useFaviconBadge(badge),
+      ({ badge }: { badge: "none" | "unread" }) =>
+        module.useFaviconBadge(badge),
       { initialProps },
     );
     await waitFor(() => expect(FakeImage.created).toBe(2));
@@ -156,7 +156,6 @@ describe("favicon rendering", () => {
     rerender({ badge: "none" });
     rerender({ badge: "unread" });
     await new Promise((resolve) => setTimeout(resolve, 0));
-    // 16px and 32px glyphs were decoded once; the second badge does not refetch.
     expect(FakeImage.created).toBe(2);
     unmount();
   });

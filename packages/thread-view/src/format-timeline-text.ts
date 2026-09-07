@@ -38,12 +38,6 @@ interface TimelineTextFormatContext {
   verbose: boolean;
   color: boolean;
   depth: number;
-  /**
-   * `id` of the bundle-summary that is the open step's active-latest bundle
-   * for the row list currently being formatted. Computed once per list via
-   * `findActiveLatestBundleId` and passed down so per-row title formatting can
-   * mark only the matching bundle as active.
-   */
   activeLatestBundleId: string | null;
 }
 
@@ -104,13 +98,6 @@ function rowHeader(label: string, context: TimelineTextFormatContext): string {
   return dim(`── ${label}`, context.color);
 }
 
-// Active-latest bundle treatment fires only for the trailing bundle of a
-// "feed-like" container — top-level rows and delegation childRows. Turn
-// children and bundle/step children are excluded: a turn's children are an
-// archived completed-turn body, and bundle children are a single grouped
-// concept where there is no separate "frontier" to mark. `nestedRows`
-// drives the active-latest lookup for feed-like containers; pass `null`
-// for non-feed scopes to suppress active-latest treatment.
 function nestedContext(
   context: TimelineTextFormatContext,
   nestedRows: readonly ThreadTimelineViewRow[] | null,

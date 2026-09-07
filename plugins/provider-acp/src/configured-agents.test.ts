@@ -4,10 +4,7 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { resolveConfiguredAcpAgents } from "./configured-agents.js";
 import { acpProviderDeclaration } from "./declaration.js";
-import {
-  KNOWN_ACP_AGENTS,
-  RESERVED_ACP_PROVIDER_IDS,
-} from "./known-agents.js";
+import { KNOWN_ACP_AGENTS, RESERVED_ACP_PROVIDER_IDS } from "./known-agents.js";
 import { resolveAcpNativeRoots } from "./native-roots/index.js";
 
 const reserved = RESERVED_ACP_PROVIDER_IDS;
@@ -25,15 +22,14 @@ function shipped(id: string) {
 function onlyAgent(resolved: ReturnType<typeof resolveConfiguredAcpAgents>) {
   const [agent] = resolved.agents;
   if (agent === undefined || resolved.agents.length !== 1) {
-    throw new Error(`expected exactly one agent, got ${resolved.agents.length}`);
+    throw new Error(
+      `expected exactly one agent, got ${resolved.agents.length}`,
+    );
   }
   return agent;
 }
 
 describe("resolveConfiguredAcpAgents", () => {
-  // The precedence rule is the whole migration: a user who copied an agent
-  // into the setting must see their new entry, once, with no deprecation
-  // notice for the copy they left behind.
   it("lets a setting entry win over the legacy entry with the same id", () => {
     const resolved = resolveConfiguredAcpAgents({
       settingValue: JSON.stringify([amp("Amp", "amp-next")]),
@@ -60,8 +56,6 @@ describe("resolveConfiguredAcpAgents", () => {
     expect(resolved.warnings[0]).toContain("deprecated customAcpAgents");
   });
 
-  // Malformed setting JSON must not take the legacy agents down with it: the
-  // user still has whatever was working before they started editing.
   it("falls back to the legacy entries when the setting is not JSON", () => {
     const resolved = resolveConfiguredAcpAgents({
       settingValue: "[{ not json",
@@ -102,9 +96,6 @@ describe("resolveConfiguredAcpAgents", () => {
     expect(resolved.warnings[1]).toContain('built-in provider "acp-cursor"');
   });
 
-  // Only the always-listed agents are reserved. Overriding an installed-only
-  // one is documented, so it has to parse — the server module then registers
-  // the override in place of the shipped agent.
   it("accepts an entry that overrides an installed-only known agent", () => {
     const resolved = resolveConfiguredAcpAgents({
       settingValue: JSON.stringify([
@@ -119,9 +110,6 @@ describe("resolveConfiguredAcpAgents", () => {
     expect(resolved.warnings).toEqual([]);
   });
 
-  // The migration path in full: an old config entry keeps its native skills.
-  // Both halves used to break — the strict plugin schema dropped the whole
-  // agent, and the declaration never carried the roots on to the server.
   it("keeps a legacy entry's native skill roots and declares them", () => {
     const resolved = resolveConfiguredAcpAgents({
       settingValue: "",
@@ -143,9 +131,9 @@ describe("resolveConfiguredAcpAgents", () => {
       user: [".amp/skills"],
       project: [".amp"],
     });
-    expect(
-      acpProviderDeclaration(agent).experimental_nativeSkillRoots,
-    ).toEqual({ user: [".amp/skills"], project: [".amp"] });
+    expect(acpProviderDeclaration(agent).experimental_nativeSkillRoots).toEqual(
+      { user: [".amp/skills"], project: [".amp"] },
+    );
   });
 
   it("reports a problem reading the deprecated file", () => {
@@ -163,12 +151,6 @@ describe("resolveConfiguredAcpAgents", () => {
   });
 });
 
-/**
- * What a replacing entry inherits. The documented override
- * (`{ id: "grok", command: "/opt/grok-private" }`) says how to launch the
- * agent and nothing about its skills; before this the declaration carried no
- * roots and no resolver flag, so `/` in that agent's threads listed nothing.
- */
 describe("a configured entry that replaces a shipped agent", () => {
   let tempRoot: string;
 
@@ -204,7 +186,6 @@ describe("a configured entry that replaces a shipped agent", () => {
     expect(agent.nativeRootsResolver).toBe(grok.nativeRootsResolver);
 
     const declaration = acpProviderDeclaration(agent);
-    // The recursive/ancestors options travel with the roots.
     expect(declaration.experimental_nativeSkillRoots).toEqual({
       user: [{ path: ".agents/skills", recursive: true }],
       project: [
@@ -214,8 +195,6 @@ describe("a configured entry that replaces a shipped agent", () => {
     });
     expect(declaration.experimental_resolvesNativeRoots).toBe(true);
 
-    // The host entry keys on the provider id, so the private build's threads
-    // still get the roots the host's grok config names.
     const homeDir = path.join(tempRoot, "home");
     const answer = await resolveAcpNativeRoots({
       agentId: agent.id,
@@ -242,7 +221,9 @@ describe("a configured entry that replaces a shipped agent", () => {
       user: [".private/skills"],
       project: [],
     });
-    expect(agent.nativeRootsResolver).toBe(shipped("acp-grok").nativeRootsResolver);
+    expect(agent.nativeRootsResolver).toBe(
+      shipped("acp-grok").nativeRootsResolver,
+    );
     const declaration = acpProviderDeclaration(agent);
     expect(declaration.experimental_nativeSkillRoots).toEqual({
       user: [".private/skills"],

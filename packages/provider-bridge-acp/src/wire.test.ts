@@ -8,9 +8,6 @@ import {
 } from "./wire.js";
 
 describe("acpToolCallUpdateEventSchema", () => {
-  // ACP's ToolKind is an open enum upstream (`#[serde(other)]`). A closed zod
-  // enum rejected the whole tool_call for one unseen value, so the call never
-  // opened and its later `completed` update merged into nothing.
   it("parses an unknown kind as `other` and keeps the agent's word on rawKind", () => {
     const parsed = acpToolCallUpdateEventSchema.parse({
       sessionUpdate: "tool_call",
@@ -101,9 +98,6 @@ describe("acpInitializeResultSchema", () => {
 });
 
 describe("acpSessionNewResultSchema", () => {
-  // pi-acp serializes absent optional strings as explicit `null` instead of
-  // omitting them. Before this was accepted, every pi-acp thread failed to
-  // start with "ACP agent returned an unexpected session/new result".
   it("accepts explicit null for optional model and config-option strings", () => {
     const parsed = acpSessionNewResultSchema.safeParse({
       sessionId: "session-1",

@@ -1,3 +1,4 @@
+import { createUpdatedPackageContent } from "./lib/package-version.mjs";
 // Bumps @get-bb/plugin-sdk in the two files that must always agree:
 //
 //   packages/domain/src/plugin-sdk-version.ts  (PLUGIN_SDK_VERSION)
@@ -36,12 +37,6 @@ const VERSION_EXPORT_PATTERN =
 
 const defaultFileSystem = { readFile, rename, unlink, writeFile };
 
-function detectPackageJsonIndent(content) {
-  const match = /\n([ \t]+)"/u.exec(content);
-
-  return match === null ? 2 : match[1];
-}
-
 function readManifestVersion({ content, path }) {
   const packageJson = JSON.parse(content);
 
@@ -58,16 +53,6 @@ function readManifestVersion({ content, path }) {
   }
 
   return { packageJson, version: packageJson.version };
-}
-
-function writeManifestVersion({ content, packageJson, newVersion }) {
-  const trailingNewline = content.endsWith("\n") ? "\n" : "";
-
-  return `${JSON.stringify(
-    { ...packageJson, version: newVersion },
-    null,
-    detectPackageJsonIndent(content),
-  )}${trailingNewline}`;
 }
 
 function readModuleVersion({ content, path }) {
@@ -171,7 +156,7 @@ export async function bumpPluginSdk(options) {
       {
         absolutePath: manifestAbsolutePath,
         content: manifestContent,
-        nextContent: writeManifestVersion({
+        nextContent: createUpdatedPackageContent({
           content: manifestContent,
           packageJson,
           newVersion,

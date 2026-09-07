@@ -80,9 +80,6 @@ export function useHostFilePreview(
   const activeHostId = enabled ? hostId : null;
   const activePath = enabled ? path : null;
   return useQuery<FilePreview>({
-    // Move a retained-but-disabled observer off the heavy payload's key. That
-    // aborts an in-flight read and lets the one-minute GC policy start while
-    // the closed panel body remains mounted.
     queryKey: hostFilePreviewQueryKey(activeHostId, activePath),
     queryFn: async ({ signal }) => {
       if (activeHostId === null || activePath === null) {

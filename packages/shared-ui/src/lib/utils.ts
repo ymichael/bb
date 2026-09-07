@@ -5,13 +5,6 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-/**
- * Abbreviate a conventional absolute home directory for display only.
- *
- * Detail surfaces can show paths from remote hosts, so the browser cannot use
- * its own HOME value. Preserve the original path for actions and compact only
- * the standard macOS, Linux, root, and Windows home layouts users recognize.
- */
 export function formatHomePathForDisplay(pathValue: string): string {
   const homePrefix =
     pathValue.match(/^\/Users\/[^/]+(?=\/|$)/)?.[0] ??

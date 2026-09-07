@@ -75,9 +75,6 @@ export default async function keepAwakePlugin(bb: BbPluginApi): Promise<void> {
     contract: keepAwakeHostContract,
   });
 
-  // `reconcileRequested` asks for an immediate pass (configuration or host
-  // changes). `retryRequested` asks for a pass after the current backoff delay
-  // (host worker exits), so a crash-looping worker cannot spin the reconciler.
   let reconcileRequested = true;
   let retryRequested = false;
   let wakeWaiter: (() => void) | null = null;

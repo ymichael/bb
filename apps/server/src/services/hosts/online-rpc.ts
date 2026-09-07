@@ -152,11 +152,6 @@ async function waitForRetryableHostRpcTransport(
   await ensureHostSessionReadyForWork(deps, { hostId });
 }
 
-/**
- * True when the host never received the command because it is offline or
- * unenrolled. A caller that only needs host-local state gone can treat this as
- * a success; any other error means the host answered and failed.
- */
 export function isHostUnavailableApiError(error: unknown): boolean {
   return (
     error instanceof ApiError &&
@@ -180,7 +175,6 @@ function requestHostOnlineRpcResponse(
   });
 }
 
-/** The error a host command raises when its timeout elapses. */
 export function hostCommandTimeoutError(): ApiError {
   return new ApiError(
     504,

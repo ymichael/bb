@@ -1,4 +1,3 @@
-/* shadcn/ui-derived */
 import * as React from "react";
 import { Drawer as DrawerPrimitive } from "vaul";
 
@@ -43,13 +42,8 @@ const DrawerOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DrawerPrimitive.Overlay
     ref={ref}
-    // Portaled outside every plugin mount; re-attach the plugin CSS scope
-    // when rendered from a plugin slot (see portal-scope.ts).
     {...usePortalScopeProps()}
-    className={cn(
-      "fixed inset-0 z-50 bg-black/40",
-      className,
-    )}
+    className={cn("fixed inset-0 z-50 bg-black/40", className)}
     {...props}
   />
 ));
@@ -70,9 +64,7 @@ const DrawerContent = React.forwardRef<
       )}
       {...props}
     >
-      <DrawerPrimitive.Handle
-        className="mx-auto mt-3 mb-1 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20"
-      />
+      <DrawerPrimitive.Handle className="mx-auto mt-3 mb-1 h-1 w-10 shrink-0 rounded-full bg-muted-foreground/20" />
       {children}
     </DrawerPrimitive.Content>
   </DrawerPortal>

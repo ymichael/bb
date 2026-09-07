@@ -76,7 +76,11 @@ describe("custom themes service", () => {
   });
 
   it("rejects oversized stylesheets so the broadcast payload stays bounded", async () => {
-    await writeTheme(themeRoot, "huge", "a".repeat(CUSTOM_THEME_CSS_MAX_LENGTH + 1));
+    await writeTheme(
+      themeRoot,
+      "huge",
+      "a".repeat(CUSTOM_THEME_CSS_MAX_LENGTH + 1),
+    );
     expect(readCustomThemeCss(themeRoot, "huge")).toBeNull();
     expect(resolveAppTheme(themeRoot, "huge", "default")).toEqual(
       defaultAppTheme,

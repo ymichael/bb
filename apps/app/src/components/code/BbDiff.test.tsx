@@ -133,10 +133,6 @@ describe("BbDiff", () => {
   });
 
   it("omits the expansion budget unless the caller can supply file contents", async () => {
-    // pierre renders an EMPTY diff when it is handed an expansion budget for a
-    // hunk-only patch — which is exactly what timeline file-change rows carry,
-    // since they have no way to fetch the full file. Sending the option
-    // unconditionally blanked every timeline diff.
     render(
       <BbDiff
         file={fixture()}
@@ -242,7 +238,6 @@ describe("BbDiff", () => {
     expect(pierre.lastOptions?.diffStyle).toBe("split");
     expect(pierre.lastOptions?.overflow).toBe("wrap");
     expect(pierre.lastOptions?.disableLineNumbers).toBe(true);
-    // The card header owns the file name; the renderer must never draw a second.
     expect(pierre.lastOptions?.disableFileHeader).toBe(true);
   });
 });

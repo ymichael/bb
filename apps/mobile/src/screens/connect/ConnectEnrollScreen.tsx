@@ -55,15 +55,6 @@ interface FieldError {
   message: string;
 }
 
-/**
- * bb connect enrollment (a modal on iOS with Cancel in the header): scan the
- * pairing QR or type the code, redeem it at the apex for this phone's
- * machine credential, save the profile, make it active (the connector then
- * mints the desktop-session cookie and opens realtime), and offer the
- * account's other servers — one enrollment covers all of them because the
- * credential and the session cookie are account-scoped. With `profileId`
- * the same flow re-pairs an existing profile whose credential was revoked.
- */
 export function ConnectEnrollScreen() {
   const router = useRouter();
   const navigation = useNavigation();
@@ -165,9 +156,6 @@ export function ConnectEnrollScreen() {
 
   const done = () => router.dismissTo("/");
 
-  // This screen is a modal: a push would land the Add server card beneath
-  // it on iOS. Pop back to Add server when it opened this screen; otherwise
-  // (the bb://connect deep link) replace the modal with it.
   const openDirectUrlForm = () => {
     const state = navigation.getState();
     const below = state ? state.routes[state.index - 1] : undefined;
@@ -255,7 +243,7 @@ export function ConnectEnrollScreen() {
           </Stack.Toolbar.Button>
         </Stack.Toolbar>
       ) : null}
-      {/* Own sheet host: this route is a native modal. */}
+      {}
       <SheetProvider>
         <GroupedScreen testID="connect-screen">
           <SettingsSection
@@ -434,7 +422,6 @@ export function ConnectEnrollScreen() {
   );
 }
 
-/** The connect session for the just-enrolled profile, as the connector sees it. */
 function SessionStatusLine({ session }: { session: SessionState | null }) {
   const { tokens } = useTheme();
   if (session === null || session.status === "idle") {

@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type CSSProperties, type ReactNode } from "react";
 import { Icon, type IconName } from "../icon";
 import {
   Tooltip,
@@ -12,11 +12,6 @@ export type ResourceStatusTone = "success" | "warning" | "error" | "muted";
 
 export const RESOURCE_ROUTE_LABEL_EVENT = "bb:resource-route-label";
 
-/**
- * Supplies the loaded resource name to the host shell without coupling the
- * shell to a particular resource API. The DOM event also crosses the frontend
- * plugin boundary, where React context is not shared with the host bundle.
- */
 export function useResourceRouteLabel(label: string | null | undefined) {
   useEffect(() => {
     if (!label || typeof window === "undefined") return;
@@ -88,6 +83,40 @@ export function ResourceState({
 
 export const ResourceStatus = ResourceState;
 
+export const RESOURCE_ICON_FRAME_SIZES = {
+  sm: { frame: "size-5", glyph: "size-3" },
+  md: { frame: "size-6", glyph: "size-3.5" },
+  lg: { frame: "size-8", glyph: "size-[1.125rem]" },
+} as const;
+
+export type ResourceIconFrameSize = keyof typeof RESOURCE_ICON_FRAME_SIZES;
+
+export function ResourceIconFrame({
+  size = "md",
+  className,
+  style,
+  children,
+}: {
+  size?: ResourceIconFrameSize;
+  className?: string;
+  style?: CSSProperties;
+  children: (glyphClassName: string) => ReactNode;
+}) {
+  const { frame, glyph } = RESOURCE_ICON_FRAME_SIZES[size];
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center overflow-hidden",
+        frame,
+        className,
+      )}
+      style={style}
+    >
+      {children(glyph)}
+    </span>
+  );
+}
+
 export function ResourceMeta({
   items,
 }: {
@@ -128,18 +157,23 @@ export function ResourceLocationMeta({
 export function ResourceCardStat({
   icon,
   iconClassName,
+  className,
   accessibleLabel,
   children,
 }: {
   icon: IconName;
   iconClassName?: string;
+  className?: string;
   accessibleLabel?: string;
   children: ReactNode;
 }) {
   return (
     <span
       aria-label={accessibleLabel}
-      className="inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap px-1 text-muted-foreground"
+      className={cn(
+        "inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap px-1 text-muted-foreground",
+        className,
+      )}
     >
       <Icon
         name={icon}

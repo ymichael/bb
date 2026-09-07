@@ -1,28 +1,14 @@
-// A tiny zero-dependency markdown renderer for issue/comment bodies.
-// Supports: # headings, paragraphs, fenced code blocks, - lists, GFM tables,
-// `inline code`, **bold**, *italic*, [links](url), ![images](url), and raw
-// `<img …>` tags (GitHub's attachment uploader emits HTML img tags, not
-// markdown). Everything is built as React elements — img attributes are
-// extracted and whitelisted, so no HTML is ever injected.
 import { cn } from "@bb/shared-ui/lib/utils";
 import { UrlLink as UrlLink } from "@get-bb/plugin-sdk/app";
 
 const INLINE_PATTERN =
-  // Image forms first: `![…](…)` must win over the link pattern (which
-  // would otherwise match its tail), and `<img …>` before generic text.
   /(!\[[^\]]*\]\([^)\s]+\))|(<img\s[^>]*?\/?>)|(`[^`]+`)|(\*\*[^*]+\*\*)|(\*[^*]+\*)|(\[[^\]]+\]\([^)\s]+\))/g;
 
-/** Extract a quoted attribute from a raw `<img …>` tag. */
 function imgAttribute(tag: string, name: string): string | undefined {
   const match = tag.match(new RegExp(`\\b${name}\\s*=\\s*"([^"]*)"`));
   return match?.[1];
 }
 
-/**
- * Safe image element from an alt/src pair (+ optional intrinsic size from a
- * raw img tag). Only http(s) sources render — anything else falls back to
- * the original text. `h-auto`/`max-w-full` keep clamped images undistorted.
- */
 function renderImage(
   key: number,
   src: string | undefined,
@@ -133,7 +119,6 @@ function hasUnescapedPipe(line: string): boolean {
   return false;
 }
 
-/** Split a GFM table row while retaining escaped pipes inside cells. */
 function splitTableRow(line: string): string[] {
   let row = line.trim();
   if (row.startsWith("|")) row = row.slice(1);
@@ -245,7 +230,7 @@ export function Markdown({
         code.push(lines[i]);
         i++;
       }
-      i++; // skip closing fence (or end of input)
+      i++;
       blocks.push(
         <pre
           key={key++}
@@ -330,7 +315,6 @@ export function Markdown({
       );
       continue;
     }
-    // Paragraph: absorb consecutive non-empty, non-block lines.
     const para: string[] = [];
     while (
       i < lines.length &&

@@ -24,16 +24,6 @@ import {
 } from "./session-params.js";
 import type { CodexSessionOptions } from "./session-params.js";
 
-/**
- * Codex session/turn parameter invariants. These moved here from the deleted
- * codex legacy adapter suite, which asserted them through
- * `adapter.buildCommandPlan(...)` on `plan.params`. `session-params.ts` is
- * shared verbatim with the canonical codex bridge
- * (`plugins/provider-codex/src/bridge/bridge.ts`), so the invariants
- * outlive the adapter: they are properties of this module, not of the
- * command-plan shaping that died with the adapter.
- */
-
 const WORKSPACE_ASK_OPTIONS = {
   permissionMode: "accept-edits",
   permissionScope: "workspace",
@@ -68,10 +58,6 @@ const FULL_OPTIONS = {
   approvalReviewer: null,
   permissionEscalation: null,
 } satisfies RuntimePermissionPolicy;
-
-// ---------------------------------------------------------------------------
-// Linked-worktree git writable roots
-// ---------------------------------------------------------------------------
 
 interface LinkedWorktreeFixture {
   cleanup(): void;
@@ -198,11 +184,6 @@ function workspaceConfigForCwd(args: {
   });
 }
 
-/**
- * The writable-roots key must be OMITTED rather than set to an empty array:
- * `buildCodexConfig` only writes it when there is at least one root, and a
- * present-but-empty list would read as an explicit "nothing is writable".
- */
 function expectWorkspaceWriteWritableRootsConfigAbsent(
   config: ReturnType<typeof buildCodexConfig>,
 ): void {
@@ -479,7 +460,6 @@ describe("gitWritableRootsForWorkspace", () => {
     const fixture = createLinkedWorktreeFixture();
     const additionalWorkspaceWriteRoots = [
       path.join(fixture.rootPath, "host-extra-root"),
-      // Already a git root: the combined list must not repeat it.
       fixture.gitDir,
     ];
     const expectedWritableRoots = dedupeRoots([
@@ -511,10 +491,6 @@ describe("gitWritableRootsForWorkspace", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Permission settings
-// ---------------------------------------------------------------------------
-
 function permissionSettings(
   options: CodexSessionOptions,
   additionalWorkspaceWriteRoots: readonly string[] = [],
@@ -527,10 +503,6 @@ function permissionSettings(
 }
 
 describe("codex permission settings", () => {
-  // The legacy suite also asserted that an escalation is ignored in full
-  // permission mode. `RuntimePermissionPolicy` is a discriminated union that
-  // pins `permissionEscalation: null` for `permissionMode: "full"`, so that
-  // state is now unrepresentable and the type system carries the invariant.
   it("defaults full permission scope to unreviewed danger-full-access", () => {
     expect(toCodexThreadPermissionSettings(FULL_OPTIONS)).toEqual({
       approvalPolicy: "never",
@@ -543,8 +515,6 @@ describe("codex permission settings", () => {
       sandbox: "danger-full-access",
       sandboxPolicy: { type: "dangerFullAccess" },
     });
-    // Permission settings must never smuggle instruction overrides: an empty
-    // instruction source yields no base/developer instructions at all.
     expect(
       resolveCodexInstructionOverrides({
         instructionMode: "append",
@@ -561,11 +531,6 @@ describe("codex permission settings", () => {
     });
   });
 
-  // Automatic review is the reviewer, not the escalation: a "deny" escalation
-  // must not silence the auto reviewer by dropping approvals to "never".
-  // The legacy suite pinned this across thread/start, thread/resume,
-  // thread/fork and turn/start; every one of those built its approvals from
-  // these two functions, so one assertion per function covers all four.
   it("keeps automatic review on-request under deny escalation", () => {
     expect(toCodexThreadPermissionSettings(AUTO_DENY_OPTIONS)).toMatchObject({
       approvalPolicy: "on-request",
@@ -632,10 +597,6 @@ describe("codex permission settings", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Config
-// ---------------------------------------------------------------------------
-
 function configFor(options: CodexSessionOptions) {
   return buildCodexConfig({
     threadId: "bb-thread-1",
@@ -652,8 +613,6 @@ describe("buildCodexConfig", () => {
     expect(config).toMatchObject({
       "features.default_mode_request_user_input": false,
     });
-    // bb never overrides Codex's own web-search default; writing the key at
-    // all would pin it against the user's Codex config.
     expect(JSON.stringify(config)).not.toContain("tools.web_search");
   });
 
@@ -673,21 +632,22 @@ describe("buildCodexConfig", () => {
     });
   });
 
-  it("injects the bb thread id into the shell env and drops invalid keys", () => {
+  it("injects contributed environment into session params and drops invalid keys", () => {
     const config = configFor({
       ...FULL_OPTIONS,
       envVars: {
         "BAD.KEY": "ignored",
+        PLUGIN_API_URL: "http://127.0.0.1:3334/plugins/example/auth",
         TEST_VAR: "123",
       },
     });
 
     expect(config).toMatchObject({
       "shell_environment_policy.set.BB_THREAD_ID": "bb-thread-1",
+      "shell_environment_policy.set.PLUGIN_API_URL":
+        "http://127.0.0.1:3334/plugins/example/auth",
       "shell_environment_policy.set.TEST_VAR": "123",
     });
-    // A dotted name cannot be expressed as a shell-environment-policy key, so
-    // it is dropped rather than smuggled into the config as a nested path.
     expect(config).not.toMatchObject({
       "shell_environment_policy.set.BAD.KEY": "ignored",
     });
@@ -718,10 +678,6 @@ describe("buildCodexConfig", () => {
     );
   });
 });
-
-// ---------------------------------------------------------------------------
-// Instructions, reasoning, service tier, dynamic tools, input
-// ---------------------------------------------------------------------------
 
 describe("resolveCodexInstructionOverrides", () => {
   it("appends instructions as developer instructions", () => {
@@ -755,9 +711,6 @@ describe("toCodexReasoningEffort", () => {
     expect(toCodexReasoningEffort("ultra")).toBe("ultra");
   });
 
-  // "ultracode" is Claude-specific and Codex models never expose it, so
-  // model-switch reconciliation maps it away before here. Fail closed rather
-  // than sending a level the Codex app server would reject.
   it("rejects ultracode because Codex does not support it", () => {
     expect(() => toCodexReasoningEffort("ultracode")).toThrow(
       "Codex does not support the ultracode reasoning level.",
@@ -808,8 +761,6 @@ describe("toCodexDynamicTools", () => {
 });
 
 describe("toCodexUserInput", () => {
-  // Codex has no attachment input type, so a local file becomes a text chunk
-  // naming the path; dropping it would silently lose the attachment.
   it("maps every prompt input variant, rendering local files as text", () => {
     const input: PromptInput[] = [
       { type: "text", text: "hello", mentions: [] },

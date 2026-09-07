@@ -110,42 +110,10 @@ interface MarkdownPreviewProps {
   allowHtml?: boolean;
   className?: string;
   content: string;
-  /**
-   * Controls whether Markdown image nodes mount browser image subresources.
-   * Use `"alt-text"` for untrusted generated previews that should retain a
-   * readable placeholder without issuing a request to the image URL.
-   */
   imagePolicy?: MarkdownImagePolicy;
   linkRouting?: MarkdownLinkRouting;
-  /**
-   * When supplied, serialized `@thread:<id>` tokens and exact raw persisted
-   * thread ids in markdown prose render as canonical thread-mention pills. An
-   * inline-code span also renders as a pill when the entire span is one exact
-   * raw id; mixed inline code and fenced code remain literal. Raw ids remain
-   * text unless the live thread lookup or `mentions` resolves them. Raw-id pills
-   * always use the resolved thread resource's project route; `resolveLinkHref`
-   * continues to route serialized and offset-based mentions.
-   */
   threadMentions?: MarkdownThreadMentions;
-  /**
-   * Authored-prompt mentions (user messages): unlike {@link threadMentions},
-   * which recognizes thread references in markdown prose, this carries the
-   * editor's offset-based `mentions` array (offsets into `content`) and renders
-   * every kind — thread, file/path, and slash command — as its canonical pill.
-   * Activates the offset-substitution pipeline in `markdown-prompt-mentions`.
-   * User messages may also supply {@link threadMentions} so raw serialized
-   * thread tokens without offset metadata still render consistently. Structured
-   * spans are substituted before Markdown parsing, so the two pipelines do not
-   * double-render the same mention. Generated conversation bodies also use
-   * this transport when they carry authoritative offset metadata.
-   */
   promptMentions?: MarkdownPromptMentions;
-  /**
-   * Plugin assistant-message directives (`::inline-vis{...}`). Only supplied
-   * for assistant conversation bodies (and nested agent output); user messages
-   * and generic Markdown/file previews omit this so directives stay literal.
-   * Parsing is `remark-directive`; recognized ids mount via PluginSlotMount.
-   */
   messageDirectives?: MarkdownMessageDirectives;
   urlTransform?: UrlTransform;
 }
@@ -179,10 +147,6 @@ interface BuildMarkdownComponentsArgs {
   messageDirectives?: ResolvedMessageDirectiveRender;
 }
 
-/**
- * Message-directive props after the remark transform has filled the mount table
- * for this render (indices match `data-directive-index` on the custom element).
- */
 interface ResolvedMessageDirectiveRender {
   mounts: readonly MountedMessageDirective[];
   message: MarkdownMessageDirectives["message"];
@@ -190,10 +154,6 @@ interface ResolvedMessageDirectiveRender {
   openThreadPanel: MarkdownMessageDirectives["openThreadPanel"];
 }
 
-/**
- * {@link MarkdownPromptMentions} after sentinel substitution: the mention array
- * is now indexed to match the sentinels embedded in the parsed content.
- */
 interface ResolvedPromptMentions {
   mentions: readonly IndexedPromptMention[];
   resolveLinkHref?: TimelineTitleLinkResolver;
@@ -299,37 +259,18 @@ type MarkdownTableHeaderProps = ComponentPropsWithoutRef<"th"> & ExtraProps;
 type MarkdownUnorderedListProps = ComponentPropsWithoutRef<"ul"> & ExtraProps;
 type MarkdownRehypePlugins = NonNullable<ReactMarkdownOptions["rehypePlugins"]>;
 
-// A table may grow past its text column up to the container width, but never
-// past the nearest ancestor that clips or scrolls horizontally. The limit
-// variable is measured in `useMarkdownTableContentWidthVariable`; without it a
-// negative `marginInline` moves the table left of the scroll origin, where no
-// scroll can reach it (plan approval cards, message bubbles, side chat).
 const MARKDOWN_TABLE_BREAKOUT_LIMIT_VARIABLE = "--md-table-breakout-max";
 const MARKDOWN_TABLE_BREAKOUT_WIDTH = `max(100%, min(1100px, 100cqw - 2rem, var(${MARKDOWN_TABLE_BREAKOUT_LIMIT_VARIABLE}, 100cqw)))`;
 const MARKDOWN_CONTENT_WIDTH_VARIABLE = "--md-content-w";
 const MARKDOWN_SOURCE_COLOR_SCHEME_MEDIA_PATTERN =
   /^\(\s*prefers-color-scheme\s*:\s*(dark|light)\s*\)$/iu;
-// `remark-math` emits math as `<code class="language-math">` (inline) and
-// `<pre><code class="language-math">` (display) holding the raw TeX, and
-// `rehype-katex` renders any element carrying that class. The default sanitize
-// schema already keeps `language-*` classes on `<code>`, so the wrappers survive
-// sanitization untouched — and `rehype-katex` runs LAST, after sanitize, so KaTeX
-// (which uses `trust: false` and self-escapes its TeX input) emits its rendered
-// output without it being re-sanitized.
-//
-// Security-critical order: raw HTML must become nodes (rehypeRaw) before
-// sanitization can strip unsafe elements, attributes, and URLs.
 const MARKDOWN_HTML_REHYPE_PLUGINS: MarkdownRehypePlugins = [
   rehypeRaw,
   rehypeSanitize,
 ];
 
-// No raw HTML means nothing untrusted to sanitize, so KaTeX renders straight
-// from the `remark-math` wrappers.
 const MARKDOWN_PLAIN_REHYPE_PLUGINS: MarkdownRehypePlugins = [];
 
-// KaTeX loads on demand (`markdown-katex-loader`): until the chunk resolves,
-// math stays as the `remark-math` code wrappers.
 function resolveRehypePlugins({
   allowHtml,
   rehypeKatex,
@@ -666,13 +607,10 @@ function MarkdownAnchor({
       return;
     }
 
-    // Internal BB destinations belong to RouteAnchor so they participate in
-    // SPA history. URL preference routing only sees non-route destinations.
     if (isAppRouteHref) {
       return;
     }
 
-    // Let timeline/terminal/navigation hosts claim ordinary web links.
     if (
       linkRouting?.onOpenLink &&
       rewrittenHref &&
@@ -754,8 +692,6 @@ function MarkdownCode({
   const language = getMarkdownCodeLanguage({ className: codeClassName });
   const isBlock = isMarkdownCodeBlock({ codeText, language });
   const [softWrap, setSoftWrap] = useState(false);
-  // Highlight only fenced blocks (mermaid renders as a diagram, inline code stays
-  // plain). The HTML is escaped by sugar-high, so dangerouslySetInnerHTML is safe.
   const highlightedHtml = useMemo(
     () =>
       isBlock && language !== "mermaid"
@@ -916,9 +852,6 @@ function MarkdownUnorderedList({ children }: MarkdownUnorderedListProps) {
   return <ul className="mb-2 list-disc pl-5 text-foreground">{children}</ul>;
 }
 
-// `start` carries the list's first number (`3.` renders as "3."), so it has to
-// reach the DOM: the marker comes from a CSS counter that otherwise restarts
-// at 1.
 function MarkdownOrderedList({
   children,
   className: _className,
@@ -959,14 +892,7 @@ function MarkdownTable({ children }: MarkdownTableProps) {
         marginInline: `calc((100% - ${MARKDOWN_TABLE_BREAKOUT_WIDTH}) / 2)`,
       }}
     >
-      {/*
-        Inner wrapper anchors narrow tables, centers mid-width tables, and
-        scrolls overflow for very wide tables. The min-width is clamped by
-        100% so it never forces the wrapper wider than the breakout
-        container — without that clamp, when the viewport shrinks below
-        `--md-content-w` the wrapper extends past the container and the
-        scrollbar gets clipped.
-      */}
+      {}
       <div
         className="w-max max-w-full overflow-x-auto"
         style={{
@@ -1393,9 +1319,6 @@ let sharedMarkdownTableResizeObserver: ResizeObserver | null = null;
 function measureMarkdownTableGeometry(
   registrations: Iterable<MarkdownTableGeometryRegistration>,
 ): void {
-  // Complete every geometry read before writing either CSS variable. Writing
-  // one table's variables first would make the next table's read recalculate
-  // layout while a long timeline's initial observer delivery is in progress.
   const measurements: MarkdownTableGeometryMeasurement[] = [];
   for (const registration of registrations) {
     const { breakout, clip, content } = registration;
@@ -1498,8 +1421,6 @@ function useMarkdownTableContentWidthVariable() {
       return;
     }
 
-    // The initial observer delivery gives us the geometry before paint without
-    // a synchronous layout read for every table while a long timeline mounts.
     return observeMarkdownTableGeometry(registration);
   }, []);
 
@@ -1513,13 +1434,6 @@ const HORIZONTAL_CLIP_OVERFLOW_VALUES = new Set([
   "scroll",
 ]);
 
-/**
- * The nearest element, starting at `element` itself, whose horizontal overflow
- * is clipped or scrolled. A table breakout that extends past this element's
- * padding box is lost: the clipped side is invisible and a scroll container
- * cannot scroll to a negative offset. The preview root counts because callers
- * can clip it through `className`.
- */
 function findHorizontalClipAncestor(element: HTMLElement): HTMLElement | null {
   let current: HTMLElement | null = element;
   while (current && current !== document.body) {
@@ -1533,11 +1447,6 @@ function findHorizontalClipAncestor(element: HTMLElement): HTMLElement | null {
   return null;
 }
 
-/**
- * Reads the widest breakout that keeps the table inside `clip`. The breakout
- * is centered on its containing block (the breakout's parent), so the usable
- * width is the parent content width plus twice the smaller side gap.
- */
 function readMarkdownTableBreakoutLimit({
   breakout,
   clip,
@@ -1549,8 +1458,6 @@ function readMarkdownTableBreakoutLimit({
   if (!clip || !parent) {
     return { kind: "remove" };
   }
-  // Positions are taken at scroll offset 0 of `clip`, so a horizontally
-  // scrolled container does not change the result.
   const parentStyle = getComputedStyle(parent);
   const parentPaddingLeft =
     parent.getBoundingClientRect().left + parent.clientLeft + clip.scrollLeft;
@@ -1597,12 +1504,6 @@ function cssPixels(value: string): number {
 const FRONTMATTER_PATTERN =
   /^---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/;
 
-/**
- * Splits a leading YAML frontmatter block (`---` … `---` at the very start of
- * the document) from the markdown body. Without this, react-markdown renders
- * the fences as two thematic breaks with the raw YAML as a paragraph between
- * them. Returns the inner frontmatter text (or null) and the remaining body.
- */
 function splitMarkdownFrontmatter(markdown: string): {
   frontmatter: string | null;
   body: string;
@@ -1614,12 +1515,6 @@ function splitMarkdownFrontmatter(markdown: string): {
   return { frontmatter: match[1], body: markdown.slice(match[0].length) };
 }
 
-/**
- * Renders frontmatter subtly: a muted, small key/value list set off by a thin
- * left rule, so it reads as document metadata instead of competing with the
- * body. Flat `key: value` lines get an aligned key; anything else (nested keys,
- * list items) is shown verbatim but still muted.
- */
 function MarkdownFrontmatter({ source }: { source: string }) {
   const lines = source.split("\n").filter((line) => line.trim().length > 0);
   if (lines.length === 0) {
@@ -1632,8 +1527,6 @@ function MarkdownFrontmatter({ source }: { source: string }) {
         if (separator > 0 && !/^[\s-]/.test(line)) {
           const key = line.slice(0, separator).trim();
           const value = line.slice(separator + 1).trim();
-          // `contents` lets the key/value spans participate in the parent grid,
-          // so every value lines up in a single column regardless of key width.
           return (
             <div key={index} className="contents">
               <span className="font-medium text-muted-foreground/70">
@@ -1674,10 +1567,6 @@ function MarkdownPreviewComponent({
   const localImageRouting = linkRouting?.localImage;
   const normalizeLocalFileLinks =
     localFileRouting !== undefined || localImageRouting !== undefined;
-  // Substitute prompt-mention spans for inert sentinels first (offsets index
-  // into the raw `content`), so the sentinels are present before frontmatter
-  // splitting and link normalization run. `resolvedPromptMentions` carries the
-  // index-aligned mention list the `bb-prompt-mention` renderer reads back.
   const promptMentionSubstitution = useMemo(
     () =>
       promptMentions
@@ -1718,10 +1607,6 @@ function MarkdownPreviewComponent({
       body: normalizeMathFences(split.body),
     };
   }, [promptMarkdownContent]);
-  // The remark transform fills this shared mount table on every parse. Keep it
-  // stable while assistant text streams so the custom React component type
-  // also stays stable and an already-complete directive does not remount when
-  // later prose arrives.
   const messageDirectiveMounts = useMemo(() => {
     if (messageDirectives === undefined) {
       return null;
@@ -1765,25 +1650,11 @@ function MarkdownPreviewComponent({
       messageDirectiveMounts,
     ],
   );
-  // A mention pipeline activates only when its prop is set. Generated thread
-  // bodies opt into `remark-breaks` so a single `\n` stays a line break;
-  // assistant thread mentions keep ordinary CommonMark soft breaks. Authored
-  // prompt mentions also preserve breaks to retain the editor's prior
-  // `whitespace-pre-wrap` behavior. User messages may enable both pipelines:
-  // offset substitution removes structured mentions before the raw-token pass,
-  // leaving only unstructured `@thread:<id>` tokens for that fallback.
-  //
-  // Message directives (assistant only) add `remark-directive` + a host
-  // transformer that rewrites recognized leaf directives into plugin mounts.
   const remarkPlugins = useMemo((): NonNullable<
     ReactMarkdownOptions["remarkPlugins"]
   > => {
     const plugins: NonNullable<ReactMarkdownOptions["remarkPlugins"]> = [
       remarkGfm,
-      // `remark-math` with single-dollar math OFF: micromark pairs any two
-      // unescaped `$` on a line, so "$5 to $10" or "$HOME and $PATH" render the
-      // span between them as math — and literal dollars dominate chat (#511).
-      // Inline math needs `$$x$$`; `$$` on its own lines is still a block.
       [remarkMath, { singleDollarTextMath: false }],
     ];
     if (
@@ -1800,8 +1671,6 @@ function MarkdownPreviewComponent({
     }
     if (messageDirectiveMounts !== null) {
       plugins.push(remarkDirective);
-      // Attacher + options: shared mount table is cleared/refilled each parse
-      // so indices stay aligned with the custom elements below.
       plugins.push([
         remarkMessageDirectives,
         {

@@ -4,7 +4,6 @@ import { PermissionModePicker } from "@/components/pickers/PermissionModePicker"
 import { useThreadCreationOptions } from "@/hooks/useThreadCreationOptions";
 import { resolvePluginExecutionRouting } from "./plugin-execution-routing";
 
-/** Controlled SDK adapter over BB's permission capability and ceiling policy. */
 export function PluginPermissionModePicker({
   providerId,
   value,

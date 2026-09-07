@@ -6,14 +6,6 @@ import { useRouteState } from "@/hooks/useRouteState";
 import { getPluginHomepageSectionAnchor } from "@/lib/plugin-homepage-section";
 import { PluginSlotMount } from "./PluginSlotMount";
 
-/**
- * Plugin `homepageSection` slot mounts (plugin design §5.2), rendered under
- * the compose content on the root compose surface. Renders nothing while no
- * plugin contributes a section; each section is contained in its own
- * per-plugin error boundary. The route-derived props live in an inner
- * component so hosts without a Router (isolated tests/stories) can render
- * the empty state.
- */
 export function PluginHomepageSections() {
   const { homepageSections } = usePluginSlots();
   if (homepageSections.length === 0) return null;
@@ -30,8 +22,6 @@ function PluginHomepageSectionList({
     <div className="mt-6 space-y-6" data-testid="plugin-homepage-sections">
       {sections.map((section) => (
         <section
-          // Generation in the key: a P3.4 reload remounts the slot (fresh
-          // error-boundary state) instead of reusing a latched crash.
           key={`${section.pluginId}/${section.id}/${section.generation}`}
           id={getPluginHomepageSectionAnchor(section.pluginId, section.id)}
           className="space-y-3"

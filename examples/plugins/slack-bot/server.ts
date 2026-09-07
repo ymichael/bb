@@ -1,32 +1,13 @@
-// bb-plugin-slack-bot — the headless "Slack bot" hero plugin (no frontend).
-//
-// Mention the bot in Slack → it spawns a BB thread in the configured project
-// (server-resolved project-default environment) and posts the agent's answer
-// back into the Slack thread when the BB thread goes idle.
-//
-// Surfaces demonstrated: secret + project settings, bb.http webhook with
-// Slack signature verification, bb.sdk.threads.spawn/send with plugin
-// attribution, bb.storage.kv mapping Slack threads to BB threads,
-// bb.events.on("thread.idle"), and bb.status.needsConfiguration.
-//
-// The type-only import is erased at load time; this file runs as-is.
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 
 const SIGNATURE_VERSION = "v0";
-/** Slack replays are rejected past this age (Slack's own recommendation). */
 const SIGNATURE_MAX_AGE_SECONDS = 5 * 60;
 
 const CONFIGURE_HINT =
   "Set botToken, signingSecret, and project with `bb plugin config slack-bot`, " +
   "then `bb plugin reload slack-bot`.";
 
-/**
- * Verify Slack's request signature (x-slack-signature): HMAC-SHA256 of
- * "v0:<timestamp>:<raw body>" with the app's signing secret. This is why the
- * /events route can use auth "none" — every request proves it came from
- * Slack.
- */
 function verifySlackSignature(args: {
   signingSecret: string;
   timestamp: string;
@@ -51,7 +32,6 @@ function verifySlackSignature(args: {
   );
 }
 
-/** "<@U123> run the tests please" → "run the tests please". */
 function stripMentions(text: string): string {
   return text.replace(/<@[^>]+>/g, "").trim();
 }
@@ -88,23 +68,15 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
 
-  // Loaded-but-unconfigured is a first-class state: report it instead of
-  // crash-looping. The webhook stays registered and returns 503 until the
-  // settings above are saved and the plugin is reloaded.
   const initial = await settings.get();
   if (!initial.botToken || !initial.signingSecret || !initial.project) {
     bb.status.needsConfiguration(CONFIGURE_HINT);
   }
 
-  // Slack Events API webhook. Point the Slack app's event subscription at
-  //   <server>/api/v1/plugins/slack-bot/http/events
-  // auth "none" is justified because every request is checked against the
-  // signing secret above; unsigned requests never reach the handlers below.
   bb.http.route(
     "POST",
     "/events",
     async (context) => {
-      // Read settings per request: they can change after load.
       const current = await settings.get();
       if (!current.signingSecret) {
         return context.json(
@@ -136,7 +108,6 @@ export default async function plugin(bb: BbPluginApi) {
         return context.json({ ok: false, error: "body must be JSON" }, 400);
       }
 
-      // Slack's endpoint handshake when event subscriptions are enabled.
       if (body?.type === "url_verification") {
         return context.json({ challenge: body.challenge });
       }
@@ -160,7 +131,6 @@ export default async function plugin(bb: BbPluginApi) {
         const prompt = stripMentions(event.text);
         const threadTs = event.thread_ts ?? event.ts;
 
-        // Second mention in a Slack thread we already track → follow-up.
         const existing = await bb.storage.kv.get<string>(`slack:${threadTs}`);
         if (existing !== undefined) {
           await bb.sdk.threads.send({
@@ -171,9 +141,6 @@ export default async function plugin(bb: BbPluginApi) {
           return context.json({ ok: true });
         }
 
-        // First mention → spawn a BB thread. The server resolves the
-        // project-default environment; bb.sdk fills in origin "plugin" +
-        // originPluginId automatically.
         const thread = await bb.sdk.threads.spawn({
           projectId: current.project,
           prompt,
@@ -189,14 +156,11 @@ export default async function plugin(bb: BbPluginApi) {
         return context.json({ ok: true });
       }
 
-      // Other event types are acknowledged so Slack does not retry them.
       return context.json({ ok: true });
     },
     { auth: "none" },
   );
 
-  // When a BB thread this plugin spawned goes idle, post the agent's last
-  // message back into the originating Slack thread.
   bb.events.on("thread.idle", async ({ thread, lastAssistantText }) => {
     const target = await bb.storage.kv.get<SlackTarget>(`bb:${thread.id}`);
     if (target === undefined || lastAssistantText === null) return;
@@ -224,15 +188,4 @@ export default async function plugin(bb: BbPluginApi) {
       );
     }
   });
-
-  // Socket Mode (no public URL needed) would live here as a background
-  // service, but it requires a WebSocket client dependency (e.g.
-  // @slack/socket-mode), which this dependency-free example omits — webhook
-  // (Events API) mode above covers the same flow:
-  //
-  // bb.background.service("slack-socket", {
-  //   async start(signal) {
-  //     // connect with the app-level token; resolve when `signal` aborts.
-  //   },
-  // });
 }

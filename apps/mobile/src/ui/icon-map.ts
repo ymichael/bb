@@ -1,11 +1,3 @@
-/**
- * Icon name → glyph data. Adapted from
- * packages/shared-ui/src/components/ui/icon.tsx: the same names map to the
- * same @hugeicons/core-free-icons glyphs (plus the two inline custom glyphs)
- * so web and mobile share an icon vocabulary. `icon-map.test.ts` fails when
- * the two maps drift. Pure data: no React Native imports, so it is testable
- * under node.
- */
 import type { IconSvgElement } from "@hugeicons/react-native";
 import {
   AiBrowserIcon,
@@ -51,6 +43,7 @@ import {
   Coffee02Icon,
   CollapseIcon,
   Book02Icon,
+  BellDotIcon,
   BrainIcon,
   ComputerTerminal01Icon,
   Copy01Icon,
@@ -93,6 +86,7 @@ import {
   InternetIcon,
   LaptopIcon,
   Layers01Icon,
+  LimitationIcon,
   ListViewIcon,
   LockIcon,
   Loading03Icon,
@@ -146,9 +140,6 @@ import {
   ZoomOutAreaIcon,
 } from "@hugeicons/core-free-icons";
 
-// The free hugeicons set ships no artist-palette glyph (its `Palette` export
-// is a pen nib), so this inlines the stroke-rounded palette artwork in the
-// same element format the set uses.
 const PaletteStrokeRoundedIcon: IconSvgElement = [
   [
     "path",
@@ -231,11 +222,6 @@ const PaletteStrokeRoundedIcon: IconSvgElement = [
   ],
 ];
 
-// Custom "new section" glyph: the set's ListView rows with the middle and
-// bottom rows shortened so the plus owns the lower-right quadrant, matching
-// FolderAdd's non-overlapping plus placement (same plus geometry). Hugeicons
-// has no list-with-plus variant that keeps the ListView row shape, so this
-// inlines the artwork in the same element format the set uses.
 const SectionAddStrokeRoundedIcon: IconSvgElement = [
   [
     "path",
@@ -297,6 +283,7 @@ const ICON_MAP = {
   ArrowTurnForward: ArrowTurnForwardIcon,
   ArrowUpRight: ArrowUpRight01Icon,
   Beaker: TestTube01Icon,
+  BellDot: BellDotIcon,
   Bot: BotIcon,
   Browser: BrowserIcon,
   Brain: BrainIcon,
@@ -364,6 +351,7 @@ const ICON_MAP = {
   Info: InformationCircleIcon,
   Laptop: LaptopIcon,
   Layers: Layers01Icon,
+  Limitation: LimitationIcon,
   ListView: ListViewIcon,
   SectionAdd: SectionAddStrokeRoundedIcon,
   ListTodo: CheckListIcon,

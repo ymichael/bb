@@ -8,7 +8,6 @@ interface RootComposePanelCommandHandlersProps {
   onToggle: () => void;
 }
 
-/** Focus-scoped command bridge for a New Thread pane's secondary panel. */
 export function RootComposePanelCommandHandlers({
   isFocused,
   onClose,

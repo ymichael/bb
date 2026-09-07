@@ -1,3 +1,4 @@
+import { DiffLoadingSkeleton } from "@/components/code/code-loading-skeletons";
 import { memo, useEffect, useMemo, useRef, useState } from "react";
 import { useIntersectionObserver } from "usehooks-ts";
 import type { DiffFileEntry } from "@bb/server-contract";
@@ -5,7 +6,6 @@ import type { DiffPresentation } from "@/components/code/code-rendering";
 import {
   getGitDiffCardImageSizeStat,
   GitDiffCardBody,
-  GitDiffCardBodySkeleton,
   GitDiffCardImagePreviewBody,
   useGitDiffCardBody,
   type DiffFileContentsResult,
@@ -32,10 +32,6 @@ import { FilePathLink } from "@/components/ui/file-path-link.js";
 import type { DiffPatchState } from "@/hooks/queries/use-environment-diff-patches";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-/**
- * Build the file label for a TOC entry. Renames/copies read as `old -> new`;
- * everything else is just the path.
- */
 function formatDiffEntryLabel(entry: DiffFileEntry): string {
   if (
     (entry.changeKind === "renamed" || entry.changeKind === "copied") &&
@@ -126,11 +122,8 @@ export interface DiffFileCardProps {
   filePathRoot?: string | null;
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
-  /** Patch load state for `auto`/`on_demand` tiers from the patch hook. */
   patchState: DiffPatchState;
-  /** Request this file's patch now (used by the `on_demand` "Load diff" CTA). */
   onLoadPatch: () => void;
-  /** Re-request after a per-card error. */
   onRetry: () => void;
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
@@ -138,28 +131,6 @@ export interface DiffFileCardProps {
   onSelectionAddToChat?: (text: string) => void;
 }
 
-/**
- * The diff tab's per-file card. Its header always renders from the
- * {@link DiffFileEntry} (so `on_demand` / `too_large` / loading rows show a real
- * header with no patch in hand); its body is gated by the entry's `loadMode`
- * tier:
- *
- * - `auto`: render the parsed patch once it arrives (reusing
- *   {@link GitDiffCardBody}); a `truncated` patch shows a "Show full diff"
- *   affordance; a loaded patch that parses to no renderable file (empty / pure
- *   rename / mode-only) shows a terminal "No renderable diff" notice; while the
- *   patch loads it shows a skeleton.
- * - `on_demand`: header + stat + a "Load diff" button that triggers the fetch.
- * - `too_large`: header + a "too large" notice + a link to open the file.
- *
- * Per-card errors surface a Retry that re-requests just this path.
- */
-/**
- * `patchState` is freshly allocated on every parent render, which would defeat
- * `memo`'s default referential check. Compare it by value (and shallow-compare
- * the remaining props) so an unchanged row skips re-rendering its `DiffView`
- * when the panel re-renders on scroll / an unrelated file's patch settling.
- */
 function arePatchStatesEqual(a: DiffPatchState, b: DiffPatchState): boolean {
   return (
     a.status === b.status &&
@@ -289,8 +260,6 @@ export const DiffFileCard = memo(function DiffFileCard({
   onSelectionAddToChat,
 }: DiffFileCardProps) {
   const headerModel = useMemo(() => buildDiffEntryHeaderModel(entry), [entry]);
-  // The single file's patch, parsed only once it has loaded. The patch hook
-  // returns whole-file patch text; we parse just this file (not a blob).
   const parsedFile = useMemo<ParsedGitDiffFile | null>(() => {
     if (patchState.status !== "loaded" || patchState.patch === undefined) {
       return null;
@@ -336,14 +305,6 @@ export const DiffFileCard = memo(function DiffFileCard({
     onRequestFileContents !== undefined &&
     isSvgGitDiffFile(parsedFile);
 
-  // Detect when this card's sticky header is pinned to the panel top: a
-  // zero-height sentinel sits just above the header, so once it scrolls out of
-  // the scroll container the header is stuck. When stuck we square the header's
-  // top and draw a non-layout top edge — the card's own rounded top has
-  // scrolled off-screen by then, and a rounded header top would otherwise show
-  // the scrolling diff through its corners. (`overflow-clip` below keeps the
-  // bottom rounded; the top can't be fixed by clipping because the rounded
-  // corners are the header's own, over live content.)
   const { ref: stickySentinelRef, isIntersecting } = useIntersectionObserver({
     initialIsIntersecting: true,
     threshold: 1,
@@ -351,10 +312,6 @@ export const DiffFileCard = memo(function DiffFileCard({
   const isHeaderStuck = !isIntersecting;
 
   return (
-    // `overflow-clip` clips the header/body to the card's rounded shape so a
-    // short file's square-bottomed sticky header can't poke its corners past the
-    // card's rounded bottom. `clip` (unlike `hidden`) is NOT a scroll container,
-    // so it doesn't capture the sticky header — it still pins to the panel.
     <div className="overflow-clip rounded-lg border border-border bg-background">
       <div ref={stickySentinelRef} className="h-0" />
       <div
@@ -487,7 +444,7 @@ function DiffFileCardBody({
       binaryImagePreviewState.status === "idle" ||
       binaryImagePreviewState.status === "loading"
     ) {
-      return <GitDiffCardBodySkeleton />;
+      return <DiffLoadingSkeleton />;
     }
     if (binaryImagePreviewState.status === "ready") {
       return (
@@ -556,11 +513,6 @@ function DiffFileCardBody({
   }
 
   if (parsedFile === null) {
-    // A `loaded` patch that parses to no renderable file (empty patch / parse
-    // error — common for pure renames and mode-only changes) is terminal: show
-    // a notice with the same open-file affordance the `too_large` tier uses,
-    // never a skeleton that would spin forever. The skeleton is reserved for the
-    // genuinely-not-yet-loaded states below.
     if (patchState.status === "loaded") {
       return (
         <div className={DIFF_FILE_CARD_NOTICE_CLASS}>
@@ -577,7 +529,7 @@ function DiffFileCardBody({
       );
     }
 
-    return <GitDiffCardBodySkeleton />;
+    return <DiffLoadingSkeleton />;
   }
 
   return (
@@ -607,13 +559,6 @@ interface DiffFileCardRenderedBodyProps {
   onSelectionAddToChat?: (text: string) => void;
 }
 
-/**
- * The diff tab's loaded-and-parsed body: the shared {@link GitDiffCardBody}
- * (text diff with context expansion, or an inline image preview for binary image
- * changes) plus the truncated-patch "Show full diff" affordance. Split out so
- * {@link useGitDiffCardBody} is only called once a renderable parsed file exists
- * (the gate/notice branches above have no file to enrich).
- */
 function DiffFileCardRenderedBody({
   entry,
   parsedFile,

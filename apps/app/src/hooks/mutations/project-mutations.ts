@@ -117,11 +117,6 @@ interface AddProjectSourceMutationRequest {
   request: CreateProjectSourceRequest;
 }
 
-/**
- * Source add for the guided machine-setup dialog (clone or existing folder).
- * Errors render inline in the dialog — clone failures carry git stderr the
- * user needs to read — so the global error toast is suppressed.
- */
 export function useAddProjectSource() {
   const queryClient = useQueryClient();
 

@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import { builtInThemes, defaultAppTheme, type BuiltInThemeId } from "@bb/domain";
+import {
+  builtInThemes,
+  defaultAppTheme,
+  type BuiltInThemeId,
+} from "@bb/domain";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { Button } from "@bb/shared-ui/button";
 import { resolveAppThemeCss } from "@/lib/themes";
@@ -7,24 +11,10 @@ import { GitDiffCard } from "@/components/git-diff/GitDiffCard";
 import type { DiffPresentation } from "@/components/code/code-rendering";
 import { parseGitDiffFiles } from "@/components/git-diff/git-diff-parsing";
 
-/**
- * Manual preview for the diff panel's theme bridge (Layer 1). The diff renderer
- * (`@pierre/diffs`) draws its surface, gutter, line numbers, and +/- row tints
- * from `--diffs-*` CSS variables; `theme.css` now feeds those from the app
- * tokens (`--background`, `--foreground`, `--diff-added`, `--diff-removed`).
- *
- * Pick a palette below and the diff retints to match — in both light and dark
- * at once — because each palette overrides those app tokens and the bridge
- * re-resolves through them. (Syntax-highlighting token colors are still the
- * library's fixed light/dark Shiki palette — that's Layer 2, untouched here.)
- */
 export default {
   title: "Git Diff / Themed Panel",
 };
 
-// A small, realistic patch: one mixed modify (adds + a deletion) and one added
-// file (all-green), enough to show the surface, gutter, line numbers, and both
-// row tints following the palette.
 const SAMPLE_DIFF = `diff --git a/src/auth/session.ts b/src/auth/session.ts
 index 1a2b3c4..5d6e7f8 100644
 --- a/src/auth/session.ts
@@ -60,8 +50,6 @@ index 0000000..a1b2c3d
 
 const STORY_THEME_STYLE_ID = "story-git-diff-theme";
 
-/** Inject the selected palette's CSS globally (the same string the app applies
- *  at runtime) so the `.light` / `.dark` panes below pick up its tokens. */
 function usePaletteCss(themeId: BuiltInThemeId) {
   useEffect(() => {
     let el = document.getElementById(
@@ -89,10 +77,6 @@ const DIFF_PRESENTATION: DiffPresentation = {
   showLineNumbers: true,
 };
 
-// Syntax-highlight token colors follow the app's own light/dark preference
-// (Layer 2), so both panes below tokenize the same way. What each pane proves
-// is Layer 1: the surface, gutter, and +/- tints re-resolving through the
-// forced `.light` / `.dark` class.
 function DiffStack() {
   const files = useMemo(() => parseGitDiffFiles(SAMPLE_DIFF), []);
   return (
@@ -108,8 +92,6 @@ function DiffStack() {
   );
 }
 
-/** One mode pane: forces `.light` / `.dark` locally so both modes show at once,
- *  regardless of the page theme. */
 function ModePane({ mode }: { mode: "light" | "dark" }) {
   return (
     <div

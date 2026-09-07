@@ -207,13 +207,7 @@ function outputBeforeCommandBegin(
   state: ToolActivityProjectionState,
   output: string,
 ): void {
-  onExecOutput(
-    state,
-    eventMeta(1),
-    commandOutput({ output }),
-    true,
-    false,
-  );
+  onExecOutput(state, eventMeta(1), commandOutput({ output }), true, false);
 }
 
 function applyCommandOutput(
@@ -304,10 +298,6 @@ describe("tool activity projection", () => {
   });
 
   it("leaves pending commands without a captured completedAt", () => {
-    // The projection records work-start (`startedAt` on the message) and the
-    // terminal `completedAt` only when the work ends. Renderers derive any
-    // "elapsed since start" from `now - startedAt` themselves; the projection
-    // never computes a synthetic pending duration.
     const state = createProjectionState();
 
     beginCommandWithoutOutput(state);

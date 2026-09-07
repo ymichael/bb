@@ -1,14 +1,5 @@
 // @vitest-environment jsdom
 
-/**
- * The Extensions detail pages share a shell, but the thing that actually keeps
- * them consistent is each tool type's *recipe*: which semantic sections appear,
- * in which order, under which label, and which of them are allowed to
- * disappear. These tests read the recipe straight off the rendered DOM via
- * `data-resource-detail-section`, so reordering, relabelling, or dropping a
- * required section fails here rather than silently drifting.
- */
-
 import {
   act,
   cleanup,
@@ -90,10 +81,7 @@ vi.mock("@get-bb/plugin-sdk/app", async (importOriginal) => ({
     </button>
   ),
 }));
-import {
-  EMPTY_PLUGIN_UPDATE_STATE,
-  type PluginListItem,
-} from "@/hooks/queries/plugin-settings-queries";
+import { type PluginListItem } from "@/hooks/queries/plugin-settings-queries";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import {
   resetPluginSlotStoreForTest,
@@ -103,6 +91,10 @@ import { PluginDetail } from "./PluginDetail";
 import { SkillDetailView, splitMarkdownIntoChunks } from "./SkillDetailView";
 import { projectSkillsQueryKey } from "@/hooks/queries/query-keys";
 import { sdk } from "@/lib/sdk";
+import {
+  makePluginListItem,
+  makePluginRegistrationSet,
+} from "@/test/fixtures/plugins";
 
 afterEach(() => {
   cleanup();
@@ -110,7 +102,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** The rendered recipe: each section's kind and its visible label, in order. */
 function renderedRecipe(container: HTMLElement): Array<[string, string]> {
   return [...container.querySelectorAll("[data-resource-detail-section]")].map(
     (section) => [
@@ -120,34 +111,18 @@ function renderedRecipe(container: HTMLElement): Array<[string, string]> {
   );
 }
 
-const PLUGIN: PluginListItem = {
+const PLUGIN: PluginListItem = makePluginListItem({
   id: "github",
   source: "builtin:github",
   rootDir: "/managed/plugins/github",
-  version: "0.1.0",
-  enabled: true,
-  status: "running",
-  statusDetail: null,
   description: "Browse GitHub issues and pull requests in BB.",
   name: "GitHub",
   icon: "Github",
-  compactIconUrl: null,
-  logoUrl: null,
-  logoDarkUrl: null,
-  hasSettings: false,
-  handlerStats: { count: 0, totalMs: 0, maxMs: 0, errorCount: 0 },
-  services: [],
-  schedules: [],
-  cliCommand: null,
-  capabilities: [],
-  app: { hasApp: false, bundle: null },
   provenance: "catalog",
-  isOrphanedBuiltin: false,
   catalogEntryId: "github",
   publisherLabel: "BB Community",
   sourceDisplay: "BB Official · GitHub",
-  updateState: EMPTY_PLUGIN_UPDATE_STATE,
-};
+});
 
 function renderPlugin(
   plugin: PluginListItem,
@@ -172,6 +147,8 @@ function renderPlugin(
           onEdit={() => {}}
           onOpenSource={() => {}}
           onDelete={() => {}}
+          catalogEntries={[]}
+          onOpenPlugin={() => undefined}
         />
       </QueryClientWrapper>
     </MemoryRouter>,
@@ -183,7 +160,7 @@ describe("Plugin detail recipe", () => {
     const { container } = renderPlugin(PLUGIN);
 
     expect(renderedRecipe(container)).toEqual([
-      ["overview", "About"],
+      ["overview", ""],
       ["release", "Release"],
     ]);
   });
@@ -205,7 +182,7 @@ describe("Plugin detail recipe", () => {
     });
 
     expect(renderedRecipe(container)).toEqual([
-      ["overview", "About"],
+      ["overview", ""],
       ["release", "Release"],
       ["activity", "Background services"],
       ["activity", "Scheduled jobs"],
@@ -219,13 +196,13 @@ describe("Plugin detail recipe", () => {
     });
 
     expect(renderedRecipe(container)).toEqual([
-      ["overview", "About"],
+      ["overview", ""],
       ["release", "Release"],
       ["activity", "Background services"],
     ]);
   });
 
-  it("keeps About present when a plugin declares no description", () => {
+  it("keeps the description present when a plugin declares no description", () => {
     const { container } = renderPlugin({ ...PLUGIN, description: null });
 
     expect(renderedRecipe(container).map(([kind]) => kind)).toContain(
@@ -319,23 +296,23 @@ describe("Plugin detail recipe", () => {
   });
 
   it("keeps browser-registered app surfaces in Capabilities", () => {
-    setPluginSlotRegistrations("github", {
-      homepageSections: [],
-      settingsSections: [],
-      navPanels: [
-        {
-          id: "issues",
-          title: "Issues",
-          icon: "Github",
-          path: "issues",
-          component: () => null,
-        },
-      ],
-      threadPanelActions: [],
-      sidebarFooterActions: [],
-      fileOpeners: [],
-      messageDirectives: [],
-    });
+    setPluginSlotRegistrations(
+      "github",
+      makePluginRegistrationSet({
+        navPanels: [
+          {
+            id: "issues",
+            title: "Issues",
+            icon: "Github",
+            path: "issues",
+            component: () => null,
+          },
+        ],
+        threadPanelActions: [],
+        sidebarFooterActions: [],
+        fileOpeners: [],
+      }),
+    );
     renderPlugin({ ...PLUGIN, app: { hasApp: true, bundle: null } });
 
     expect(screen.getByText("Issues")).toBeTruthy();
@@ -345,62 +322,64 @@ describe("Plugin detail recipe", () => {
     const listSkills = vi
       .spyOn(sdk.skills, "list")
       .mockResolvedValue({ skills: [] });
-    setPluginSlotRegistrations("github", {
-      homepageSections: [
-        {
-          id: "dashboard",
-          title: "GitHub dashboard",
-          component: () => null,
-        },
-      ],
-      settingsSections: [
-        {
-          id: "advanced",
-          title: "Advanced settings",
-          component: () => null,
-        },
-      ],
-      navPanels: [
-        {
-          id: "issues",
-          title: "Issues",
-          icon: "Github",
-          path: "issues",
-          component: () => null,
-        },
-      ],
-      threadPanelActions: [
-        {
-          id: "inspect",
-          title: "Inspect issue",
-          component: () => null,
-        },
-      ],
-      sidebarFooterActions: [],
-      threadLists: [
-        {
-          id: "github-threads",
-          title: "GitHub threads",
-          component: () => null,
-        },
-      ],
-      threadHeaderActions: [
-        {
-          id: "sync",
-          title: "Sync status",
-          component: () => null,
-        },
-      ],
-      fileOpeners: [
-        {
-          id: "markdown",
-          title: "Markdown viewer",
-          extensions: ["md"],
-          component: () => null,
-        },
-      ],
-      messageDirectives: [],
-    });
+    setPluginSlotRegistrations(
+      "github",
+      makePluginRegistrationSet({
+        homepageSections: [
+          {
+            id: "dashboard",
+            title: "GitHub dashboard",
+            component: () => null,
+          },
+        ],
+        settingsSections: [
+          {
+            id: "advanced",
+            title: "Advanced settings",
+            component: () => null,
+          },
+        ],
+        navPanels: [
+          {
+            id: "issues",
+            title: "Issues",
+            icon: "Github",
+            path: "issues",
+            component: () => null,
+          },
+        ],
+        threadPanelActions: [
+          {
+            id: "inspect",
+            title: "Inspect issue",
+            component: () => null,
+          },
+        ],
+        sidebarFooterActions: [],
+        threadLists: [
+          {
+            id: "github-threads",
+            title: "GitHub threads",
+            component: () => null,
+          },
+        ],
+        threadHeaderActions: [
+          {
+            id: "sync",
+            title: "Sync status",
+            component: () => null,
+          },
+        ],
+        fileOpeners: [
+          {
+            id: "markdown",
+            title: "Markdown viewer",
+            extensions: ["md"],
+            component: () => null,
+          },
+        ],
+      }),
+    );
     const { container } = renderPlugin(
       {
         ...PLUGIN,
@@ -593,9 +572,6 @@ describe("Plugin detail recipe", () => {
 
 describe("Detail page header slots", () => {
   it("renders actions, provenance badge, and overflow menu together", () => {
-    // These used to be mutually exclusive — passing `actions` suppressed the
-    // other two, which silently dropped the registry skill page's overflow
-    // menu. All three now compose; this fails if the suppression returns.
     const { container } = render(
       <SkillDetailView
         title="writing-voice"
@@ -685,7 +661,6 @@ describe("Skill detail recipe", () => {
       },
     );
     try {
-      // Two 121+ line sections separated by blank lines → two chunks.
       const section = (marker: string) =>
         `## ${marker}\n${Array.from({ length: 125 }, (_, i) => `${marker} line ${i}`).join("\n")}\n`;
       const content = `${section("alpha")}\n${section("omega")}`;
@@ -717,7 +692,6 @@ describe("Skill detail recipe", () => {
       });
 
       expect(screen.getByText(/omega line 0/)).toBeTruthy();
-      // Everything is shown: the sentinel retires.
       expect(
         container.querySelector("[data-resource-infinite-sentinel]"),
       ).toBeNull();
@@ -727,7 +701,6 @@ describe("Skill detail recipe", () => {
   });
 
   it("never splits a chunk inside a code fence", () => {
-    // A fence spanning the would-be boundary must hold the chunk open.
     const fenced = [
       "intro",
       "",
@@ -1298,8 +1271,6 @@ describe("Automation detail recipe", () => {
     );
 
     expect(screen.getByRole("img", { name: "Skipped" })).toBeTruthy();
-    // Not CircleDashed: icon.tsx aliases it to Spinner, so a skipped run drew
-    // the same shape as a running one.
     const icon = container.querySelector('[data-icon="ArrowTurnForward"]');
     expect(icon).not.toBeNull();
     expect(icon?.getAttribute("class")).toContain("text-subtle-foreground");

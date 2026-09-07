@@ -24,18 +24,16 @@ function collectAutoExpandedIds({
   rows,
   scopeActive,
 }: CollectAutoExpandedIdsArgs): Set<string> {
-  const { liveFrontierRowIds, terminalFrontierRowIds } =
+  const { liveExpandedRowIds, terminalFrontierRowIds } =
     collectTimelineAutoExpansionRowIds({
       rows,
       scopeActive,
     });
-  return new Set([...liveFrontierRowIds, ...terminalFrontierRowIds]);
+  return new Set([...liveExpandedRowIds, ...terminalFrontierRowIds]);
 }
 
 describe("isWorkRowExpandable", () => {
   it("marks an error-only degraded workflow row expandable so the error is reachable", () => {
-    // A workflow that fails before any workflow_progress arrives carries only
-    // an error: WorkflowWorkRowBody renders it, so the row must expand.
     const row = workflowRow({
       error: "agent abandoned: user requested retry on all 3 attempts",
       status: "error",
@@ -52,8 +50,6 @@ describe("isWorkRowExpandable", () => {
   });
 
   it("expands an extension row only when its detail has text", () => {
-    // The schema caps the detail's length but not its content, so a bridge
-    // may persist a blank one; a chevron must never open onto an empty body.
     const base = { ...ECHO_RECEIPT_PRESENTATION, icon: { glyph: "Check" } };
     for (const detail of [undefined, "", "   ", "\n\t "]) {
       expect(
@@ -92,9 +88,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
   });
 
   it("auto-expands a trailing bundle in an active scope without expanding its children", () => {
-    // Single rule: in an active container, expand the trailing row if it
-    // is expandable and one of the auto-expandable frontier kinds. Bundle
-    // children do not get the rule applied.
     const rows = buildTimelineViewRows([
       commandRow({
         id: "command-pending-1",
@@ -122,7 +115,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
     });
 
     expect(Array.from(ids)).toEqual([bundle.id]);
-    // Bundle children stay collapsed.
     for (const child of bundle.children) {
       expect(ids.has(child.id)).toBe(false);
     }
@@ -154,13 +146,13 @@ describe("collectTimelineAutoExpansionRowIds", () => {
       }),
     ]);
 
-    const { liveFrontierRowIds, terminalFrontierRowIds } =
+    const { liveExpandedRowIds, terminalFrontierRowIds } =
       collectTimelineAutoExpansionRowIds({
         rows,
         scopeActive: true,
       });
 
-    expect(Array.from(liveFrontierRowIds)).toEqual([]);
+    expect(Array.from(liveExpandedRowIds)).toEqual([]);
     expect(Array.from(terminalFrontierRowIds)).toEqual([]);
   });
 
@@ -236,7 +228,7 @@ describe("collectTimelineAutoExpansionRowIds", () => {
       }),
     ]);
 
-    const { liveFrontierRowIds, terminalFrontierRowIds } =
+    const { liveExpandedRowIds, terminalFrontierRowIds } =
       collectTimelineAutoExpansionRowIds({
         rows,
         scopeActive: false,
@@ -245,7 +237,7 @@ describe("collectTimelineAutoExpansionRowIds", () => {
     expect(Array.from(terminalFrontierRowIds)).toEqual([
       "nested-provider-error",
     ]);
-    expect(Array.from(liveFrontierRowIds)).toEqual([]);
+    expect(Array.from(liveExpandedRowIds)).toEqual([]);
   });
 
   it("does not auto-expand a trailing command row in an active scope", () => {
@@ -303,9 +295,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
   });
 
   it("does not auto-expand a displaced completed bundle in an active scope", () => {
-    // Two completed bundles in an active scope. Only the trailing/latest
-    // bundle auto-expands; the earlier displaced bundle stays collapsed
-    // so the timeline doesn't surface stale, finished work.
     const rows = buildTimelineViewRows([
       commandRow({
         id: "command-1",
@@ -345,7 +334,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
       }),
     ]);
 
-    // Two bundles: the run-commands group and the exploration group.
     expect(rows).toHaveLength(2);
     const [displaced, trailing] = rows;
     if (!displaced || displaced.kind !== "bundle-summary") {
@@ -365,9 +353,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
   });
 
   it("does not auto-expand anything when an assistant message is the frontier", () => {
-    // Assistant-role conversation rows count as the frontier (events the
-    // agent produced) but are not expandable, so they suppress
-    // auto-expansion of any bundle before them.
     const rows = buildTimelineViewRows([
       commandRow({
         id: "command-pending-1",
@@ -397,10 +382,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
   });
 
   it("looks past trailing user conversation rows when finding the frontier", () => {
-    // User-role conversation rows (initial messages, follow-ups, pending
-    // or accepted steers) are inputs to the agent, not events the agent
-    // produced. The rule skips them and treats the previous agent-emitted
-    // row as the frontier.
     const rows = buildTimelineViewRows([
       commandRow({
         id: "command-pending-1",
@@ -436,9 +417,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
   });
 
   it("does not auto-expand a pending delegation's frontier on an idle thread", () => {
-    // Strict scope propagation: an idle top-level scope does not bestow
-    // an active scope on its children, even if the delegation itself is
-    // pending. The user is browsing history, not watching live work.
     const rows = buildTimelineViewRows([
       delegationRow({
         id: "idle-pending-delegation",
@@ -464,10 +442,6 @@ describe("collectTimelineAutoExpansionRowIds", () => {
   });
 
   it("auto-expands a pending delegation's frontier when the top-level scope is active", () => {
-    // Active scope propagates *through* a pending delegation: the
-    // delegation row itself auto-expands at the top level. The pending
-    // command inside the delegation is still visited as the delegation's
-    // frontier, but commands are not auto-expandable frontier rows.
     const rows = buildTimelineViewRows([
       delegationRow({
         id: "active-pending-delegation",

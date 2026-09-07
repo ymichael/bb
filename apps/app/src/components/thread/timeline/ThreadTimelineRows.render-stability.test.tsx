@@ -7,13 +7,11 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PERSONAL_PROJECT_ID } from "@bb/domain";
 import { threadsQueryKey } from "@/hooks/queries/query-keys";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { conversationRow } from "@/test/fixtures/thread-timeline-rows";
 import { ThreadTimelineRows } from "./ThreadTimelineRows";
 import { sdk } from "@/lib/sdk";
 
-// The query cache notifies through notifyManager's scheduler (a macrotask),
-// so cache writes only reach subscribers after a timer tick.
 function flushCacheNotifications(): Promise<void> {
   return act(() => new Promise<void>((resolve) => setTimeout(resolve, 20)));
 }
@@ -103,10 +101,6 @@ describe("ThreadTimelineRows render stability", () => {
     await flushCacheNotifications();
     const settledCommitCount = commits.length;
 
-    // Realtime events refetch thread lists constantly; each success dispatches
-    // an "updated" cache event with fresh array identity but equal values.
-    // None of them may commit the timeline again — before the stable-reference
-    // fix, every event re-rendered all rows past React.memo.
     for (let round = 0; round < 10; round += 1) {
       await act(async () => {
         queryClient.setQueryData(threadsQueryKey(), [

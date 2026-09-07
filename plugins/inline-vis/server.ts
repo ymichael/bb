@@ -1,17 +1,7 @@
-// bb-plugin-inline-vis — reference messageDirective that previews a workspace
-// HTML file inside an assistant message.
-//
-// The frontend directive mounts when the model emits:
-//   ::inline-vis{file="demo.html"}
-// and calls `prepareHtmlPreview` with the message's threadId plus the file
-// attribute. This backend preflights the file for a clean inline error; the
-// frontend then points its iframe at bb's path-shaped worktree preview route so
-// relative assets work exactly as they do in the sidebar HTML preview.
 import path from "node:path";
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
-/** Match the generic sidebar HTML preview's 5 MiB document cap. */
 export const MAX_HTML_BYTES = 5 * 1024 * 1024;
 
 const HTML_EXTENSIONS = new Set([".html", ".htm"]);
@@ -31,17 +21,11 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Validate a workspace-relative HTML path. Rejects absolute paths, traversal,
- * and non-html extensions before any filesystem access.
- */
 export function requireWorkspaceHtmlFile(value: unknown): string {
   const file = requireNonEmptyString(value, "file");
   if (path.isAbsolute(file)) {
     throw new Error(`"file" must be workspace-relative, not absolute: ${file}`);
   }
-  // Normalize separators and reject Windows drive / UNC-style absolute forms
-  // that `path.isAbsolute` may miss on POSIX hosts.
   if (/^[a-zA-Z]:[\\/]/.test(file) || file.startsWith("\\\\")) {
     throw new Error(`"file" must be workspace-relative, not absolute: ${file}`);
   }
@@ -68,10 +52,6 @@ export function requireWorkspaceHtmlFile(value: unknown): string {
   return normalized;
 }
 
-/**
- * Resolve `relativeFile` beneath `rootPath` and prove it stays contained.
- * Returns the absolute path suitable for `bb.sdk.files.read`.
- */
 export function resolveContainedHtmlPath(
   rootPath: string,
   relativeFile: string,
@@ -111,11 +91,6 @@ export const inlineVisRpcContract = defineRpcContract({
 
 export default async function plugin(bb: BbPluginApi) {
   bb.rpc.register(inlineVisRpcContract, {
-    /**
-     * Preflight a workspace-relative HTML file for the inline-vis message
-     * directive. Input is untyped on the wire — narrowed immediately. The
-     * existing worktree preview route serves the iframe and its relative assets.
-     */
     async prepareHtmlPreview({
       threadId,
       file,

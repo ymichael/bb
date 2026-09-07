@@ -25,14 +25,10 @@ import {
   type TestAppHarness,
 } from "../../helpers/test-app.js";
 
-/** The repo's real Phase-2 hero example plugins — installed exactly as
- * shipped. */
 const EXAMPLES_DIR = fileURLToPath(
   new URL("../../../../../examples/plugins", import.meta.url),
 );
 
-// The examples pin engines.bb to ">=0.9"; the harness default app version
-// ("0.0.0-test") would legitimately mark them incompatible.
 const APP_VERSION = "1.0.0";
 
 describe("hero plugin: agent-enrichment (Phase 2 surfaces)", () => {
@@ -94,7 +90,6 @@ describe("hero plugin: agent-enrichment (Phase 2 surfaces)", () => {
       thread,
     });
 
-    // Native tool: listed in dynamicTools with the zod-derived JSON schema.
     expect(command.dynamicTools.map((tool) => tool.name)).toEqual([
       UPDATE_ENVIRONMENT_DIRECTORY_TOOL_NAME,
       "docs_search",
@@ -114,7 +109,6 @@ describe("hero plugin: agent-enrichment (Phase 2 surfaces)", () => {
       "Use the docs_search tool to look up repo conventions",
     );
 
-    // Skills tier: the plugin's skills/ directory is injected.
     expect(command.injectedSkillSources).toContainEqual(
       expect.objectContaining({
         kind: "tree",
@@ -151,7 +145,6 @@ describe("hero plugin: agent-enrichment (Phase 2 surfaces)", () => {
     expect(result.contentItems[0].text).toContain("conventions.md");
     expect(result.contentItems[0].text).toContain("conventional commits");
 
-    // Zod-invalid arguments are a tool error, not a plugin error.
     const invalid = await postToolCall({});
     const invalidResult = (await readJson(invalid)) as {
       success: boolean;
@@ -168,8 +161,6 @@ describe("hero plugin: agent-enrichment (Phase 2 surfaces)", () => {
         .errorCount,
     ).toBe(0);
 
-    // The CLI command and the native tool share one search helper — the
-    // tool call above is now `bb docs last`.
     const last = await harness.app.request(
       "http://127.0.0.1:3334/api/v1/plugins/agent-enrichment/cli",
       {
@@ -213,8 +204,6 @@ describe("hero plugin: agent-enrichment (Phase 2 surfaces)", () => {
       },
     ]);
 
-    // Resolve-at-send: the picked doc's body is attached as agent-only
-    // context on the dispatched thread.start command.
     const { environment, thread } = seedThreadFixture(3);
     const input: PromptInput[] = [
       {

@@ -28,7 +28,6 @@ import {
 import { readJson } from "../helpers/json.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-/** Write a custom theme's `theme.css` under `<dataDir>/theme/<name>/`. */
 async function writeCustomTheme(
   dataDir: string,
   name: string,
@@ -176,7 +175,6 @@ describe("appearance settings", () => {
     await withTestHarness(async (harness) => {
       await writeCustomTheme(harness.config.dataDir, "zephyr", ":root {}");
       await writeCustomTheme(harness.config.dataDir, "amber", ":root {}");
-      // A directory without a theme.css is not a theme.
       await mkdir(join(harness.config.dataDir, "theme", "incomplete"), {
         recursive: true,
       });
@@ -282,7 +280,6 @@ describe("appearance settings", () => {
       const config = systemConfigResponseSchema.parse(
         await readJson(await harness.app.request("/api/v1/system/config")),
       );
-      // The selection is still stored, but resolution falls back gracefully.
       expect(getStoredThemeId(harness.db)).toBe("ghost");
       expect(config.appearance).toEqual(defaultAppTheme);
       expect(config.customThemes).toEqual([]);

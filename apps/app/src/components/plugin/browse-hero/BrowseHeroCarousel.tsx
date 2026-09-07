@@ -9,7 +9,6 @@ import {
 import { BROWSE_ARCHETYPES } from "./browse-hero-archetypes";
 import { MINI_APP_SCENES } from "./MiniAppScenes";
 
-/** bb's own nav rail, which a plugin's panel joins. */
 const PLUGIN_RAIL: readonly IconName[] = [
   "MessageSquare",
   "Folder",
@@ -33,23 +32,15 @@ const PLUGIN_HERO_COMPOSER: ShowcaseHeroComposerConfig = {
 };
 
 interface BrowseHeroCarouselProps {
-  /** Stories force a slide and disable autoplay to capture a stable frame. */
   initialIndex?: number;
   autoplay?: boolean;
-  /** Stories render the showcase without the thread-creating composer. */
   composerDisabled?: boolean;
-  /** External open/close-the-composer request; see ShowcaseHeroCarousel. */
   openRequest?: React.ComponentProps<
     typeof ShowcaseHeroCarousel
   >["openRequest"];
   onComposingChange?: (composing: boolean) => void;
 }
 
-/**
- * The Plugins Browse hero: the shared showcase engine dressed in plugin
- * content — app-surface archetypes, the "Turn bb into …" headline, and the
- * create-plugin prompt prefix.
- */
 export function BrowseHeroCarousel({
   initialIndex = 0,
   autoplay = true,

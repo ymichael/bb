@@ -277,7 +277,8 @@
     "title": "optional",
     "detail": "optional",
     "suppress": "optional",
-    "tint": "optional"
+    "tint": "optional",
+    "badge": "optional"
   },
   "capabilities": {
     "sessionRestore": "default",

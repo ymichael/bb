@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useId, useState, type FocusEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { appToast } from "@/components/ui/app-toast.js";
 import { PluginSettingsSections } from "@/components/plugin/PluginSettingsSections";
@@ -23,8 +23,12 @@ import {
   ResourceDetailStack,
 } from "@bb/shared-ui/resource-detail";
 import { PluginIcon } from "@/components/plugin/PluginIcon";
-import { applyPluginSettingsView } from "@/hooks/cache-owners/plugin-cache-owner";
 import {
+  applyPluginSettingsView,
+  invalidatePluginList,
+} from "@/hooks/cache-owners/plugin-cache-owner";
+import {
+  setPluginEnabled,
   updatePluginSettings,
   usePluginList,
   usePluginSettingsView,
@@ -33,32 +37,18 @@ import {
 } from "@/hooks/queries/plugin-settings-queries";
 import { useSidebarNavigation } from "@/hooks/queries/sidebar-navigation-query";
 import { usePluginSlots } from "@/lib/plugin-slots";
-
-/**
- * Plugin configuration rendered inside the canonical Plugins detail surface.
- * Declarative settings remain host-rendered, while `settingsSection` slots
- * can provide richer plugin-owned controls. Secrets are write-only: the
- * server reports only `{ set }`, and an empty secret input leaves it unchanged.
- * A string marked `experimental_multiline` is a monospace textarea below its
- * label at full width; every other control sits beside its label.
- */
+import { getMutationErrorMessage } from "@/lib/mutation-errors";
 
 const DROPDOWN_TRIGGER_CLASS =
   "h-7 w-full justify-between border-border/60 bg-card px-2 text-xs sm:w-44";
 const DROPDOWN_CONTENT_CLASS =
   "min-w-[var(--radix-dropdown-menu-trigger-width)]";
 
-/**
- * A multi-line field sizes itself to its content between six and twenty-four
- * rows where `field-sizing: content` is supported (the min/max heights), and
- * falls back to a `rows` count derived from the value elsewhere: one row per
- * line plus one to type into, within the same bounds.
- */
 const MULTILINE_MIN_ROWS = 6;
 const MULTILINE_MAX_ROWS = 24;
+const INVALID_NUMBER_DRAFT = Symbol();
 const MULTILINE_TEXTAREA_CLASS =
   "max-h-96 min-h-32 w-full resize-y overflow-y-auto font-mono text-xs field-sizing-content";
-
 function multilineRows(value: string): number {
   const lines = value.split("\n").length;
   return Math.min(MULTILINE_MAX_ROWS, Math.max(MULTILINE_MIN_ROWS, lines + 1));
@@ -73,6 +63,8 @@ function isMultilineSetting(descriptor: PluginSettingFieldDescriptor): boolean {
 }
 
 interface SettingOptionPickerProps {
+  ariaDescribedBy: string | undefined;
+  ariaInvalid: boolean;
   ariaLabel: string;
   onSelect: (value: string) => void;
   options: readonly { label: string; value: string }[];
@@ -80,6 +72,8 @@ interface SettingOptionPickerProps {
 }
 
 function SettingOptionPicker({
+  ariaDescribedBy,
+  ariaInvalid,
   ariaLabel,
   onSelect,
   options,
@@ -93,6 +87,8 @@ function SettingOptionPicker({
           size="sm"
           className={DROPDOWN_TRIGGER_CLASS}
           aria-label={ariaLabel}
+          aria-describedby={ariaDescribedBy}
+          aria-invalid={ariaInvalid}
         >
           <span className="min-w-0 truncate">{valueLabel}</span>
           <Icon name="ChevronDown" className="size-3.5 text-muted-foreground" />
@@ -113,15 +109,21 @@ function SettingOptionPicker({
 }
 
 interface PluginSettingFieldProps {
+  ariaDescribedBy: string | undefined;
+  ariaInvalid: boolean;
   descriptor: PluginSettingFieldDescriptor;
-  draft: unknown;
+  draft: string | boolean;
+  onBlur: (event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>) => void;
   onChange: (value: string | boolean) => void;
   storedValue: unknown;
 }
 
 function PluginSettingField({
+  ariaDescribedBy,
+  ariaInvalid,
   descriptor,
   draft,
+  onBlur,
   onChange,
   storedValue,
 }: PluginSettingFieldProps) {
@@ -141,6 +143,8 @@ function PluginSettingField({
         checked={checked}
         onCheckedChange={onChange}
         aria-label={descriptor.label}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
       />
     );
   }
@@ -154,6 +158,8 @@ function PluginSettingField({
           : "";
     return (
       <SettingOptionPicker
+        ariaDescribedBy={ariaDescribedBy}
+        ariaInvalid={ariaInvalid}
         ariaLabel={descriptor.label}
         valueLabel={value.length > 0 ? value : "Select…"}
         options={descriptor.options.map((option) => ({
@@ -190,6 +196,8 @@ function PluginSettingField({
       (value.length > 0 ? value : "Select a project…");
     return (
       <SettingOptionPicker
+        ariaDescribedBy={ariaDescribedBy}
+        ariaInvalid={ariaInvalid}
         ariaLabel={descriptor.label}
         valueLabel={valueLabel}
         options={options}
@@ -198,13 +206,36 @@ function PluginSettingField({
     );
   }
 
-  // type === "string" (including secrets).
+  if (descriptor.type === "number") {
+    const value =
+      typeof draft === "string"
+        ? draft
+        : typeof storedValue === "number"
+          ? String(storedValue)
+          : "";
+    return (
+      <Input
+        type="number"
+        inputMode="decimal"
+        step="any"
+        value={value}
+        aria-label={descriptor.label}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
+        onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
+        className="h-7 w-full text-xs sm:w-64"
+      />
+    );
+  }
+
   const isSecret = descriptor.secret === true;
   const secretIsSet =
     isSecret &&
     typeof storedValue === "object" &&
     storedValue !== null &&
-    (storedValue as { set?: unknown }).set === true;
+    "set" in storedValue &&
+    storedValue.set === true;
   const value =
     typeof draft === "string"
       ? draft
@@ -216,11 +247,14 @@ function PluginSettingField({
       <Textarea
         value={value}
         aria-label={descriptor.label}
+        aria-describedby={ariaDescribedBy}
+        aria-invalid={ariaInvalid}
         rows={multilineRows(value)}
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"
         onChange={(event) => onChange(event.target.value)}
+        onBlur={onBlur}
         className={MULTILINE_TEXTAREA_CLASS}
       />
     );
@@ -230,115 +264,190 @@ function PluginSettingField({
       type={isSecret ? "password" : "text"}
       value={value}
       aria-label={descriptor.label}
+      aria-describedby={ariaDescribedBy}
+      aria-invalid={ariaInvalid}
       placeholder={isSecret ? (secretIsSet ? "[set]" : "[not set]") : undefined}
       onChange={(event) => onChange(event.target.value)}
+      onBlur={onBlur}
       className="h-7 w-full text-xs sm:w-64"
     />
   );
 }
 
-/** Host-rendered declarative settings form for a plugin detail page. */
-export function PluginSettingsForm({ pluginId }: { pluginId: string }) {
+function initialSettingDraft(
+  descriptor: PluginSettingFieldDescriptor,
+  storedValue: unknown,
+): string | boolean {
+  if (descriptor.type === "boolean") {
+    return typeof storedValue === "boolean" ? storedValue : false;
+  }
+  if (descriptor.type === "number") {
+    return typeof storedValue === "number" ? String(storedValue) : "";
+  }
+  if (descriptor.type === "string" && descriptor.secret === true) return "";
+  return typeof storedValue === "string" ? storedValue : "";
+}
+
+interface AutosavingPluginSettingProps {
+  descriptor: PluginSettingFieldDescriptor;
+  pluginId: string;
+  settingKey: string;
+  storedValue: unknown;
+}
+
+function AutosavingPluginSetting({
+  descriptor,
+  pluginId,
+  settingKey,
+  storedValue,
+}: AutosavingPluginSettingProps) {
   const queryClient = useQueryClient();
-  const viewQuery = usePluginSettingsView(pluginId, { enabled: true });
-  const [drafts, setDrafts] = useState<Record<string, string | boolean>>({});
+  const messageId = useId();
+  const initialDraft = initialSettingDraft(descriptor, storedValue);
+  const [draftState, setDraftState] = useState({
+    value: initialDraft,
+    hasNewerDraft: false,
+  });
+  const draft = draftState.value;
   const save = useMutation({
-    mutationFn: (values: Record<string, unknown>) =>
-      updatePluginSettings(fetch, pluginId, values),
+    scope: { id: `plugin-setting:${pluginId}:${settingKey}` },
+    mutationFn: (value: string | boolean | typeof INVALID_NUMBER_DRAFT) => {
+      if (value === INVALID_NUMBER_DRAFT)
+        throw new Error("Enter a finite number");
+      let settingValue: string | number | boolean | null = value;
+      if (descriptor.type === "number") {
+        const trimmed = typeof value === "string" ? value.trim() : "";
+        const parsed = Number(trimmed);
+        if (trimmed.length > 0 && !Number.isFinite(parsed)) {
+          throw new Error("Enter a finite number");
+        }
+        settingValue = trimmed.length === 0 ? null : parsed;
+      }
+      return updatePluginSettings(fetch, pluginId, {
+        [settingKey]: settingValue,
+      });
+    },
     onSuccess: (view) => {
       applyPluginSettingsView({ queryClient, pluginId, view });
-      setDrafts({});
-      appToast.success("Plugin settings saved");
-    },
-    onError: (error) => {
-      appToast.error("Saving plugin settings failed", {
-        description: error instanceof Error ? error.message : String(error),
-      });
     },
   });
 
-  const view = viewQuery.data ?? null;
-  if (view === null || Object.keys(view.schema).length === 0) return null;
+  useEffect(() => {
+    if (!draftState.hasNewerDraft && !save.isPending && !save.isError) {
+      setDraftState({ value: initialDraft, hasNewerDraft: false });
+    }
+  }, [draftState.hasNewerDraft, initialDraft, save.isError, save.isPending]);
 
-  // Secrets are write-only; an untouched or emptied secret input means
-  // "leave unchanged", so it never rides the update payload.
-  const changedValues: Record<string, unknown> = {};
-  for (const [key, draft] of Object.entries(drafts)) {
-    const descriptor = view.schema[key];
-    if (descriptor === undefined) continue;
-    const isSecret = descriptor.type === "string" && descriptor.secret === true;
-    if (isSecret && draft === "") continue;
-    if (!isSecret && draft === view.values[key]) continue;
-    changedValues[key] = draft;
+  function changeDraft(value: string | boolean): void {
+    setDraftState({
+      value,
+      hasNewerDraft:
+        descriptor.type === "string" || descriptor.type === "number",
+    });
+    if (!save.isPending) save.reset();
+    if (descriptor.type !== "string" && descriptor.type !== "number") {
+      save.mutate(value);
+    }
   }
-  const hasChanges = Object.keys(changedValues).length > 0;
 
+  function saveDraft(
+    event: FocusEvent<HTMLInputElement | HTMLTextAreaElement>,
+  ): void {
+    if (descriptor.type !== "string" && descriptor.type !== "number") return;
+    if (descriptor.type === "number" && event.currentTarget.validity.badInput) {
+      setDraftState({ value: initialDraft, hasNewerDraft: false });
+      save.mutate(INVALID_NUMBER_DRAFT);
+      return;
+    }
+    if (descriptor.type === "number") {
+      const trimmed = typeof draft === "string" ? draft.trim() : "";
+      const parsed = Number(trimmed);
+      if (
+        (trimmed.length === 0 && storedValue === undefined) ||
+        (trimmed.length > 0 && parsed === storedValue && !save.isPending)
+      ) {
+        setDraftState({ value: draft, hasNewerDraft: false });
+        return;
+      }
+    }
+    if (
+      (draft === storedValue && !save.isPending) ||
+      (descriptor.type === "string" &&
+        descriptor.secret === true &&
+        draft === "")
+    ) {
+      setDraftState({ value: draft, hasNewerDraft: false });
+      return;
+    }
+    setDraftState({ value: draft, hasNewerDraft: false });
+    save.mutate(draft);
+  }
+
+  const saveError = save.isError
+    ? getMutationErrorMessage({
+        error: save.error,
+        fallbackMessage: "Could not save this setting",
+      })
+    : null;
   return (
-    <form
-      className="space-y-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (hasChanges) save.mutate(changedValues);
-      }}
+    <SettingsWithControl
+      label={descriptor.label}
+      labelBadge={
+        descriptor.type === "string" && descriptor.secret === true
+          ? "secret"
+          : undefined
+      }
+      controlPlacement={isMultilineSetting(descriptor) ? "below" : "inline"}
+      {...(descriptor.description !== undefined
+        ? { description: descriptor.description }
+        : {})}
     >
-      {Object.entries(view.schema).map(([key, descriptor]) => (
-        <SettingsWithControl
-          key={key}
-          label={descriptor.label}
-          labelBadge={
-            descriptor.type === "string" && descriptor.secret === true
-              ? "secret"
-              : undefined
-          }
-          controlPlacement={isMultilineSetting(descriptor) ? "below" : "inline"}
-          {...(descriptor.description !== undefined
-            ? { description: descriptor.description }
-            : {})}
-        >
-          <PluginSettingField
-            descriptor={descriptor}
-            storedValue={view.values[key]}
-            draft={drafts[key]}
-            onChange={(value) => {
-              setDrafts((current) => ({ ...current, [key]: value }));
-            }}
-          />
-        </SettingsWithControl>
-      ))}
-      <div className="flex justify-end">
-        <Button
-          type="submit"
-          size="sm"
-          variant="outline"
-          disabled={!hasChanges || save.isPending}
-          aria-busy={save.isPending}
-        >
-          {save.isPending ? (
-            <Icon name="Spinner" className="animate-spin" />
-          ) : null}
-          Save settings
-        </Button>
+      <div className="space-y-1">
+        <PluginSettingField
+          ariaDescribedBy={saveError !== null ? messageId : undefined}
+          ariaInvalid={saveError !== null}
+          descriptor={descriptor}
+          storedValue={storedValue}
+          draft={draft}
+          onBlur={saveDraft}
+          onChange={changeDraft}
+        />
+        {saveError !== null ? (
+          <p id={messageId} className="text-xs text-destructive" role="alert">
+            {saveError}
+          </p>
+        ) : null}
       </div>
-    </form>
+    </SettingsWithControl>
   );
 }
 
-/**
- * Statuses whose factory ran, so a settings schema exists server-side. A
- * needs-configuration plugin MUST be configurable here — that status exists
- * precisely to send the user to this form — and degraded plugins are loaded
- * too. Errored/missing/incompatible plugins have no schema to render.
- */
+export function PluginSettingsForm({ pluginId }: { pluginId: string }) {
+  const viewQuery = usePluginSettingsView(pluginId, { enabled: true });
+  const view = viewQuery.data ?? null;
+  if (view === null || Object.keys(view.schema).length === 0) return null;
+
+  return (
+    <div className="space-y-4">
+      {Object.entries(view.schema).map(([key, descriptor]) => (
+        <AutosavingPluginSetting
+          key={key}
+          descriptor={descriptor}
+          pluginId={pluginId}
+          settingKey={key}
+          storedValue={view.values[key]}
+        />
+      ))}
+    </div>
+  );
+}
+
 const PLUGIN_STATUSES_WITH_SETTINGS = [
   "running",
   "needs-configuration",
   "degraded",
 ];
 
-/**
- * The Settings-page home for one plugin's configuration. The Extensions
- * detail page links here rather than hosting the form itself.
- */
 export function PluginSettingsPage({ pluginId }: { pluginId: string }) {
   const listQuery = usePluginList({ enabled: true });
   const plugin =
@@ -359,40 +468,71 @@ export function PluginSettingsPage({ pluginId }: { pluginId: string }) {
       </p>
     );
   }
-  // Mirrors the Extensions detail page: the same header anatomy and section
-  // stack, with a "Plugin details" section that is the counterpart of the
-  // detail page's Configuration section (each one sentence linking across).
+  return <PluginSettingsContent key={plugin.id} plugin={plugin} />;
+}
+
+function PluginSettingsContent({ plugin }: { plugin: PluginListItem }) {
+  const queryClient = useQueryClient();
+  const { settingsSections } = usePluginSlots();
+  const toggle = useMutation({
+    meta: { showErrorToast: false },
+    mutationFn: (enabled: boolean) =>
+      setPluginEnabled(fetch, plugin.id, enabled),
+    onError: (error, enabled) => {
+      appToast.error(
+        `${enabled ? "Enabling" : "Disabling"} ${plugin.id} failed`,
+        {
+          description: error instanceof Error ? error.message : String(error),
+        },
+      );
+    },
+    onSettled: () => invalidatePluginList({ queryClient }),
+  });
+  const enabled = toggle.isPending ? toggle.variables : plugin.enabled;
+  const hasAvailableSettings =
+    plugin.hasSettings ||
+    settingsSections.some((section) => section.pluginId === plugin.id);
   return (
     <div className="mx-auto w-full max-w-5xl">
-      <div className="flex items-center gap-3">
-        <div className="size-9 shrink-0">
-          <PluginIcon
-            pluginId={plugin.id}
-            icon={plugin.icon}
-            className="size-full"
-          />
+      <header className="flex items-center justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="size-9 shrink-0">
+            <PluginIcon
+              pluginId={plugin.id}
+              icon={plugin.icon}
+              className="size-full"
+            />
+          </div>
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-foreground">
+              {plugin.name ?? plugin.id}
+            </h1>
+            {plugin.description ? (
+              <p className="truncate text-xs text-subtle-foreground">
+                {plugin.description}
+              </p>
+            ) : null}
+          </div>
         </div>
-        <div className="min-w-0">
-          <h1 className="truncate text-lg font-semibold text-foreground">
-            {plugin.name ?? plugin.id}
-          </h1>
-          {plugin.description ? (
-            <p className="truncate text-xs text-subtle-foreground">
-              {plugin.description}
-            </p>
-          ) : null}
-        </div>
-      </div>
+        <Switch
+          checked={enabled}
+          disabled={toggle.isPending}
+          onCheckedChange={(next) => toggle.mutate(next)}
+          aria-label={`${enabled ? "Disable" : "Enable"} ${plugin.id}`}
+        />
+      </header>
       <ResourceDetailStack className="mt-6">
-        <ResourceDetailConfigurationSection label="Configuration">
-          <PluginSettingsDetail plugin={plugin} />
-        </ResourceDetailConfigurationSection>
+        {enabled && plugin.enabled && hasAvailableSettings ? (
+          <ResourceDetailConfigurationSection label="Configuration">
+            <PluginSettingsDetail plugin={plugin} />
+          </ResourceDetailConfigurationSection>
+        ) : null}
         <ResourceDetailOverviewSection label="Plugin details">
           <p className="max-w-none text-sm leading-relaxed text-muted-foreground">
             Release, capabilities, and health live on{" "}
             <Link
               to={getPluginDetailRoutePath({
-                pluginId,
+                pluginId: plugin.id,
                 view: "installed",
               })}
               className="inline-flex items-center gap-0.5 rounded-sm underline underline-offset-2 hover:text-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
@@ -411,7 +551,6 @@ export function PluginSettingsPage({ pluginId }: { pluginId: string }) {
   );
 }
 
-/** Exported for tests (status gating of the settings form). */
 export function PluginSettingsDetail({ plugin }: { plugin: PluginListItem }) {
   const { settingsSections } = usePluginSlots();
   const hasSettingsSections = settingsSections.some(

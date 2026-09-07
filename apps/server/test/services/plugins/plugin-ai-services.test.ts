@@ -18,11 +18,6 @@ import { testLogger, withTestHarness } from "../../helpers/test-app.js";
 
 const logger = testLogger as unknown as Logger;
 
-/**
- * A host entry shaped like `experimental_defineHostEntry`'s result without
- * importing the SDK: the fixture lives outside the workspace, and the server
- * only builds the artifact — the daemon's worker is what would run it.
- */
 const HOST_SOURCE = `
   export default {
     experimental_apiVersion: 1,
@@ -41,11 +36,6 @@ const REGISTER_AI_SERVICE_SOURCE = (id: string): string => `
   }
 `;
 
-/**
- * A plugin that serves both an AI service and a provider from its one
- * `bb.host` entry — the first-party provider plugins' shape. `order` is which
- * registration the factory makes first.
- */
 const REGISTER_AI_SERVICE_AND_PROVIDER_SOURCE = (
   id: string,
   order: "service-first" | "provider-first",
@@ -157,17 +147,16 @@ describe("bb.experimental_aiServices.register (server)", () => {
     });
   });
 
-  // A first install whose host artifact fails to build runs the factory
-  // anyway: the register call stages the service unbound (the plugin does
-  // declare an entry), and the load then fails on the build error — the
-  // actionable problem — after the factory. The unbound service never lands.
   it("fails the load on the host build error when a first install's bb.host entry does not build", async () => {
     await withTestHarness(async (harness) => {
       const rootDir = await writePlugin(workDir, {
         name: "bb-plugin-broken-host-ai",
         serverSource: REGISTER_AI_SERVICE_SOURCE("broken-host-ai"),
       });
-      await writeFile(join(rootDir, "host.ts"), 'import "missing-host-runtime";\n');
+      await writeFile(
+        join(rootDir, "host.ts"),
+        'import "missing-host-runtime";\n',
+      );
       const entry = await harness.pluginService.installPath(rootDir);
       expect(entry.status).toBe("error");
       expect(entry.statusDetail).toContain("Could not resolve");
@@ -177,10 +166,6 @@ describe("bb.experimental_aiServices.register (server)", () => {
     });
   });
 
-  // The first-party provider plugins register an AI service and a provider
-  // from one host entry. When that entry fails to build, the provider must
-  // stay listed as unavailable with the build error — the single-provider
-  // failure mode — whichever registration the factory makes first.
   it.each(["service-first", "provider-first"] as const)(
     "keeps the provider listed as unavailable when the host entry of a plugin that also registers an AI service fails to build (%s)",
     async (order) => {
@@ -190,30 +175,37 @@ describe("bb.experimental_aiServices.register (server)", () => {
           name: `bb-plugin-${id}`,
           serverSource: REGISTER_AI_SERVICE_AND_PROVIDER_SOURCE(id, order),
         });
-        await writeFile(join(rootDir, "host.ts"), 'import "missing-host-runtime";\n');
+        await writeFile(
+          join(rootDir, "host.ts"),
+          'import "missing-host-runtime";\n',
+        );
         const entry = await harness.pluginService.installPath(rootDir);
         expect(entry.status).toBe("error");
         expect(entry.statusDetail).toContain("Could not resolve");
         expect(harness.deps.providerRegistry.get(id)?.info).toEqual(
-          expect.objectContaining({ id, displayName: "Acme Agent", available: false }),
+          expect.objectContaining({
+            id,
+            displayName: "Acme Agent",
+            available: false,
+          }),
         );
         expect(
           (await listSystemProviderInfos(harness.deps, {})).find(
             (provider) => provider.id === id,
           ),
         ).toEqual(expect.objectContaining({ available: false }));
-        // The unbound service is neither advertised nor callable.
         expect(harness.deps.aiServices.get(id)).toBeNull();
         expect(harness.deps.aiServices.list()).toEqual([]);
 
-        // A fixed build brings both up; disabling the plugin removes both.
         await writeFile(join(rootDir, "host.ts"), HOST_SOURCE);
         await harness.pluginService.reload(entry.id);
         expect(
           harness.pluginService.list().find((plugin) => plugin.id === entry.id)
             ?.status,
         ).toBe("running");
-        expect(harness.deps.providerRegistry.get(id)?.info.available).toBe(true);
+        expect(harness.deps.providerRegistry.get(id)?.info.available).toBe(
+          true,
+        );
         expect(
           harness.deps.providerRegistry
             .list()
@@ -228,9 +220,6 @@ describe("bb.experimental_aiServices.register (server)", () => {
     },
   );
 
-  // The server serves `openai` transcription and every builtin inference
-  // provider itself; a plugin claiming one of those ids would receive the
-  // user's audio and prompts.
   it.each(["openai", "anthropic"])(
     "refuses the reserved server-direct id %j at the register call",
     async (id) => {
@@ -268,8 +257,9 @@ describe("bb.experimental_aiServices.register (server)", () => {
       expect(second.statusDetail).toContain(
         'AI service "shared-ai" is already registered; a plugin cannot shadow an existing service.',
       );
-      // The incumbent is untouched.
-      expect(harness.deps.aiServices.get("shared-ai")?.pluginId).toBe("first-ai");
+      expect(harness.deps.aiServices.get("shared-ai")?.pluginId).toBe(
+        "first-ai",
+      );
     });
   });
 });
@@ -282,7 +272,11 @@ describe("the AI service host binding", () => {
   const callPluginHost = vi.fn(
     async (
       _args: Parameters<NonNullable<PluginServiceDeps["callPluginHost"]>>[0],
-    ): Promise<unknown> => ({ ok: true, model: "acme-1", value: { title: "Hello" } }),
+    ): Promise<unknown> => ({
+      ok: true,
+      model: "acme-1",
+      value: { title: "Hello" },
+    }),
   );
 
   beforeEach(async () => {
@@ -333,8 +327,15 @@ describe("the AI service host binding", () => {
       timeoutMs: 5_000,
     };
     await expect(
-      registration.completeInference(input, { hostId: "host-1", timeoutMs: 6_000 }),
-    ).resolves.toEqual({ ok: true, model: "acme-1", value: { title: "Hello" } });
+      registration.completeInference(input, {
+        hostId: "host-1",
+        timeoutMs: 6_000,
+      }),
+    ).resolves.toEqual({
+      ok: true,
+      model: "acme-1",
+      value: { title: "Hello" },
+    });
     expect(callPluginHost).toHaveBeenCalledWith(
       expect.objectContaining({
         pluginId: "acme-ai",
@@ -349,8 +350,6 @@ describe("the AI service host binding", () => {
       }),
     );
 
-    // An answer outside the contract is a failure at the binding, not a
-    // value core goes on to read fields from.
     callPluginHost.mockResolvedValueOnce({ ok: true, text: "no model field" });
     await expect(
       registration.transcribeVoice(
@@ -367,23 +366,20 @@ describe("the AI service host binding", () => {
       ),
     ).rejects.toThrow();
     expect(callPluginHost).toHaveBeenLastCalledWith(
-      expect.objectContaining({ method: "ai.voice.transcribe", timeoutMs: 11_000 }),
+      expect.objectContaining({
+        method: "ai.voice.transcribe",
+        timeoutMs: 11_000,
+      }),
     );
   });
 });
 
 describe("server-direct AI service ids", () => {
   it("the SDK's static list matches pi-ai's builtin inference providers plus openai transcription", async () => {
-    // The fake host and production both enforce the static list
-    // (isServerDirectAiServiceId). A pi-ai bump that adds or renames a
-    // provider must move the list in the same change, or a plugin could
-    // register the new id and capture traffic the server serves itself.
-    const { SERVER_DIRECT_AI_SERVICE_IDS } = await import(
-      "@get-bb/plugin-sdk/internal/host-policy"
-    );
-    const { builtinModels } = await import(
-      "@earendil-works/pi-ai/providers/all"
-    );
+    const { SERVER_DIRECT_AI_SERVICE_IDS } =
+      await import("@get-bb/plugin-sdk/internal/host-policy");
+    const { builtinModels } =
+      await import("@earendil-works/pi-ai/providers/all");
     const live = new Set<string>([
       "openai",
       ...builtinModels()

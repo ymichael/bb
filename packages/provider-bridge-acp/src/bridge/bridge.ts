@@ -1,14 +1,3 @@
-/**
- * Generic ACP bridge.
- *
- * Speaks bb's runtime JSON-RPC on stdio and acts as the ACP *client* for the
- * configured agent (Cursor): one agent subprocess and
- * one ACP session per bb thread. The bridge owns the cooperative permission
- * policy — it answers `session/request_permission` per bb's permission mode
- * (forwarding to the runtime when escalation is "ask") and enforces the
- * workspace write policy on client `fs/write_text_file` requests.
- */
-
 import {
   isStandaloneBuiltinCompactCommand,
   pendingInteractionResolutionSchema,
@@ -73,7 +62,11 @@ import {
   createAcpDeltaTranslator,
   type AcpDeltaTranslator,
 } from "../delta-translation.js";
-import { resolveAcpDialect, type AcpDialect } from "../dialect.js";
+import {
+  compactionOutcomeForEndTurn,
+  resolveAcpDialect,
+  type AcpDialect,
+} from "../dialect.js";
 import type { AcpMaintenanceDialect } from "./provider-maintenance.js";
 import {
   buildAcpPermissionInteractionPayload,
@@ -87,6 +80,7 @@ import {
   type AcpSessionParams,
   type AcpSkillRoot,
 } from "../session-params.js";
+import { buildCursorParameterizedModelCatalog } from "../cursor-model-selection.js";
 import {
   getAcpProviderHealth,
   getAcpProviderInstallationRun,
@@ -104,6 +98,8 @@ import {
   acpSessionForkResultSchema,
   acpSessionNewResultSchema,
   acpSessionNotificationParamsSchema,
+  acpAgentMessageChunkUpdateSchema,
+  extractAcpContentText,
   acpUsageUpdateSchema,
   type AcpConfigStateResult,
   type AcpSessionModels,
@@ -145,10 +141,6 @@ import {
   type AcpMcpServerConfig,
 } from "./tool-proxy-mcp.js";
 
-// ---------------------------------------------------------------------------
-// Session state
-// ---------------------------------------------------------------------------
-
 interface AcpSessionPolicy {
   permissionMode: "accept-edits" | "full";
   workspaceWriteRoots: string[];
@@ -159,68 +151,41 @@ interface PendingAcpPermission {
   options: AcpPermissionOption[];
 }
 
-/**
- * Turn input bb handed the bridge, waiting to reach the agent. ACP has no
- * provider acknowledgement to correlate acceptance against, so the designed
- * correlation point is the `session/prompt` request that carries the input:
- * before that the agent has not seen the input at all, and a queued steer can
- * still be dropped by a failed or stopping turn.
- */
 interface AcpPendingTurnInput {
   clientRequestId: string;
   input: PromptInput[];
-  /**
-   * The command to answer once the input reaches the agent, or `null` for a
-   * steer, which is answered at queue time. Waiting for the cancelled prompt
-   * to be reissued would risk the runtime's 30-second command timeout.
-   */
   requestId: AcpBridgeRequestId | null;
 }
 
 interface AcpThreadSession {
   bbThreadId: string;
   providerThreadId: string;
-  /** The session's working directory: the agent's cwd and the path root. */
   cwd: string;
-  /** The agent's dialect: its vendor side channels and client methods. */
   dialect: AcpDialect;
-  /** Every session-scoped notification is translated through this. */
   translator: AcpDeltaTranslator;
   connection: AcpAgentConnection;
   supportsImageInput: boolean;
   supportsLoadSession: boolean;
   policy: AcpSessionPolicy;
   pendingInstructions: string | undefined;
-  /**
-   * Which agent prompt is in flight for this bb turn: an ordinary `"turn"`,
-   * the provider-local `"compaction"` maintenance prompt, or none.
-   */
   activePromptKind: "turn" | "compaction" | null;
+  compactionAgentMessage: string;
   queuedInputs: AcpPendingTurnInput[];
-  /** True while a session/prompt request is outstanding. */
   promptRequestPending: boolean;
-  /** True after a steer sent session/cancel for the current prompt. */
   cancelRequested: boolean;
   loading: boolean;
   loadingSessionId: string | undefined;
   pendingLoadUsageUpdate: AcpUsageUpdate | undefined;
   stopping: boolean;
-  /** Resolves when the in-flight turn or maintenance prompt fully settles. */
   turnSettled: Promise<void> | undefined;
   pendingPermissions: Set<PendingAcpPermission>;
   cursorMcpApproval: CursorMcpApproval | undefined;
-  /**
-   * While the session is under construction (`providerThreadId` still
-   * empty), session-scoped emits are held here so `thread/identity` goes out
-   * first; the construction flushes them and clears this.
-   */
   deferStartEmit: AcpDeferredStartEmitter | undefined;
 }
 
 type AcpDeferredStartEmitter = (
   method: string,
   params: Record<string, unknown>,
-  /** The agent session the emit belongs to, when it names one. */
   sessionId?: string,
 ) => void;
 
@@ -233,13 +198,7 @@ const pendingRuntimeRequests = new Map<
 let runtimeRequestIdCounter = 0;
 let dynamicToolBridgePromise: Promise<AcpDynamicToolBridge> | null = null;
 
-// Runtime waits on thread/stop until the agent settles the cancelled prompt or
-// this timeout forces disposal. Stop remains a best-effort success boundary.
 const THREAD_STOP_CANCEL_TIMEOUT_MS = 4_000;
-
-// ---------------------------------------------------------------------------
-// stdout helpers (bridge → runtime)
-// ---------------------------------------------------------------------------
 
 interface BridgeNotification {
   jsonrpc: "2.0";
@@ -295,16 +254,6 @@ function sendRuntimeRequest(
   return responsePromise;
 }
 
-// ---------------------------------------------------------------------------
-// Thread-delta emission
-// ---------------------------------------------------------------------------
-
-/**
- * Skill roots latched by the canonical `skills/configure` request. ACP agents
- * have no skill-directory concept, so the roots are listed in the session
- * instructions — which are fixed at session construction, hence the latch.
- * `null` means the runtime never configured skills for this process.
- */
 let configuredSkillRoots: AcpSkillRoot[] | null = null;
 
 function sendThreadDeltas(
@@ -320,14 +269,6 @@ function sendThreadDeltas(
   });
 }
 
-/**
- * The one session-scoped emitter: it runs the ACP-flavored notification
- * through the session translator and emits the parsed semantic deltas as one
- * batched `thread/delta` notification. The `acp/*` envelope never reaches the
- * wire — it is only the translator's input vocabulary. Turn/item ids are
- * minted by the runtime's delta assembler, so no id entropy lives here
- * anymore (#1224 discipline is held centrally).
- */
 function emitForSession(
   session: AcpThreadSession,
   method: string,
@@ -343,12 +284,6 @@ function emitForSession(
 }
 
 function emitSessionError(session: AcpThreadSession, message: string): void {
-  // Settle any open turn first: every accepted turn reaches exactly one
-  // terminal state, and settlement events precede the error signal. With no
-  // prompt in flight the error stays a runtime notification — a settling
-  // error delta on an idle thread would surface a diagnostic for a turn bb
-  // never accepted. `activePromptKind` mirrors the turn the bridge itself
-  // opened with `turn.open`.
   if (session.activePromptKind !== null) {
     emitForSession(session, "error", {
       threadId: session.bbThreadId,
@@ -365,10 +300,6 @@ function emitSessionError(session: AcpThreadSession, message: string): void {
 }
 
 function resolveBridgeProcessArgsForMcpServer(): string[] {
-  // process.argv[1] is the provider-bridge bootstrap, not this module: the
-  // bootstrap imports this artifact, so only import.meta.url names the file
-  // that understands `--mcp-stdio`. The bootstrap rejects the flag with a
-  // usage error, which the ACP agent reports as "bb-bridge: Transport closed".
   return [...process.execArgv, fileURLToPath(import.meta.url), "--mcp-stdio"];
 }
 
@@ -378,8 +309,6 @@ function resolveBridgeProcessEnvForMcpServer(): AcpMcpServerConfig["env"] {
     return [];
   }
 
-  // The ACP agent must not inherit Electron's Node mode, but this MCP process
-  // re-executes the packaged bridge and therefore needs it restored.
   return [{ name: "ELECTRON_RUN_AS_NODE", value: electronRunAsNode }];
 }
 
@@ -403,8 +332,6 @@ async function forwardDynamicToolCall(args: {
     return { ok: false, error: "No active ACP session for dynamic tool call." };
   }
 
-  // The agent's own tool_call for this MCP call is the timeline row; the
-  // translator binds it to the bb tool so the row reads as that tool (Q31).
   session.translator.noteInjectedToolCall(session.bbThreadId, args.tool);
   try {
     const result = await sendRuntimeRequest("item/tool/call", {
@@ -430,6 +357,7 @@ function handleDynamicToolBridgeSocket(
 ): void {
   let buffer = "";
   socket.setEncoding("utf8");
+  socket.on("error", () => {});
   socket.on("data", (chunk) => {
     buffer += chunk;
     const newlineIndex = buffer.indexOf("\n");
@@ -472,6 +400,7 @@ async function ensureDynamicToolBridge(): Promise<AcpDynamicToolBridge> {
   dynamicToolBridgePromise = new Promise((resolveBridge, rejectBridge) => {
     const host = "127.0.0.1";
     const server = createServer((socket) => {
+      socket.on("error", () => {});
       void dynamicToolBridgePromise?.then((bridge) => {
         handleDynamicToolBridgeSocket(bridge, socket);
       });
@@ -520,11 +449,6 @@ async function buildSessionMcpServers(
   );
   return [config];
 }
-
-// ---------------------------------------------------------------------------
-// Model catalog — parsed from the agent CLI's list command, with the
-// synthetic "Agent default" entry as the resilience fallback
-// ---------------------------------------------------------------------------
 
 const ACP_DEFAULT_MODEL: AvailableModel = {
   id: ACP_DEFAULT_MODEL_ID,
@@ -735,10 +659,6 @@ const dynamicToolBridgeRequestSchema = z.discriminatedUnion("kind", [
 
 let cachedModelCatalog: { key: string; catalog: AgentModelCatalog } | null =
   null;
-// ACP-native model discovery spawns a throwaway session, so its result is
-// cached. Unlike the CLI list (which re-runs every call), discovery is too
-// expensive to repeat per picker open — but a short TTL lets external changes
-// to the agent (auth, added model providers) surface on the next open.
 const SESSION_MODEL_DISCOVERY_TTL_MS = 60_000;
 let cachedSessionDiscoveredModels: {
   key: string;
@@ -750,9 +670,6 @@ function resolveAcpAuthMethodId(
   authMethods: readonly { id: string }[] | undefined,
   env: Record<string, string | undefined>,
 ): string | undefined {
-  // Grok is currently the only built-in ACP provider that advertises auth methods.
-  // Keep this preference local until another authenticated ACP provider needs
-  // a data-driven policy; cached_token is an ACP-side local-login flow.
   const methodIds = new Set((authMethods ?? []).map((method) => method.id));
   if (methodIds.size === 0) {
     return undefined;
@@ -766,16 +683,6 @@ function resolveAcpAuthMethodId(
   return undefined;
 }
 
-/**
- * Authenticate the connection if the agent advertised a method bb can perform
- * headlessly.
- *
- * Advertised methods bb cannot perform (a browser login, say) are not a
- * verdict on the agent's state: a signed-in Cursor lists `cursor_login` on
- * every initialize. Whether the user must sign in is what the agent says when
- * a request fails — its `-32000 Authentication required` error, a failed
- * `authenticate`, or its sign-in prose — never the method list.
- */
 async function authenticateAcpAgent(args: {
   connection: AcpAgentConnection;
   env: Record<string, string | undefined>;
@@ -814,13 +721,6 @@ function acpClientCapabilities(
   };
 }
 
-/**
- * Run the agent's model list command and build the variant catalog, cached
- * per list command for the bridge's lifetime (model/list refreshes it on the
- * next picker open; session starts reuse it for variant resolution). Returns
- * null when the command fails or lists nothing so callers can fall back —
- * the picker to the synthetic entry, session starts to the unresolved id.
- */
 async function loadAgentModelCatalog(
   listCommand: AcpAgentCommandParam,
 ): Promise<AgentModelCatalog | null> {
@@ -1024,11 +924,6 @@ async function discoverAcpNativeReasoningByModel(args: {
     }
   }
 
-  // Each probe is one set_config_option round trip to the local agent, so
-  // work is bounded by the time budget rather than a model-count cutoff
-  // (omp's catalog alone is ~90 models). On timeout or a mid-probe error the
-  // partial map is kept: probed models surface their real reasoning levels
-  // and unprobed models fall back to the agent-managed default.
   const supportByModel = new Map<string, AcpNativeReasoningSupport>();
   let timeout: ReturnType<typeof setTimeout> | undefined;
   const timeoutReached = new Promise<
@@ -1084,18 +979,8 @@ function isMissingExecutableError(error: unknown): boolean {
   );
 }
 
-/**
- * The agent needs the user to sign in, and no retry of this command will
- * change that.
- *
- * Thrown wherever the bridge can tell — from the agent's own auth-required
- * error, from a failed `authenticate`, or from its sign-in prose — so that one
- * predicate downstream turns every such failure into the typed recovery hint.
- */
 class AcpAuthRequiredError extends BridgeRecoveryError {
   constructor(message: string) {
-    // The same code and message the bridge always answered with; only the
-    // `data.recovery` hint is new, and `runBridgeRequest` writes it.
     super({
       code: -32000,
       message,
@@ -1112,16 +997,6 @@ class AcpModelListAuthRequiredError extends AcpAuthRequiredError {
   }
 }
 
-/**
- * Whether text an agent produced says the user must sign in.
- *
- * A last resort, for an agent that reports auth failure only in prose: bb
- * prefers what the protocol tells it (the agent's `-32000 Authentication
- * required` error, a failed `authenticate`). The daemon matches the same
- * phrases today, over provider-agnostic errors it cannot interpret; keeping
- * the same rule HERE, where the text belongs to a known agent, is what lets
- * that copy go.
- */
 function isAcpAuthRequiredText(...texts: readonly string[]): boolean {
   const text = texts.join("\n");
   return (
@@ -1147,18 +1022,9 @@ function isAuthRequiredModelListError(
   );
 }
 
-/**
- * ACP reserves this JSON-RPC code for "Authentication required": the agent's
- * own, in-protocol statement that the user must sign in.
- */
 const ACP_AUTH_REQUIRED_ERROR_CODE = -32000;
 const ACP_AUTH_REQUIRED_ERROR_MESSAGE = "Authentication required";
 
-/**
- * Whether an agent's error response is ACP's own auth-required error: the
- * reserved code with the reserved message (an agent that reuses the code for
- * an unrelated failure keeps its own message, and stays untyped).
- */
 function isAcpAuthRequiredResponse(error: unknown): boolean {
   return (
     error instanceof AcpAgentResponseError &&
@@ -1167,14 +1033,6 @@ function isAcpAuthRequiredResponse(error: unknown): boolean {
   );
 }
 
-/**
- * A handler that fails with the agent's own auth-required error — ACP's
- * reserved code, or the last-resort prose rule for an agent that reports
- * auth failure only that way — becomes the typed rejection, so every auth
- * failure leaves this bridge as `error.data.recovery { kind: "authRequired" }`.
- * Every other failure keeps its own type: a session that failed for another
- * reason must not send the user to sign in.
- */
 function withAcpAuthRequiredRecovery(error: unknown): unknown {
   if (error instanceof AcpAuthRequiredError) return error;
   if (
@@ -1186,13 +1044,6 @@ function withAcpAuthRequiredRecovery(error: unknown): unknown {
   return error;
 }
 
-/**
- * Resolve the session's model pin to the exact raw agent id and compose global
- * launch args before the ACP subcommand. CLI model selection still resolves
- * reasoning by model-id variant; agents such as Grok can additionally receive
- * reasoning as a separate global flag (`grok --reasoning-effort high agent
- * stdio`).
- */
 async function resolveAgentLaunchArgs(
   params: AcpSessionParams,
 ): Promise<{ args: string[]; warning: string | undefined }> {
@@ -1209,14 +1060,10 @@ async function resolveAgentLaunchArgs(
     let resolved: string | undefined;
     const variantReasoningLevel =
       params.reasoningCli === undefined ? selection.reasoningLevel : undefined;
-    // Resolve whenever the selection narrows the raw id: an explicit reasoning
-    // effort, or Fast mode (which picks the model's `-fast` twin).
     if (
       variantReasoningLevel !== undefined ||
       selection.serviceTier === "fast"
     ) {
-      // Prefer the catalog cached by the last model/list (the picker the
-      // selection came from) over re-running the list command per spawn.
       const key = JSON.stringify(selection.listCommand);
       const catalog =
         cachedModelCatalog?.key === key
@@ -1279,13 +1126,6 @@ async function selectAcpNativeModel(args: {
       sessionModelsIncludeSelection &&
       args.models?.currentModelId !== selection.modelId);
   if (shouldSetModel) {
-    // Agents that surface a "model" config option (e.g. omp) pin the model via
-    // the standard session/set_config_option and may not implement the legacy
-    // session/set_model method, while agents that only report session models
-    // state (e.g. opencode) support only session/set_model. Prefer the config
-    // option when the agent advertises one and fall back to set_model so
-    // option-advertising agents that only implement the legacy method keep
-    // working.
     let configState: AcpConfigStateResult | null = null;
     let setModel = true;
     if (modelOption) {
@@ -1365,9 +1205,7 @@ async function selectAcpNativeReasoning(args: {
       },
       resultSchema: acpConfigStateResultSchema,
     });
-  } catch {
-    // Unsupported or stale thought levels should leave the agent default intact.
-  }
+  } catch {}
 }
 
 async function selectAcpNativeServiceTier(args: {
@@ -1400,10 +1238,6 @@ async function selectAcpNativeServiceTier(args: {
     resultSchema: acpConfigStateResultSchema,
   });
 }
-
-// ---------------------------------------------------------------------------
-// Prompt content
-// ---------------------------------------------------------------------------
 
 function buildPromptContentBlocks(
   session: AcpThreadSession,
@@ -1463,10 +1297,6 @@ function buildPromptContentBlocks(
 
   return blocks;
 }
-
-// ---------------------------------------------------------------------------
-// Permission policy
-// ---------------------------------------------------------------------------
 
 function findOptionIdByKinds(
   options: AcpPermissionOption[],
@@ -1539,11 +1369,6 @@ function handlePermissionRequest(
   }
 
   const toolCall = parsed.data.toolCall;
-  // The permission's tool call is a ToolCallUpdate: it merges into the
-  // in-flight call it describes (same id, else the one in-flight call of its
-  // kind), and the approval subject joins that call's row. This runs before
-  // the permission is answered — an auto-allowed ask (permission mode
-  // "full") describes the call just as well as one the user sees.
   const bound =
     toolCall?.toolCallId !== undefined
       ? session.translator.notePermissionToolCall(session.bbThreadId, {
@@ -1603,20 +1428,12 @@ function handlePermissionRequest(
       : undefined;
 
   {
-    // The session carries the canonical PendingInteractionPayload out and
-    // maps the canonical PendingInteractionResolution back.
     const payload = buildAcpPermissionInteractionPayload({
       toolCall: normalizedToolCall,
       options: parsed.data.options,
       cwd: session.cwd,
-      // The dialect reads the same side channels for the ask as for the
-      // row: a Cursor sub-agent asking keeps its delegation reading.
       classifyToolCall: session.dialect.classifyToolCall,
     });
-    // Turn ids are runtime-minted under the narrow grammar: `turnId: null`
-    // asks the runtime to stamp its active turn for this thread (the wire
-    // contract's unresolved marker), which is the turn the permission
-    // interrupted.
     void sendRuntimeRequest(BRIDGE_INBOUND_REQUEST_METHODS.interactionRequest, {
       providerThreadId: session.providerThreadId,
       threadId: session.bbThreadId,
@@ -1625,7 +1442,6 @@ function handlePermissionRequest(
     })
       .then((result) => {
         if (!session.pendingPermissions.delete(pending)) {
-          // Already settled as cancelled (stop/cancel raced the decision).
           return;
         }
         const resolution = pendingInteractionResolutionSchema.safeParse(result);
@@ -1645,10 +1461,6 @@ function handlePermissionRequest(
       });
   }
 }
-
-// ---------------------------------------------------------------------------
-// Client fs methods
-// ---------------------------------------------------------------------------
 
 function isPathInsideRoots(targetPath: string, roots: string[]): boolean {
   const resolvedTarget = resolve(targetPath);
@@ -1729,8 +1541,6 @@ async function handleFsWriteTextFile(
     await fs.mkdir(dirname(parsed.data.path), { recursive: true });
     await fs.writeFile(parsed.data.path, parsed.data.content, "utf8");
 
-    // The assembler builds the diff from oldText/content, so the envelope
-    // carries the texts instead of a pre-built diff string.
     emitForSession(session, ACP_FS_WRITE_METHOD, {
       threadId: session.bbThreadId,
       path: parsed.data.path,
@@ -1747,15 +1557,6 @@ async function handleFsWriteTextFile(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Session lifecycle
-// ---------------------------------------------------------------------------
-
-/**
- * The thread's session when it can take a turn: constructed (identity
- * announced) and not stopping. A session still under construction is
- * registered so a stop can reap it, but it is not live yet.
- */
 function liveSessionForThread(
   bbThreadId: string,
 ): AcpThreadSession | undefined {
@@ -1809,13 +1610,11 @@ type AcpSessionStartRequest =
   | {
       kind: "resume";
       params: AcpSessionParams;
-      /** The ACP session id to reload, when the agent supports loadSession. */
       resumeProviderThreadId: string;
     }
   | {
       kind: "fork";
       params: AcpSessionParams;
-      /** The ACP session id to clone. */
       sourceProviderThreadId: string;
     };
 
@@ -1838,8 +1637,6 @@ async function startAgentSession(
     cwd: params.cwd,
     dialect,
   });
-  // The session's bb-injected tools: a proxied call to one is a bb tool and
-  // reads the way its definition says (Q31).
   translator.configureInjectedTools(
     (params.dynamicTools ?? []).map((tool) => ({
       name: tool.name,
@@ -1848,12 +1645,6 @@ async function startAgentSession(
         : { presentation: tool.presentation }),
     })),
   );
-  // Ordering guarantee: thread/identity precedes any thread/delta for the
-  // session, so pre-identity notifications are held and flushed after the
-  // identity goes out. That includes the agent's own session/update traffic
-  // in the construction window (an agent may write its first update in the
-  // same chunk as its session/new response); an update naming a session
-  // other than the one adopted is dropped at the flush.
   const deferredEmits: {
     method: string;
     params: Record<string, unknown>;
@@ -1875,8 +1666,6 @@ async function startAgentSession(
     });
   }
   const agentLabel = [params.agent.command, ...params.agent.args].join(" ");
-  // The connection handlers close over `session`; they only fire after the
-  // child process emits events, by which point the session is constructed.
   let session: AcpThreadSession;
   const childEnv = {
     ...withoutBridgeRuntimeEnv(process.env),
@@ -1896,8 +1685,6 @@ async function startAgentSession(
       const wasCurrent = sessionsByBbThreadId.get(bbThreadId) === session;
       cancelPendingPermissions(session);
       removeSession(session);
-      // An exit during construction fails the pending request, and that
-      // rejection is the report; a released session owes nothing.
       if (!wasCurrent || session.stopping || session.providerThreadId === "") {
         return;
       }
@@ -1925,6 +1712,7 @@ async function startAgentSession(
     },
     pendingInstructions: params.instructions,
     activePromptKind: null,
+    compactionAgentMessage: "",
     queuedInputs: [],
     promptRequestPending: false,
     cancelRequested: false,
@@ -1937,12 +1725,6 @@ async function startAgentSession(
     cursorMcpApproval: undefined,
     deferStartEmit: emitStartNotification,
   };
-  // Registered before the agent is spoken to: a thread/stop that lands while
-  // the session is under construction (the runtime's backstop for a
-  // construction that timed out on its side) must find the session, so the
-  // agent it spawned is reaped and the pending request fails instead of
-  // publishing a session nobody holds. The session counts as live only once
-  // `providerThreadId` is set.
   sessionsByBbThreadId.set(bbThreadId, session);
 
   try {
@@ -2004,9 +1786,6 @@ async function startAgentSession(
         },
         resultSchema: acpSessionForkResultSchema,
       });
-      // The agent owns this value and the schema checks only that it is a
-      // string. A reused ID would overwrite the map entry of the source or of
-      // another live thread, so reject it instead of registering it.
       if (
         forkedSession.sessionId === request.sourceProviderThreadId ||
         getSessionByProviderThreadId(forkedSession.sessionId) !== undefined
@@ -2088,8 +1867,6 @@ async function startAgentSession(
       }
     }
 
-    // A stop that landed after the last agent request was answered: the
-    // agent is being reaped, so the session must not be published.
     if (session.stopping) {
       throw new Error(
         `ACP session for thread "${bbThreadId}" was released during construction`,
@@ -2102,10 +1879,6 @@ async function startAgentSession(
       providerThreadId: sessionId,
       sessionRestorable: session.supportsLoadSession,
     });
-    // The provider id-space boundary: a new agent session was constructed for
-    // this thread (start/resume/fork all land here), so the assembler drops
-    // the thread's assembly state — settled item keys, id maps, accumulated
-    // usage — before any of the new session's deltas.
     sendThreadDeltas(bbThreadId, [{ kind: "session.reset" }]);
     session.deferStartEmit = undefined;
     for (const deferred of deferredEmits) {
@@ -2153,11 +1926,6 @@ async function stopSession(session: AcpThreadSession): Promise<void> {
       ]);
     }
   }
-  // The runtime detaches the thread the moment the stop is answered, so the
-  // interrupted prompt's terminal boundary must be on the wire first. An
-  // agent that ignored session/cancel within the timeout gets the turn
-  // settled here; the kill below then rejects its prompt into a turn loop
-  // that has nothing left to settle.
   settleInterruptedPrompt(session);
 
   session.connection.kill();
@@ -2165,7 +1933,6 @@ async function stopSession(session: AcpThreadSession): Promise<void> {
   await releaseCursorMcpApproval(session);
 }
 
-/** Settle whatever prompt is still in flight as interrupted. */
 function settleInterruptedPrompt(session: AcpThreadSession): void {
   switch (session.activePromptKind) {
     case "turn":
@@ -2179,12 +1946,6 @@ function settleInterruptedPrompt(session: AcpThreadSession): void {
   }
 }
 
-/**
- * Detach a session without the cancel-settle path: a release stop must never
- * fabricate an interruption (#1584). The agent subprocess is reaped directly;
- * any in-flight prompt rejection is swallowed by the turn loop because
- * `stopping` is already set.
- */
 async function releaseSession(session: AcpThreadSession): Promise<void> {
   if (session.stopping) {
     return;
@@ -2199,10 +1960,6 @@ async function releaseSession(session: AcpThreadSession): Promise<void> {
   removeSession(session);
   await releaseCursorMcpApproval(session);
 }
-
-// ---------------------------------------------------------------------------
-// Turn loop
-// ---------------------------------------------------------------------------
 
 function requestSteerCancel(session: AcpThreadSession): void {
   if (
@@ -2220,12 +1977,6 @@ function requestSteerCancel(session: AcpThreadSession): void {
   });
 }
 
-/**
- * Accepted-input correlation (turn/input/accepted): the input reached the
- * agent, so bb can attach it to the turn it runs in. Reporting acceptance
- * before the `session/prompt` request goes out would claim an input the agent
- * may never be given.
- */
 function acceptTurnInput(
   session: AcpThreadSession,
   pending: AcpPendingTurnInput,
@@ -2239,11 +1990,6 @@ function acceptTurnInput(
   }
 }
 
-/**
- * Report input the turn ended without ever sending. Reply, never drop (#853):
- * a command still waiting on the input fails instead of hanging, and no
- * acceptance is reported for a turn the agent never received it in.
- */
 function dropTurnInput(pending: AcpPendingTurnInput, reason: string): void {
   const requestId = takeTurnInputRequestId(pending);
   if (requestId !== null) {
@@ -2251,7 +1997,6 @@ function dropTurnInput(pending: AcpPendingTurnInput, reason: string): void {
   }
 }
 
-/** Answers a command at most once, whatever else happens to the input. */
 function takeTurnInputRequestId(
   pending: AcpPendingTurnInput,
 ): AcpBridgeRequestId | null {
@@ -2266,11 +2011,6 @@ function dropQueuedTurnInputs(session: AcpThreadSession, reason: string): void {
   }
 }
 
-/**
- * Settle the open turn once. A prompt result that lands after a stop already
- * settled the turn (the agent answered between the cancel timeout and the
- * kill) finds nothing to settle.
- */
 function finishTurn(
   session: AcpThreadSession,
   stopReason: z.infer<typeof acpStopReasonSchema>,
@@ -2318,12 +2058,7 @@ function runTurn(
           },
           resultSchema: acpPromptResultSchema,
         });
-        // The agent has the input now, and the turn it runs in is already
-        // open, so the acceptance names that turn instead of waiting as a
-        // pending claim any stale terminal could take (#2014).
         acceptTurnInput(session, pending);
-        // A steer that stacked behind the cancelled prompt still needs its own
-        // cancel; otherwise this prompt can hang and strand the later input.
         if (session.queuedInputs.length > 0) {
           requestSteerCancel(session);
         }
@@ -2331,17 +2066,12 @@ function runTurn(
         stopReason = result.stopReason;
       } catch (error) {
         session.promptRequestPending = false;
-        // Answered already unless the request never went out at all.
         dropTurnInput(pending, "ACP turn failed before the prompt was sent");
         dropQueuedTurnInputs(
           session,
           "ACP turn failed before the steer was sent",
         );
         session.cancelRequested = false;
-        // An exited agent already produced an error notification from the
-        // connection's exit handler; only report in-protocol prompt failures.
-        // The error settles the still-open turn, so it is emitted before
-        // `activePromptKind` clears (the bridge's own open-turn mirror).
         if (!session.stopping && !session.connection.exited) {
           emitSessionError(
             session,
@@ -2353,7 +2083,6 @@ function runTurn(
       }
       session.promptRequestPending = false;
 
-      // Hard steer cancels the current prompt, then continues this bb turn.
       if (!session.stopping) {
         const next = session.queuedInputs.shift();
         if (next) {
@@ -2368,31 +2097,12 @@ function runTurn(
   })();
 }
 
-// ---------------------------------------------------------------------------
-// Manual compaction
-// ---------------------------------------------------------------------------
-
-/**
- * Manual compaction travels the prompt path: bb's compact affordance sends a
- * standalone builtin `/compact` mention as turn input. ACP has no compaction
- * method, so the bridge runs the agent's own `/compact` command as a
- * provider-local maintenance prompt and reports it through the compaction
- * envelopes — the translator turns those into a `contextCompaction` turn, and
- * only a completed one reports `thread/compacted`.
- *
- * Whether an agent has the command at all is a per-agent fact ACP does not
- * expose: opencode's `available_commands_update` lists only its custom
- * commands, never its built-in `/compact`. So the affordance is gated by the
- * provider declaration or custom-agent config, and the bridge reports whatever
- * the agent does with the request: only an `end_turn` prompt counts as compacted,
- * every other stop reason or prompt rejection fails the turn with the agent's
- * own reason rather than being reported as a shrunk context.
- */
 function startCompaction(
   session: AcpThreadSession,
   pending: AcpPendingTurnInput,
 ): void {
   session.activePromptKind = "compaction";
+  session.compactionAgentMessage = "";
   emitForSession(session, ACP_COMPACTION_STARTED_METHOD, {
     threadId: session.bbThreadId,
   });
@@ -2415,7 +2125,10 @@ function startCompaction(
     .then((result) => {
       finish(
         result.stopReason === "end_turn"
-          ? { status: "completed" }
+          ? compactionOutcomeForEndTurn(
+              session.dialect,
+              session.compactionAgentMessage,
+            )
           : result.stopReason === "cancelled"
             ? { status: "interrupted" }
             : {
@@ -2432,7 +2145,6 @@ function startCompaction(
     });
 }
 
-/** Settle the open compaction once (see `finishTurn`). */
 function finishCompaction(
   session: AcpThreadSession,
   outcome: Record<string, unknown>,
@@ -2447,10 +2159,6 @@ function finishCompaction(
   session.activePromptKind = null;
   session.turnSettled = undefined;
 }
-
-// ---------------------------------------------------------------------------
-// Agent inbound traffic
-// ---------------------------------------------------------------------------
 
 function handleAgentRequest(
   session: AcpThreadSession,
@@ -2473,11 +2181,6 @@ function handleAgentRequest(
   }
 }
 
-/**
- * A vendor request the agent's dialect claims (Cursor's `cursor/task`). An
- * unclaimed method is still an unsupported one — the bridge must not
- * acknowledge a request it did not act on.
- */
 function handleDialectRequest(
   session: AcpThreadSession,
   method: string,
@@ -2533,20 +2236,23 @@ function handleAgentNotification(
     update: parsed.data.update,
   };
   if (session.providerThreadId === "") {
-    // Construction window: thread/identity has not gone out yet, so the
-    // update waits behind it (and is dropped if it names another session).
     session.deferStartEmit?.(ACP_UPDATE_METHOD, update, parsed.data.sessionId);
     return;
   }
   if (parsed.data.sessionId !== session.providerThreadId) {
     return;
   }
+  if (session.activePromptKind === "compaction") {
+    const chunk = acpAgentMessageChunkUpdateSchema.safeParse(
+      parsed.data.update,
+    );
+    if (chunk.success) {
+      session.compactionAgentMessage +=
+        extractAcpContentText(chunk.data.content) ?? "";
+    }
+  }
   emitForSession(session, ACP_UPDATE_METHOD, update);
 }
-
-// ---------------------------------------------------------------------------
-// Runtime command handling
-// ---------------------------------------------------------------------------
 
 type DecodedAcpBridgeRequest =
   | { kind: "request"; request: AcpBridgeCommand & { id: string | number } }
@@ -2574,8 +2280,6 @@ function decodeAcpBridgeJsonRpcRequest(raw: unknown): DecodedAcpBridgeRequest {
       request: { ...command.data, id: envelope.data.id },
     };
   }
-  // Reply, never drop (#853): a silently dropped request is an undebuggable
-  // 30-second timeout on the runtime side.
   if (
     !(acpBridgeCommandMethodValues as readonly string[]).includes(
       envelope.data.method,
@@ -2600,15 +2304,20 @@ function decodeAcpBridgeJsonRpcRequest(raw: unknown): DecodedAcpBridgeRequest {
 async function handleModelList(
   id: string | number,
   params: AcpModelListParams,
+  dialectId: string | undefined,
 ): Promise<void> {
   const catalog = params.listCommand
     ? await loadAgentModelCatalog(params.listCommand)
     : null;
   if (catalog) {
+    const catalogModels =
+      params.parameterizedModelPicker && dialectId === "cursor"
+        ? buildCursorParameterizedModelCatalog(catalog.models)
+        : catalog.models;
     sendResult(
       id,
       splitPrimaryModels(
-        applyConfiguredReasoningToModels(catalog.models, {
+        applyConfiguredReasoningToModels(catalogModels, {
           reasoningCli: params.reasoningCli,
           nativeReasoning: params.nativeReasoning,
         }),
@@ -2649,11 +2358,6 @@ async function handleModelList(
   });
 }
 
-/**
- * Resolve the agent launch spec a request carries in
- * `providerOptions.acpLaunchSpec`. Session construction cannot proceed
- * without it, so absence is INVALID_PARAMS (replied by the caller).
- */
 function decodeLaunchSpec(
   providerOptions: Record<string, unknown> | undefined,
 ): AcpLaunchSpec | null {
@@ -2665,24 +2369,10 @@ function decodeLaunchSpec(
 
 const acpProviderOptionsSchema = z
   .object({
-    /**
-     * Environment-level extra write roots. Rides the opaque provider-options
-     * bag (packed by the registry) because the wire has no core
-     * field for it — same delivery as the ACP launch spec.
-     */
     additionalWorkspaceWriteRoots: z.array(z.string()).optional(),
-    /**
-     * The agent's dialect: which vendor side channels this bridge should
-     * read for it (see `dialect.ts`). Declared by the plugin that registers
-     * the provider, so a third-party registration of a known agent gets the
-     * same reporting fidelity a first-party one does.
-     */
     acpDialect: z.string().min(1).optional(),
-    /** Enables an agent's separate model configuration options. */
     parameterizedModelPicker: z.boolean().optional(),
-    /** Bare model ids shown before the collapsed "More models" pool. */
     primaryModels: z.array(z.string().min(1)).optional(),
-    /** Model ids to probe first during bounded native discovery. */
     reasoningProbePriorityModelIds: z.array(z.string().min(1)).optional(),
   })
   .passthrough();
@@ -2723,10 +2413,6 @@ function decodeDialectId(
   return acpProviderOptionsSchema.parse(providerOptions ?? {}).acpDialect;
 }
 
-/**
- * The maintenance surface for a provider-maintenance request: the agent's
- * dialect owns it, so the bridge never asks which bb provider is calling.
- */
 function maintenanceForRequest(
   providerOptions: Record<string, unknown> | undefined,
   launchSpec: AcpLaunchSpec | null,
@@ -2743,21 +2429,6 @@ async function handleRequest(
 ): Promise<void> {
   switch (request.method) {
     case "initialize":
-      // The canonical handshake (@bb/provider-bridge-protocol): the bridge
-      // reports the session-behavior facts its own code implements. fork is
-      // "tip" — ACP session/fork clones whole sessions and each agent's
-      // support is verified per session at agent initialize. sessionRestore
-      // stays false at the handshake; sessions that negotiate loadSession
-      // report sessionRestorable per session. Compaction is not a handshake
-      // fact: the `/compact` affordance is gated per agent by the server-side
-      // `supportsManualCompaction` declaration (the agents this bridge serves
-      // differ on it), and the per-turn honesty lives in `startCompaction`,
-      // which fails the turn legibly for an agent that advertises no
-      // `compact` command.
-      // The `ok` field is the bridge's historical shape.
-      // Typed so a capability rename cannot silently degrade this bridge:
-      // an unrenamed key would be missing from InitializeResult, not
-      // defaulted false.
       const result: InitializeResult = {
         ok: true,
         protocolVersion: PROVIDER_BRIDGE_PROTOCOL_VERSION,
@@ -2768,16 +2439,8 @@ async function handleRequest(
           threadGoalClear: false,
           fork: "tip",
           approvalEnforcedBy: "runtime",
-          // grammarVersions [3, 3] — this bridge emits the v3 delta grammar
-          // (one streaming dialect; the v3 item shapes land per bridge in
-          // WS1b). steerMode "queue" — ACP v1 has no mid-loop inject: a hard
-          // steer cancels the live prompt and re-prompts with the queued text
-          // at the next boundary.
           grammarVersions: [THREAD_DELTA_GRAMMAR_V3, THREAD_DELTA_GRAMMAR_V3],
           steerMode: "queue",
-          // Single-site addition (WS4 L4): the bridge handles skills/configure
-          // (it lists the roots in the session instructions) and must say so,
-          // or the runtime sends it no injected skills.
           skills: { configure: true },
         },
       };
@@ -2785,9 +2448,6 @@ async function handleRequest(
       return;
 
     case "model/list": {
-      // model/list carries the launch and model-picker options declared by the
-      // provider plugin. Invalid or absent launch data degrades to the
-      // synthetic default entry rather than failing the picker.
       const modelPicker = decodeAcpModelPickerOptions(
         request.params.providerOptions,
       );
@@ -2797,6 +2457,7 @@ async function handleRequest(
           decodeLaunchSpec(request.params.providerOptions),
           modelPicker,
         ),
+        decodeDialectId(request.params.providerOptions),
       );
       return;
     }
@@ -2869,9 +2530,6 @@ async function handleRequest(
         request.method === "thread/fork" &&
         request.params.sourceProviderCheckpointId !== undefined
       ) {
-        // ACP session/fork clones whole sessions; a fork:"tip" bridge rejects
-        // checkpoint forks instead of cloning history the bb timeline does
-        // not show.
         sendError(
           request.id,
           BRIDGE_JSON_RPC_ERRORS.FORK_CHECKPOINT_UNSUPPORTED,
@@ -2931,9 +2589,6 @@ async function handleRequest(
     }
 
     case "turn/start": {
-      // Requests resolve the session by bb threadId: a resume fallback
-      // replaces the provider session id, but the bb thread stays the stable
-      // handle.
       const params = request.params;
       const session = liveSessionForThread(params.threadId);
       if (session === undefined) {
@@ -2949,12 +2604,6 @@ async function handleRequest(
         input: params.input,
         requestId: request.id,
       };
-      // Both paths answer the command and report the acceptance once the
-      // `session/prompt` request carrying the input has gone out.
-      //
-      // A standalone builtin `/compact` mention is bb's manual-compaction
-      // request, not model input: it runs the agent's own compaction command
-      // instead of becoming a prompt.
       if (isStandaloneBuiltinCompactCommand(params.input)) {
         startCompaction(session, pending);
       } else {
@@ -2971,18 +2620,12 @@ async function handleRequest(
         return;
       }
       if (session.activePromptKind !== "turn") {
-        // The typed hint is what the runtime acts on (it drops the steer as
-        // stale); the code stays for the wire's sake.
         const message = "No active turn to steer";
         sendError(request.id, ACP_BRIDGE_NO_ACTIVE_TURN_ERROR_CODE, message, {
           recovery: { kind: "staleTurn", message, retryable: false },
         });
         return;
       }
-      // A steer joins the active turn, but the agent only learns about it
-      // when the cancelled prompt is reissued with it. The command answers now
-      // — the bridge has the input — while the acceptance waits for that
-      // reissue, so a steer the turn drops is never reported as accepted.
       session.queuedInputs.push({
         clientRequestId: params.clientRequestId,
         input: params.input,
@@ -3007,8 +2650,6 @@ async function handleRequest(
     }
 
     case "thread/discard":
-      // ACP agents have no provider-side thread to delete; discard succeeds
-      // as a noop.
       sendResult(request.id, { ok: true });
       return;
 
@@ -3087,10 +2728,6 @@ async function stopAllSessions(): Promise<void> {
   });
 }
 
-// The bridge re-executes its own artifact as the MCP server child that
-// exposes bb's dynamic tools to the ACP agent (`node <artifact> --mcp-stdio`).
-// That is a different program, not this bridge starting itself: the bootstrap
-// imports the artifact without the flag, so importing it starts nothing.
 if (process.argv.includes("--mcp-stdio")) {
   runAcpDynamicToolMcpServer();
 }
@@ -3098,8 +2735,6 @@ if (process.argv.includes("--mcp-stdio")) {
 export const experimental_providerBridge = experimental_defineProviderBridge({
   handleLine,
   onClose: () => {
-    // Stdin close is a process shutdown boundary; cancel and reap the agent
-    // subprocesses before the bridge exits so none outlive the daemon.
     void stopAllSessions().finally(() => {
       process.exit(0);
     });

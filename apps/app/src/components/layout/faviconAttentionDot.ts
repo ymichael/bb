@@ -13,9 +13,6 @@ type FaviconSidebarThread = ThreadReadState &
   >;
 
 interface ShouldShowFaviconAttentionDotArgs {
-  // Whether the thread currently in view is blocked on a pending interaction.
-  // Sourced from the thread's own pending-interactions query, since the sidebar
-  // list can't see archived threads or side chats.
   currentThreadHasPendingInteraction: boolean;
   currentThreadId?: string | null;
   isThreadView: boolean;
@@ -27,11 +24,6 @@ function isUnreadSidebarThread(thread: FaviconSidebarThread): boolean {
   return isSidebarProjectThread(thread) && !isThreadRead(thread);
 }
 
-// A thread blocked on the user (an agent question or a permission approval)
-// stays `active`, so it never bumps its unread marker. Surface it from the
-// sidebar only when no thread is focused. While viewing a thread, the focused
-// route pane exclusively owns favicon attention, just as it owns the title.
-// Side chats are excluded here to match the unread sidebar scan.
 function isPendingSidebarThread(thread: FaviconSidebarThread): boolean {
   return isSidebarProjectThread(thread) && thread.hasPendingInteraction;
 }

@@ -6,13 +6,6 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, it } from "vitest";
 
-/**
- * The bootstrap is the only thing standing between a plugin's exported bridge
- * and a live process, so what it does with a bad artifact matters as much as
- * what it does with a good one: a bridge that never answers is invisible, and
- * the message here is the whole diagnosis.
- */
-
 const workerEntry = fileURLToPath(
   new URL("./bridge-worker-entry.ts", import.meta.url),
 );
@@ -96,7 +89,6 @@ it("starts an exported bridge with its plugin-scoped directories", async () => {
   expect(reported.context.pluginId).toBe("provider-fixture");
   expect(reported.context.dataDir).toBe(fixture.dataDir);
   expect(reported.context.tempDir).toContain("provider-fixture");
-  // The temp dir belongs to the process, so nothing of it outlives the exit.
   expect(existsSync(reported.context.tempDir)).toBe(false);
 });
 
@@ -185,7 +177,6 @@ it("tees both sides of the runtime wire when record mode is on", async () => {
   );
 
   expect(result.code).toBe(0);
-  // The wire itself is untouched by the tee.
   expect(result.stdout).toBe(
     '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}\n{"jsonrpc":"2.0","id":2,"result":{"ok":true}}\n',
   );
@@ -193,13 +184,16 @@ it("tees both sides of the runtime wire when record mode is on", async () => {
     (await readFile(join(recordDir, scope, `${direction}.ndjson`), "utf8"))
       .trim()
       .split("\n")
-      .map((line) => JSON.parse(line) as { seq: number; dir: string; line: string });
-  expect((await read("_process", "runtime→bridge")).map((e) => e.line)).toEqual([
-    '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}',
-  ]);
-  expect((await read("_process", "bridge→runtime")).map((e) => e.line)).toEqual([
-    '{"jsonrpc":"2.0","id":1,"result":{"ok":true}}',
-  ]);
+      .map(
+        (line) =>
+          JSON.parse(line) as { seq: number; dir: string; line: string },
+      );
+  expect((await read("_process", "runtime→bridge")).map((e) => e.line)).toEqual(
+    ['{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}'],
+  );
+  expect((await read("_process", "bridge→runtime")).map((e) => e.line)).toEqual(
+    ['{"jsonrpc":"2.0","id":1,"result":{"ok":true}}'],
+  );
   expect((await read("thr_rec", "runtime→bridge")).map((e) => e.line)).toEqual([
     '{"jsonrpc":"2.0","id":2,"method":"thread/start","params":{"threadId":"thr_rec"}}',
   ]);

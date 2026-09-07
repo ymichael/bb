@@ -35,13 +35,9 @@ export interface ProviderCliInstallFailure {
 }
 
 interface ProviderCliInstallSnapshot {
-  /** The job currently executing on a host, or null when nothing is running. */
   runningJobKey: string | null;
-  /** Jobs waiting behind the running one. */
   queuedJobKeys: ReadonlySet<string>;
-  /** The failure log a user opened from a toast, or null when closed. */
   logDialogState: ProviderCliInstallLogDialogState | null;
-  /** The latest failed attempt for each provider row. */
   failuresByJobKey: ReadonlyMap<string, ProviderCliInstallFailure>;
 }
 
@@ -72,9 +68,6 @@ const INITIAL_SNAPSHOT: ProviderCliInstallSnapshot = {
   failuresByJobKey: EMPTY_FAILURES_BY_JOB_KEY,
 };
 
-// Module-level, not component state: a provider CLI install keeps running (and
-// its queue keeps draining) after the user navigates away from Settings →
-// Updates. Components subscribe to mirror progress; they never own it.
 let snapshot: ProviderCliInstallSnapshot = INITIAL_SNAPSHOT;
 let queuedJobs: ProviderCliInstallJob[] = [];
 let queryClient: QueryClient | null = null;
@@ -87,7 +80,6 @@ function setSnapshot(patch: Partial<ProviderCliInstallSnapshot>): void {
   }
 }
 
-/** Stable identity for a (machine, provider) install slot. */
 export function providerCliJobKey(
   hostId: string,
   provider: ProviderCliKey,
@@ -106,12 +98,6 @@ export function getProviderCliInstallSnapshot(): ProviderCliInstallSnapshot {
   return snapshot;
 }
 
-/**
- * The store outlives every component, so it cannot read the query client from
- * React context when an install finishes. Mounted consumers hand it over; the
- * app's client is process-stable, so the last registration stays correct even
- * after they all unmount.
- */
 export function registerProviderCliInstallQueryClient(
   client: QueryClient,
 ): void {
@@ -185,7 +171,6 @@ function setProviderCliInstallFailure(args: {
   jobKey: string;
 }): void {
   const failuresByJobKey = new Map(snapshot.failuresByJobKey);
-  // Refresh an existing key's insertion order so eviction stays least-recent.
   failuresByJobKey.delete(args.jobKey);
   failuresByJobKey.set(args.jobKey, args.failure);
   while (failuresByJobKey.size > PROVIDER_CLI_FAILURE_MAX_ENTRIES) {
@@ -345,7 +330,6 @@ export function startProviderCliInstall(job: ProviderCliInstallJob): void {
   runInstall(job);
 }
 
-/** Drop all cross-test state from this module-level store. */
 export function resetProviderCliInstallStoreForTests(): void {
   snapshot = INITIAL_SNAPSHOT;
   queuedJobs = [];

@@ -7,12 +7,6 @@ interface GitDiffIdentityParams {
   target: WorkspaceDiffTarget | undefined;
 }
 
-/**
- * Single string identity for the active (environment, target, resolved
- * merge-base) diff slice. Used to scope per-file UI state and patch caches so a
- * target/environment switch yields a fresh slice rather than leaking a previous
- * diff's collapse choices onto an unrelated file at the same path.
- */
 export function buildGitDiffIdentity({
   environmentId,
   mergeBaseRef,
@@ -47,10 +41,6 @@ export function buildGitDiffIdentity({
   }
 }
 
-/**
- * Many-file diffs open collapsed by default; the per-card store (`diffFilesStore`)
- * reuses this threshold to seed each card's initial collapsed state.
- */
 export const GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD = 10;
 
 export const ALL_GIT_DIFF_SELECTION = "all";

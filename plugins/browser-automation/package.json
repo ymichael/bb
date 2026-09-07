@@ -1,0 +1,40 @@
+{
+  "name": "bb-plugin-browser-automation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Thread-owned DevBrowser desktop and local headless sessions.",
+  "engines": {
+    "bb": ">=0.41",
+    "bbPluginSdk": ">=0.4.48"
+  },
+  "bb": {
+    "name": "Browser Automation",
+    "description": "Persistent browser scripts on desktop or enrolled hosts.",
+    "branding": {
+      "icon": "Globe"
+    },
+    "server": "./server.ts",
+    "host": "./host.ts",
+    "skills": [
+      "skills"
+    ]
+  },
+  "scripts": {
+    "build": "node ../../apps/cli/dist/index.js plugin build",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.config.ts",
+    "smoke": "tsx --tsconfig tsconfig.smoke.json --conditions=source smoke.ts",
+    "smoke:install": "tsx --tsconfig tsconfig.smoke.json --conditions=source smoke-install.ts"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@types/node": "^22.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
+    "vitest": "^4.1.1",
+    "tsx": "^4.21.0"
+  }
+}

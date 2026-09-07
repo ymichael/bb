@@ -3,8 +3,6 @@ import { useSyncExternalStore } from "react";
 export const DARK_COLOR_SCHEME_QUERY = "(prefers-color-scheme: dark)";
 export const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
-// One MediaQueryList per query, shared across every caller. This avoids adding
-// a browser listener for each row, tooltip, or overlay that subscribes.
 type MediaQueryRef = {
   mql: MediaQueryList;
   subscribe: (notify: () => void) => () => void;

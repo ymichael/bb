@@ -25,7 +25,7 @@
   },
   "acp-cursor/resume": {
     "events": 21,
-    "rows": 2,
+    "rows": 4,
     "unhandled": 0,
     "grammarDrops": 0
   },
@@ -37,7 +37,7 @@
   },
   "acp-cursor/stop-interrupt": {
     "events": 39,
-    "rows": 3,
+    "rows": 5,
     "unhandled": 0,
     "grammarDrops": 0
   },

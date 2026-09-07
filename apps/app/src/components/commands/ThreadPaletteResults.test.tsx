@@ -15,6 +15,7 @@ import {
   ThreadPaletteResults,
   type ThreadPaletteNavigationItem,
 } from "./ThreadPaletteResults";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 
 vi.mock("@/hooks/queries/thread-queries", () => ({
   hasThreadSearchableQuery: (value: string) =>
@@ -41,45 +42,15 @@ function createThreadListEntry({
   id: string;
   title: string;
 }): ThreadListEntry {
-  return {
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    archivedAt: null,
+  return makeThreadListEntry({
     createdAt: 1000,
-    deletedAt: null,
-    environmentBranchName: null,
-    environmentHostId: null,
-    environmentId: null,
-    environmentName: null,
-    environmentWorkspaceDisplayKind: "other",
-    hasPendingInteraction: false,
     id,
     lastReadAt: null,
     latestAttentionAt: 1000,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    parentThreadId: null,
-    pinSortKey: null,
-    pinnedAt: null,
     projectId: "proj_search",
-    providerId: "codex",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-    sourceThreadId: null,
-    status: "idle",
     title,
-    titleFallback: null,
-    sectionId: null,
     updatedAt: 1000,
-  };
+  });
 }
 
 function createSearchResponse(

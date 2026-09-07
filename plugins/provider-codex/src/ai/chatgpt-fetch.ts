@@ -1,11 +1,3 @@
-/**
- * `fetch` against ChatGPT hosts with the Cloudflare service-cookie jar: a
- * `403` answered with `cf-mitigated: challenge` is retried once, carrying the
- * cookies the challenge set. The host entry's AI services and the bridge's
- * usage probe both go through here; they run in separate processes, so each
- * keeps its own jar.
- */
-
 const ALLOWED_CLOUDFLARE_COOKIE_NAMES = new Set([
   "__cf_bm",
   "__cflb",
@@ -18,13 +10,10 @@ const ALLOWED_CLOUDFLARE_COOKIE_NAMES = new Set([
   "cf_use_ob",
 ]);
 
-// Process-global by design: only Cloudflare service cookies from ChatGPT hosts
-// are retained here. Do not add account, session, auth, or user cookies.
 const cloudflareCookiesByName = new Map<string, string>();
 
 export interface ChatGptFetchArgs {
   url: string;
-  /** Builds one attempt's request; `headers` carries the jar's `Cookie` when one is set. */
   init: (headers: Headers) => RequestInit;
 }
 

@@ -22,6 +22,7 @@ import {
 } from "@/lib/plugin-composer-action-usage";
 import { resetAllCrashedPluginSlotsForTest } from "./PluginSlotMount";
 import { ComposerActionsSlot } from "./PluginComposerActions";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 const VIEW: ComposerView = {
   scope: { kind: "new-thread", projectId: null },
@@ -35,11 +36,7 @@ function registrationSet(
   onMount?: (label: string) => void,
   onUnmount?: (label: string) => void,
 ): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
+  return makePluginRegistrationSet({
     composerCustomizations: [
       {
         id: "tools",
@@ -55,12 +52,7 @@ function registrationSet(
         })),
       },
     ],
-    pendingInteractions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    messageActions: [],
-  };
+  });
 }
 
 function registerPlugin(

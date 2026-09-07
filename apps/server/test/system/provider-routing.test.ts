@@ -155,10 +155,6 @@ describe("system provider host routing", () => {
       expect(environmentModels.models.map((model) => model.model)).toEqual([
         "remote-model",
       ]);
-      // Only the routing facts matter here; `bridgeLaunch` rides every
-      // command and has its own tests. The Codex catalog is host-scoped, so
-      // the environment read carries no workspace path and is served from the
-      // memo filled by the explicit-host read: one probe on the remote host.
       expect(
         remoteModelCommands.map(({ bridgeLaunch: _ignored, ...rest }) => rest),
       ).toEqual([{ type: "provider.list_models", providerId: "codex" }]);
@@ -243,10 +239,6 @@ describe("GET /api/v1/system/providers", () => {
       expect(response.status).toBe(200);
       const raw = await readJson(response);
 
-      // Every client ships with the server, so nothing is served beside
-      // `maintenance`: the pre-stabilization `experimental_provider*` booleans
-      // are gone from the wire, not only from the parsed contract. The contract
-      // schema would strip an unknown key, so this reads the raw rows.
       const rows = z.array(z.record(z.string(), z.unknown())).parse(raw);
       expect(rows.length).toBeGreaterThan(0);
       for (const row of rows) {

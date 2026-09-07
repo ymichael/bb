@@ -13,11 +13,6 @@ import {
   TOO_FEW_OPTIONS_MESSAGE,
 } from "./tool-definition.js";
 
-/**
- * The semantic rules Claude enforces outside its JSON schema, in Claude's own
- * order: option arity first (it carries the strongest steer), then uniqueness.
- * Returns Claude's verbatim message, or null when the input is acceptable.
- */
 export function validateToolInput(input: ToolInput): string | null {
   if (input.questions.some((question) => question.options.length < 2)) {
     return TOO_FEW_OPTIONS_MESSAGE;
@@ -31,11 +26,6 @@ export function validateToolInput(input: ToolInput): string | null {
   return null;
 }
 
-/**
- * `bb.ui.requestInput` rejects payloads over 64 KiB. Previews are the only
- * unbounded contributor, so the payload is measured before the request and the
- * model is told to shorten them rather than having the request fail opaquely.
- */
 export const MAX_INTERACTION_PAYLOAD_BYTES = 60 * 1024;
 
 export class PreviewTooLargeError extends Error {
@@ -55,7 +45,6 @@ function optionValue(index: number, optionIndex: number): string {
   return `${questionId(index)}o${optionIndex}`;
 }
 
-/** Blank previews are dropped rather than forwarded as empty preview blocks. */
 function normalizePreview(preview: string | undefined): string | undefined {
   if (preview === undefined) return undefined;
   const trimmed = preview.trim();
@@ -71,8 +60,6 @@ export function buildInteractionPayload(input: ToolInput): InteractionPayload {
       shortLabel: question.header,
       multiSelect: question.multiSelect,
       options: question.options.map((option, optionIndex) => {
-        // Previews are single-select only, as the tool description states: with
-        // several options selected there is no single artifact to show.
         const preview = question.multiSelect
           ? undefined
           : normalizePreview(option.preview);
@@ -83,8 +70,6 @@ export function buildInteractionPayload(input: ToolInput): InteractionPayload {
           ...(preview === undefined ? {} : { preview }),
         };
       }),
-      // Always on, matching the native Claude path: "Users will always be able
-      // to select 'Other' to provide custom text input".
       allowFreeText: true,
     })),
   };
@@ -99,11 +84,6 @@ export function assertInteractionPayloadFits(
   }
 }
 
-/**
- * Title for the composer form. The form renders each question's prompt as its
- * own heading, so the title carries the short label(s) instead of repeating the
- * prompt.
- */
 export function buildInteractionTitle(payload: InteractionPayload): string {
   const [first] = payload.questions;
   if (payload.questions.length === 1 && first) return first.shortLabel;
@@ -122,11 +102,6 @@ function selectedOptions(
   });
 }
 
-/**
- * One answer line, in the format the native Claude path produces: selected
- * labels joined with ", ", and free text appended after "; " when the user both
- * picked options and typed something.
- */
 function buildAnswerText(
   question: InteractionQuestion,
   answer: InteractionAnswer,
@@ -148,8 +123,6 @@ function buildAnnotation(
   question: InteractionQuestion,
   answer: InteractionAnswer,
 ): ToolResultAnnotation | null {
-  // `notes` only when free text accompanies a real selection — free text on its
-  // own is already the whole answer, so repeating it would be noise.
   const notes =
     answer.selected.length > 0 && answer.freeText !== undefined
       ? answer.freeText
@@ -171,12 +144,6 @@ export function buildToolResult(
 ): ToolResult {
   const answers: Record<string, string> = {};
   const annotations: Record<string, ToolResultAnnotation> = {};
-  /**
-   * Claude's `response` field is "freeform text the user typed instead of
-   * selecting a structured option" — a single string, so it is only meaningful
-   * when one question was asked. `answers` still carries the same text, so
-   * nothing is lost for multi-question calls.
-   */
   let freeformResponse: string | undefined;
   for (const question of payload.questions) {
     const answer = response.answers[question.id];

@@ -322,10 +322,6 @@ function describeParsedPiRawEvent(
           /:$/u,
           "",
         );
-      // Every known role is noise, `custom` included: the translator records
-      // a displayed extension-injected `message_start` as provider input, and
-      // every other custom boundary (its `message_end`, hidden messages)
-      // carries nothing for bb.
       return event.role === "unknown"
         ? { kind: `sdk/${event.sdkType}`, coverage: "unknown" }
         : { kind, coverage: "noise" };

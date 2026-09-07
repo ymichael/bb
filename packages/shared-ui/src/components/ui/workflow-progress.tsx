@@ -33,11 +33,6 @@ export interface WorkflowProgressAgent {
   tokens?: number;
   toolCalls?: number;
   durationMs?: number;
-  /**
-   * Provider-independent metadata shown before duration/attempt/cache state.
-   * Native Claude workflows omit this and use agentType + model. Cross-provider
-   * callers can provide provider/model/reasoning without changing the layout.
-   */
   metadata?: readonly string[];
 }
 
@@ -61,8 +56,6 @@ interface WorkflowPhaseGroup {
 const ACTIVE_PHASE_SCROLL_OFFSET = 12;
 const PROMPT_STACK_ACTIVE_ROW_CLASS = "shadow-none ring-0";
 const PROMPT_STACK_ACTIVE_ICON_CLASS = "text-foreground";
-// Inside the phase tree the shine shimmer is reserved for the card's top-level
-// header; running rows already carry a spinner, so their text stays static.
 const PROMPT_STACK_ACTIVE_TEXT_CLASS = "font-medium text-foreground";
 
 function isSettledAgentState(state: WorkflowProgressAgentState): boolean {
@@ -193,9 +186,7 @@ function shortModelName(model: string): string {
 }
 
 interface WorkflowAgentStats {
-  /** Provider/model/effort plus qualifiers, without the duration. */
   meta: string;
-  /** Duration column, right-aligned separately so times line up. */
   duration: string | null;
 }
 
@@ -673,11 +664,6 @@ function CollapsiblePhaseGroups({
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(
     () => new Map(),
   );
-  // While running, phases auto-collapse as they complete: any phase with
-  // in-flight or failed agents stays open (pipelines can run several phases at
-  // once), a cleanly-finished phase folds away. Once the workflow settles,
-  // phases holding failed, cancelled, or stopped-mid-flight agents stay open
-  // so the reason is visible.
   const defaultExpanded = (key: string, group: WorkflowPhaseGroup): boolean =>
     workflowSettled
       ? group.agents.some(
@@ -777,12 +763,6 @@ const STATUS_PILL_LABEL: Record<WorkflowStatusPillState, string> = {
   cancelled: "Cancelled",
 };
 
-/**
- * Compact status chip shown in the same top-right slot of every workflow
- * surface (inline card header and right panel header), so status always reads
- * from the same place. There is deliberately no "running" pill: a live run
- * already reads as active from the header shimmer, phase strip, and spinners.
- */
 export function WorkflowStatusPill({
   state,
   className,
@@ -878,11 +858,6 @@ const PHASE_STRIP_SEGMENT_CLASS: Record<PhaseStripSegmentState, string> = {
   upcoming: "bg-muted-foreground/20",
 };
 
-/**
- * Segmented per-phase progress strip for workflow card headers: one segment
- * per phase (green = done, pulsing = active, red = failed), so a collapsed
- * card still tells the whole story at a glance.
- */
 export function WorkflowPhaseStrip({
   progress,
   currentPhaseIndex,

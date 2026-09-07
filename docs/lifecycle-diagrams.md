@@ -23,12 +23,14 @@ policy should be handled before events reach these tables.
 ```mermaid
 flowchart LR
     __start((start))
+    pending["pending"]
     idle["idle"]
     starting["starting"]
     active["active"]
     stopping["stopping"]
     error["error"]
     __start --> starting
+    pending -->|"run.preparing ⟨notArchived, notDeleted⟩"| starting
     idle -->|"run.preparing ⟨notArchived, notDeleted⟩"| starting
     idle -->|"run.started ⟨notArchived, notDeleted⟩"| active
     starting -->|"run.started ⟨notArchived, notDeleted⟩"| active

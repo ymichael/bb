@@ -15,9 +15,6 @@ interface BbAppPackageJson {
   version: string;
 }
 
-// A hand-written guard rather than a zod schema: this module runs on every
-// `bb` invocation, including `bb --version`, and must not pull zod into the
-// startup graph just to read two fields of a package.json.
 function isBbAppPackageJson(value: unknown): value is BbAppPackageJson {
   return (
     typeof value === "object" &&

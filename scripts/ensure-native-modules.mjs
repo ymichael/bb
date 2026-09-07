@@ -142,23 +142,23 @@ export function ensureNativeModules({
 } = {}) {
   for (const { name, resolveFrom, binaryPath } of modules) {
     const requireModule = createRequireImpl(resolve(repoRoot, resolveFrom));
+    const pkgJsonPath = requireModule.resolve(`${name}/package.json`);
+    const pkgDir = dirname(pkgJsonPath);
+    if (
+      binaryPath !== undefined &&
+      detachHardlinkedBinary(resolve(pkgDir, binaryPath))
+    ) {
+      log(
+        `[ensure-native-modules] Detached hardlinked ${name} binary before verification`,
+      );
+    }
     try {
       verifyNativeModule(name, requireModule);
     } catch (err) {
       const message = formatThrownValue(err);
       if (!shouldRebuildNativeModule(message)) throw err;
 
-      const pkgJsonPath = requireModule.resolve(`${name}/package.json`);
-      const pkgDir = dirname(pkgJsonPath);
       const pkgRequire = createRequireImpl(pkgJsonPath);
-      if (
-        binaryPath !== undefined &&
-        detachHardlinkedBinary(resolve(pkgDir, binaryPath))
-      ) {
-        log(
-          `[ensure-native-modules] Detached hardlinked ${name} binary before repair`,
-        );
-      }
       log(
         `[ensure-native-modules] Installing prebuilt ${name} for Node ${process.versions.node} (ABI ${process.versions.modules})`,
       );

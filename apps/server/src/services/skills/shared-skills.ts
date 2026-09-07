@@ -82,9 +82,6 @@ export async function resolveSharedSkills(
       type: "host.list_skills",
       providerId: "bb-shared",
       cwd: args.cwd,
-      // Shared roots are plain paths in the server config (no per-root
-      // options, no commands, no plugin to resolve more): they ride the
-      // wire as the skill side of an otherwise empty root set.
       nativeRoots: {
         skills: normalizeProviderNativeRoots(roots),
         commands: EMPTY_PROVIDER_NATIVE_ROOTS,

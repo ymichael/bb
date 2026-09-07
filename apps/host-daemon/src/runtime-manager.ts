@@ -31,6 +31,7 @@ import type {
 import {
   provisionWorkspace,
   WorkspaceError,
+  type DestroyWorkspaceArgs,
   type HostWorkspace,
   type ProvisionWorkspaceArgs,
 } from "@bb/host-workspace";
@@ -93,15 +94,6 @@ interface SkillCatalogConflictErrorArgs {
   requestedCatalogHash: string;
 }
 
-/**
- * Internal invariant guard: thrown when an environment's runtime must be
- * replaced to pick up a changed injected skill catalog while it has active
- * work (active threads or open terminals) and the requesting command targets
- * no thread. No production caller can reach this — only thread commands
- * (thread.start, turn.submit) resolve with injected skill sources, and they
- * always pass a targetThreadId, which reuses the busy runtime and defers the
- * refresh instead. Reaching this error indicates a daemon bug.
- */
 export class SkillCatalogConflictError extends Error {
   constructor(args: SkillCatalogConflictErrorArgs) {
     super(
@@ -142,13 +134,6 @@ export interface RuntimeEntry {
   environmentId: string;
   runtime: AgentRuntime;
   skillCatalogHash: string | null;
-  /**
-   * Log-throttle state only: the last stale requested catalog hash this entry
-   * warned about, so the deferral warn fires once per requested catalog
-   * instead of on every command while the runtime stays busy. It never drives
-   * the deferred refresh — every thread command re-stages and re-compares the
-   * catalog.
-   */
   lastWarnedStaleSkillCatalogHash: string | null;
   stopWatchingStatus: StopWatching;
   workspace: HostWorkspace;
@@ -165,14 +150,6 @@ export interface EnsureEnvironmentArgs {
   environmentId: string;
   injectedSkillSources?: readonly HostDaemonInjectedSkillSource[];
   personalWorkspaceRoot?: string;
-  /**
-   * The thread the requesting command targets; set by thread commands that
-   * resolve with injected skill sources (thread.start, turn.submit). When
-   * set, a busy runtime is reused even when its injected skill catalog is
-   * stale, instead of failing the command and dropping the thread's message;
-   * the catalog refresh is deferred to the next launch on an idle
-   * environment.
-   */
   targetThreadId?: string;
   workspacePath?: string;
   workspaceProvisionType?: WorkspaceProvisionType;
@@ -195,10 +172,6 @@ interface RefreshEnvironmentWorkspaceArgs {
 
 export interface RuntimeManagerOptions {
   bridgeBundleDir?: AgentRuntimeOptions["bridgeBundleDir"];
-  /**
-   * Reads the daemon's cached provider-bridge policy at runtime creation.
-   * Per-runtime static: a policy flip applies to runtimes created after it.
-   */
   createRuntime?: (options: AgentRuntimeOptions) => AgentRuntime;
   dataDir?: string;
   dataDirSkillsRootPath?: string | null;
@@ -232,7 +205,6 @@ export interface RuntimeManagerOptions {
 export interface RuntimeManagerReapIdleProviderSessionsArgs {
   idleForMs: number;
   nowMs: number;
-  providerSessionReapingEnabled: boolean;
 }
 
 interface RuntimeManagerReapedIdleProviderSession extends ReapedIdleProviderSession {
@@ -243,18 +215,11 @@ export interface RuntimeManagerReapIdleProviderSessionsResult {
   reapedSessions: RuntimeManagerReapedIdleProviderSession[];
 }
 
-/**
- * `interrupt` stops an old runtime even while it runs a turn. `keep` leaves
- * that turn alone and reports its environment to the caller.
- */
 type ReleaseThreadActiveTurnPolicy = "interrupt" | "keep";
 
 interface ReleaseThreadFromOtherEnvironmentsResult {
-  /** Environments that still run a turn for the thread under `keep`. */
   activeTurnEnvironmentIds: string[];
-  /** Provider checkpoint retained by a stopped runtime, when one reported it. */
   providerCheckpointId: string | null;
-  /** Environments whose runtime released the thread. */
   releasedEnvironmentIds: string[];
 }
 
@@ -297,10 +262,6 @@ function providerProcessEnvFromShellEnv(
   if (shellEnv.PATH) {
     env.PATH = shellEnv.PATH;
   }
-  // Bridge record mode (docs/provider-bridge-protocol.md) rides the same
-  // forward, from the daemon's own env rather than the shell env: the shell
-  // env doubles as the agent's shell environment, and the variable must reach
-  // the bridge process only, never the provider child or its shells.
   const recordDir = process.env.BB_PROVIDER_BRIDGE_RECORD_DIR;
   if (recordDir) {
     env.BB_PROVIDER_BRIDGE_RECORD_DIR = recordDir;
@@ -315,12 +276,6 @@ export class RuntimeManager {
   private baseShellEnv;
   private readonly entries = new Map<string, RuntimeEntry>();
   private readonly pendingEntries = new Map<string, Promise<RuntimeEntry>>();
-  /**
-   * The catalog an entry still being created will run on. A catalog swap in
-   * another environment prunes staging dirs by the catalogs in use, and an
-   * entry inside `createEntry` is not in `entries` yet — without this its
-   * staged root could be removed from under it.
-   */
   private readonly pendingCatalogHashes = new Map<string, string>();
   private readonly pendingEnvironmentProvisions = new Map<
     string,
@@ -346,13 +301,6 @@ export class RuntimeManager {
   private providerMaintenanceActiveRequests = 0;
   private providerMaintenanceIdleTimer: ReturnType<typeof setTimeout> | null =
     null;
-  /**
-   * Remembers a supported provider-CLI probe so thread start and rewind do
-   * not pay the bridge's version check every time. Lives here because the
-   * events that make a remembered answer stale (a bb-run install, a shell
-   * environment change) are the ones this manager already observes; the 60 s
-   * idle teardown of the maintenance runtime is not one of them.
-   */
   readonly providerInstallationGate: ProviderInstallationGate;
   private stopWatchingDataDirSkillsRoot: StopWatching = STOP_WATCHING;
 
@@ -374,9 +322,6 @@ export class RuntimeManager {
   ): string[] {
     const roots = [...args.workspaceRoots];
     if (args.threadStorageRootPath) {
-      // Provider runtimes are environment-scoped and may host multiple threads.
-      // BB_THREAD_STORAGE still points agents at their own thread subdirectory;
-      // this root lets workspace-write sandboxes mutate that path.
       roots.push(args.threadStorageRootPath);
     }
     return [...new Set(roots)];
@@ -419,24 +364,11 @@ export class RuntimeManager {
     return next;
   }
 
-  /**
-   * A thread can move between environments while its provider session is
-   * still resident in the old environment runtime. Release that old runtime
-   * before the new environment resumes the persisted provider thread, so two
-   * runtime processes never own the same provider session at once.
-   *
-   * `activeTurn` selects what happens when an old runtime still runs a turn.
-   * Turn dispatch and stop controls own the session, so they interrupt it.
-   * Other controls keep it and report the environment back to their caller.
-   */
   async releaseThreadFromOtherEnvironments(args: {
     activeTurn: ReleaseThreadActiveTurnPolicy;
     environmentId: string;
     threadId: string;
   }): Promise<ReleaseThreadFromOtherEnvironmentsResult> {
-    // Wait outside the control lane. An in-flight thread command takes this
-    // same lane for its own release step, so a wait inside the lane can hold
-    // the lane against the command it waits for and deadlock the thread.
     await this.waitForThreadCommandsInOtherEnvironments(args);
     return this.enqueueThreadControl(args.threadId, () =>
       this.releaseThreadFromOtherEnvironmentsOnce(args),
@@ -447,9 +379,6 @@ export class RuntimeManager {
     environmentId: string;
     threadId: string;
   }): Promise<void> {
-    // A command can register while an earlier one settles, so drain until no
-    // other environment holds a thread command. Each pass awaits real command
-    // completions, so this cannot spin.
     for (;;) {
       const inFlightOldCommands = [
         ...this.inFlightThreadCommandCompletionsByEnvironmentId.entries(),
@@ -509,12 +438,6 @@ export class RuntimeManager {
     };
   }
 
-  /**
-   * Every loaded runtime that still holds the thread, in any environment. A
-   * moved thread can keep its provider session in the environment it left,
-   * so controls that act on the live session must look past the command's
-   * own environment.
-   */
   listThreadOwnerEntries(threadId: string): RuntimeEntry[] {
     return [...this.entries.values()].filter((entry) =>
       entry.runtime.hasThread(threadId),
@@ -529,12 +452,6 @@ export class RuntimeManager {
     this.entries.get(environmentId)?.terminals.delete(terminalId);
   }
 
-  /**
-   * Keeps an environment runtime alive while a thread command is preparing a
-   * start or submit. Runtime turn state becomes active only after the provider
-   * accepts the command, so it cannot by itself protect that short interval
-   * from a concurrent shell-environment refresh.
-   */
   async retainEnvironmentForThreadCommand(
     environmentId: string,
     threadId: string,
@@ -664,8 +581,6 @@ export class RuntimeManager {
     }
 
     this.baseShellEnv = { ...shellEnv };
-    // A new PATH can resolve a different provider binary, so the remembered
-    // version check no longer describes what a thread would run.
     this.providerInstallationGate.clear();
     await this.shutdownProviderMaintenanceRuntime();
     await this.evictIdleRuntimeEntries();
@@ -700,12 +615,6 @@ export class RuntimeManager {
     });
   }
 
-  /**
-   * Background tasks outlive their turn, so an entry with no active turn can
-   * still be running a workflow or a backgrounded command inside its provider
-   * process. Shutting that runtime down would kill them, so they count as
-   * active work.
-   */
   private entryHasActiveRuntimeWork(entry: RuntimeEntry): boolean {
     return (
       entry.terminals.size > 0 ||
@@ -747,12 +656,6 @@ export class RuntimeManager {
     );
   }
 
-  /**
-   * Removes staged skill catalog directories no loaded entry references.
-   * `pendingCatalogHashes` names catalogs that are about to become active but
-   * are not yet registered in `entries` — e.g. the replacement catalog during
-   * a runtime swap — so the cleanup does not delete a just-staged directory.
-   */
   private async cleanupUnusedInjectedSkillStagingDirs(
     pendingCatalogHashes: readonly string[],
   ): Promise<void> {
@@ -818,13 +721,6 @@ export class RuntimeManager {
       return args.entry;
     }
 
-    // A thread command must not force a catalog swap while the runtime is
-    // busy: replacement would kill in-flight work, and failing the command
-    // would drop the thread's message — an agent can trigger this against its
-    // own thread by installing a skill mid-turn, and an open terminal would
-    // otherwise pin every thread in the environment into the failure. Reuse
-    // the busy runtime with its stale catalog and defer the refresh to the
-    // next launch on an idle environment.
     if (
       args.targetThreadId !== undefined &&
       (this.entryHasActiveRuntimeWork(args.entry) ||
@@ -859,12 +755,6 @@ export class RuntimeManager {
     return null;
   }
 
-  /**
-   * Tears down the resident provider-maintenance runtime so the next caller
-   * gets a fresh one. In-flight maintenance RPCs fail with "Runtime shutting
-   * down"; the provider-installation gate transparently re-probes after its
-   * generation changes, while other maintenance callers refetch on demand.
-   */
   async invalidateProviderMaintenanceRuntime(): Promise<void> {
     this.providerInstallationGate.clear();
     try {
@@ -1199,7 +1089,10 @@ export class RuntimeManager {
     });
   }
 
-  async destroyEnvironment(environmentId: string): Promise<void> {
+  async destroyEnvironment(
+    environmentId: string,
+    args: DestroyWorkspaceArgs,
+  ): Promise<void> {
     const existing = this.entries.get(environmentId);
     const pending = this.pendingEntries.get(environmentId);
     const entry = existing ?? (pending ? await pending : undefined);
@@ -1212,24 +1105,10 @@ export class RuntimeManager {
     await this.stopWatchingStatus(entry);
     await entry.runtime.shutdown();
     await this.killManagedWorkspaceProcesses(entry);
-    await entry.workspace.destroy();
+    await entry.workspace.destroy(args);
     await this.cleanupUnusedInjectedSkillStagingDirs([]);
   }
 
-  /**
-   * Reaps every process still rooted in a managed workspace before its
-   * directory is removed. Runtime and terminal shutdown signal their own
-   * process groups, but processes that start a new session (`setsid`,
-   * `nohup`, detached dev servers) survive that and would otherwise keep
-   * running with a cwd in a deleted directory.
-   *
-   * The sweep is ownership-agnostic on purpose: it kills ANY process of this
-   * user whose cwd is inside the workspace, including ones bb never started
-   * (a shell `cd`'d into the worktree, an editor terminal, a debugger). The
-   * directory is about to be deleted, so those processes lose their cwd
-   * anyway. Only managed workspaces are swept; personal workspaces stay
-   * untouched.
-   */
   private async killManagedWorkspaceProcesses(
     entry: RuntimeEntry,
   ): Promise<void> {
@@ -1284,9 +1163,6 @@ export class RuntimeManager {
   }
 
   async evictIdleEnvironments(): Promise<string[]> {
-    // A pending environment creation is still active work. If we evict around
-    // it, the creation can resolve immediately after this sweep and resurrect
-    // an idle runtime entry that missed the eviction pass.
     if (this.pendingEntries.size > 0) {
       return [];
     }
@@ -1324,9 +1200,7 @@ export class RuntimeManager {
     for (const pending of this.pendingEntries.values()) {
       try {
         entries.push(await pending);
-      } catch {
-        // Ignore failed provisions during shutdown
-      }
+      } catch {}
     }
     this.entries.clear();
     this.pendingEntries.clear();
@@ -1334,9 +1208,6 @@ export class RuntimeManager {
     for (const entry of entries) {
       await this.stopWatchingStatus(entry);
       await entry.runtime.shutdown();
-      // Do NOT call workspace.destroy() — the server owns managed workspace
-      // lifecycle via explicit environment.destroy commands. Daemon shutdown
-      // should only release in-memory state and stop provider processes.
     }
     await this.shutdownProviderMaintenanceRuntime();
     await this.stopWatchingDataDirSkillsRoot();
@@ -1344,14 +1215,6 @@ export class RuntimeManager {
     await this.cleanupUnusedInjectedSkillStagingDirs([]);
   }
 
-  /**
-   * Synthesizes failure events for threads that were mid-turn when their
-   * provider process died, from the runtime's final per-thread snapshot.
-   * A process can also die after a turn request is sent but before the
-   * provider emits turn/started. That request has already made the server
-   * thread active, so synthesize a thread-scoped error to settle it instead
-   * of waiting for the live-command timeout.
-   */
   private buildUnexpectedProviderExitEvents(
     info: AgentRuntimeProcessExitInfo,
   ): ThreadEvent[] {
@@ -1502,13 +1365,6 @@ export class RuntimeManager {
       onInteractiveRequest: this.options.onInteractiveRequest,
       onStderr: this.options.onStderr,
       onProviderRecovery: (hint) => {
-        // The runtime has already acted on the kind (unarchive-and-retry,
-        // typed auth_required rejection, bridge restart, stale-steer drop,
-        // rate-limit ladder end: a rateLimited rejection arrives here only
-        // when it is terminal or ended the retry ladder). Provider health is
-        // pulled on demand by the server, so there is no host-side cache to
-        // invalidate here; the hint is logged so it is never silently
-        // consumed.
         this.options.logger?.debug(
           {
             environmentId: args.environmentId,

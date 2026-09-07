@@ -3,9 +3,6 @@ import { matchPath, Navigate, useLocation } from "react-router-dom";
 import { useAtomValue } from "jotai";
 import { splitLayoutAtom } from "@/lib/split-layout/atoms";
 import { holdsPluginDetailPane } from "@/lib/split-layout/openPaneContentInSplit";
-// Route views render icons outside the shell's core set. Importing the
-// extended registry here ships it as a static dependency of this route chunk,
-// so those icons never flash blank waiting for an on-demand load.
 import "@bb/shared-ui/icon-extended";
 import {
   APP_ROOT_ROUTE_PATH,
@@ -20,19 +17,10 @@ import { SplitThreadArea } from "./thread-detail/SplitThreadArea";
 
 const ROOT_COMPOSE_CONTENT = { kind: "new-thread" } as const;
 
-// The Extensions detail page, for the full-window case below. Lazy, like the
-// other Extensions routes in App.tsx, so it stays out of the workspace chunk.
 const ToolsView = lazy(() =>
   import("./ToolsView").then((m) => ({ default: m.ToolsView })),
 );
 
-/**
- * Stable route owner for every page that can live in the split workspace.
- *
- * All supported URLs intentionally match the same outer `*` route in App.tsx.
- * Focus-driven URL changes therefore update `routeContent` without replacing
- * this component or remounting the split tree and its plugin/compose panes.
- */
 export default function SplitWorkspaceRoute() {
   const location = useLocation();
   const { projectId, threadId, isThreadView } = useRouteState();
@@ -89,13 +77,6 @@ export default function SplitWorkspaceRoute() {
   if (routeContent === null) {
     return <Navigate to={APP_ROOT_ROUTE_PATH} replace />;
   }
-  // A plugin's detail page is full-window, like the rest of Extensions,
-  // unless the workspace already holds it in a split pane — which only
-  // happens when something deliberately opened it there (cmd-click on a link
-  // to it from plugin UI). The decision is made here rather than with a
-  // separate <Route>: this element must own every URL a pane can have, or
-  // focusing a different pane (which rewrites the URL) would swap Route
-  // elements and remount the whole workspace, threads included.
   if (
     routeContent.kind === "plugin-detail" &&
     !holdsPluginDetailPane(layout, routeContent.pluginId)

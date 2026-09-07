@@ -1,6 +1,6 @@
 {
   "name": "bb-app",
-  "version": "0.40.0",
+  "version": "0.42.1",
   "description": "bb app launcher for npx",
   "keywords": [
     "bb",
@@ -61,6 +61,7 @@
   },
   "scripts": {
     "build": "node scripts/build.mjs",
+    "build:host": "node scripts/build-host.mjs",
     "clean": "rimraf dist app host-daemon server tsconfig.tsbuildinfo",
     "prepack": "node dist/prune-bb-chunks.mjs",
     "smoke:tarball": "node scripts/smoke-tarball.mjs",
@@ -72,7 +73,7 @@
     "better-sqlite3": "12.10.0",
     "hono": "^4.7.0",
     "jiti": "^2.6.1",
-    "node-pty": "1.1.0",
+    "node-pty": "1.2.0-beta.15",
     "pino": "^9.6.0",
     "pino-pretty": "^13.0.0",
     "pino-roll": "^4.0.0",

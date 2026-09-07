@@ -7,10 +7,17 @@ export function isIgnoredPluginDevPath(relativePath: string): boolean {
     .some((segment) => IGNORED_SEGMENTS.has(segment));
 }
 
-interface PluginDevLoopDeps {
-  pluginId: string;
+export interface PluginDevLoopTargets {
   hasApp: boolean;
   hasHost: boolean;
+}
+
+interface PluginDevLoopDeps {
+  pluginId: string;
+  // Re-resolved every cycle: a plugin can add or drop its app/host entry
+  // while the dev loop is watching, and a stale snapshot would demand a
+  // build that can never succeed again (or skip one that now must run).
+  targets: () => Promise<PluginDevLoopTargets>;
   buildApp: () => Promise<void>;
   buildHost: () => Promise<void>;
   reloadPlugin: () => Promise<void>;
@@ -41,7 +48,15 @@ export function createPluginDevLoop(deps: PluginDevLoopDeps): PluginDevLoop {
     const parts = [
       `${files.length} file${files.length === 1 ? "" : "s"} changed`,
     ];
-    if (deps.hasApp) {
+    let targets: PluginDevLoopTargets;
+    try {
+      targets = await deps.targets();
+    } catch (error) {
+      parts.push(`manifest read failed: ${errorMessage(error)}`);
+      deps.log(`${parts.join(" · ")} — fix and save to retry`);
+      return;
+    }
+    if (targets.hasApp) {
       const startedAt = now();
       try {
         await deps.buildApp();
@@ -54,7 +69,7 @@ export function createPluginDevLoop(deps: PluginDevLoopDeps): PluginDevLoop {
         return;
       }
     }
-    if (deps.hasHost) {
+    if (targets.hasHost) {
       const startedAt = now();
       try {
         await deps.buildHost();

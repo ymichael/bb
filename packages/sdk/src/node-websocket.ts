@@ -12,15 +12,9 @@ function decodeWsMessageData(data: RawData): string {
   if (Buffer.isBuffer(data)) {
     return data.toString("utf8");
   }
-  // Remaining case is an ArrayBuffer; go through Uint8Array so every
-  // @types/node Buffer.from overload set accepts it.
   return Buffer.from(new Uint8Array(data)).toString("utf8");
 }
 
-/**
- * Adapts a `ws`-package WebSocket to the runtime-agnostic socket shape the
- * realtime client consumes.
- */
 export function wrapNodeWsWebsocket(url: string): BbRealtimeSocket {
   const socket = new NodeWsWebSocket(url);
   const adapter: BbRealtimeSocket = {
@@ -43,10 +37,6 @@ export function wrapNodeWsWebsocket(url: string): BbRealtimeSocket {
   return adapter;
 }
 
-/**
- * Node 22+ ships a global WebSocket; older supported Node versions (20.x)
- * fall back to the `ws` package so bb.subscribe works out of the box everywhere.
- */
 export function createNodeWebsocketFactory(): BbRealtimeSocketFactory {
   return (url) => {
     if (typeof WebSocket !== "undefined") {

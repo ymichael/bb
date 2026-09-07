@@ -1,28 +1,4 @@
 #!/usr/bin/env node
-/**
- * `pnpm rerecord [--plan-with <checkout>] [--provider <id>] [--cell <name>]
- *                [--recordings <dir>] [--timeout <ms>] [--verbose]`
- *
- * Writes each committed recording's `bridge→runtime.current.ndjson`: the
- * bridge's side of the wire as THIS checkout's bridge emits it for the
- * recording's provider and runtime lanes. The recording itself (provider
- * lanes, runtime lane, the recorded bridge lane) is never touched — a
- * pre-migration checkout paces its replay from the recorded lane — so the
- * current expectation lives beside it, and `parity.self.test.ts`
- * ("replaying the recording through the current bridge reproduces the
- * recorded output") reads it when present. Run `UPDATE_PARITY_ROW_COUNTS=1`
- * on the self-suite afterwards to re-pin the counts, and explain both diffs
- * in the PR.
- *
- * `--plan-with` names a checkout whose assembler parses the recorded lane
- * (the recording-time checkout): the replay plans where each runtime
- * request lands from that lane, which matters when this checkout's grammar
- * no longer accepts all of it.
- *
- * The lane itself is written by `rerecordCurrentBridgeLane` (the published
- * harness core); this CLI adds the first-party bridge launch, the per-cell
- * loop, and the redaction pass a committed fixture needs.
- */
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -43,17 +19,19 @@ import {
 import { loadParityLeg, type ParityLeg } from "./leg.js";
 
 const REDACT_SCRIPT = resolve(
-  new URL("../../../scripts/provider-recordings/redact.mjs", import.meta.url).pathname,
+  new URL("../../../scripts/provider-recordings/redact.mjs", import.meta.url)
+    .pathname,
 );
 
-/** Run `scripts/provider-recordings/redact.mjs` over one file, in place. */
 function redactInPlace(file: string): void {
   const inDir = mkdtempSync(join(tmpdir(), "bb-rerecord-redact-in-"));
   const outDir = mkdtempSync(join(tmpdir(), "bb-rerecord-redact-out-"));
   try {
     const staged = join(inDir, basename(file));
     writeFileSync(staged, readFileSync(file));
-    execFileSync(process.execPath, [REDACT_SCRIPT, inDir, outDir], { stdio: ["ignore", "ignore", "inherit"] });
+    execFileSync(process.execPath, [REDACT_SCRIPT, inDir, outDir], {
+      stdio: ["ignore", "ignore", "inherit"],
+    });
     writeFileSync(file, readFileSync(join(outDir, basename(file))));
   } finally {
     rmSync(inDir, { recursive: true, force: true });
@@ -146,10 +124,6 @@ async function rerecordCell(
   if (result.file === null) {
     return `STALL ${cellKey(cell)}: ${result.stalls.join("; ")} (current lane left untouched)`;
   }
-  // The lane is bridge output from this machine: a bridge error can quote
-  // the replay child's command line, with this checkout's paths in it. Pass
-  // it through the recordings' redactor so a committed lane is clean by
-  // construction, and fail loudly if a secret shape survives.
   redactInPlace(result.file);
   return `OK ${cellKey(cell)}: ${result.lines} bridge→runtime lines (${result.events} events)`;
 }

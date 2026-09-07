@@ -64,7 +64,10 @@ import {
   type UsePromptModelReasoningOptions,
   updateThreadPromptSelections,
 } from "./thread-creation-options/selection-state";
-import { resolveModelCatalogSelection } from "./thread-creation-options/model-catalog-selection";
+import {
+  resolveModelCatalogSelection,
+  resolveModelReasoningLevel,
+} from "./thread-creation-options/model-catalog-selection";
 
 export { formatModelLabel, resolvePermissionModeSelection };
 
@@ -121,16 +124,13 @@ interface UseThreadCreationOptionsResult<TExecutionInputSources> {
   isLoadingModels: boolean;
   modelLoadFailed: boolean;
   modelLoadError: SystemExecutionOptionsModelLoadError | null;
-  /** True only after the selected provider's live model probe succeeds. */
   modelCatalogIsVerified: boolean;
   reasoningOptions: PickerOption<ReasoningLevel>[];
   permissionModeOptions: PickerOption<PermissionMode>[];
   supportsPermissionModeSelection: boolean;
-  /** True once provider capabilities and the routed permission ceiling are authoritative. */
   permissionModeIsVerified: boolean;
   supportsServiceTier: boolean;
   serviceTierSupportByProvider: Record<string, boolean>;
-  /** The committed provider's declared label for its fast tier. */
   serviceTierFastLabel: string;
   executionInputSources: TExecutionInputSources;
 }
@@ -139,11 +139,6 @@ interface ResolveThreadCreationProviderRoutingArgs {
   environmentId?: string;
   environmentHostId?: string;
   environmentSelectionValue: string;
-  /**
-   * The selected provider's declared catalog scope, when this render already
-   * knows it. It is undefined on the first pass: this routing decides the
-   * query key of the request that fetches the providers in the first place.
-   */
   modelCatalogScope?: ProviderModelCatalogScope;
   scope: "component-local" | "new-thread";
 }
@@ -159,11 +154,6 @@ function resolveThreadCreationProviderRouting({
     if (environmentId === undefined) {
       return {};
     }
-    // A host-scoped catalog is the same for every environment on the machine,
-    // so route by host: opening threads in different environments then shares
-    // one cached query instead of issuing a probe per environment. Workspace-
-    // scoped catalogs (and providers whose scope is unknown) keep the
-    // environment so the server can pass the workspace path through.
     if (
       environmentHostId !== undefined &&
       !providerModelCatalogDependsOnWorkspace(modelCatalogScope)
@@ -189,9 +179,6 @@ type InitialReadyProviderResolution =
   | { status: "resolved"; providerId: string | null };
 
 function sanitizeStoredEnvironmentValue(stored: string): string {
-  // Legacy guard: earlier iterations briefly persisted `reuse:<envId>` to
-  // localStorage. Treat any persisted reuse value as absent so the picker
-  // never resurrects a stale reuse selection across sessions.
   if (!stored) return "";
   const parsed = parseEnvironmentValue(stored);
   if (parsed?.type === "reuse") return "";
@@ -238,9 +225,6 @@ export function useThreadCreationOptions(
     setValue: setStoredEnvironmentSelectionValue,
     value: storedEnvironmentSelectionValue,
   } = usePromptBoxEnvironmentPreference(preferenceProjectId);
-  // Reuse env values are intentionally NEVER persisted to localStorage —
-  // they represent a transient "create one thread in this worktree" intent,
-  // not a project default.
   const [rootComposeReuseValue, setRootComposeReuseValue] =
     useRootComposeReuseEnvironment();
   const [threadSelections, setThreadSelections] =
@@ -288,10 +272,6 @@ export function useThreadCreationOptions(
   );
   const renderedThreadSelections = useMemo(() => {
     if (!usesLocalThreadSelections) {
-      // New-thread scope writes user picks to atoms, never to `threadSelections`,
-      // so the useState seed cannot reflect late-arriving project defaults.
-      // Track `nextThreadSelections` directly — the seed becomes the empty
-      // baseline before any initial values resolve, and updates as they do.
       return nextThreadSelections;
     }
     if (threadResetKeyRef.current !== resetKey) {
@@ -324,10 +304,6 @@ export function useThreadCreationOptions(
         sanitizeStoredEnvironmentValue(storedEnvironmentSelectionValue))
       : renderedThreadSelections.environmentSelectionValue;
 
-  // --- Provider selection ---
-  // The scope of the selected provider, from whatever provider list this
-  // render already has. Undefined on a cold cache, which routes by
-  // environment — one redundant probe, never a stale catalog.
   const knownModelCatalogScope = useKnownProviderModelCatalogScope(
     selectedProviderIdBeforeReadyFallback,
   );
@@ -364,9 +340,6 @@ export function useThreadCreationOptions(
     initialReadyProvider.status === "resolved"
       ? (initialReadyProvider.providerId ?? undefined)
       : queriedReadyProviderId;
-  // This is an initial default, not a host-scoped live selection. Once the
-  // first routed probe settles, retain its answer so changing machines does
-  // not silently reselect the provider or repeat provider health probes.
   useEffect(() => {
     if (!shouldResolveReadyProvider || providerStatesQuery.isPending) {
       return;
@@ -386,8 +359,6 @@ export function useThreadCreationOptions(
   ]);
   const rawSelectedProviderId =
     selectedProviderIdBeforeReadyFallback || readyProviderId || "";
-  // Omission delegates the no-selection fallback to the server, whose product
-  // default comes from the same provider catalog that orders the picker.
   const executionOptionsProviderId = executionOptionsQueryEnabled
     ? rawSelectedProviderId || undefined
     : undefined;
@@ -408,10 +379,6 @@ export function useThreadCreationOptions(
     executionOptionsQuery.data?.modelLoadError ?? NO_MODEL_LOAD_ERROR;
   const modelLoadFailed =
     executionOptionsQuery.isError || modelLoadError !== null;
-  // Preloaded placeholder rows and the server's probe-failure fallback are both
-  // provisional catalogs. Only a successful probe proves a stored model is gone,
-  // so recovery is gated on the catalog being verified. Placeholder data is not
-  // a failure, so it deliberately stays out of `modelLoadFailed`.
   const modelCatalogIsVerified =
     executionOptionsQuery.data !== undefined &&
     !executionOptionsQuery.isPlaceholderData &&
@@ -423,8 +390,6 @@ export function useThreadCreationOptions(
     !executionOptionsQuery.isError;
   const hasMultipleProviders = providers.length >= 2;
 
-  // Resolve the effective provider: use selectedProviderId if it matches a known
-  // provider, otherwise fall back to the first provider in the list.
   const effectiveProviderId = useMemo(() => {
     if (
       rawSelectedProviderId &&
@@ -492,11 +457,6 @@ export function useThreadCreationOptions(
     activeProviderCapabilities?.permissionModes ??
     DEFAULT_SUPPORTED_PERMISSION_MODES;
   const supportsPermissionModeSelection = permissionModes.length > 1;
-  // The machine's permission limit (Settings → Machines). Modes above it stay
-  // listed but unselectable, so the picker never offers a mode the server
-  // would resolve back down. Before the routed answer lands (cold load, or the
-  // Claude preload placeholder) the cached machine list stands in, so the
-  // picker never briefly offers a mode this machine has already ruled out.
   const routedHostCeiling = useMemo(() => {
     const hosts = hostsQuery.data;
     if (!hosts) return null;
@@ -588,19 +548,12 @@ export function useThreadCreationOptions(
 
   const permissionMode = resolvePermissionModeSelection({
     rawPermissionMode,
-    // A stored preference above the machine's limit shows as the mode that
-    // will actually run, not the one that would be resolved away.
     permissionModes:
       allowedPermissionModes.length > 0
         ? allowedPermissionModes
         : permissionModes,
   });
   const environmentSelectionValue = rawEnvironmentSelectionValue;
-  // A resetKey change clears touched fields in a layout effect, which runs
-  // after this render's provenance is computed. Treat the pending reset as
-  // "nothing touched" here — the same render-time rule
-  // `renderedThreadSelections` applies — so the reset render never reports
-  // stale explicit provenance.
   const touchedFieldsPendingReset =
     usesLocalThreadSelections && threadResetKeyRef.current !== resetKey;
   const effectiveInitialProviderSource: ExecutionInputFieldSource | undefined =
@@ -675,8 +628,6 @@ export function useThreadCreationOptions(
       touchedThreadFieldsRef.current.add("selectedProviderId");
       if (usesStoredCreateSelections) {
         if (effectiveProviderId.length > 0) {
-          // Materialize legacy/current defaults under the provider being left
-          // before the provider setter retires the old unscoped storage keys.
           setStoredSelectedModel(selectedModel);
           setStoredReasoningLevel(reasoningLevel);
         }
@@ -787,8 +738,23 @@ export function useThreadCreationOptions(
   const setSelectedModel = useCallback(
     (value: string) => {
       touchedThreadFieldsRef.current.add("selectedModel");
+      const nextModel =
+        executionOptionsQuery.data?.models.find(
+          (model) => model.model === value,
+        ) ??
+        executionOptionsQuery.data?.selectedOnlyModels.find(
+          (model) => model.model === value,
+        );
+      const nextReasoningLevel = resolveModelReasoningLevel(
+        nextModel,
+        reasoningLevel,
+      );
       if (usesStoredCreateSelections) {
-        setStoredSelectedModel(value);
+        setStoredProviderModelReasoning({
+          providerId: effectiveProviderId,
+          model: value,
+          reasoningLevel: nextReasoningLevel,
+        });
         return;
       }
       setLocalProvidersUsingDefaults((current) => {
@@ -799,18 +765,20 @@ export function useThreadCreationOptions(
       });
       localProviderSelectionsRef.current.set(effectiveProviderId, {
         model: value,
-        reasoningLevel,
+        reasoningLevel: nextReasoningLevel,
       });
       setThreadSelections((currentSelections) => ({
         ...currentSelections,
         selectedModel: value,
-        reasoningLevel,
+        reasoningLevel: nextReasoningLevel,
       }));
     },
     [
       effectiveProviderId,
+      executionOptionsQuery.data?.models,
+      executionOptionsQuery.data?.selectedOnlyModels,
       reasoningLevel,
-      setStoredSelectedModel,
+      setStoredProviderModelReasoning,
       usesStoredCreateSelections,
     ],
   );
@@ -885,9 +853,6 @@ export function useThreadCreationOptions(
       if (scope === "new-thread") {
         const parsed = parseEnvironmentValue(value);
         if (parsed?.type === "reuse") {
-          // Reuse intent is transient. Hold it in root-compose state so the
-          // picker reflects the user's choice without overwriting their
-          // persisted host-mode default.
           setRootComposeReuseValue(value);
           return;
         }
@@ -906,9 +871,6 @@ export function useThreadCreationOptions(
     },
     [scope, setRootComposeReuseValue, setStoredEnvironmentSelectionValue],
   );
-  // Dismissing the reuse banner reverts to whatever the user's persisted
-  // host-mode default is — no localStorage write needed, just clear the
-  // transient override.
   const clearReuseEnvironment = useCallback(() => {
     if (scope !== "new-thread") return;
     setRootComposeReuseValue(null);

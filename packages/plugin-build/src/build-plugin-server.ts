@@ -21,47 +21,10 @@ import {
   type PluginBuildToolchain,
 } from "./toolchain.js";
 
-/**
- * `bb plugin build` — compile a plugin's `bb.server` entry into a
- * self-contained backend bundle (prebuilt distribution, design §6):
- *
- * - `dist/server.js` (+ `.map`) — single node-platform ESM file with the
- *   plugin's npm deps inlined, so git:/npm: consumers never need npm or
- *   node_modules. The bare `@get-bb/plugin-sdk` stays external — plugin
- *   authors only ever have its `.d.ts` types, so the specifier must survive
- *   to load time, where the server's loader aliases it to the SDK runtime
- *   bundle shipped next to the server (workspace resolution covers source
- *   checkouts). An SDK subpath (`@get-bb/plugin-sdk/host`,
- *   `/provider-bridge/acp`, …) is bundled from the plugin's own SDK install,
- *   as the host artifact bundles it: the loader serves nothing but the bare
- *   specifier. better-sqlite3 is also external (plugins get sqlite from the
- *   host via `bb.storage`; native deps are unsupported in plugins regardless).
- * - `dist/server.meta.json` — SDK compatibility plus authoritative plugin,
- *   artifact-format, and build-version metadata.
- */
-
-/** The SDK package plugin server sources import. */
 const PLUGIN_SDK_SPECIFIER = "@get-bb/plugin-sdk";
 
-/**
- * Legacy alias for {@link PLUGIN_SDK_SPECIFIER}, kept so pre-rename plugin
- * sources still build. The server loader aliases both specifiers to the same
- * SDK runtime bundle; a later change removes it.
- */
 const LEGACY_PLUGIN_SDK_SPECIFIER = "@bb/plugin-sdk";
 
-/**
- * Specifiers the backend bundle leaves unresolved. Everything else a plugin's
- * server source imports is inlined from its node_modules, so it has to be a
- * real `dependency` — `packages/templates` scaffolds against this list.
- *
- * The two SDK specifiers are external by exact match only: esbuild's
- * `external` option would keep every subpath of the package external too,
- * and the server's loader aliases only the bare specifier to its runtime
- * bundle, so a bundled `@get-bb/plugin-sdk/host` import resolved to
- * `plugin-sdk-runtime.js/host` on a packaged server and failed the plugin's
- * load. Subpaths go through {@link unresolvedSdkSubpathError}'s resolver.
- */
 export const PLUGIN_SERVER_EXTERNALS: readonly string[] = [
   PLUGIN_SDK_SPECIFIER,
   LEGACY_PLUGIN_SDK_SPECIFIER,
@@ -70,15 +33,8 @@ export const PLUGIN_SERVER_EXTERNALS: readonly string[] = [
 
 const PLUGIN_SDK_ROOT_FILTER = /^@get-bb\/plugin-sdk$|^@bb\/plugin-sdk$/;
 const PLUGIN_SDK_SUBPATH_FILTER = /^@get-bb\/plugin-sdk\//;
-/** Marks the resolver's own re-entrant `build.resolve` call. */
 const PLUGIN_SDK_SUBPATH_RESOLVE_MARK = "bb-server-sdk-subpath";
 
-/**
- * Why an SDK subpath did not resolve for a server entry. A subpath is
- * bundled from the plugin's own SDK install (the loader serves only the bare
- * specifier), so the cause is the dependency, not the import; esbuild's
- * "Could not resolve" would send the author after the wrong one.
- */
 async function unresolvedSdkSubpathError(args: {
   specifier: string;
   resolveDir: string;
@@ -102,13 +58,11 @@ async function unresolvedSdkSubpathError(args: {
 }
 
 interface PluginServerConfig {
-  /** Absolute path of the `bb.server` entry file. */
   serverEntry: string;
   packageName: string;
   pluginVersion: string;
 }
 
-/** Read `<rootDir>/package.json` and resolve its `bb.server` entry, or throw. */
 async function readPluginServerConfig(
   rootDir: string,
 ): Promise<PluginServerConfig> {
@@ -163,10 +117,6 @@ interface PluginServerBuildResult {
   metaPath: string;
 }
 
-/**
- * Build `<rootDir>`'s backend bundle into `<rootDir>/dist/`. Throws with a
- * human-readable message on any problem (missing bb.server, compile errors).
- */
 export async function buildPluginServer(
   rootDir: string,
   bbVersion: string,
@@ -180,15 +130,11 @@ export async function buildPluginServer(
   const mapPath = join(distDir, "server.js.map");
   const metaPath = join(distDir, "server.meta.json");
 
-  // Build every artifact into a staging directory and only rename into place
-  // once all steps succeeded — a failed rebuild must not clobber the previous
-  // dist/server.js the loader may still prefer.
   const stageDir = await mkdtemp(join(distDir, ".stage-"));
   try {
     const stagedJsPath = join(stageDir, "server.js");
     const stagedMetaPath = join(stageDir, "server.meta.json");
 
-    // Dynamic specifier: restate the module type (see build-plugin-app.ts).
     const esbuild = (await import(
       toolchain.esbuild
     )) as typeof import("esbuild");
@@ -201,9 +147,6 @@ export async function buildPluginServer(
       target: "node22",
       sourcemap: true,
       banner: { js: NODE_ESM_REQUIRE_BANNER },
-      // better-sqlite3 comes from the host (bb.storage). Node builtins are
-      // auto-external via platform: "node". The SDK specifiers are handled by
-      // the plugin below, not here: `external` would take their subpaths too.
       external: PLUGIN_SERVER_EXTERNALS.filter(
         (specifier) => !PLUGIN_SDK_ROOT_FILTER.test(specifier),
       ),
@@ -211,14 +154,10 @@ export async function buildPluginServer(
         {
           name: "bb-plugin-sdk-resolution",
           setup(build) {
-            // The bare specifier (and its legacy alias) survives to load
-            // time, where the server's loader aliases it to its runtime.
             build.onResolve({ filter: PLUGIN_SDK_ROOT_FILTER }, (args) => ({
               path: args.path,
               external: true,
             }));
-            // A subpath is bundled from the plugin's installed SDK; when that
-            // fails, name the cause.
             build.onResolve(
               { filter: PLUGIN_SDK_SUBPATH_FILTER },
               async (args) => {
@@ -261,7 +200,6 @@ export async function buildPluginServer(
       ) + "\n",
     );
 
-    // Same filesystem as dist/, so each rename is atomic.
     await rename(stagedJsPath, jsPath);
     await rename(join(stageDir, "server.js.map"), mapPath);
     await rename(stagedMetaPath, metaPath);

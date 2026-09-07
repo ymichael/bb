@@ -72,9 +72,6 @@ it("snap-syncs the timeline height when older rows are prepended", () => {
 
   expect(heightWrapper?.style.height).toBe("200px");
 
-  // Loading an older page changes the leading row while the latest completed
-  // turn stays the same. The wrapper must snap now, before ResizeObserver, so
-  // the parent scroll body's layout effect sees the full prepend delta.
   view.rerender(timeline([...olderRows, ...latestRows]));
 
   expect(heightWrapper?.style.height).toBe("400px");

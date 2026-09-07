@@ -1,8 +1,5 @@
 import type { WorkspaceFileStatus } from "@bb/domain";
-import {
-  ThreadGitActionDialogContent,
-  type ThreadGitActionDialogTarget,
-} from "./ThreadGitActionDialog";
+import { ThreadGitActionDialogContent } from "./ThreadGitActionDialog";
 import type { ThreadGitStatusDisplay } from "@/components/workspace/workspace-status";
 import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
 import { BRANCH_NAMES } from "../../../.ladle/story-fixtures";
@@ -16,16 +13,8 @@ export default {
 const noop = () => {};
 const asyncNoop = async () => {};
 
-// Matches the dialog's custom DialogContent className: p-0 + tight border +
-// 34rem width, leaving the form to own its own padding.
 const stageClassName =
   "max-w-[34rem] gap-0 overflow-hidden border-border p-0 shadow-sm";
-
-const commitTarget: ThreadGitActionDialogTarget = { kind: "commit" };
-const commitAndSquashTarget: ThreadGitActionDialogTarget = {
-  kind: "commit_and_squash_merge",
-};
-const squashTarget: ThreadGitActionDialogTarget = { kind: "squash_merge" };
 
 const changedFiles: WorkspaceFileStatus[] = [
   {
@@ -67,15 +56,6 @@ const dirtyGitStatus: ThreadGitStatusDisplay = {
   summaryContent: "",
 };
 
-const aheadGitStatus: ThreadGitStatusDisplay = {
-  label: "Ahead",
-  summary: "3 ahead of origin/main",
-  summaryContent: "3 ahead of origin/main",
-};
-
-const mergeBaseOptions = ["main", "develop", "staging"];
-const mergeBaseRemoteOptions = ["origin/main", "origin/develop"];
-
 export function Overview() {
   return (
     <StoryCard>
@@ -85,116 +65,11 @@ export function Overview() {
       >
         <DialogStage className={stageClassName}>
           <ThreadGitActionDialogContent
-            target={commitTarget}
             branchName={BRANCH_NAMES.feature}
             gitStatusDisplay={dirtyGitStatus}
             changedFilesSection={changedFilesSection}
             onOpenChange={noop}
             onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="commit + squash merge"
-        hint="commit then squash — adds the Merge base picker"
-      >
-        <DialogStage className={stageClassName}>
-          <ThreadGitActionDialogContent
-            target={commitAndSquashTarget}
-            branchName={BRANCH_NAMES.feature}
-            gitStatusDisplay={dirtyGitStatus}
-            changedFilesSection={changedFilesSection}
-            showMergeBaseDetails
-            mergeBaseBranch="main"
-            mergeBaseBranchRef={{ name: "main", kind: "local" }}
-            mergeBaseBranchOptions={mergeBaseOptions}
-            mergeBaseRemoteBranchOptions={mergeBaseRemoteOptions}
-            onMergeBaseBranchChange={noop}
-            onOpenChange={noop}
-            onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="squash merge"
-        hint='kind="squash_merge" — no changed-files row, just branch + merge base'
-      >
-        <DialogStage className={stageClassName}>
-          <ThreadGitActionDialogContent
-            target={squashTarget}
-            branchName={BRANCH_NAMES.feature}
-            gitStatusDisplay={aheadGitStatus}
-            showMergeBaseDetails
-            mergeBaseBranch="main"
-            mergeBaseBranchRef={{ name: "main", kind: "local" }}
-            mergeBaseBranchOptions={mergeBaseOptions}
-            mergeBaseRemoteBranchOptions={mergeBaseRemoteOptions}
-            onMergeBaseBranchChange={noop}
-            onOpenChange={noop}
-            onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="squash merge, no picker"
-        hint="merge base shown as plain text — no onMergeBaseBranchChange handler"
-      >
-        <DialogStage className={stageClassName}>
-          <ThreadGitActionDialogContent
-            target={squashTarget}
-            branchName={BRANCH_NAMES.feature}
-            gitStatusDisplay={aheadGitStatus}
-            showMergeBaseDetails
-            mergeBaseBranch="main"
-            mergeBaseBranchRef={{ name: "main", kind: "local" }}
-            onOpenChange={noop}
-            onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="checking target branch"
-        hint="selected merge base is still being classified — inline footer status, submit disabled"
-      >
-        <DialogStage className={stageClassName}>
-          <ThreadGitActionDialogContent
-            target={commitAndSquashTarget}
-            branchName={BRANCH_NAMES.feature}
-            gitStatusDisplay={dirtyGitStatus}
-            changedFilesSection={changedFilesSection}
-            showMergeBaseDetails
-            mergeBaseBranch="main"
-            mergeBaseBranchOptions={["main"]}
-            mergeBaseBranchOptionsLoading
-            onMergeBaseBranchChange={noop}
-            onOpenChange={noop}
-            onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
-          />
-        </DialogStage>
-      </StoryRow>
-      <StoryRow
-        label="remote target blocked"
-        hint="selected merge base is remote-only — inline footer validation stays visible"
-      >
-        <DialogStage className={stageClassName}>
-          <ThreadGitActionDialogContent
-            target={squashTarget}
-            branchName={BRANCH_NAMES.feature}
-            gitStatusDisplay={aheadGitStatus}
-            showMergeBaseDetails
-            mergeBaseBranch="origin/main"
-            mergeBaseBranchRef={{ name: "origin/main", kind: "remote" }}
-            mergeBaseBranchOptions={mergeBaseOptions}
-            mergeBaseRemoteBranchOptions={mergeBaseRemoteOptions}
-            onMergeBaseBranchChange={noop}
-            onOpenChange={noop}
-            onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
           />
         </DialogStage>
       </StoryRow>
@@ -204,10 +79,8 @@ export function Overview() {
       >
         <DialogStage className={stageClassName}>
           <ThreadGitActionDialogContent
-            target={commitTarget}
             onOpenChange={noop}
             onCommit={asyncNoop}
-            onSquashMerge={asyncNoop}
           />
         </DialogStage>
       </StoryRow>

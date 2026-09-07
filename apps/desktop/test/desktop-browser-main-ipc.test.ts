@@ -99,6 +99,30 @@ interface SendBrowserIpcArgs {
 }
 
 class RecordingDesktopBrowserViewManager implements DesktopBrowserViewManager {
+  createTab(): never {
+    throw new Error("Not used by renderer IPC");
+  }
+
+  listTabs(): [] {
+    return [];
+  }
+
+  closeTab(): void {}
+
+  async captureTab(): Promise<never> {
+    throw new Error("Not used by renderer IPC");
+  }
+
+  getAutomationTabs(): ReturnType<
+    DesktopBrowserViewManager["getAutomationTabs"]
+  > {
+    return [];
+  }
+
+  subscribeAutomationTabs(): () => void {
+    return () => undefined;
+  }
+
   public readonly attachCalls: AttachCall[] = [];
   public readonly beginWindowResizeCalls: WindowResizeCall[] = [];
   public readonly destroyAllCalls: string[] = [];
@@ -124,6 +148,8 @@ class RecordingDesktopBrowserViewManager implements DesktopBrowserViewManager {
   beginWindowResize(hostWindow: WindowResizeCall): void {
     this.beginWindowResizeCalls.push(hostWindow);
   }
+
+  prepareWindowReload(): void {}
 
   destroyAll(): void {
     this.destroyAllCalls.push("destroyAll");
@@ -228,6 +254,7 @@ describe("registerDesktopBrowserIpc", () => {
     const renderer = createTrustedRenderer("main-window");
     const untrustedSender = createUntrustedSender();
     const attachRequest: BbDesktopBrowserAttachRequest = {
+      threadId: "thread-1",
       tabId: "browser:a",
       url: "http://localhost:5173/",
       bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -341,6 +368,7 @@ describe("registerDesktopBrowserIpc", () => {
     registerDesktopBrowserIpc(manager);
     const renderer = createTrustedRenderer("main-window");
     const validAttachRequest: BbDesktopBrowserAttachRequest = {
+      threadId: "thread-1",
       tabId: "browser:a",
       url: "",
       bounds: { x: 0, y: 0, width: 800, height: 600 },

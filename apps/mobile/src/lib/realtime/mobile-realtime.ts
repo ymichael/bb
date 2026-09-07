@@ -25,15 +25,6 @@ export type MobileRealtimeConnectionState =
   | "connected"
   | "reconnecting";
 
-/**
- * A connection attempt ended before the socket opened (refused upgrade,
- * unreachable host, handshake timeout). `authRejected` is set when the
- * platform's error message names an auth status — React Native reports
- * "Received bad response code from server 401" (iOS) / "Expected HTTP 101
- * response but was '401 Unauthorized'" (Android) for a gate that refused
- * the session cookie — so the owner can re-check the session right away
- * instead of backing off.
- */
 export interface MobileRealtimeConnectFailedEvent {
   message: string | null;
   authRejected: boolean;
@@ -48,50 +39,15 @@ function isAuthRejectionMessage(message: string | null): boolean {
 export type MobileRealtimeConnectedEvent =
   | { reconnected: false }
   | {
-      /** The socket had connected before (reconnect, resume, or a probe). */
       reconnected: true;
-      /**
-       * Watermark for reconnect catch-up: the last moment the previous socket
-       * was known to be healthy (the last inbound frame for a socket that
-       * failed a liveness probe, the close/suspend time otherwise). Data
-       * fetched after it may still be current; data fetched before it may
-       * have missed change events.
-       */
       disconnectedAt: number;
     };
 
-/**
- * `WebSocketManager`-shaped realtime client for React Native (see
- * apps/app/src/lib/ws.ts for the web twin). One instance per server profile.
- *
- * Differences from the web manager: explicit `suspend()`/`resume()` for
- * AppState (the socket is closed in the background but subscriptions are
- * kept and replayed on resume), an injectable socket factory, and no
- * partysocket dependency (backoff is implemented here: 1s × 1.5 → 30s).
- *
- * Liveness: React Native's WebSocket exposes no ping/pong either, and a
- * half-open socket (Wi-Fi to LTE switch, a tunnel hiccup) stays `OPEN` while
- * delivering nothing. While connected the manager sends an app-level `ping`
- * on an interval, treats any inbound frame as proof of life, and replaces a
- * socket whose probe goes unanswered. `resume()` on an already-open socket
- * (iOS `inactive` → `active`) probes it right away.
- */
 export interface MobileRealtime {
   connect(): void;
   disconnect(): void;
-  /** App went to the background: close the socket, keep subscriptions. */
   suspend(): void;
-  /**
-   * App is active again: reconnect (if `connect()` was called) and replay
-   * subscriptions. When the socket was never suspended (a transient
-   * `inactive`), an open socket is probed and a closed one reconnects now.
-   */
   resume(): void;
-  /**
-   * Something that may have fixed the connection just happened (a fresh
-   * session cookie): a closed socket waiting out its backoff reconnects
-   * now, an open one is probed, an attempt in flight is left alone.
-   */
   probeOrReconnect(): void;
   subscribe(target: RealtimeSubscriptionTarget): void;
   unsubscribe(target: RealtimeSubscriptionTarget): void;
@@ -104,7 +60,6 @@ export interface MobileRealtime {
   onConnected(
     callback: (event: MobileRealtimeConnectedEvent) => void,
   ): () => void;
-  /** A connection attempt failed before opening (see the event type). */
   onConnectFailed(
     callback: (event: MobileRealtimeConnectFailedEvent) => void,
   ): () => void;
@@ -116,10 +71,8 @@ export interface MobileRealtime {
 }
 
 export interface CreateMobileRealtimeOptions {
-  /** Absolute `ws(s)://…/ws` URL (see `realtimeUrlForServer`). */
   url: string;
   socketFactory?: RealtimeSocketFactory;
-  /** Extra upgrade headers, evaluated per connection attempt (cookie hook). */
   headers?: () => Record<string, string>;
   connectionTimeoutMs?: number;
   onInvalidMessage?: (error: unknown) => void;
@@ -129,7 +82,6 @@ const REALTIME_MIN_RECONNECT_DELAY_MS = 1000;
 const REALTIME_MAX_RECONNECT_DELAY_MS = 30_000;
 const REALTIME_RECONNECT_GROW_FACTOR = 1.5;
 const REALTIME_CONNECTION_TIMEOUT_MS = 10_000;
-/** Same cadence as the web manager (apps/app/src/lib/ws.ts). */
 export const REALTIME_PING_INTERVAL_MS = 25_000;
 export const REALTIME_PONG_TIMEOUT_MS = 5_000;
 
@@ -186,7 +138,6 @@ export function createMobileRealtime(
   const pendingOpenFileByThreadId = new Map<string, ThreadOpenFile>();
 
   let socket: RealtimeSocketLike | null = null;
-  /** Whether the current socket ever opened, and its last error message. */
   let socketOpened = false;
   let socketErrorMessage: string | null = null;
   let started = false;
@@ -198,9 +149,7 @@ export function createMobileRealtime(
   let connectionTimer: ReturnType<typeof setTimeout> | null = null;
   let pingTimer: ReturnType<typeof setInterval> | null = null;
   let pongTimer: ReturnType<typeof setTimeout> | null = null;
-  /** Last moment the current socket proved it was alive (open or any frame). */
   let lastServerActivityAt = 0;
-  /** Set when a connected socket is lost; consumed by the next onopen. */
   let disconnectedAt: number | null = null;
   let connectionState: MobileRealtimeConnectionState = "connecting";
 
@@ -247,11 +196,8 @@ export function createMobileRealtime(
 
   function sendPing(): void {
     if (!socket || socket.readyState !== SOCKET_OPEN) return;
-    // A frame that just arrived is proof enough; do not add traffic to a
-    // socket that is visibly alive (a streaming turn delivers many per second).
     if (Date.now() - lastServerActivityAt < REALTIME_PONG_TIMEOUT_MS) return;
     send({ type: "ping" });
-    // A probe already outstanding keeps its own timer.
     if (pongTimer !== null) return;
     pongTimer = setTimeout(() => {
       pongTimer = null;
@@ -265,13 +211,11 @@ export function createMobileRealtime(
     pingTimer = setInterval(sendPing, REALTIME_PING_INTERVAL_MS);
   }
 
-  /** Any inbound frame proves the socket is alive, not only a pong. */
   function noteServerActivity(): void {
     lastServerActivityAt = Date.now();
     clearPongTimer();
   }
 
-  /** The connected socket is gone; remember when it was last trusted. */
   function markSocketLost(at: number): void {
     stopPingLoop();
     if (hasConnected && disconnectedAt === null) {
@@ -280,7 +224,6 @@ export function createMobileRealtime(
     setConnectionState(hasConnected ? "reconnecting" : "connecting");
   }
 
-  /** Detach and close the current socket without triggering reconnect logic. */
   function teardownSocket(): void {
     clearConnectionTimer();
     const current = socket;
@@ -292,9 +235,7 @@ export function createMobileRealtime(
     current.onerror = null;
     try {
       current.close(1000, "client closing");
-    } catch {
-      // Closing an already-closed socket is not an error we care about.
-    }
+    } catch {}
   }
 
   function scheduleReconnect(): void {
@@ -330,10 +271,6 @@ export function createMobileRealtime(
       return;
     }
     if (pongTimer !== null) {
-      // The close confirms what the unanswered probe suspected: the socket
-      // was already dead when the ping went out. Reconnect right away instead
-      // of waiting out the first backoff, and watermark from the last inbound
-      // frame.
       markSocketLost(lastServerActivityAt);
       openSocket();
       return;
@@ -346,9 +283,6 @@ export function createMobileRealtime(
     if (disposed || suspended || !started) return;
     const current = socket;
     if (current) {
-      // A live-looking socket that failed its probe: watermark from the last
-      // inbound frame, not "now" — anything fetched after it may have raced a
-      // dead connection. A socket still connecting was never trusted.
       const watermark =
         current.readyState === SOCKET_OPEN ? lastServerActivityAt : Date.now();
       teardownSocket();
@@ -358,11 +292,6 @@ export function createMobileRealtime(
     openSocket();
   }
 
-  /**
-   * The app came to the foreground without a suspend in between (iOS
-   * `inactive`): an open socket is probed, a closed one waiting out its
-   * backoff reconnects now, an attempt in flight is left alone.
-   */
   function probeOrReconnect(): void {
     if (disposed || suspended || !started) return;
     if (!socket) {
@@ -384,7 +313,6 @@ export function createMobileRealtime(
     connectionTimer = setTimeout(() => {
       connectionTimer = null;
       if (socket !== next) return;
-      // Handshake stalled: drop it and back off like a failed attempt.
       teardownSocket();
       setConnectionState(hasConnected ? "reconnecting" : "connecting");
       emitConnectFailed("handshake timeout");
@@ -421,12 +349,6 @@ export function createMobileRealtime(
       handleIncomingMessage(event.data);
     };
     next.onclose = (event) => {
-      // React Native emits `error` then `close` for a failed connection; the
-      // close handler owns reconnect scheduling. React Native puts the
-      // platform's failure reason ("Received bad response code from server:
-      // 401.") in the close event's `reason` (RN ≥ 0.86; older versions and
-      // some platforms set `message` on the error event), so either is kept
-      // for the failure report.
       if (socket === next && !socketOpened && socketErrorMessage === null) {
         socketErrorMessage = event.reason.length > 0 ? event.reason : null;
       }
@@ -446,7 +368,6 @@ export function createMobileRealtime(
       return;
     }
 
-    // Answer to our liveness probe; receipt already cleared the pong timer.
     if (pongMessageLenientSchema.safeParse(parsed).success) return;
 
     const threadOpen = threadOpenSignalLenientSchema.safeParse(parsed);
@@ -514,8 +435,6 @@ export function createMobileRealtime(
       teardownSocket();
       reconnectAttempt = 0;
       if (started) {
-        // The socket is closed on purpose; anything fetched before now is
-        // the last data this client can trust.
         markSocketLost(Date.now());
       } else {
         stopPingLoop();

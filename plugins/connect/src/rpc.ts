@@ -12,11 +12,6 @@ import { MachineCodeError, type MachineCode } from "./machine-code.js";
 import type { ShareHostResolver } from "./hosts.js";
 import type { ShareListing } from "./shares.js";
 
-// Panel-facing rpc surface. `server` is optional: the dashboard command
-// carries both --code and --server, but the panel's paste-a-code field only
-// has the code — the server URL is then derived from the redeemed handle
-// (https://<handle>.getbb.app). `baseUrl` overrides the connect cloud apex
-// (tests and self-hosted gates).
 const pairInputSchema = z.object({
   code: z.string().min(1),
   server: z.string().url().optional(),
@@ -100,7 +95,6 @@ const desktopSessionSchema: z.ZodType<DesktopSession> = z
 
 const mobilePairingSchema = z
   .object({
-    /** True when the `mobileApp` experiment is on (Settings → Experiments). */
     enabled: z.boolean(),
   })
   .strict();
@@ -145,14 +139,6 @@ export const connectRpcContract = defineRpcContract({
 
 type ConnectRpcHandlers = PluginRpcHandlers<typeof connectRpcContract>;
 
-/**
- * Mobile pairing (the "Add mobile device" card and `bb connect machine-code`)
- * ships behind the user-toggled `mobileApp` experiment until the app is
- * generally available. The gate is read at call time so a toggle applies
- * without a plugin reload. It covers only those two mobile surfaces: the
- * `createMachineCode` rpc itself stays open because the desktop app's own
- * enrollment and the web "Add machine" dialog mint machine codes through it.
- */
 export interface MobilePairingGate {
   enabled(): Promise<boolean>;
 }
@@ -171,8 +157,6 @@ export function createRpcHandlers(
           ...(args.baseUrl !== undefined ? { baseUrl: args.baseUrl } : {}),
         });
       } catch (error) {
-        // The panel maps stable codes to human copy; raw detail stays in the
-        // plugin log (see ConnectTunnel.pair). Never surface wire text.
         if (error instanceof ConnectPairError) {
           throw new Error(error.code);
         }
@@ -205,8 +189,6 @@ export function createRpcHandlers(
       try {
         return await tunnel.listAccountServers();
       } catch (error) {
-        // Stable codes for callers (CLI / panel); raw detail stays on the error
-        // message for plugin logs when surfaced elsewhere.
         if (error instanceof ConnectListError) {
           throw new Error(error.code);
         }

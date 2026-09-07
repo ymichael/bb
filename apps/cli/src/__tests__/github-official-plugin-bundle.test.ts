@@ -4,28 +4,12 @@ import { basename, dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// The plugin bundles real deps (hugeicons icon maps among them) —
-// parsing that graph blows the 5s default on cold CI runners.
 vi.setConfig({ testTimeout: 60_000 });
-import {
-  buildPluginApp,
-  resolvePluginBuildToolchain,
-} from "@bb/plugin-build";
-/**
- * The monorepo's own toolchain: resolved from `@bb/plugin-build`'s
- * devDependencies, so tests never download one.
- */
+import { buildPluginApp, resolvePluginBuildToolchain } from "@bb/plugin-build";
 function testToolchain() {
   return resolvePluginBuildToolchain(join(tmpdir(), "bb-toolchain-unused"));
 }
 
-
-/**
- * Evaluates the official GitHub plugin's built bundle against a stub runtime
- * (the plugin-build.test.ts pattern) and asserts its default export
- * registers exactly the expected slots. Built from a temp copy so this test
- * never races the server suite over plugins/github/dist.
- */
 const GITHUB_DIR = fileURLToPath(
   new URL("../../../../plugins/github", import.meta.url),
 );
@@ -60,11 +44,6 @@ describe("GitHub official plugin frontend bundle", () => {
         return name !== "dist" && name !== "node_modules";
       },
     });
-    // The temp copy has no node_modules; link @bb/shared-ui (the plugin's UI
-    // components — its own deps resolve through the workspace realpath) so
-    // buildPluginApp can bundle it. Shimmed packages — react, radix portal
-    // families, sonner, vaul, pierre, clsx, tailwind-merge, cva, the
-    // shared-ui icon — never resolve from disk.
     const sharedUiLink = join(pluginDir, "node_modules", "@bb", "shared-ui");
     await mkdir(dirname(sharedUiLink), { recursive: true });
     await symlink(
@@ -72,7 +51,11 @@ describe("GitHub official plugin frontend bundle", () => {
       sharedUiLink,
       "dir",
     );
-    const { jsPath } = await buildPluginApp(pluginDir, "0.9.0-test", await testToolchain());
+    const { jsPath } = await buildPluginApp(
+      pluginDir,
+      "0.9.0-test",
+      await testToolchain(),
+    );
 
     const registered: Record<string, SlotRegistration[]> = {
       homepageSection: [],
@@ -80,9 +63,6 @@ describe("GitHub official plugin frontend bundle", () => {
       threadPanelAction: [],
       sidebarFooterAction: [],
     };
-    // Vendored components read e.g. `Primitive.Trigger.displayName` at
-    // module scope, so shimmed slots must answer any property chain — a
-    // self-returning proxy does.
     const componentStub: unknown = new Proxy(function stub() {}, {
       get: (target, prop) =>
         prop === "prototype"
@@ -91,7 +71,6 @@ describe("GitHub official plugin frontend bundle", () => {
       set: () => true,
     });
     (globalThis as { __bbPluginRuntime?: unknown }).__bbPluginRuntime = {
-      // Bundled radix primitives (slot, tabs) call these at module scope.
       react: {
         forwardRef: (render: unknown) => render,
         createContext: () => ({}),
@@ -103,15 +82,12 @@ describe("GitHub official plugin frontend bundle", () => {
       pluginSdkApp: {
         definePluginApp: (setup: unknown) => ({ __bbPluginApp: true, setup }),
       },
-      // Shimmed singleton packages the vendored components import.
       sonner: componentStub,
       vaul: componentStub,
       radixDropdownMenu: componentStub,
       radixSelect: componentStub,
       pierreDiffs: componentStub,
       pierreDiffsReact: componentStub,
-      // Host-resident libraries: cva() runs at module scope in vendored
-      // components, and cn() reads clsx/twMerge.
       clsx: componentStub,
       tailwindMerge: componentStub,
       classVarianceAuthority: componentStub,

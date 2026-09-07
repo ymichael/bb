@@ -11,11 +11,6 @@ type ThreadSecondaryPanelThreadId =
   | null
   | undefined;
 
-/**
- * User's preferred secondary panel width as a percentage of the surrounding
- * PanelGroup. Persisted across reloads. The default (50) is used when the
- * panel opens for the first time.
- */
 const DEFAULT_SECONDARY_PANEL_WIDTH_PERCENT = 50;
 const secondaryPanelWidthStorage = createLocalStorageSyncStorage<number>({
   parse: (storedValue, initialValue) => {
@@ -53,15 +48,6 @@ function hasThreadId(
 const THREAD_CONVERSATION_COLLAPSED_STORAGE_PREFIX =
   "bb.thread.conversation.collapsed";
 
-/**
- * Whether a given thread's conversation/timeline pane is collapsed so the
- * secondary panel fills the whole content area. Keyed per thread (like the
- * terminal panel and recent-items state) so collapsing one thread's
- * conversation — e.g. opening an app full-screen from the sidebar — never
- * leaks into another thread or gets cleared by selecting an unrelated row.
- * Persisted per thread; only takes effect while the secondary panel is open on
- * a wide viewport — see ThreadDetailSecondaryContent for the gating.
- */
 const threadConversationCollapsedAtomFamily = atomFamily(
   (threadId: ResolvedThreadSecondaryPanelThreadId) =>
     atomWithStorage<boolean>(
@@ -72,16 +58,8 @@ const threadConversationCollapsedAtomFamily = atomFamily(
     ),
 );
 
-// Fallback for callers without a resolved thread id (e.g. before routing
-// settles). It stays false and any write lands on this throwaway atom, so no
-// real thread's collapse state is affected.
 const disabledThreadConversationCollapsedAtom = atom(false);
 
-/**
- * The conversation-collapsed atom for a specific thread. `atomFamily` memoizes
- * by threadId, so repeated calls with the same id return a stable atom
- * reference safe to pass straight to `useAtom`/`useSetAtom`/`useAtomValue`.
- */
 export function getThreadConversationCollapsedAtom(
   threadId: ThreadSecondaryPanelThreadId,
 ) {

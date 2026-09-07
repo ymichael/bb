@@ -10,11 +10,6 @@ import {
 } from "@/components/promptbox/NewThreadComposer";
 import { PluginContext } from "@/components/plugin/plugin-context";
 
-/**
- * SDK adapter only. The host's ordinary NewThreadComposer owns every picker,
- * draft, attachment, and request; the plugin still owns creation attribution
- * through its supplied onSubmit callback.
- */
 export function PluginNewThreadComposer({
   defaultProjectId,
   defaultProviderId,
@@ -53,7 +48,13 @@ export function PluginNewThreadComposer({
   };
   const composerKey = draftKey ?? pluginId ?? "default";
   const handleSubmit = async (request: NewThreadRequest) => {
-    await onSubmit(request);
+    await onSubmit({
+      ...request,
+      executionInputSources: {
+        ...request.executionInputSources,
+        providerId: "explicit",
+      },
+    });
   };
 
   return (

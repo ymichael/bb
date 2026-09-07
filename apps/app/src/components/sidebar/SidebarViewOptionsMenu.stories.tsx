@@ -11,8 +11,6 @@ export default {
   title: "sidebar/View options menu",
 };
 
-// Live readout of the atoms the menu drives, so the effect of each click is
-// visible even after the menu closes.
 function StateReadout() {
   const organizationMode = useAtomValue(sidebarOrganizationModeAtom);
   const sort = useAtomValue(sidebarChronologicalSortAtom);
@@ -26,9 +24,6 @@ function StateReadout() {
   );
 }
 
-// The menu writes to global (atomWithStorage) atoms. A story-local Jotai store
-// keeps each mount self-contained and seeded with the same defaults the app
-// ships, instead of inheriting whatever the last Ladle session left behind.
 function InteractiveMenu() {
   const store = useMemo(() => {
     const next = createStore();

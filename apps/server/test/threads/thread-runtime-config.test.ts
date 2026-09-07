@@ -157,9 +157,6 @@ function registerRemoteRuntimeFileResponder(
 }
 
 describe("thread runtime config", () => {
-  // A configured agent's launch spec reaches the bridge the way every
-  // provider's static options do: on the registration, inside the opaque
-  // `bridgeLaunch.providerOptions` bag.
   it("carries a configured ACP agent's launch spec on thread start and turn submit", async () => {
     await withTestHarness(
       {
@@ -878,8 +875,6 @@ describe("thread runtime config", () => {
         });
       }
 
-      // The default knobs each bridge receives when the user changed nothing.
-      // A wrong default here silently turns a provider feature off.
       const codex = await build("codex");
       expect(codex.options.providerOptions).toEqual({
         memoryEnabled: true,
@@ -891,12 +886,13 @@ describe("thread runtime config", () => {
 
       const claudeCode = await build("claude-code");
       expect(claudeCode.options.providerOptions).toEqual({
+        chromeEnabled: false,
+        idleQueryReleaseEnabled: false,
         memoryEnabled: true,
         providerSubagentsEnabled: true,
         workflowsEnabled: true,
       });
 
-      // A provider that derives nothing still carries an explicit empty bag.
       const pi = await build("pi");
       expect(pi.options.providerOptions).toEqual({});
     });
@@ -906,6 +902,7 @@ describe("thread runtime config", () => {
     await withTestHarness(async (harness) => {
       const pluginId = "provider-hooked";
       const registration = buildPluginProviderRegistration({
+        iconHash: null,
         available: true,
         pluginId,
         declaration: validatePluginProviderDeclaration({
@@ -941,7 +938,10 @@ describe("thread runtime config", () => {
         pluginId,
         iconNames: new Set<string>(),
       });
-      harness.deps.pluginHostArtifacts.set(pluginId, stubHostArtifact(pluginId));
+      harness.deps.pluginHostArtifacts.set(
+        pluginId,
+        stubHostArtifact(pluginId),
+      );
 
       const { host } = seedHostSession(harness.deps, {
         id: "host-provider-hook",
@@ -1049,15 +1049,11 @@ describe("thread runtime config", () => {
       });
 
       expect(command.input).toEqual(input);
-      // The shared contract carries the BB prompt mode; the Claude plugin's
-      // hook maps it onto its own native flag inside the opaque bag.
       expect(command.options.promptMode).toBe("plan");
       expect(command.options.providerOptions).toMatchObject({
         claudeCodePermissionMode: "plan",
       });
 
-      // A provider that declares no plan action never sees the mode: the
-      // `/plan` text stays an ordinary mention.
       const piThread = seedThread(harness.deps, {
         projectId: project.id,
         environmentId: environment.id,
@@ -1109,7 +1105,6 @@ describe("thread runtime config", () => {
         reasoningLevelOverride: "high",
       });
 
-      // No model/reasoning in the request: the override sticks for this turn.
       const execution = await resolveExecutionOptions(harness.deps, {
         threadId: thread.id,
         requestedExecution: { source: "client/turn/requested" },
@@ -1117,7 +1112,6 @@ describe("thread runtime config", () => {
       expect(execution.model).toBe("claude-opus-4-8");
       expect(execution.reasoningLevel).toBe("high");
 
-      // An explicit per-turn request still wins over the sticky override.
       const oneOff = await resolveExecutionOptions(harness.deps, {
         threadId: thread.id,
         requestedExecution: {
@@ -1580,8 +1574,6 @@ describe("thread runtime config", () => {
 
   describe("plugin contributeInstructions assembly", () => {
     afterEach(() => {
-      // withTestHarness rebinds this on each createApp; clear so a later
-      // isolated test doesn't see a leftover stub if harness cleanup races.
       setPluginAgentContributions(undefined);
     });
 
@@ -1775,7 +1767,6 @@ describe("thread runtime config", () => {
           'The following instructions come from the BB plugin "ok":',
         );
         expect(instructions).toContain("still contributes");
-        // Truncated to 4096 chars — the full 5000-x body must not appear.
         expect(instructions).not.toContain(longBody);
         expect(instructions).toContain("x".repeat(4096));
         expect(instructions).not.toContain("x".repeat(4097));

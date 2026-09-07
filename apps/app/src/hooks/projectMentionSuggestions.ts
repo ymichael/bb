@@ -7,7 +7,6 @@ type ProjectMentionSuggestion = Extract<
   { kind: "project" }
 >;
 
-/** A project the mention menu can offer, reduced to what the picker needs. */
 export interface ProjectMentionCandidate {
   id: string;
   name: string;
@@ -19,11 +18,9 @@ interface BuildProjectMentionSuggestionsArgs {
   limit: number;
 }
 
-function getProjectSearchTexts(
-  project: ProjectMentionCandidate,
-): readonly string[] {
+function getProjectSearchText(project: ProjectMentionCandidate): string {
   const name = project.name.trim();
-  return name ? [name, project.id] : [project.id];
+  return name || project.id;
 }
 
 function toProjectMentionSuggestion(
@@ -49,7 +46,8 @@ export function buildProjectMentionSuggestions(
   const matches = fuzzyMatchText({
     items: args.projects,
     query: trimmedQuery,
-    getText: getProjectSearchTexts,
+    getText: getProjectSearchText,
+    getAliases: (project) => [project.id],
     limit: args.projects.length,
   });
 

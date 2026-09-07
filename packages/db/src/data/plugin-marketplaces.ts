@@ -2,7 +2,6 @@ import { and, asc, eq } from "drizzle-orm";
 import type { DbConnection, DbQueryConnection } from "../connection.js";
 import { pluginMarketplaceIcons, pluginMarketplaces } from "../schema.js";
 
-/** How bb reads a marketplace manifest. */
 export type PluginMarketplaceSourceKind = "https" | "git" | "path";
 
 export interface PluginMarketplaceRow {
@@ -12,7 +11,6 @@ export interface PluginMarketplaceRow {
   sourceGitRef: string | null;
   sourceGitCommit: string | null;
   manifestJson: string;
-  /** Last-known-good `stats.json` document, verbatim; null when there is none. */
   statsJson: string | null;
   etag: string | null;
   lastModified: string | null;
@@ -30,11 +28,6 @@ export interface UpsertPluginMarketplaceInput {
   sourceGitRef: string | null;
   sourceGitCommit: string | null;
   manifestJson: string;
-  /**
-   * Last-known-good `stats.json`, verbatim. Every caller states it: passing
-   * the row's current value is how a refresh that did not re-read the sidecar
-   * keeps the counts it already had.
-   */
   statsJson: string | null;
   etag: string | null;
   lastModified: string | null;
@@ -70,7 +63,6 @@ export function getPluginMarketplace(
     .get();
 }
 
-/** Every registered marketplace, ordered by name for stable listings. */
 export function listPluginMarketplaces(
   db: DbQueryConnection,
 ): PluginMarketplaceRow[] {
@@ -81,11 +73,6 @@ export function listPluginMarketplaces(
     .all();
 }
 
-/**
- * Delete a marketplace and its cached icons. Installed plugins are untouched:
- * the caller converts their provenance first, so removal never disturbs
- * running code.
- */
 export function deletePluginMarketplace(
   db: DbQueryConnection,
   name: string,
@@ -119,10 +106,6 @@ export function upsertPluginMarketplace(
   return row;
 }
 
-/**
- * Record a failed refresh attempt. The stored manifest is deliberately
- * untouched: a failure keeps the last-known-good catalog serving.
- */
 export function recordPluginMarketplaceRefreshFailure(
   db: DbConnection,
   name: string,
@@ -192,7 +175,6 @@ function upsertPluginMarketplaceIcon(
     .run();
 }
 
-/** Replace one marketplace's complete icon set inside the caller's commit. */
 export function replacePluginMarketplaceIcons(
   db: DbQueryConnection,
   marketplaceName: string,

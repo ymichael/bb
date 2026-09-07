@@ -28,18 +28,15 @@ function EditorIcon({ src, alt }: EditorIconProps) {
   );
 }
 
-// Mirrors ThreadDetailHeader (useThreadGitActions): "Commit" primary, "Squash
-// merge" secondary. Plain text actions, no grouping in the real app.
 const commitAction: SplitButtonAction = {
   label: "Commit",
   onSelect: noop,
 };
 
 const gitSecondaries: SplitButtonAction[] = [
-  { label: "Squash merge", onSelect: noop },
+  { label: "Amend commit", onSelect: noop },
 ];
 
-// Representative icon-only split button: icon primary + icon+label secondaries.
 const openInVSCodeAction: SplitButtonAction = {
   label: "Open workspace in VS Code",
   onSelect: noop,

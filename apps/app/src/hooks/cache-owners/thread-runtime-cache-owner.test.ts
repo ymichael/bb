@@ -8,6 +8,15 @@ import { QueryObserver } from "@tanstack/react-query";
 import { describe, expect, it, vi } from "vitest";
 import { createAppQueryClient } from "@/lib/query-client";
 import {
+  makeThreadListEntry as makeThreadListEntryFixture,
+  makeThreadQueuedMessage as makeThreadQueuedMessageFixture,
+} from "@bb/test-helpers/domain-fixtures";
+import {
+  makeProjectWithThreadsResponse,
+  makeSidebarBootstrapResponse,
+} from "@/test/fixtures/projects";
+import { makeThreadTimelineResponse as makeTimelineResponse } from "@/test/fixtures/thread-responses";
+import {
   sidebarNavigationQueryKey,
   threadListQueryKey,
   threadPromptHistoryQueryKey,
@@ -19,6 +28,7 @@ import {
 import { threadDefaultExecutionOptionsQueryKey } from "../queries/thread-default-execution-options-query";
 import {
   applyQueuedMessageCreateResult,
+  applyQueuedMessageSendResult,
   applyQueuedMessageUpdateResult,
   applySendThreadMessageSuccess,
   applyThreadGoalClearResult,
@@ -35,45 +45,12 @@ import {
   rollbackUpdateQueuedMessageTransaction,
 } from "./thread-runtime-cache-owner";
 
-function makeTimelineResponse(): ThreadTimelineResponse {
-  return {
-    rows: [],
-    activePromptMode: null,
-    activeThinking: null,
-    activeWorkflows: [],
-    activeBackgroundCommands: [],
-    pendingTodos: null,
-    goal: null,
-    modelFallback: null,
-    maxSeq: 0,
-    timelinePage: {
-      kind: "latest",
-      segmentLimit: 20,
-      returnedSegmentCount: 0,
-      hasOlderRows: false,
-      olderCursor: null,
-    },
-  };
-}
-
 function makeThreadListEntry(id = "thread-1"): ThreadListEntry {
-  return {
+  return makeThreadListEntryFixture({
     id,
     projectId: "project-1",
     environmentId: "env-1",
-    providerId: "codex",
-    title: null,
-    titleFallback: null,
-    sectionId: null,
     status: "active",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
     lastReadAt: null,
     latestAttentionAt: 50,
     createdAt: 1,
@@ -89,45 +66,27 @@ function makeThreadListEntry(id = "thread-1"): ThreadListEntry {
       activePlanModeCount: 1,
       activeGoalCount: 1,
     },
-    pinSortKey: null,
-    hasPendingInteraction: false,
     environmentHostId: "host-1",
     environmentName: "Environment",
     environmentBranchName: "main",
     environmentWorkspaceDisplayKind: "managed-worktree",
-  };
+  });
 }
 
 function makeSidebarNavigation(
   threads: ThreadListEntry[],
 ): SidebarBootstrapResponse {
-  return {
-    sections: [],
+  return makeSidebarBootstrapResponse({
     projects: [
-      {
+      makeProjectWithThreadsResponse({
         id: "project-1",
-        kind: "standard",
         name: "Project",
-        gitRemoteUrl: null,
         createdAt: 1,
         updatedAt: 1,
-        sources: [],
         threads,
-        defaultExecutionOptions: null,
-      },
+      }),
     ],
-    personalProject: {
-      id: "proj_personal",
-      kind: "personal",
-      name: "Personal",
-      gitRemoteUrl: null,
-      createdAt: 1,
-      updatedAt: 1,
-      sources: [],
-      threads: [],
-      defaultExecutionOptions: null,
-    },
-  };
+  });
 }
 
 function makeSearchResponse(thread: ThreadListEntry): ThreadSearchResponse {
@@ -143,18 +102,14 @@ function makeSearchResponse(thread: ThreadListEntry): ThreadSearchResponse {
 function makeQueuedMessage(
   message: Partial<ThreadQueuedMessage> = {},
 ): ThreadQueuedMessage {
-  return {
+  return makeThreadQueuedMessageFixture({
     id: "qmsg-1",
-    content: [{ type: "text", text: "Queued message", mentions: [] }],
+    threadId: "thread-1",
     model: "codex-test",
-    reasoningLevel: "medium",
-    permissionMode: "auto",
-    serviceTier: "default",
-    groupWithNext: false,
     createdAt: 1,
     updatedAt: 1,
     ...message,
-  };
+  });
 }
 
 describe("thread runtime cache owner", () => {
@@ -340,9 +295,9 @@ describe("thread runtime cache owner", () => {
 
     expect(
       queryClient
-        .getQueryData<
-          ThreadQueuedMessage[]
-        >(threadQueuedMessagesQueryKey("thread-1"))
+        .getQueryData<ThreadQueuedMessage[]>(
+          threadQueuedMessagesQueryKey("thread-1"),
+        )
         ?.map((queuedMessage) => queuedMessage.id),
     ).toEqual(["qmsg-existing", "qmsg-server"]);
     expect(
@@ -415,9 +370,9 @@ describe("thread runtime cache owner", () => {
     });
     expect(
       queryClient
-        .getQueryData<
-          ThreadQueuedMessage[]
-        >(threadQueuedMessagesQueryKey("thread-1"))
+        .getQueryData<ThreadQueuedMessage[]>(
+          threadQueuedMessagesQueryKey("thread-1"),
+        )
         ?.map((queuedMessage) => ({
           content: queuedMessage.content,
           groupWithNext: queuedMessage.groupWithNext,
@@ -445,9 +400,9 @@ describe("thread runtime cache owner", () => {
     });
     expect(
       queryClient
-        .getQueryData<
-          ThreadQueuedMessage[]
-        >(threadQueuedMessagesQueryKey("thread-1"))
+        .getQueryData<ThreadQueuedMessage[]>(
+          threadQueuedMessagesQueryKey("thread-1"),
+        )
         ?.map((queuedMessage) => queuedMessage.id),
     ).toEqual(["qmsg-first", "qmsg-edit", "qmsg-last"]);
 
@@ -631,6 +586,59 @@ describe("thread runtime cache owner", () => {
     ).toEqual([]);
   });
 
+  it("optimistically queues a scheduled send even when the cached thread is idle", async () => {
+    const queryClient = createAppQueryClient({
+      defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+      showMutationErrorToasts: false,
+    });
+    const sendAt = Date.now() + 3_600_000;
+    queryClient.setQueryData(threadQueryKey("thread-1"), { status: "idle" });
+    queryClient.setQueryData(threadQueuedMessagesQueryKey("thread-1"), []);
+    const request = {
+      id: "thread-1",
+      mode: "auto" as const,
+      input: [{ type: "text" as const, text: "Send later", mentions: [] }],
+      sendAt,
+    };
+
+    const transaction = await beginSendThreadMessageTransaction({
+      queryClient,
+      request,
+    });
+
+    expect(transaction.kind).toBe("queued-message");
+    expect(
+      queryClient.getQueryData<ThreadQueuedMessage[]>(
+        threadQueuedMessagesQueryKey("thread-1"),
+      ),
+    ).toMatchObject([{ sendAt, waitingOn: { kind: "time" } }]);
+
+    applySendThreadMessageSuccess({
+      queryClient,
+      realtimeConnected: true,
+      request,
+      result: {
+        ok: true,
+        delivery: "queued",
+        queuedMessage: makeQueuedMessage({
+          id: "qmsg-scheduled",
+          content: request.input,
+          sendAt,
+          waitingOn: { kind: "time" },
+        }),
+      },
+      transaction,
+    });
+
+    expect(
+      queryClient.getQueryData<ThreadQueuedMessage[]>(
+        threadQueuedMessagesQueryKey("thread-1"),
+      ),
+    ).toMatchObject([
+      { id: "qmsg-scheduled", sendAt, waitingOn: { kind: "time" } },
+    ]);
+  });
+
   it("optimistically removes queued messages and rolls back on failure", async () => {
     const queryClient = createAppQueryClient({
       defaultOptions: { queries: { gcTime: Infinity, retry: false } },
@@ -655,9 +663,9 @@ describe("thread runtime cache owner", () => {
 
     expect(
       queryClient
-        .getQueryData<
-          ThreadQueuedMessage[]
-        >(threadQueuedMessagesQueryKey("thread-1"))
+        .getQueryData<ThreadQueuedMessage[]>(
+          threadQueuedMessagesQueryKey("thread-1"),
+        )
         ?.map((queuedMessage) => queuedMessage.id),
     ).toEqual(["qmsg-2"]);
 
@@ -813,6 +821,151 @@ describe("thread runtime cache owner", () => {
     ).toEqual([]);
   });
 
+  it("restores a queued row and removes its optimistic turn when delivery remains queued", async () => {
+    const queryClient = createAppQueryClient({
+      defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+      showMutationErrorToasts: false,
+    });
+    const previousQueue = [
+      makeQueuedMessage({
+        id: "qmsg-1",
+        waitingOn: { kind: "thread-busy" },
+      }),
+    ];
+    const previousThread = {
+      id: "thread-1",
+      status: "starting",
+      updatedAt: 1,
+      runtime: {
+        displayStatus: "provisioning",
+        hostReconnectGraceExpiresAt: null,
+      },
+    };
+    queryClient.setQueryData(
+      threadQueuedMessagesQueryKey("thread-1"),
+      previousQueue,
+    );
+    queryClient.setQueryData(threadQueryKey("thread-1"), previousThread);
+    queryClient.setQueryData(
+      threadTimelineQueryKey("thread-1"),
+      makeTimelineResponse(),
+    );
+    const request = {
+      id: "thread-1",
+      mode: "steer" as const,
+      queuedMessageId: "qmsg-1",
+    };
+    const transaction = await beginSendQueuedMessageTransaction({
+      queryClient,
+      request,
+    });
+
+    applyQueuedMessageSendResult({
+      queryClient,
+      request,
+      result: {
+        ok: true,
+        delivery: "queued",
+        queuedMessage: makeQueuedMessage({
+          id: "qmsg-1",
+          waitingOn: { kind: "provisioning" },
+          updatedAt: 2,
+        }),
+      },
+      transaction,
+    });
+
+    expect(
+      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+    ).toEqual([
+      makeQueuedMessage({
+        id: "qmsg-1",
+        waitingOn: { kind: "provisioning" },
+        updatedAt: 2,
+      }),
+    ]);
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      )?.rows,
+    ).toEqual([]);
+    expect(queryClient.getQueryData(threadQueryKey("thread-1"))).toEqual(
+      previousThread,
+    );
+  });
+
+  it("does not duplicate a queued-row steer or overwrite newer thread state after realtime wins", async () => {
+    const queryClient = createAppQueryClient({
+      defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+      showMutationErrorToasts: false,
+    });
+    const queuedMessage = makeQueuedMessage({
+      waitingOn: { kind: "thread-busy" },
+    });
+    const previousThread = {
+      id: "thread-1",
+      status: "starting",
+      updatedAt: 1,
+      runtime: {
+        displayStatus: "provisioning",
+        hostReconnectGraceExpiresAt: null,
+      },
+    };
+    queryClient.setQueryData(threadQueuedMessagesQueryKey("thread-1"), [
+      queuedMessage,
+    ]);
+    queryClient.setQueryData(threadQueryKey("thread-1"), previousThread);
+    queryClient.setQueryData(
+      threadTimelineQueryKey("thread-1"),
+      makeTimelineResponse(),
+    );
+    const request = {
+      id: "thread-1",
+      mode: "steer" as const,
+      queuedMessageId: queuedMessage.id,
+    };
+    const transaction = await beginSendQueuedMessageTransaction({
+      queryClient,
+      request,
+    });
+    const authoritativeQueuedMessage = makeQueuedMessage({
+      waitingOn: { kind: "provisioning" },
+      updatedAt: 2,
+    });
+    const realtimeThread = {
+      ...previousThread,
+      title: "Realtime title",
+      updatedAt: 2,
+    };
+    queryClient.setQueryData(threadQueuedMessagesQueryKey("thread-1"), [
+      authoritativeQueuedMessage,
+    ]);
+    queryClient.setQueryData(threadQueryKey("thread-1"), realtimeThread);
+
+    applyQueuedMessageSendResult({
+      queryClient,
+      request,
+      result: {
+        ok: true,
+        delivery: "queued",
+        queuedMessage: authoritativeQueuedMessage,
+      },
+      transaction,
+    });
+
+    expect(
+      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+    ).toEqual([authoritativeQueuedMessage]);
+    expect(queryClient.getQueryData(threadQueryKey("thread-1"))).toEqual(
+      realtimeThread,
+    );
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      )?.rows,
+    ).toEqual([]);
+  });
+
   it("clears optimistic group edges when sending a grouped successor", async () => {
     const queryClient = createAppQueryClient({
       defaultOptions: { queries: { gcTime: Infinity, retry: false } },
@@ -900,9 +1053,9 @@ describe("thread runtime cache owner", () => {
 
     expect(
       queryClient
-        .getQueryData<
-          ThreadQueuedMessage[]
-        >(threadQueuedMessagesQueryKey("thread-1"))
+        .getQueryData<ThreadQueuedMessage[]>(
+          threadQueuedMessagesQueryKey("thread-1"),
+        )
         ?.map((queuedMessage) => queuedMessage.id),
     ).toEqual(["qmsg-3"]);
     const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
@@ -928,26 +1081,26 @@ describe("thread runtime cache owner", () => {
       )?.rows,
     ).toEqual([]);
   });
-  it("keeps a held message visible and the thread idle when the server defers the send", async () => {
+  it("moves an optimistic turn into the queue when the server holds an idle send", async () => {
     const queryClient = createAppQueryClient({
       defaultOptions: { queries: { gcTime: Infinity, retry: false } },
       showMutationErrorToasts: false,
     });
-    const idleThread = {
+    queryClient.setQueryData(threadQueryKey("thread-1"), {
       id: "thread-1",
       status: "idle",
       updatedAt: 1,
       runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
-    };
-    queryClient.setQueryData(threadQueryKey("thread-1"), idleThread);
+    });
     queryClient.setQueryData(
       threadTimelineQueryKey("thread-1"),
       makeTimelineResponse(),
     );
+    queryClient.setQueryData(threadQueuedMessagesQueryKey("thread-1"), []);
     const request = {
       id: "thread-1",
-      mode: "steer-if-active" as const,
-      input: [{ type: "text" as const, text: "worker report", mentions: [] }],
+      mode: "queue-if-active" as const,
+      input: [{ type: "text" as const, text: "ship the notes", mentions: [] }],
     };
     const transaction = await beginSendThreadMessageTransaction({
       queryClient,
@@ -955,28 +1108,27 @@ describe("thread runtime cache owner", () => {
     });
     expect(transaction.kind).toBe("accepted-turn");
 
-    // The thread awaits a user interaction, so the server holds the message
-    // (#1650): nothing runs, but the message was accepted and must not vanish.
-    // Realtime is down, the case where an accepted send refetches the timeline
-    // and would drop the optimistic row for a turn the server never started.
     applySendThreadMessageSuccess({
-      delivery: "deferred",
       queryClient,
-      realtimeConnected: false,
+      realtimeConnected: true,
       request,
+      result: {
+        ok: true,
+        delivery: "queued",
+        queuedMessage: makeQueuedMessage({
+          content: request.input,
+          waitingOn: { kind: "plugin", pluginId: "limiter", reason: "busy" },
+        }),
+      },
       transaction,
     });
     await Promise.resolve();
 
-    const timeline = queryClient.getQueryData<ThreadTimelineResponse>(
-      threadTimelineQueryKey("thread-1"),
-    );
-    expect(timeline?.rows).toHaveLength(1);
     expect(
-      queryClient.getQueryState(threadTimelineQueryKey("thread-1"))
-        ?.isInvalidated,
-    ).toBe(false);
-    // No turn started, so the working indicator must not mount.
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      )?.rows,
+    ).toEqual([]);
     expect(queryClient.getQueryData(threadQueryKey("thread-1"))).toMatchObject({
       status: "idle",
       runtime: { displayStatus: "idle" },
@@ -984,6 +1136,95 @@ describe("thread runtime cache owner", () => {
     expect(
       queryClient.getQueryData(threadPromptHistoryQueryKey("thread-1")),
     ).toMatchObject([{ input: request.input }]);
+    expect(
+      queryClient.getQueryState(threadQueuedMessagesQueryKey("thread-1"))
+        ?.isInvalidated,
+    ).toBe(true);
+    expect(
+      queryClient.getQueryData<ThreadQueuedMessage[]>(
+        threadQueuedMessagesQueryKey("thread-1"),
+      ),
+    ).toMatchObject([
+      {
+        content: request.input,
+        waitingOn: { kind: "plugin", pluginId: "limiter" },
+      },
+    ]);
+  });
+
+  it("keeps newer realtime queue and thread state when it arrives before send success", async () => {
+    const queryClient = createAppQueryClient({
+      defaultOptions: { queries: { gcTime: Infinity, retry: false } },
+      showMutationErrorToasts: false,
+    });
+    const previousThread = {
+      id: "thread-1",
+      status: "idle",
+      updatedAt: 1,
+      runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
+    };
+    queryClient.setQueryData(threadQueryKey("thread-1"), previousThread);
+    queryClient.setQueryData(
+      threadTimelineQueryKey("thread-1"),
+      makeTimelineResponse(),
+    );
+    queryClient.setQueryData(threadQueuedMessagesQueryKey("thread-1"), []);
+    const request = {
+      id: "thread-1",
+      mode: "auto" as const,
+      input: [{ type: "text" as const, text: "Wait for input", mentions: [] }],
+    };
+    const transaction = await beginSendThreadMessageTransaction({
+      queryClient,
+      request,
+    });
+    const authoritativeQueuedMessage = makeQueuedMessage({
+      id: "qmsg-realtime",
+      content: request.input,
+      waitingOn: { kind: "interaction" },
+      updatedAt: 5,
+    });
+    const realtimeThread = {
+      ...previousThread,
+      status: "starting",
+      updatedAt: 5,
+      runtime: {
+        displayStatus: "provisioning",
+        hostReconnectGraceExpiresAt: null,
+      },
+    };
+    queryClient.setQueryData(threadQueuedMessagesQueryKey("thread-1"), [
+      authoritativeQueuedMessage,
+    ]);
+    queryClient.setQueryData(
+      threadTimelineQueryKey("thread-1"),
+      makeTimelineResponse(),
+    );
+    queryClient.setQueryData(threadQueryKey("thread-1"), realtimeThread);
+
+    applySendThreadMessageSuccess({
+      queryClient,
+      realtimeConnected: true,
+      request,
+      result: {
+        ok: true,
+        delivery: "queued",
+        queuedMessage: authoritativeQueuedMessage,
+      },
+      transaction,
+    });
+
+    expect(
+      queryClient.getQueryData(threadQueuedMessagesQueryKey("thread-1")),
+    ).toEqual([authoritativeQueuedMessage]);
+    expect(queryClient.getQueryData(threadQueryKey("thread-1"))).toEqual(
+      realtimeThread,
+    );
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      )?.rows,
+    ).toEqual([]);
   });
 
   it("keeps an accepted send local while realtime is connected: prompt history is prepended, not refetched, and default execution options only go stale", async () => {
@@ -1028,10 +1269,10 @@ describe("thread runtime cache owner", () => {
     expect(transaction.kind).toBe("accepted-turn");
 
     applySendThreadMessageSuccess({
-      delivery: "sent",
       queryClient,
       realtimeConnected: true,
       request,
+      result: { ok: true, delivery: "sent" },
       transaction,
     });
     await Promise.resolve();
@@ -1056,15 +1297,27 @@ describe("thread runtime cache owner", () => {
     }
   });
 
-  it("refetches only the queue list for a queued send while realtime is connected", async () => {
+  it("moves a predicted queued send into the timeline when the server sends it", async () => {
     const queryClient = createAppQueryClient({
       defaultOptions: { queries: { gcTime: Infinity, retry: false } },
       showMutationErrorToasts: false,
     });
-    queryClient.setQueryData(threadQueryKey("thread-1"), { status: "active" });
+    const activeThread = {
+      status: "active",
+      updatedAt: 1,
+      runtime: {
+        displayStatus: "active",
+        hostReconnectGraceExpiresAt: null,
+      },
+    };
+    queryClient.setQueryData(threadQueryKey("thread-1"), activeThread);
+    queryClient.setQueryData(
+      threadTimelineQueryKey("thread-1"),
+      makeTimelineResponse(),
+    );
     const queuedMessagesQueryFn = vi.fn(async () => []);
     const promptHistoryQueryFn = vi.fn(async () => []);
-    const threadQueryFn = vi.fn(async () => ({ status: "active" }));
+    const threadQueryFn = vi.fn(async () => activeThread);
     const observers = [
       new QueryObserver(queryClient, {
         queryKey: threadQueuedMessagesQueryKey("thread-1"),
@@ -1101,10 +1354,10 @@ describe("thread runtime cache owner", () => {
     expect(transaction.kind).toBe("queued-message");
 
     applySendThreadMessageSuccess({
-      delivery: "sent",
       queryClient,
       realtimeConnected: true,
       request,
+      result: { ok: true, delivery: "sent" },
       transaction,
     });
     await vi.waitFor(() => {
@@ -1119,6 +1372,16 @@ describe("thread runtime cache owner", () => {
     expect(
       queryClient.getQueryState(threadQueryKey("thread-1"))?.isInvalidated,
     ).toBe(false);
+    expect(
+      queryClient.getQueryData<ThreadQueuedMessage[]>(
+        threadQueuedMessagesQueryKey("thread-1"),
+      ),
+    ).toEqual([]);
+    expect(
+      queryClient.getQueryData<ThreadTimelineResponse>(
+        threadTimelineQueryKey("thread-1"),
+      )?.rows,
+    ).toMatchObject([{ kind: "conversation", text: "Queued prompt" }]);
 
     for (const unsubscribe of unsubscribers) {
       unsubscribe();

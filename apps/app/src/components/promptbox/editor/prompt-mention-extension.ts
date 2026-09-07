@@ -49,10 +49,6 @@ export const PromptMentionExtension = Mention.extend({
   addNodeView() {
     return ReactNodeViewRenderer(PromptMentionPillNodeView);
   },
-  // Mention SVG icons never receive the browser's native `::selection` paint,
-  // so a text selection that spans a pill highlights its label but not its
-  // icon. Mark every mention node fully inside the selection so the node view
-  // can paint the whole pill as one selected unit.
   addProseMirrorPlugins() {
     const parentPlugins = this.parent?.() ?? [];
     const mentionName = this.name;

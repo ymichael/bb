@@ -15,13 +15,6 @@ import { DetailView } from "../detail/index.js";
 import { PRIORITY_LABELS, STATUS_LABELS } from "../list/lib.js";
 import { PriorityIcon, StatusIcon } from "../list/icons.js";
 
-/**
- * `::task{key="TSK-4"}` chat embeds: a single quiet row (status glyph, key,
- * title, priority glyph, open arrow). Primary click opens the task in the
- * thread side panel; the arrow opens the full Tasks app. Everything richer —
- * due date, labels, comments, threads, editing — lives in those surfaces.
- */
-
 const TASK_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9]{0,9}-\d+$/;
 
 type TaskEmbedState =
@@ -30,14 +23,6 @@ type TaskEmbedState =
   | { kind: "not_found" }
   | { kind: "error" };
 
-/**
- * Fetch a task by key and keep it fresh. Unlike `useTasksQuery`, realtime
- * refetches are payload-filtered: a resolved card refetches only for events
- * about its own task or project, so one mutation does not refetch every
- * embed mounted in a long thread. While unresolved (loading / not found /
- * error) any event refetches — the task may have just been created or
- * renamed into existence.
- */
 function useTaskEmbed(taskKey: string): {
   state: TaskEmbedState;
   retry: () => void;
@@ -49,8 +34,6 @@ function useTaskEmbed(taskKey: string): {
   stateRef.current = state;
 
   const refresh = useCallback(() => {
-    // Blank key ⇒ the caller is rendering the invalid-attributes notice and
-    // this hook only runs to satisfy the rules of hooks; never fetch.
     if (taskKey === "") return;
     const seq = ++seqRef.current;
     rpc.call("getTaskByKey", { taskKey }).then(
@@ -287,11 +270,6 @@ export function TaskDirectiveCard({ attributes }: PluginMessageDirectiveProps) {
   );
 }
 
-/**
- * Thread side-panel tab opened by the directive card: the full task-detail
- * composition (editing, comments, attachments, delegation) rendered
- * panel-sized — TaskDetail's own container queries adapt the layout.
- */
 function TaskEmbedPanelContent({ params }: PluginThreadPanelProps) {
   const taskKey =
     isRecord(params) && typeof params.taskKey === "string"

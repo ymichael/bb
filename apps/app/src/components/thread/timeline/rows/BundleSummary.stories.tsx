@@ -26,26 +26,15 @@ export default {
   title: "thread/timeline/rows/Bundle Summary",
 };
 
-function TimelineStage({
-  children,
-}: {
-  children: ReactNode;
-}) {
+function TimelineStage({ children }: { children: ReactNode }) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
 
 const baseProps = {
-  // Idle scope — keeps the non-active-latest bundle rendering visible so
-  // a regression in the muted-bundle path stays catchable. The story rows
-  // expand bodies via `initialExpanded` instead of claiming active state.
   threadRuntimeDisplayStatus: "idle" as const,
   workspaceRootPath: undefined,
 };
 
-// The projection composes a bundle's id from its first child row. Mirrored
-// here so stories can target the bundle with `initialExpanded` without
-// flipping the scope to active. If the projection's id formula changes,
-// thread-view's tests will catch it before this helper does.
 function bundleId(children: readonly TimelineRow[]): string {
   const first = children[0];
   if (!first) {
@@ -82,18 +71,6 @@ interface DelegationFixtureRowArgs {
   output: string;
 }
 
-// ---------------------------------------------------------------------------
-// Bundle summaries are NOT raw rows — they're produced by the @bb/thread-view
-// `buildTimelineViewRows` projection when consecutive same-workKind work rows
-// appear inside an open step. We feed real raw rows from
-// thr_zeb7z9afmw / turn 019dd185-ef12-7d50-aa48-47882e9c8aaf and let the
-// projection group them. Raw command outputs and file diffs are pulled from
-// ~/.bb-dev/bb.db sequence ranges 35700..35702 (turbo command run) and
-// 35564..35595 (file-change run during the same turn). Long outputs are
-// trimmed to keep the fixture readable.
-// ---------------------------------------------------------------------------
-
-// ---- Real consecutive build/test commands (sequences 35700-35702) ---------
 const buildDomainCoreUiCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_buildDomainCoreUi",
   threadId: "thr_zeb7z9afmw",
@@ -199,8 +176,6 @@ const testCoreUiForceCommand: TimelineRow = commandRow({
   durationMs: 8500,
 });
 
-// Real failing test command, used to give the mixed-status bundle one error
-// child without inventing data.
 const testServerErrorCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_testServerError",
   threadId: "thr_zeb7z9afmw",
@@ -238,9 +213,6 @@ const commandBundleMixedStatusRows: TimelineRow[] = [
   testCoreUiForceCommand,
 ];
 
-// ---- Real consecutive file-change rows (sequences 35564..35595) -----------
-// These are all updates from the same turn — the projection groups consecutive
-// `file-change` rows into a single bundle regardless of which file they touch.
 const fileChangeAssistantStream: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:35564",
   threadId: "thr_zeb7z9afmw",
@@ -409,8 +381,6 @@ const fileChangeToViewMessages: TimelineRow = fileChangeRow({
   approvalStatus: null,
 });
 
-// One interrupted file-change to give the mixed-status bundle a non-completed
-// child without fabricating data.
 const fileChangeInterrupted: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:fileChange:interrupted",
   threadId: "thr_zeb7z9afmw",
@@ -448,13 +418,6 @@ const fileChangeBundleMixedStatusRows: TimelineRow[] = [
   fileChangeInterrupted,
   fileChangeToViewMessages,
 ];
-
-// ---- Exploration bundle ---------------------------------------------------
-// Grammar v3 `file-read` / `search` rows (what a Read / Grep / Glob call
-// projects to, including persisted legacy tool calls the read-time adapter
-// upgrades) bundle under the "exploration" concept. Real paths pulled from
-// thr_zeb7z9afmw / turn 019dd185-... — the agent reading the projection
-// refactor.
 
 function explorationRow(args: ExplorationRowArgs): TimelineRow {
   const base = {
@@ -523,10 +486,6 @@ const explorationBundleRows: TimelineRow[] = [
   }),
 ];
 
-// ---- Tools bundle ---------------------------------------------------------
-// Non-exploration `tool` rows (TodoWrite / notify_user / ToolSearch) bundle
-// under "tools". Real tool names + arg shapes pulled from threads in the DB.
-
 function plainToolRow(args: PlainToolRowArgs): TimelineRow {
   return toolRow({
     id: `thr_zeb7z9afmw:tool:${args.id}`,
@@ -578,10 +537,6 @@ const toolsBundleRows: TimelineRow[] = [
   }),
 ];
 
-// ---- Delegations bundle ---------------------------------------------------
-// Consecutive `delegation` work rows bundle under "delegations". Real Agent
-// dispatches from the DB.
-
 function delegationFixtureRow(args: DelegationFixtureRowArgs): TimelineRow {
   return delegationRow({
     id: `thr_y9q6n559fu:delegation:${args.id}`,
@@ -628,11 +583,6 @@ const delegationsBundleRows: TimelineRow[] = [
       "Branch is rebased on main; tests pass. Two minor suggestions inline. Ready to merge.",
   }),
 ];
-
-// ---- Web research bundle --------------------------------------------------
-// `web-search` and `web-fetch` rows bundle together under "webResearch" — the
-// concept switch puts them in the same bucket. Real queries/urls pulled from
-// thr_yr83zs2m7f and thr_3vw9r8igrb.
 
 const webSearchEditors: TimelineRow = webSearchRow({
   id: "thr_yr83zs2m7f:websearch:ws_editor_cli",
@@ -808,19 +758,6 @@ export function Overview() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Interleaved timeline. The states above, rendered as one continuous thread
-// with user + assistant messages, so the prominence ramp reads in context:
-//   - user/agent messages sit at full strength (the top tier);
-//   - finished work rolls up and recedes (the muted past layer);
-//   - the errored and interrupted clusters, and the live frontier, stay
-//     prominent.
-// Note on form: between two messages the projection closes a multi-row step
-// into a *step-summary* — that's the real product behavior, since a genuine
-// bundle-summary only survives at the live frontier. So the trailing
-// "Exploring…" cluster is the one true (active-latest) bundle-summary here.
-// ---------------------------------------------------------------------------
-
 const CONV_THREAD_ID = "thr_zeb7z9afmw";
 const CONV_TURN_ID = "conv-interleaved-turn";
 
@@ -850,8 +787,6 @@ function assistantMessage(seq: number, text: string): TimelineRow {
   });
 }
 
-// Trailing exploration cluster left open under active scope — the one genuine
-// (active-latest) bundle-summary in the thread, shimmering as the frontier.
 function frontierRead(
   idSuffix: string,
   seq: number,

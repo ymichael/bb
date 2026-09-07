@@ -24,9 +24,6 @@ describe("selectCommandGroups", () => {
   });
 
   it("needs every group, in help order, whenever commander shows the full program", () => {
-    // No arguments and `help`/`--help` print the command list; an unknown or
-    // plugin-contributed name falls through to commander's "unknown command"
-    // suggestions. Both must see the same program a full registration builds.
     for (const firstArg of [undefined, "help", "--help", "-h", "linear"]) {
       expect(
         selectCommandGroups(firstArg).map((group) => group.name),
@@ -38,11 +35,6 @@ describe("selectCommandGroups", () => {
 
 describe("CORE_COMMAND_GROUPS", () => {
   it("registers exactly the top-level commands it names, in order, with no aliases", async () => {
-    // The static name table stands in for commander's command list before any
-    // command module is loaded: it decides which group `bb <name>` loads and
-    // which names the plugin proxy must leave alone. A group whose module
-    // registers a different name, an extra top-level command, or an alias
-    // would be a name commander accepts that the table does not know about.
     const program = new Command();
     const deps: CommandGroupDeps = {
       getUrl: () => "http://localhost",
@@ -58,9 +50,5 @@ describe("CORE_COMMAND_GROUPS", () => {
     expect(program.commands.flatMap((command) => command.aliases())).toEqual(
       [],
     );
-    // Loading every group is the point of this guard, so it pays the import
-    // cost of all 17 module graphs at once (`plugin` alone pulls the plugin
-    // build toolchain and the scaffold templates). The shipped CLI never does
-    // this; a contended CI runner needs more than the 5s default.
   }, 30_000);
 });

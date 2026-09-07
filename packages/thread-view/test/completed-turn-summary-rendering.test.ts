@@ -108,10 +108,6 @@ describe("completed turn summary rendering", () => {
   });
 
   it("keeps an assistant answer visible when the provider re-queries and the model answers again", () => {
-    // A Claude Code Stop hook blocks the stop and injects its reason as a
-    // synthetic user message that bb never sees (get-bb/bb#1355). The turn
-    // then holds two assistant texts back to back: the real answer and a
-    // short reply to the hook. Only the reply is the terminal message.
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const request = event.clientTurnRequested({
       target: { kind: "new-turn" },

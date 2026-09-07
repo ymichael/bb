@@ -38,9 +38,6 @@ describe.sequential("custom provider models integration", () => {
         defaultReasoningEffort: "medium",
         isDefault: false,
       });
-      // The provider-reported default stays marked even if the provider
-      // catalog does not sort the default row first; custom models append at
-      // the end and never become the default.
       const defaultModel = models.find((model) => model.isDefault);
       expect(defaultModel).toBeDefined();
       expect(defaultModel?.model).not.toBe("claude-example-preview[1m]");
@@ -64,8 +61,6 @@ describe.sequential("custom provider models integration", () => {
         "utf8",
       );
 
-      // The invalid entry warns and is skipped instead of failing the whole
-      // reload; valid entries survive.
       const reloadResponse = await harness.api.system.config.reload.$post({});
       expect(reloadResponse.status).toBe(200);
 

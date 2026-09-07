@@ -1,24 +1,5 @@
 import type { ThreadEvent } from "@bb/domain";
 
-/**
- * Tracks background tasks and delegations that are still open per thread,
- * from the same normalized event stream the runtime forwards to the server.
- *
- * Background tasks outlive the turn that spawned them, so a thread can be idle
- * while its workflow or backgrounded command is still running inside the
- * provider process. Turn state alone therefore cannot tell a caller whether
- * shutting the runtime down would destroy live work — this can.
- *
- * Open delegations are open work too (grammar v3, docs/provider-plugin-api.md
- * §3): a codex native sub-agent can still be running, or still owe a
- * followup turn, after the parent turn that spawned it settled. The
- * delegation item's lifecycle (`item/started` pending, `item/completed`, and
- * the thread-scoped `item/delegation/*` events for background ones) is the
- * only signal; bridges report no side channel for it.
- *
- * Ambient (`skipTranscript`) tasks count too: they are hidden from the
- * transcript, not detached from the process that would be killed.
- */
 export class RuntimeBackgroundWorkState {
   private readonly openTaskIdsByThreadId = new Map<string, Set<string>>();
 

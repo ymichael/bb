@@ -1,25 +1,7 @@
-/**
- * Recorded-traffic conformance.
- *
- * The scripted scenarios in `scenarios.ts` drive a bridge with a fake
- * provider the kit authors wrote. This set drives it with what the provider
- * CLI really emitted: a committed recording (`recordings/<provider>/<cell>`),
- * replayed through the bridge by `testing/parity.ts`, checked with the same
- * grammar rules. A bridge passes when the replay reproduces a complete,
- * schema-valid, grammar-clean session for every recorded cell — so a
- * translation change that only the real dialect exercises fails conformance,
- * not just a golden.
- *
- * Pure over a replay's output, like `checkItemOpensBeforeDelta`: the caller
- * owns the bridge transport and the replay; this module owns the verdicts.
- */
 import { threadEventSchema, type ThreadEvent } from "@bb/domain";
-import {
-  ThreadEventGrammar,
-} from "../thread-event-grammar.js";
+import { ThreadEventGrammar } from "../thread-event-grammar.js";
 import type { ConformanceCheckResult } from "./types.js";
 
-/** The cells every bridge is expected to reproduce (the live-QA matrix core). */
 export const RECORDED_CONFORMANCE_CELLS = [
   "turn-tools",
   "steer",
@@ -31,21 +13,14 @@ export const RECORDED_CONFORMANCE_CELLS = [
   "fork",
 ] as const;
 
-export type RecordedConformanceCell = (typeof RECORDED_CONFORMANCE_CELLS)[number];
+export type RecordedConformanceCell =
+  (typeof RECORDED_CONFORMANCE_CELLS)[number];
 
 export interface RecordedCellReplay {
   provider: string;
   cell: string;
-  /** Events the replayed bridge output assembled to, in order. */
   events: readonly ThreadEvent[];
-  /**
-   * Events the recording's own bridge output assembled to: the turn count the
-   * replay must reach. A provider that legitimately refused a cell (an ACP
-   * agent without `session/fork`) recorded no turns, and the replay must
-   * reproduce that rather than invent one.
-   */
   recordedEvents: readonly ThreadEvent[];
-  /** Requests the harness had to answer for the bridge, or gates that timed out. */
   stalls: readonly string[];
 }
 
@@ -59,7 +34,10 @@ function result(
     : { id, title, status: "fail", detail };
 }
 
-function countTurns(events: readonly ThreadEvent[]): { started: number; completed: number } {
+export function countTurns(events: readonly ThreadEvent[]): {
+  started: number;
+  completed: number;
+} {
   let started = 0;
   let completed = 0;
   for (const event of events) {
@@ -69,11 +47,9 @@ function countTurns(events: readonly ThreadEvent[]): { started: number; complete
   return { started, completed };
 }
 
-/**
- * The verdicts for one replayed cell. Rule ids are `recorded/<cell>/<rule>`
- * so a report lists every cell and a regression names the one it broke.
- */
-export function checkRecordedCellReplay(replay: RecordedCellReplay): ConformanceCheckResult[] {
+export function checkRecordedCellReplay(
+  replay: RecordedCellReplay,
+): ConformanceCheckResult[] {
   const prefix = `recorded/${replay.cell}`;
   const results: ConformanceCheckResult[] = [];
 

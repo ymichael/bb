@@ -43,13 +43,6 @@ export function EmptyState({
 
 type EmptyStatePanelProps = HTMLAttributes<HTMLDivElement>;
 
-/**
- * Boxed zero-state placeholder: a dashed-outline, centered, muted panel with no
- * surface fill, so it never clashes with the page background. Use for empty
- * regions that should read as a framed placeholder; for an inline list/heading
- * hint use {@link EmptyState} instead. Per-context sizing (padding, text size,
- * margin, radius) passes through `className`.
- */
 export function EmptyStatePanel({
   className,
   children,

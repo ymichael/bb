@@ -29,6 +29,14 @@ env:
     timeout: 60000
 - takeScreenshot: shell-deep-link-page
 
+- openLink: "bb://settings/notifications"
+- extendedWaitUntil:
+    visible:
+      id: "notifications-settings-screen"
+    timeout: 20000
+- assertVisible: "Push notifications"
+- takeScreenshot: shell-deep-link-notifications
+
 # There is deliberately no web-link step here. A universal link only reaches
 # the app for a domain in `associatedDomains` (`*.getbb.app`), and the harness
 # serves a loopback origin, so iOS hands `http://127.0.0.1:.../` to Safari —

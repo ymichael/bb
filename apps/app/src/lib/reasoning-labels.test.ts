@@ -2,12 +2,6 @@ import { describe, expect, it } from "vitest";
 import { fastServiceTierLabel, reasoningLevelLabel } from "./reasoning-labels";
 import { getProviderIconTintStyle } from "./provider-icon";
 
-/**
- * Pickers and settings read the provider's declaration
- * (docs/provider-plugin-api.md §1) — `reasoningLevels`, `serviceTiers`,
- * `strings.iconTint` — and fall back to the vendored tables only for
- * providers that declared none.
- */
 describe("declared provider labels", () => {
   const declared = {
     reasoningLevels: [
@@ -29,7 +23,6 @@ describe("declared provider labels", () => {
   it("labels a reasoning level from the declaration, else the fallback table", () => {
     expect(reasoningLevelLabel("low", declared)).toBe("Quick");
     expect(reasoningLevelLabel("high", declared)).toBe("Deep");
-    // A level the provider did not declare still reads from the table.
     expect(reasoningLevelLabel("xhigh", declared)).toBe("Extra High");
     expect(reasoningLevelLabel("xhigh", undefined)).toBe("Extra High");
   });

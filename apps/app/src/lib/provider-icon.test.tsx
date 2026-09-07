@@ -7,19 +7,11 @@ import {
   removePluginSlotRegistrations,
   resetPluginSlotStoreForTest,
   setPluginSlotRegistrations,
-  type PluginRegistrationSet,
 } from "./plugin-slots";
 import { getProviderIconInfo } from "./provider-icon";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
-const EMPTY_REGISTRATIONS: PluginRegistrationSet = {
-  homepageSections: [],
-  settingsSections: [],
-  navPanels: [],
-  threadPanelActions: [],
-  sidebarFooterActions: [],
-  fileOpeners: [],
-  messageDirectives: [],
-};
+const EMPTY_REGISTRATIONS = makePluginRegistrationSet();
 
 function PluginCodexIcon({ className }: { className?: string }) {
   return (
@@ -55,9 +47,9 @@ describe("getProviderIconInfo", () => {
     const view = render(
       createElement(iconInfo.icon, { className: "size-4 shrink-0" }),
     );
-    // The logo is the mask's alpha: an SVG drawn through <img> is a separate
-    // document where currentColor is black, invisible on dark themes.
-    const mask = view.container.querySelector<HTMLElement>("[data-provider-logo]");
+    const mask = view.container.querySelector<HTMLElement>(
+      "[data-provider-logo]",
+    );
     expect(mask).not.toBeNull();
     if (mask === null) {
       throw new Error("Expected provider logo mask");
@@ -68,14 +60,10 @@ describe("getProviderIconInfo", () => {
     expect(mask.className).toContain("bg-current");
     expect(mask.className).toContain("size-4");
 
-    // One fetch per mark: no probe image beside the mask.
     expect(view.container.querySelector("img")).toBeNull();
   });
 
   it("vendors no brand marks: a provider known only by id has no icon", () => {
-    // Every mark comes from the plugin that registers the provider. With no
-    // source (no logo, no glyph, no family) there is nothing to draw, and the
-    // caller shows the display name's initial.
     for (const providerId of ["codex", "claude-code", "pi", "acp-opencode"]) {
       expect(getProviderIconInfo(providerId), providerId).toBeUndefined();
       expect(
@@ -86,9 +74,6 @@ describe("getProviderIconInfo", () => {
   });
 
   it("draws a declared host glyph for a provider without a logo, and keeps it below a logo", () => {
-    // `icon: "Zap"` on the declaration: no bytes to serve, so no logoUrl; the
-    // glyph arrives by name and must render through the shared icon set
-    // (inline svg, inherits the text color) instead of the initial.
     const glyphInfo = getProviderIconInfo("echo-agent", {
       logoUrl: null,
       icon: { glyph: "Zap" },
@@ -97,20 +82,22 @@ describe("getProviderIconInfo", () => {
       throw new Error("Expected a glyph icon for echo-agent");
     }
     expect(
-      getProviderIconInfo("echo-agent", { logoUrl: null, icon: { glyph: "Zap" } })
-        ?.icon,
+      getProviderIconInfo("echo-agent", {
+        logoUrl: null,
+        icon: { glyph: "Zap" },
+      })?.icon,
     ).toBe(glyphInfo.icon);
     const glyphView = render(
       createElement(glyphInfo.icon, { className: "size-4" }),
     );
-    expect(glyphView.container.querySelector("[data-provider-logo]")).toBeNull();
+    expect(
+      glyphView.container.querySelector("[data-provider-logo]"),
+    ).toBeNull();
     expect(
       glyphView.container.querySelector('svg[data-icon="Zap"]'),
     ).not.toBeNull();
     glyphView.unmount();
 
-    // A glyph the host does not know resolves to nothing, so the caller's
-    // fallback (the initial) takes over instead of an empty box.
     expect(
       getProviderIconInfo("echo-agent", {
         logoUrl: null,
@@ -118,7 +105,6 @@ describe("getProviderIconInfo", () => {
       }),
     ).toBeUndefined();
 
-    // A file logo is the richer asset: it wins when both are present.
     const bothInfo = getProviderIconInfo("echo-agent", {
       logoUrl: "/api/v1/system/providers/echo-agent/logo",
       icon: { glyph: "Zap" },
@@ -127,11 +113,14 @@ describe("getProviderIconInfo", () => {
       throw new Error("Expected icon info when both forms are present");
     }
     const bothView = render(createElement(bothInfo.icon, {}));
-    expect(bothView.container.querySelector("[data-provider-logo]")).not.toBeNull();
+    expect(
+      bothView.container.querySelector("[data-provider-logo]"),
+    ).not.toBeNull();
     bothView.unmount();
 
-    // Unknown non-ACP provider with neither form: nothing, as before.
-    expect(getProviderIconInfo("echo-agent", { logoUrl: null })).toBeUndefined();
+    expect(
+      getProviderIconInfo("echo-agent", { logoUrl: null }),
+    ).toBeUndefined();
   });
 
   it("lets a plugin-registered component win, and falls back when it goes away", () => {
@@ -142,7 +131,6 @@ describe("getProviderIconInfo", () => {
       throw new Error("Expected icon info for codex");
     }
     const view = render(createElement(iconInfo.icon, { className: "size-4" }));
-    // The served logo (as a mask) before any plugin frontend has booted.
     expect(view.container.querySelector("[data-testid]")).toBeNull();
     expect(view.container.querySelector("[data-provider-logo]")).not.toBeNull();
 
@@ -157,10 +145,8 @@ describe("getProviderIconInfo", () => {
       '[data-testid="plugin-codex-icon"]',
     );
     expect(pluginMark).not.toBeNull();
-    // The plugin's inline component replaces the mask outright.
     expect(view.container.querySelector("[data-provider-logo]")).toBeNull();
 
-    // Disable / failed reload disposes the registration.
     act(() => {
       removePluginSlotRegistrations("provider-codex");
     });
@@ -218,9 +204,6 @@ describe("getProviderIconInfo", () => {
     view.unmount();
   });
 
-  // The generic mark is reached by the DECLARED family, not by the shape of
-  // the id: a third-party agent registered as "amp" is an ACP agent because
-  // its registration says so, and an unregistered "acp-…" id is nothing.
   it("uses the declared family for the generic mark, not the id prefix", () => {
     const byFamily = getProviderIconInfo("amp", {
       logoUrl: null,

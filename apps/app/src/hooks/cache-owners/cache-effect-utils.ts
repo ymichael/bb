@@ -19,11 +19,8 @@ export function refetchFailedActiveQueryKeys({
         queryKey,
         type: "active",
         predicate: (query) =>
-          query.state.status === "error" &&
-          query.state.fetchStatus === "idle",
+          query.state.status === "error" && query.state.fetchStatus === "idle",
       })
-      .catch(() => {
-        // Individual query state already captures the refetch error.
-      });
+      .catch(() => {});
   }
 }

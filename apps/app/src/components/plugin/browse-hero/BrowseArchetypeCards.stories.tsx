@@ -12,7 +12,6 @@ export const Grid = () => (
   </div>
 );
 
-/** Narrow column: the grid collapses to one card per row. */
 export const Narrow = () => (
   <div className="min-h-screen bg-background p-8">
     <div className="max-w-[22rem]">

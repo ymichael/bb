@@ -7,9 +7,6 @@ import {
   resolveBuiltinSkillsRootPath,
 } from "../src/services/skills/builtin-skills-copy.js";
 
-// Build step: copies the built-in injected skills into dist so the bundled
-// server resolves them beside its dist entry points, mirroring the app
-// scaffold template copy.
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const targetPath = path.resolve(
   scriptDir,

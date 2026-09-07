@@ -1,11 +1,3 @@
-/**
- * The vendor-plugin readers against fixture homes and workspaces: the cases
- * the claude-code, codex and ACP plugins each pinned on their own copy of
- * this code before it moved here (scopes, settings precedence, the cache
- * fallback, the symlink rule per origin, skills-directory plugins) and the
- * rules the copies disagreed on (one path per side across the whole answer,
- * the first root winning; the grok layout).
- */
 import {
   mkdir,
   mkdtemp,
@@ -81,7 +73,6 @@ function installed(
   );
 }
 
-/** Resolve, and prove the contract accepts what was answered. */
 async function resolve(
   workspace: string | null = cwd,
   env: Record<string, string | undefined> = {},
@@ -126,8 +117,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
       expect(roots).toEqual({ claudeDir: expected, skills: [], commands: [] });
     }
 
-    // The registry, the user settings and the cache live in the moved
-    // directory; a registry left in ~/.claude is not read.
     const movedDir = path.join(homeDir, "custom-claude");
     const pluginRoot = path.join(homeDir, "moved-plugin");
     await installed(
@@ -192,7 +181,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
       "fallback-plugin",
       "abcdef123456",
     );
-    // An older cache entry must lose to the commit-prefixed one.
     const olderPluginRoot = path.join(cacheRoot, "fallback-plugin", "older");
     await writePlugin(olderPluginRoot, { name: "fallback-plugin" });
     await writePlugin(fallbackPluginRoot, {
@@ -273,7 +261,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
     const prefixed = (namePrefix: string) => ({ origin: "user", namePrefix });
     expect(roots.skills).toEqual([
       {
-        // No frontmatter name: the plugin name, not the commit directory.
         path: path.join(fallbackPluginRoot, "SKILL.md"),
         ...prefixed("fallback-plugin:"),
         shape: "skill-file",
@@ -418,9 +405,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
     ]) {
       await mkdir(path.join(root, "skills"), { recursive: true });
     }
-    // reenabled: user off, project on. local-off: the local file alone.
-    // local-wins: the user file switches it on, the local file (read last)
-    // switches the same id off again.
     await writeJson(path.join(claudeDir, "settings.json"), {
       enabledPlugins: { "reenabled@market": false, "local-wins@market": true },
     });
@@ -546,7 +530,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
       path.join(userPluginRoot, "extra", "SKILL.md"),
     ]);
     expect(roots.skills.every((root) => root.origin === "user")).toBe(true);
-    // Command roots never follow symlinks, whatever the origin.
     expect(commandPaths(roots)).toEqual([]);
   });
 
@@ -571,7 +554,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
     await writePlugin(projectTool, {});
     await mkdir(path.join(projectTool, "commands"), { recursive: true });
     await symlink(linkedTarget, projectLinked);
-    // A plain skill beside the plugins is left to the skills root scan.
     await writeFileEnsuringDir(
       path.join(claudeDir, "skills", "plain", "SKILL.md"),
       "---\n---\n",
@@ -582,8 +564,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
 
     const roots = await resolve(cwd);
 
-    // Project plugins first, then the user ones in directory-name order:
-    // linked-tool before local-tool.
     expect(roots.skills).toEqual([
       {
         path: path.join(userLinked, "skills"),
@@ -616,11 +596,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
   });
 
   it("answers each path once, first root wins, and ignores malformed vendor files", async () => {
-    // The same plugin installed twice: the registry lists it under two ids
-    // and two scopes at one path, and its manifest names `skills` twice.
-    // Before the readers shared this code, one copy answered the second
-    // scope as a second root; the contract accepts that and the daemon scans
-    // the first root per path, so the answer now says what is scanned.
     const pluginRoot = path.join(cwd, "dup-plugin");
     await installed({
       "dup-plugin@market": [
@@ -671,8 +646,6 @@ describe("experimental_resolveClaudePluginRoots", () => {
 describe("experimental_resolveVendorPluginRoots", () => {
   it("lists a grok-layout plugin's manifest entries only, each directory recursive", async () => {
     const pluginRoot = path.join(homeDir, ".grok", "plugins", "tools");
-    // A root SKILL.md and a default `skills/` are Claude-layout conventions;
-    // grok reads what the manifest names.
     await writeFileEnsuringDir(
       path.join(pluginRoot, "SKILL.md"),
       "---\nname: root\n---\n",
@@ -709,7 +682,6 @@ describe("experimental_resolveVendorPluginRoots", () => {
           namePrefix: "tools:",
           shape: "skills",
         },
-        // A directory holding SKILL.md itself is still a recursive tree.
         {
           path: path.join(pluginRoot, "single"),
           origin: "user",

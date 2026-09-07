@@ -101,14 +101,12 @@ export interface WatchPathRootArgs {
   ignoredPaths: readonly string[];
   onChange: (changes: readonly HostPathWatchChange[]) => void;
   onReady: () => void;
-  /** A native backend reported a gap; consumers must reread current state. */
   onRescanRequired: () => void;
   onWatchError: (error: { rootPath: string; message: string }) => void;
 }
 
 export interface HostWatcher {
   watchWorkspace(args: WatchWorkspaceArgs): () => void | Promise<void>;
-  /** Generic, policy-free native path observation for host-local consumers. */
   watchPathRoot?(args: WatchPathRootArgs): () => void | Promise<void>;
   watchThreadStorageRoot(
     args: WatchThreadStorageRootArgs,

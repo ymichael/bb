@@ -6,8 +6,6 @@ import {
   type TestAppHarness,
 } from "../../helpers/test-app.js";
 
-// The harness config uses serverPort 3334, so this host is on the local-app
-// origin allowlist the "local" auth mode enforces.
 const BASE = "http://127.0.0.1:3334";
 
 const HEALTHY_SOURCE = `export default function plugin(bb: any) {
@@ -68,8 +66,6 @@ describe("POST /plugins/reload outcome", () => {
       `${BASE}/api/v1/plugins/reload?id=keeper`,
       { method: "POST" },
     );
-    // `bb plugin reload` exits 1 through this structured failure; the
-    // previous instance keeps serving, which the entry list shows.
     expect(response.status).toBe(422);
     const body: unknown = await response.json();
     expect(body).toMatchObject({

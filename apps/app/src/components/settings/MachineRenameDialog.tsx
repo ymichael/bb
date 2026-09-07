@@ -12,7 +12,6 @@ import {
 import { Input } from "@bb/shared-ui/input";
 import { useRenameDialogAutoFocus } from "@/components/dialogs/useRenameDialogAutoFocus.js";
 
-/** Server-side limit from `updateHostRequestSchema`. */
 const HOST_NAME_MAX_LENGTH = 100;
 
 interface MachineRenameDialogProps {

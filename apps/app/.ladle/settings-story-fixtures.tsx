@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { QueryClientProvider } from "@tanstack/react-query";
-import { PERSONAL_PROJECT_ID } from "@bb/domain";
+import { PERSONAL_PROJECT_ID, type ProviderInfo } from "@bb/domain";
 import { UPDATE_ACTION_ICON } from "@bb/domain/update-state";
 import type {
   SidebarBootstrapResponse,
@@ -15,6 +15,7 @@ import {
   pluginMarketplacesQueryKey,
   sidebarNavigationQueryKey,
   systemConfigQueryKey,
+  systemProvidersQueryKey,
   systemVersionQueryKey,
 } from "../src/hooks/queries/query-keys";
 import {
@@ -23,9 +24,11 @@ import {
 } from "../src/hooks/useUpdateInventory";
 import { createAppQueryClient } from "../src/lib/query-client";
 import { makeSystemConfig } from "../src/test/fixtures/system-config";
+import { makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import { getSettingsRoutePath } from "../src/lib/route-paths";
 import {
   BbAppUpdateRows,
+  MachineUpdatesFleetSection,
   MachineUpdatesRows,
   MachineUpdatesSection,
   UpdateActionButton,
@@ -39,6 +42,9 @@ import {
   makeProject,
   makeProviderCliStatus,
 } from "./story-fixtures";
+import codexLogoUrl from "../../../plugins/provider-codex/icons/codex.svg";
+import claudeCodeLogoUrl from "../../../plugins/provider-claude-code/icons/claude-code.svg";
+import cursorLogoUrl from "../../../plugins/provider-acp/icons/cursor.svg";
 
 const SETTINGS_STORY_NOW = Date.parse("2026-08-19T08:00:00.000Z");
 
@@ -140,6 +146,24 @@ const systemVersion = {
   upgradeCommand: "npx bb-app@latest",
 } satisfies SystemVersionResponse;
 
+const systemProviders = [
+  makeProviderInfo({
+    id: "codex",
+    displayName: "Codex",
+    logoUrl: codexLogoUrl,
+  }),
+  makeProviderInfo({
+    id: "claude-code",
+    displayName: "Claude Code",
+    logoUrl: claudeCodeLogoUrl,
+  }),
+  makeProviderInfo({
+    id: "acp-cursor",
+    displayName: "Cursor",
+    logoUrl: cursorLogoUrl,
+  }),
+] satisfies ProviderInfo[];
+
 const settingsUpdateMachine = {
   host: SETTINGS_STORY_PRIMARY_HOST,
   isPrimary: true,
@@ -154,27 +178,26 @@ const settingsUpdateMachine = {
 const noJobs: ReadonlySet<string> = new Set();
 const noop = () => {};
 
-/** The representative, side-effect-free Updates route inside the Settings story. */
 export function SettingsUpdatesStory() {
   const navigate = useNavigate();
   return (
-    <div className="space-y-6">
+    <MachineUpdatesFleetSection
+      action={
+        <div role="toolbar" aria-label="Bulk update actions">
+          <UpdateActionButton
+            label="Update all 1 CLI tool"
+            tooltipLabel="Update all"
+            icon={UPDATE_ACTION_ICON}
+            visibleLabel="Update all"
+            variant="default"
+            onClick={noop}
+          />
+        </div>
+      }
+    >
       <MachineUpdatesSection
         machine={settingsUpdateMachine}
         isThisMachine={false}
-        action={
-          <div role="toolbar" aria-label="Bulk update actions">
-            <UpdateActionButton
-              label="Update all 1 CLI tool"
-              tooltipLabel="Update all"
-              icon={UPDATE_ACTION_ICON}
-              iconPosition="end"
-              visibleLabel="Update all"
-              variant="default"
-              onClick={noop}
-            />
-          </div>
-        }
       >
         <BbAppUpdateRows
           systemVersion={systemVersion}
@@ -191,7 +214,7 @@ export function SettingsUpdatesStory() {
           onOpenProvider={() => navigate(getSettingsRoutePath("providers"))}
         />
       </MachineUpdatesSection>
-    </div>
+    </MachineUpdatesFleetSection>
   );
 }
 
@@ -209,6 +232,7 @@ function createSettingsStoryQueryClient() {
   });
   queryClient.setQueryData(hostsQueryKey(), SETTINGS_STORY_HOSTS);
   queryClient.setQueryData(systemConfigQueryKey(), systemConfig);
+  queryClient.setQueryData(systemProvidersQueryKey(), systemProviders);
   queryClient.setQueryData(systemVersionQueryKey(), systemVersion);
   queryClient.setQueryData(sidebarNavigationQueryKey(), sidebarNavigation);
   queryClient.setQueryData(pluginMarketplacesQueryKey(), []);
@@ -220,11 +244,10 @@ function createSettingsStoryQueryClient() {
     hostProviderCliStatusQueryKey(HOST_IDS.remote),
     remoteProviderStatus,
   );
-  queryClient.setQueryData(pluginListQueryKey(true), { plugins: [] });
+  queryClient.setQueryData(pluginListQueryKey(true), []);
   return queryClient;
 }
 
-/** Deterministic production-query fixtures shared by every Settings route. */
 export function SettingsStoryFixtures({ children }: { children: ReactNode }) {
   const [queryClient] = useState(createSettingsStoryQueryClient);
   return (

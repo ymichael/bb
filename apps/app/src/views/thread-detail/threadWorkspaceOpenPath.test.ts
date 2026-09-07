@@ -4,6 +4,7 @@ import type {
   WorkspaceFileStatusKind,
 } from "@bb/domain";
 import type { WorkspaceChangedFilesSection } from "@/components/workspace/workspace-change-summary";
+import { makeEnvironment } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
 import {
   resolveWorkspaceChangedFileOpenTarget,
@@ -11,26 +12,21 @@ import {
   resolveThreadWorkspaceOpenPath,
 } from "./threadWorkspaceOpenPath";
 
-function makeEnvironment(overrides: Partial<Environment> = {}): Environment {
-  return {
+function makeWorkspaceEnvironment(
+  overrides: Partial<Environment> = {},
+): Environment {
+  return makeEnvironment({
     baseBranch: null,
     branchName: "feature/test",
     createdAt: 1,
-    defaultBranch: "main",
     hostId: "host-1",
     id: "environment-1",
-    name: null,
-    isGitRepo: true,
-    isWorktree: true,
-    managed: true,
     mergeBaseBranch: "main",
     path: "/tmp/workspace",
     projectId: "project-1",
-    status: "ready",
     updatedAt: 1,
-    workspaceProvisionType: "managed-worktree",
     ...overrides,
-  };
+  });
 }
 
 function makeWorkspaceFileStatus(
@@ -67,14 +63,14 @@ describe("resolveThreadWorkspaceOpenPath", () => {
   it("resolves local and remote editor contexts", () => {
     expect(
       resolveEnvironmentOpenContext({
-        environment: makeEnvironment({ hostId: "host-local" }),
+        environment: makeWorkspaceEnvironment({ hostId: "host-local" }),
         serverOrigin: "https://bb.example.test",
         threadEnvironmentIsLocal: true,
       }),
     ).toEqual({ kind: "local" });
     expect(
       resolveEnvironmentOpenContext({
-        environment: makeEnvironment({ hostId: "host-remote" }),
+        environment: makeWorkspaceEnvironment({ hostId: "host-remote" }),
         serverOrigin: "https://bb.example.test",
         threadEnvironmentIsLocal: false,
       }),
@@ -89,7 +85,7 @@ describe("resolveThreadWorkspaceOpenPath", () => {
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,
-        environment: makeEnvironment(),
+        environment: makeWorkspaceEnvironment(),
         hasWorkspaceOpenTargets: true,
       }),
     ).toBe("/tmp/workspace");
@@ -99,28 +95,28 @@ describe("resolveThreadWorkspaceOpenPath", () => {
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,
-        environment: makeEnvironment(),
+        environment: makeWorkspaceEnvironment(),
         hasWorkspaceOpenTargets: true,
       }),
     ).toBe("/tmp/workspace");
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,
-        environment: makeEnvironment({ path: null }),
+        environment: makeWorkspaceEnvironment({ path: null }),
         hasWorkspaceOpenTargets: true,
       }),
     ).toBeNull();
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: false,
-        environment: makeEnvironment(),
+        environment: makeWorkspaceEnvironment(),
         hasWorkspaceOpenTargets: true,
       }),
     ).toBeNull();
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,
-        environment: makeEnvironment(),
+        environment: makeWorkspaceEnvironment(),
         hasWorkspaceOpenTargets: false,
       }),
     ).toBeNull();
@@ -130,7 +126,7 @@ describe("resolveThreadWorkspaceOpenPath", () => {
     expect(
       resolveThreadWorkspaceOpenPath({
         canOpenWorkspace: true,
-        environment: makeEnvironment({ status: "destroyed" }),
+        environment: makeWorkspaceEnvironment({ status: "destroyed" }),
         hasWorkspaceOpenTargets: true,
       }),
     ).toBe("/tmp/workspace");

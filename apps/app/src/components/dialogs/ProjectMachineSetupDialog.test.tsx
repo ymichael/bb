@@ -54,7 +54,9 @@ function renderDialog(target: ProjectMachineSetupDialogTarget) {
   const onOpenChange = vi.fn();
   render(
     <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      client={
+        new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      }
     >
       <ProjectMachineSetupDialog
         target={target}
@@ -91,8 +93,6 @@ describe("ProjectMachineSetupDialog", () => {
     );
 
     await waitFor(() => expect(onComplete).toHaveBeenCalledTimes(1));
-    // No targetPath when the default destination is untouched — the daemon
-    // derives the same path itself.
     expect(sdk.projects.sources.add).toHaveBeenCalledWith({
       projectId: "proj_test",
       type: "clone",
@@ -121,9 +121,7 @@ describe("ProjectMachineSetupDialog", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Clone & continue" }));
 
-    await waitFor(() =>
-      expect(sdk.projects.sources.add).toHaveBeenCalled(),
-    );
+    await waitFor(() => expect(sdk.projects.sources.add).toHaveBeenCalled());
     expect(sdk.projects.sources.add).toHaveBeenCalledWith({
       projectId: "proj_test",
       type: "clone",
@@ -179,9 +177,7 @@ describe("ProjectMachineSetupDialog", () => {
     expect(
       await screen.findByText("Target directory is not empty"),
     ).toBeTruthy();
-    expect(
-      screen.getByText(/use the existing-folder option/u),
-    ).toBeTruthy();
+    expect(screen.getByText(/use the existing-folder option/u)).toBeTruthy();
   });
 
   it("submits an existing browsed folder as a local_path source", async () => {
@@ -202,10 +198,7 @@ describe("ProjectMachineSetupDialog", () => {
     });
     const { onComplete } = renderDialog(gitTarget);
 
-    fireEvent.click(
-      screen.getByText("Use an existing folder on Mac Studio"),
-    );
-    // The browser resolves the initial (home) listing as the picked folder.
+    fireEvent.click(screen.getByText("Use an existing folder on Mac Studio"));
     await screen.findByText("This folder is empty.");
     const submit = await screen.findByRole("button", {
       name: "Use folder & continue",

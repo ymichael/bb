@@ -53,10 +53,6 @@ export function resolveEnvironmentWorkspaceDisplayKind({
   return "other";
 }
 
-/**
- * Properties discovered about a workspace during provisioning.
- * Used by the provision command result and to populate the environment record.
- */
 export const discoveredWorkspacePropertiesSchema = z.object({
   path: z.string().min(1),
   isGitRepo: z.boolean(),

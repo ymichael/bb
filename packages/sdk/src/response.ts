@@ -31,13 +31,6 @@ interface WrapRequestTimeoutBodyArgs {
   stream: ReadableStream<Uint8Array>;
 }
 
-/**
- * The subset of `Response` the SDK reads. Constraining on this instead of the
- * global `Response` keeps typed Hono client responses assignable in every
- * runtime whose global `Response`/`FormData` declarations differ from lib.dom
- * (React Native declares its own `FormData` with `getParts()`, which makes
- * `Response.formData()` incompatible even though the SDK never calls it).
- */
 export type SdkResponseLike = Pick<
   Response,
   "arrayBuffer" | "headers" | "json" | "ok" | "status" | "statusText" | "text"
@@ -86,14 +79,6 @@ export interface BbHttpErrorArgs {
   status: number;
 }
 
-/**
- * Non-2xx HTTP response surfaced by the transport. `status` is the HTTP
- * status code; `code` carries the server's machine-readable error code when
- * the error body provides one, so callers can branch on the failure kind
- * instead of parsing the message. `body` is the parsed JSON error payload
- * (null when the body was empty or not JSON) for callers that need
- * structured error details beyond `code`.
- */
 export class BbHttpError extends Error {
   readonly body: unknown;
   readonly code: string | null;
@@ -263,8 +248,6 @@ function isRequestTimeoutError(
   context: RequestTimeoutContext,
   error: unknown,
 ): boolean {
-  // Some paths reject with the timeout reason directly; others wrap it as a
-  // platform AbortError/TimeoutError while preserving the composed reason.
   if (context.timeoutSignal.aborted && error === context.timeoutSignal.reason) {
     return true;
   }
@@ -278,7 +261,6 @@ function isRequestTimeoutError(
 }
 
 function validateRequestTimeoutMs(timeoutMs: number): void {
-  // timeoutMs=0 is an effectively immediate abort knob for tests and callers.
   if (!Number.isFinite(timeoutMs) || timeoutMs < 0) {
     throw new RangeError(
       "BB request timeout must be a non-negative finite number.",
@@ -340,8 +322,6 @@ async function readHttpErrorInfo(
     normalized.startsWith("{") ||
     normalized.startsWith("[");
   if (!shouldParseJson) {
-    // An HTML body (proxy error page, auth redirect target) is useless as a
-    // user-facing message; fall back to the status line instead.
     const message = normalized.startsWith("<")
       ? response.statusText || `Request failed with status ${response.status}`
       : normalized;

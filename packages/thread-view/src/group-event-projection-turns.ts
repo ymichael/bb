@@ -15,7 +15,6 @@ import {
 } from "./apply-turn-message-detail.js";
 import { findLastTerminalTimelineMessage } from "./timeline-message-helpers.js";
 
-/** A typed thread event paired with its row metadata. */
 export interface ThreadEventWithMeta {
   event: ThreadEvent;
   meta: EventMeta;
@@ -249,10 +248,6 @@ export function groupEventProjectionTurns(
         scope: event.scope,
       });
       if (turnsById.has(turnId)) {
-        // Histories stored before ingestion deduplicated turn/started can hold
-        // the same provider turn start twice (a daemon replay after a lost
-        // acknowledgement). The first start is canonical; one replayed
-        // lifecycle marker must not make the whole timeline unreadable.
         continue;
       }
       turnsById.set(turnId, createProjectionTurn(event, meta));

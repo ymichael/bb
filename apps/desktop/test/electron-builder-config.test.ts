@@ -117,14 +117,15 @@ const electronBuilderConfigSchema = z
         })
         .passthrough(),
     ]),
+    toolsets: z.object({
+      appimage: z.literal("1.0.3"),
+    }),
   })
   .passthrough();
 
 const desktopPackageJsonSchema = z
   .object({
     main: z.literal("dist/main.js"),
-    // Optional: the desktop app no longer pins per-architecture plugin build
-    // binaries, so it may declare none at all.
     optionalDependencies: z.record(z.string(), z.string()).optional(),
     type: z.never().optional(),
   })
@@ -275,8 +276,6 @@ describe("electron-builder signing config", () => {
   });
 
   it("ships no plugin build toolchain binaries", async () => {
-    // The toolchain is fetched into the data dir on first plugin build, so
-    // the packaged app must not carry per-architecture esbuild/oxide binaries.
     const packageJsonText = await readFile(
       resolve(desktopPackageRoot, "package.json"),
       "utf8",
@@ -372,11 +371,6 @@ describe("electron-builder signing config", () => {
   });
 
   it("disables in-place native rebuilds so the shared pnpm store is not mutated", async () => {
-    // electron-builder's npmRebuild rebuilds better-sqlite3 through the
-    // workspace symlink into the shared content-addressed store, flipping the
-    // binary to Electron's ABI and breaking every plain-node consumer (the
-    // server test suite). The afterPack hook fetches the Electron prebuild into
-    // the packaged copy instead, so this must stay false.
     const configText = await readFile(
       resolve(desktopPackageRoot, "electron-builder.config.json"),
       "utf8",
@@ -403,9 +397,6 @@ describe("electron-builder signing config", () => {
     );
     const config = electronBuilderConfigSchema.parse(JSON.parse(configText));
 
-    // electron-builder prunes *.d.ts while collecting node_modules. The
-    // scaffold source is user-editable template content, so copy that subtree
-    // separately without relaxing dependency pruning for the rest of node_modules.
     expect(config.files).toContainEqual({
       filter: ["**/*"],
       from: "node_modules/bb-app/server/dist/app-scaffold-template",
@@ -489,8 +480,6 @@ describe("electron-builder signing config", () => {
     ).resolves.toBeUndefined();
   });
 
-  // An x64 macOS target forces the release job onto a slow Intel runner and
-  // notarizes twice, which tripled desktop release time when it last shipped.
   it("packages macOS artifacts for arm64 only", async () => {
     const configText = await readFile(
       resolve(desktopPackageRoot, "electron-builder.config.json"),
@@ -516,6 +505,7 @@ describe("electron-builder signing config", () => {
       executableName: "bb",
       target: [{ arch: ["x64"], target: "AppImage" }],
     });
+    expect(config.toolsets.appimage).toBe("1.0.3");
     await expect(
       access(resolve(desktopPackageRoot, config.linux.icon)),
     ).resolves.toBeUndefined();
@@ -565,8 +555,6 @@ describe("electron-builder signing config", () => {
     expect(config.productName).toBe("bb Nightly");
     expect(config.artifactName).toBe("bb-nightly-${version}-${arch}.${ext}");
     expect(config.linux.icon).toBe("assets/icon-nightly.png");
-    // A shared Linux binary name would let one channel shadow the other on
-    // PATH, and the two channels are meant to be installed side by side.
     expect(config.linux.executableName).toBe("bb-nightly");
     expect(config.mac.icon).toBe("assets/icon-nightly.icns");
     await expect(
@@ -594,9 +582,6 @@ describe("electron-builder signing config", () => {
   });
 
   it("signs local builds via keychain auto-discovery when signing secrets are absent", async () => {
-    // An unsigned bundle is provenance-tracked by macOS, which makes syspolicyd
-    // evaluate every exec in the app's process tree — local builds must sign
-    // with a keychain identity when one is available.
     const { config } = await readResolvedConfig({});
 
     expect(config.mac).not.toHaveProperty("identity");

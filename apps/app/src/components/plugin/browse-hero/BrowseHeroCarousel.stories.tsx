@@ -13,18 +13,12 @@ function Stage({ children }: { children: React.ReactNode }) {
   );
 }
 
-/**
- * Stories render the showcase with the composer entry points disabled: the real
- * composer the hero swaps in is bb's new-thread prompt box, which needs live
- * project/host/provider queries a story has no server for.
- */
 export const Autoplaying = () => (
   <Stage>
     <BrowseHeroCarousel composerDisabled />
   </Stage>
 );
 
-/** Each archetype held still, so screenshots do not race the 5s advance. */
 export const EveryArchetype = () => (
   <Stage>
     <div className="space-y-10">

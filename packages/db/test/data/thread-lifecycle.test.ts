@@ -82,7 +82,6 @@ describe("applyThreadLifecycleEvent", () => {
       });
 
       vi.setSystemTime(2_000);
-      // idle has no run.succeeded cell.
       const outcome = applyThreadLifecycleEvent(db, {
         event: { type: "run.succeeded" },
         threadId: thread.id,
@@ -130,7 +129,6 @@ describe("applyThreadLifecycleEvent", () => {
       status: "active",
     });
 
-    // Enter the stopping phase via the stop.requested event.
     const stopping = requireThreadLifecycleEventApplied(
       applyThreadLifecycleEvent(db, {
         event: { type: "stop.requested" },
@@ -140,8 +138,6 @@ describe("applyThreadLifecycleEvent", () => {
     expect(stopping.status).toBe("stopping");
     const stoppingRow = getThread(db, thread.id);
 
-    // A stopping thread structurally accepts no "begin new work" event. This
-    // is the replacement for the old notStopRequested supersession guard.
     const outcome = applyThreadLifecycleEvent(db, {
       event: { type: "run.started" },
       threadId: thread.id,
@@ -153,7 +149,6 @@ describe("applyThreadLifecycleEvent", () => {
     });
     expect(getThread(db, thread.id)).toEqual(stoppingRow);
 
-    // The stop landing settles the thread to idle.
     const settled = requireThreadLifecycleEventApplied(
       applyThreadLifecycleEvent(db, {
         event: { type: "stop.settled" },
@@ -228,7 +223,6 @@ describe("applyThreadLifecycleEvent", () => {
       detail: "status changed from starting while applying run.started",
       reason: "cas-conflict",
     });
-    // The interleaved writer's value survives; the event's target does not.
     expect(getThread(db, thread.id)?.status).toBe("idle");
   });
 
@@ -239,7 +233,6 @@ describe("applyThreadLifecycleEvent", () => {
       const { db, project } = setup();
 
       const cases = [
-        // active → idle on a root thread requires attention.
         {
           attention: true,
           event: { type: "run.succeeded" },
@@ -247,7 +240,6 @@ describe("applyThreadLifecycleEvent", () => {
           status: "active",
           target: "idle",
         },
-        // active → idle on a child thread does not.
         {
           attention: false,
           event: { type: "run.succeeded" },
@@ -255,7 +247,6 @@ describe("applyThreadLifecycleEvent", () => {
           status: "active",
           target: "idle",
         },
-        // starting → active never requires attention.
         {
           attention: false,
           event: { type: "run.started" },
@@ -263,7 +254,6 @@ describe("applyThreadLifecycleEvent", () => {
           status: "starting",
           target: "active",
         },
-        // starting → error requires attention.
         {
           attention: true,
           event: { type: "run.failed" },

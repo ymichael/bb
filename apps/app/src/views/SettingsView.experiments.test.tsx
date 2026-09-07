@@ -8,7 +8,7 @@ afterEach(cleanup);
 function renderSection(overrides?: {
   onChangelogPreviewEnabledChange?: (enabled: boolean) => void;
   onMobileAppEnabledChange?: (enabled: boolean) => void;
-  onProviderSessionReapingEnabledChange?: (enabled: boolean) => void;
+  onSidebarProgressiveDisclosureEnabledChange?: (enabled: boolean) => void;
   onTimelineWindowingEnabledChange?: (enabled: boolean) => void;
 }) {
   return render(
@@ -17,15 +17,15 @@ function renderSection(overrides?: {
       disabled={false}
       editMessagesEnabled={false}
       mobileAppEnabled={false}
-      providerSessionReapingEnabled={false}
+      sidebarProgressiveDisclosureEnabled={false}
       timelineWindowingEnabled={false}
       onChangelogPreviewEnabledChange={
         overrides?.onChangelogPreviewEnabledChange ?? vi.fn()
       }
       onEditMessagesEnabledChange={vi.fn()}
       onMobileAppEnabledChange={overrides?.onMobileAppEnabledChange ?? vi.fn()}
-      onProviderSessionReapingEnabledChange={
-        overrides?.onProviderSessionReapingEnabledChange ?? vi.fn()
+      onSidebarProgressiveDisclosureEnabledChange={
+        overrides?.onSidebarProgressiveDisclosureEnabledChange ?? vi.fn()
       }
       onTimelineWindowingEnabledChange={
         overrides?.onTimelineWindowingEnabledChange ?? vi.fn()
@@ -49,10 +49,10 @@ describe("ExperimentsSettingsSection", () => {
     expect(onChange).toHaveBeenCalledWith(true);
   });
 
-  it("reports idle provider session release changes", () => {
+  it("reports sidebar progressive disclosure changes", () => {
     const onChange = vi.fn();
-    renderSection({ onProviderSessionReapingEnabledChange: onChange });
-    fireEvent.click(screen.getByLabelText("Idle provider session release"));
+    renderSection({ onSidebarProgressiveDisclosureEnabledChange: onChange });
+    fireEvent.click(screen.getByLabelText("Sidebar progressive disclosure"));
     expect(onChange).toHaveBeenCalledWith(true);
   });
 

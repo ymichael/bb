@@ -114,12 +114,11 @@ interface NewThreadComposerPromptOptions {
   id?: string;
   placeholder?: string;
   autoFocus?: boolean;
+  allowSoftKeyboardAutoFocus?: boolean;
   banner?: ReactNode;
   header?: ReactNode;
-  /** When present, submission is blocked and this reason is shown on the submit button. */
   blockedReason?: string;
   resolveMentionLink?: PromptMentionLinkResolver;
-  /** Override the host bound to this prompt box; omission uses this Composer's host. */
   pluginComposerHost?: PluginComposerHost;
   textEffects?: NewThreadPromptBoxProps["textEffects"];
   allowNoProject?: boolean;
@@ -162,6 +161,10 @@ export interface NewThreadComposerState {
   renderPromptBox: (options: NewThreadComposerPromptOptions) => ReactNode;
 }
 
+export interface NewThreadComposerSubmission extends NewThreadRequest {
+  sendAt?: number;
+}
+
 export interface NewThreadComposerProps {
   projectId: string | null;
   onProjectChange: (projectId: string) => void | Promise<void>;
@@ -170,7 +173,7 @@ export interface NewThreadComposerProps {
   seed?: NewThreadComposerSeed;
   resetKey?: string | number | null;
   preferReadyProviderWhenUnset?: boolean;
-  onSubmit: (request: NewThreadRequest) => void | Promise<void>;
+  onSubmit: (request: NewThreadComposerSubmission) => void | Promise<void>;
   focusRequest?: number;
   children: (state: NewThreadComposerState) => ReactNode;
 }
@@ -359,11 +362,6 @@ function resolvePanelThreadId(
   );
 }
 
-/**
- * The one owner of normal new-thread composition. Page/plugin wrappers keep
- * their layout and creation side effects; this component owns the selections,
- * draft, attachments, request, and prompt-box configuration.
- */
 export function NewThreadComposer({
   projectId: requestedProjectId,
   onProjectChange,
@@ -380,10 +378,6 @@ export function NewThreadComposer({
   const promptBoxRef = useRef<PromptBoxHandle>(null);
 
   const sidebarNavigationQuery = useSidebarNavigation();
-  // Until the sidebar bootstrap settles, `projectId` below is only the
-  // requested candidate: it may not exist and would then fall back to the
-  // personal project. Queries keyed by projectId wait for the settled value
-  // so a cold start does not fetch (and cache) data for the wrong project.
   const projects = useMemo(
     () => sidebarNavigationQuery.data?.projects.map(stripProjectThreads),
     [sidebarNavigationQuery.data],
@@ -392,12 +386,6 @@ export function NewThreadComposer({
   const candidateKnown =
     isProjectlessProjectId(requestedCandidate) ||
     (projects?.some((project) => project.id === requestedCandidate) ?? false);
-  // Replayed bootstrap data (a placeholder from the last page load) may not
-  // know a project that was created since. It must not demote that project
-  // to the personal project: a submit in that window would create the thread
-  // in the wrong project. Treat the replay as settled only when it already
-  // knows the requested project; otherwise hold the candidate and wait for
-  // the live response.
   const replayKnowsCandidate =
     !sidebarNavigationQuery.isPlaceholderData || candidateKnown;
   const sidebarNavigationSettled =
@@ -451,10 +439,6 @@ export function NewThreadComposer({
       ? null
       : new Map(hosts.map((host) => [host.id, host.name]));
   }, [hostsQuery.data]);
-  // The sidebar bootstrap already carries every unarchived thread of the
-  // selected project (`projectId` always resolves to a project in it once it
-  // has loaded), so the worktree-reuse options derive from that cache instead
-  // of a second, refetch-prone `GET /threads?projectId=` per composer mount.
   const projectThreads = useMemo(() => {
     const navigation = sidebarNavigationQuery.data;
     if (!navigation) return undefined;
@@ -462,8 +446,6 @@ export function NewThreadComposer({
     return navigation.projects.find((project) => project.id === projectId)
       ?.threads;
   }, [isProjectless, projectId, sidebarNavigationQuery.data]);
-  // While the bootstrap is still in flight the picker shows a loading label
-  // and no per-project request is issued (see B28).
   const reuseThreadOptionsLoading =
     projectThreads === undefined && !sidebarNavigationSettled;
   const reuseThreadOptions = useMemo(
@@ -668,6 +650,7 @@ export function NewThreadComposer({
   } = useScopedBranchSelection({
     environmentValue: effectiveEnvironmentValue,
     projectId,
+    selectionScope,
   });
   const selectedBranch =
     pickedBranch ??
@@ -697,10 +680,6 @@ export function NewThreadComposer({
     isHostMode && parsedEnvironment.mode === "worktree";
   const managedWorktreeUnavailable =
     requestsManagedWorktree && worktreeUnavailable;
-  // Branch data enriches the picker and can downgrade a confirmed non-Git or
-  // commitless source, but loading it is not a creation prerequisite. A
-  // default worktree request is resolved authoritatively by the server during
-  // thread creation, including a host.list_branches inspection.
   useEffect(() => {
     if (
       !worktreeUnavailable ||
@@ -1014,8 +993,13 @@ export function NewThreadComposer({
     () => promptDraftToInput(currentDraft),
     [currentDraft],
   );
-  // Identity-stable across keystrokes; the live draft flows through
-  // getCurrent/subscribeDraft (see PluginComposerHost).
+  const submitScheduledRef = useRef<
+    (options: { sendAt: number }) => Promise<void>
+  >(async () => {});
+  const submitScheduledThroughRef = useCallback(
+    (options: { sendAt: number }) => submitScheduledRef.current(options),
+    [],
+  );
   const pluginComposerHost = useMemo<PluginComposerHost>(
     () => ({
       scope: { kind: "new-thread", projectId },
@@ -1024,6 +1008,7 @@ export function NewThreadComposer({
       subscribeDraft: promptDraft.subscribe,
       setDraft: promptDraft.setDraft,
       focus: () => promptBoxRef.current?.focusEnd(),
+      submit: submitScheduledThroughRef,
     }),
     [
       projectId,
@@ -1031,13 +1016,11 @@ export function NewThreadComposer({
       promptDraft.setDraft,
       promptDraft.storageKey,
       promptDraft.subscribe,
+      submitScheduledThroughRef,
     ],
   );
 
   const seededExecutionInputSources = useMemo(
-    // The server discards requested provider/model values that have no source
-    // and re-derives them from project defaults. Preserve explicit provenance
-    // so SDK-provided seeds survive threads.spawn unchanged.
     (): CreateExecutionInputSources => ({
       ...(seed?.providerId !== undefined
         ? { providerId: "explicit" as const }
@@ -1063,10 +1046,6 @@ export function NewThreadComposer({
       supportsServiceTier,
     ],
   );
-  // Root forks own their source environment independently of the picker. While
-  // reusable worktrees are loading (or the source has no current option), keep
-  // the seeded environment so the page can build the native fork request. A
-  // component-local plugin composer still requires a fully resolved picker.
   const submissionEnvironment =
     selectedEnvironment ??
     (selectionScope === "new-thread" ? seed?.environment : undefined) ??
@@ -1092,8 +1071,8 @@ export function NewThreadComposer({
     selectedThreadModel,
     submissionEnvironmentUnavailable: submissionEnvironment === null,
   });
-  const handleSubmit = useCallback(
-    async (blockedReason: string | null) => {
+  const submitDraft = useCallback(
+    async (blockedReason: string | null, sendAt: number | null) => {
       const submittedDraft = promptDraft.getCurrent();
       const input = promptDraftToInput(submittedDraft);
       if (
@@ -1107,13 +1086,19 @@ export function NewThreadComposer({
         !selectedThreadModel ||
         managedWorktreeUnavailable
       ) {
-        return;
+        throw new Error(
+          blockedReason ??
+            submitDisabledReason ??
+            (input.length === 0
+              ? "Type a message first."
+              : "This composer is not ready to submit yet."),
+        );
       }
       const sources: CreateExecutionInputSources = {
         ...executionInputSources,
         ...seededExecutionInputSources,
       };
-      const request: NewThreadRequest = {
+      const request: NewThreadComposerSubmission = {
         projectId,
         providerId: selectedProviderId,
         model: selectedThreadModel,
@@ -1123,6 +1108,7 @@ export function NewThreadComposer({
         executionInputSources: sources,
         environment: submissionEnvironment,
         input,
+        ...(sendAt === null ? {} : { sendAt }),
       };
       isSubmittingRef.current = true;
       setIsSubmitting(true);
@@ -1132,13 +1118,11 @@ export function NewThreadComposer({
       try {
         await onSubmit(request);
         clearReuseEnvironment();
-      } catch {
-        // The caller owns error presentation. Restore the submitted draft only
-        // when the optimistic clear succeeded and nothing replaced it while the
-        // request was pending.
+      } catch (submitError) {
         if (clearedSubmittedDraft) {
           promptDraft.restoreIfEmpty(submittedDraft);
         }
+        throw submitError;
       } finally {
         isSubmittingRef.current = false;
         setIsSubmitting(false);
@@ -1163,6 +1147,20 @@ export function NewThreadComposer({
       supportsServiceTier,
     ],
   );
+
+  const handleSubmit = useCallback(
+    async (blockedReason: string | null) => {
+      try {
+        await submitDraft(blockedReason, null);
+      } catch {}
+    },
+    [submitDraft],
+  );
+  useEffect(() => {
+    submitScheduledRef.current = async ({ sendAt }) => {
+      await submitDraft(null, sendAt);
+    };
+  }, [submitDraft]);
 
   const handleProviderChange = useCallback(
     (value: string) => {
@@ -1208,12 +1206,12 @@ export function NewThreadComposer({
     },
     [serviceTier, setServiceTier, snapshotDraftBeforeOptionChange],
   );
-  const refetchBranches = branchesQuery.refetch;
+  const refreshBranchesFromRemote = branchesQuery.refreshFromRemote;
   const handleBranchOpenChange = useCallback(
     (open: boolean) => {
-      if (open) void refetchBranches();
+      if (open) void refreshBranchesFromRemote().catch(() => undefined);
     },
-    [refetchBranches],
+    [refreshBranchesFromRemote],
   );
   const handleWorktreeChange = useCallback(
     (environmentId: string) => {
@@ -1239,6 +1237,7 @@ export function NewThreadComposer({
           disabledReason={disabledReason ?? undefined}
           placeholder={options.placeholder}
           autoFocus={options.autoFocus}
+          allowSoftKeyboardAutoFocus={options.allowSoftKeyboardAutoFocus}
           pluginComposerHost={options.pluginComposerHost ?? pluginComposerHost}
           textEffects={options.textEffects ?? textEffects}
           history={{
@@ -1250,7 +1249,7 @@ export function NewThreadComposer({
           typeahead={{
             mention: {
               triggers: promptMentions.triggers,
-              suggestions: promptMentions.suggestions,
+              results: promptMentions.results,
               isLoading: promptMentions.isLoading,
               isError: promptMentions.isError,
               onQueryChange: promptMentions.setQuery,
@@ -1352,8 +1351,6 @@ export function NewThreadComposer({
               isUploading ||
               isCopyingAttachments ||
               isSubmitting,
-            // A lock renders the picker as a plain label; the transient busy
-            // states must not resize the trigger and shift the row beside it.
             showChevronWhenDisabled: !locks.project,
           }}
           execution={{

@@ -1,9 +1,3 @@
-/**
- * Returns a copy of `array` with the item at `from` moved to `to`. Mirrors
- * `arrayMove` from `@dnd-kit/sortable`, which the web sidebar drag layer uses;
- * kept local so the shared tab-state reducers do not depend on a DOM drag
- * library.
- */
 export function arrayMove<T>(
   array: readonly T[],
   from: number,

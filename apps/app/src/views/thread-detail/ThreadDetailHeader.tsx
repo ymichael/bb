@@ -12,10 +12,10 @@ import { useAtomValue } from "jotai";
 import { COARSE_POINTER_TOOLBAR_ACTION_BUTTON_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
 import { Icon } from "@bb/shared-ui/icon";
 import { Pill } from "@bb/shared-ui/pill";
-import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { SplitButton } from "@/components/ui/split-button.js";
 import {
   AppPageHeader,
+  COMPACT_SHELF_HIDDEN_PAGE_HEADER_ACTIONS_CLASS,
   HEADER_ICON_BUTTON_CLASS,
   HEADER_PANE_ACTION_ICON_BUTTON_CLASS,
 } from "@/components/layout/AppPageHeader";
@@ -32,8 +32,9 @@ import { useInlineThreadTitle } from "@/components/thread/InlineThreadTitle";
 import { useThreadActions } from "@/components/thread/ThreadActionsProvider";
 import { ThreadTitleMentions } from "@/components/thread/ThreadTitleMentions";
 import { SecondaryPanelHostLayoutContext } from "@/components/secondary-panel/SecondaryPanelHostLayoutContext";
-import { getRightPanelToggleIconName } from "@/components/secondary-panel/panelToggleControlState";
+import { RIGHT_PANEL_TOGGLE_ICON_NAME } from "@/components/secondary-panel/panelToggleControlState";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
+import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { dimInactiveSplitsAtom } from "@/lib/split-layout/atoms";
 import {
   CONTEXT_INACTIVE_TEXT_CLASS,
@@ -50,19 +51,12 @@ const THREAD_HEADER_ACTION_BUTTON_CLASS = cn(
 const NARROW_SPLIT_HEADER_MAX_WIDTH = 560;
 
 interface ThreadDetailHeaderProps {
-  /**
-   * Renders the thread menu. Responsive header actions belong in the menu only
-   * while a narrow split hides their inline controls.
-   */
   actionsMenu: ((includeResponsiveActions: boolean) => ReactNode) | null;
-  /** Pill shown beside the title for side chats and hierarchical child threads. */
   childPillLabel: "child" | "side chat" | null;
   isSecondaryPanelOpen: boolean;
-  /** Closes this pane; only provided when the layout is split (>1 pane). */
   onClosePane?: () => void;
   onOpenThreadGitAction: (target: ThreadGitActionDialogTarget) => void;
   onToggleSecondaryPanel: () => void;
-  /** Plugin-contributed thread action buttons (design §4.9); optional. */
   pluginActions?: ReactNode;
   threadHeaderGitActions: ThreadHeaderGitAction[];
   threadId: string;
@@ -83,6 +77,7 @@ export function ThreadDetailHeader({
   threadTitle,
   workspaceOpenButton,
 }: ThreadDetailHeaderProps) {
+  const isCompactViewport = useIsCompactViewport();
   const [primaryAction, ...secondaryActions] = threadHeaderGitActions;
   const { renameThread } = useThreadActions();
   const handleRename = useCallback(
@@ -96,14 +91,11 @@ export function ThreadDetailHeader({
     resetKey: threadId,
     title: threadTitle,
   });
-  const renderAsDrawer = useIsCompactViewport();
   const [desktopInfo] = useState(getBbDesktopInfo);
   const dimsInactiveSplits = useAtomValue(dimInactiveSplitsAtom);
   const panelShortcut = useAppCommandShortcut("panel.toggle");
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
   const headerRef = useRef<HTMLElement>(null!);
-  // The title doubles as the pane-reorder drag handle when the layout is split;
-  // beginPaneDrag is undefined on the single-pane and page surfaces.
   const {
     beginPaneDrag,
     isFocused,
@@ -156,12 +148,10 @@ export function ThreadDetailHeader({
   const rightPanelLabel = isSecondaryPanelOpen
     ? "Hide right panel"
     : "Show right panel";
-  const rightPanelIconName = getRightPanelToggleIconName(renderAsDrawer);
-  // The thread header owns only the show control. Once the panel opens, its
-  // toolbar owns collapse so pane actions (including Full Screen) keep their
-  // stable positions in the thread header.
+  const rightPanelIconName = RIGHT_PANEL_TOGGLE_ICON_NAME;
   const showRightPanelToggle =
-    secondaryPanelHost === null && !isSecondaryPanelOpen;
+    secondaryPanelHost === null &&
+    (!isSecondaryPanelOpen || isCompactViewport);
 
   const center = (
     <>
@@ -187,8 +177,6 @@ export function ThreadDetailHeader({
               !isEditing &&
               cn(
                 "cursor-grab touch-none select-none",
-                // Opt the drag handle out of the macOS title-bar drag region so a
-                // pane-reorder gesture isn't swallowed as a window drag.
                 usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
               ),
           )}
@@ -203,19 +191,13 @@ export function ThreadDetailHeader({
           {childPillLabel}
         </Pill>
       ) : null}
-      {/*
-        The header's center slot sits inside the macOS title-bar drag region
-        (AppPageHeader only exempts the actions slot), so the interactive
-        actions menu must opt out of dragging or its clicks are swallowed as
-        window drags. Gated on desktop chrome like every other no-drag site —
-        the class also carries `relative z-50`, which must not leak into the
-        web build.
-      */}
+      {}
       {actionsMenu == null ? null : (
         <span
           data-testid="thread-detail-header-actions-menu"
           className={cn(
             "flex items-center",
+            COMPACT_SHELF_HIDDEN_PAGE_HEADER_ACTIONS_CLASS,
             usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
           )}
         >
@@ -310,11 +292,6 @@ export function ThreadDetailHeader({
           </Button>
         ) : null}
         {reservesWindowPanelToggle && !isWindowPanelOpen ? (
-          // Reserve only the fixed 28px corner button. Its modifier-held hint is
-          // positioned below the chrome row by the workspace host, so it never
-          // consumes or covers this pane-action row. With the window panel open,
-          // the toggle overlays the panel's own chrome instead, so the pane
-          // actions sit flush at the pane edge.
           <span aria-hidden className={HEADER_ICON_BUTTON_CLASS} />
         ) : null}
       </div>

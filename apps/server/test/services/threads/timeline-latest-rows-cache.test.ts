@@ -42,12 +42,10 @@ describe("createTimelineLatestRowsCache", () => {
     const cache = createTimelineLatestRowsCache({ ringSize: 2 });
     cache.set("k", { maxSeq: 1, rows: rows("r1") });
     cache.set("k", { maxSeq: 2, rows: rows("r2") });
-    // Two clients polling at revision 1 must not push revision 2 out.
     cache.set("k", { maxSeq: 1, rows: rows("r1") });
     cache.set("k", { maxSeq: 1, rows: rows("r1") });
     expect(cache.get("k", 1)?.rows).toEqual(rows("r1"));
     expect(cache.get("k", 2)?.rows).toEqual(rows("r2"));
-    // The refreshed revision 1 is now newest, so revision 2 is the one to go.
     cache.set("k", { maxSeq: 3, rows: rows("r3") });
     expect(cache.get("k", 2)).toBeUndefined();
     expect(cache.get("k", 1)?.rows).toEqual(rows("r1"));
@@ -58,7 +56,6 @@ describe("createTimelineLatestRowsCache", () => {
     const cache = createTimelineLatestRowsCache({ maxEntries: 2 });
     cache.set("a", { maxSeq: 1, rows: rows("a") });
     cache.set("b", { maxSeq: 1, rows: rows("b") });
-    // Touch "a" so "b" becomes the least recently used key.
     expect(cache.get("a", 1)).toBeDefined();
     cache.set("c", { maxSeq: 1, rows: rows("c") });
     expect(cache.size).toBe(2);

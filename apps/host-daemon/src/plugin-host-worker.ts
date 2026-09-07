@@ -307,9 +307,7 @@ function send(message: object): void {
   if (!process.connected) return;
   try {
     process.send?.(message);
-  } catch {
-    // The daemon has already disconnected.
-  }
+  } catch {}
 }
 
 function errorMessage(error: unknown): string {

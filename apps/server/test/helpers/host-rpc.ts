@@ -51,7 +51,6 @@ export type HostRpcHandlerResult =
     };
 
 export interface RegisterHostRpcResponderArgs {
-  /** A returned promise answers when it settles, as a slow host would. */
   handle: (
     request: HostDaemonOnlineRpcRequestMessage,
   ) => HostRpcHandlerResult | Promise<HostRpcHandlerResult>;

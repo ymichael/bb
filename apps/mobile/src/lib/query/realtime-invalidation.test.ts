@@ -37,7 +37,6 @@ import {
   threadTimelineTurnSummaryDetailsQueryKeyPrefix,
   threadsQueryKey,
   allPluginCatalogSearchQueryKeyPrefix,
-  allPluginSettingsQueryKeyPrefix,
   allProjectSkillsQueryKeyPrefix,
   pluginMarketplacesQueryKey,
   pluginsQueryKey,
@@ -87,15 +86,12 @@ describe("installRealtimeInvalidation", () => {
       );
       vi.advanceTimersByTime(10);
     }
-    // 200 ms of frames: the max-wait flush fired exactly once.
     expect(invalidated).toEqual([hashKey(threadTimelineQueryKey("t1"))]);
     vi.advanceTimersByTime(500);
     expect(invalidated).toHaveLength(1);
-    // Streaming touches neither the thread record nor the thread lists.
     expect(invalidated).not.toContain(hashKey(threadQueryKey("t1")));
     expect(invalidated).not.toContain(hashKey(threadsQueryKey()));
 
-    // A lone frame after the burst flushes on the debounce.
     socket.receive(
       JSON.stringify({
         type: "changed",
@@ -127,7 +123,6 @@ describe("installRealtimeInvalidation", () => {
     factory.latest().drop();
     const disconnectedAt = Date.now();
     vi.advanceTimersByTime(500);
-    // Fetched after the socket was lost (focus refetch racing the reconnect).
     queryClient.setQueryData(threadQueryKey("fresh"), { id: "fresh" });
     const freshQuery = queryClient.getQueryCache().find({
       queryKey: threadQueryKey("fresh"),
@@ -183,13 +178,10 @@ describe("installRealtimeInvalidation", () => {
     const handle = installRealtimeInvalidation(queryClient, realtime);
     realtime.connect();
     factory.latest().open();
-    // The initial connect is not a catch-up: the patches survive.
     expect(readDiffPatchEntry(queryClient, identity, "a.ts")).toEqual(entry);
     expect(getDiffPatchEvictionGeneration(queryClient, "env_1")).toBe(0);
     expect(order).toEqual([]);
 
-    // Background → foreground: the `work-status-changed` events that would
-    // have evicted the patches were missed while the socket was suspended.
     realtime.suspend();
     realtime.resume();
     factory.latest().open();
@@ -266,7 +258,6 @@ describe("queryKeysForChangedMessage", () => {
   });
 
   it("leaves the thread record alone for pure streaming batches but refetches it for background-activity and record changes", () => {
-    // A delta batch: timeline only (the record has dedicated change kinds).
     expect(
       queryKeysForChangedMessage({
         type: "changed",
@@ -276,7 +267,6 @@ describe("queryKeysForChangedMessage", () => {
         metadata: { eventTypes: ["item/agentMessage/delta"] },
       }),
     ).toEqual([threadTimelineQueryKey("t1")]);
-    // A turn completing is not a record change either; `status-changed` is.
     expect(
       queryKeysForChangedMessage({
         type: "changed",
@@ -286,7 +276,6 @@ describe("queryKeysForChangedMessage", () => {
         metadata: { eventTypes: ["turn/completed"] },
       }),
     ).not.toContainEqual(threadQueryKey("t1"));
-    // The detail indicator reads activeBackgroundAgentCount off the record.
     expect(
       queryKeysForChangedMessage({
         type: "changed",
@@ -318,7 +307,6 @@ describe("queryKeysForChangedMessage", () => {
       allSystemProvidersQueryKeyPrefix(),
       allSystemExecutionOptionsQueryKeyPrefix(),
       allProjectDefaultExecutionOptionsQueryKeyPrefix(),
-      // A settings write can switch the palette; the picker's catalog follows.
       themeCatalogQueryKey(),
     ]);
     expect(
@@ -339,13 +327,11 @@ describe("queryKeysForChangedMessage", () => {
     expect(keys).toEqual(
       expect.arrayContaining([
         pluginsQueryKey(),
-        allPluginSettingsQueryKeyPrefix(),
         pluginUpdatesQueryKey(),
         allPluginCatalogSearchQueryKeyPrefix(),
         allProjectSkillsQueryKeyPrefix(),
       ]),
     );
-    // Marketplaces are a separate resource: a plugin reload does not touch them.
     expect(keys).not.toContainEqual(pluginMarketplacesQueryKey());
   });
 
@@ -389,14 +375,9 @@ describe("queryKeysForChangedMessage", () => {
     expect(workStatusKeys).not.toContainEqual(
       environmentMergeBaseBranchesQueryKeyPrefix("env_1"),
     );
-    // The PR is remote state a file edit cannot change; every refetch is a
-    // server cache miss that runs `gh` on the host, so the watcher must not
-    // drive it (a completed turn and the pending-check poll do).
     expect(workStatusKeys).not.toContainEqual(
       environmentPullRequestQueryKey("env_1"),
     );
-    // A ref change (commit, checkout, fetch) can move the merge-base options,
-    // but still does not touch the PR.
     const refKeys = queryKeysForChangedMessage({
       type: "changed",
       entity: "environment",
@@ -407,7 +388,6 @@ describe("queryKeysForChangedMessage", () => {
       environmentMergeBaseBranchesQueryKeyPrefix("env_1"),
     );
     expect(refKeys).not.toContainEqual(environmentPullRequestQueryKey("env_1"));
-    // Without an id every workspace view is suspect.
     expect(
       queryKeysForChangedMessage({
         type: "changed",
@@ -456,7 +436,6 @@ describe("threadPullRequestQueryKeysForCompletedTurn", () => {
 
   it("refetches the PR of the thread's cached environment when a turn completes", () => {
     const queryClient = new QueryClient();
-    // Unknown thread: nothing to resolve.
     expect(
       threadPullRequestQueryKeysForCompletedTurn(queryClient, completed),
     ).toEqual([]);
@@ -467,14 +446,12 @@ describe("threadPullRequestQueryKeysForCompletedTurn", () => {
     expect(
       threadPullRequestQueryKeysForCompletedTurn(queryClient, completed),
     ).toEqual([environmentPullRequestQueryKey("env_1")]);
-    // A streaming delta is not a turn boundary.
     expect(
       threadPullRequestQueryKeysForCompletedTurn(queryClient, {
         ...completed,
         metadata: { eventTypes: ["item/agentMessage/delta"] },
       }),
     ).toEqual([]);
-    // A thread without an environment has no PR.
     queryClient.setQueryData(threadQueryKey("t1"), {
       id: "t1",
       environmentId: null,
@@ -565,8 +542,6 @@ describe("timelineInvalidationPolicyForMessage", () => {
         hashKey(filters.queryKey) === hashKey(threadTimelineQueryKey("t1")),
     );
     expect(timelineCall?.[1]).toEqual({ cancelRefetch: false });
-    // Every other key (here the record, dirtied by the background-activity
-    // flag) takes the default (cancelling) path.
     const threadCall = invalidateSpy.mock.calls.find(
       ([filters]) =>
         filters?.queryKey !== undefined &&

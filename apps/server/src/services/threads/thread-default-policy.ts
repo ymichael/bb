@@ -23,14 +23,6 @@ export const DEFAULT_REASONING_LEVEL: ReasoningLevel = "medium";
 
 const DEFAULT_PERMISSION_MODE: PermissionMode = "auto";
 
-/**
- * The default provider, used when neither the caller nor the project has
- * chosen one: the user's `defaultProviderId` setting when it names an
- * available provider, else the first available entry of the registry listing
- * (the user's `providerOrder`, then plugin install order). Providers come only
- * from plugin declarations, so an install with every provider plugin disabled
- * has no default at all.
- */
 function requireDefaultProviderId(registry: ProviderRegistryService): string {
   const listed = registry.list();
   const preferred = registry.getUserDefaultProviderId();
@@ -44,9 +36,6 @@ function requireDefaultProviderId(registry: ProviderRegistryService): string {
     )?.info.id ??
     listed.find((registration) => registration.info.available)?.info.id;
   if (providerId === undefined) {
-    // Reachable for real now that providers are plugin-only: disabling every
-    // provider plugin leaves nothing to start a thread with. Say so, instead
-    // of surfacing an internal error.
     throw new ApiError(
       409,
       "no_provider_available",
@@ -209,23 +198,11 @@ export function buildProviderThreadExecutionDefaults(
   };
 }
 
-/**
- * Resolve the `{ type: "project-default" }` thread-creation environment into
- * a concrete request. Server-owned defaulting policy for callers (plugins,
- * scripts) that must not re-derive the compose flow's choices. The personal
- * project gets a personal workspace on the primary host. Every other project
- * gets a fresh managed worktree when its primary source exposes a usable base
- * branch, or works in that source checkout when it does not (for example, a
- * non-Git directory or a repository with no commits). Host inspection failures
- * remain failures; only a successful inspection can select the source checkout.
- */
 export async function resolveProjectDefaultThreadEnvironment(
   deps: WorkSessionDeps,
   args: { projectId: string },
 ): Promise<EnvironmentArgs> {
   if (args.projectId === PERSONAL_PROJECT_ID) {
-    // hostId is resolved to the primary host downstream, exactly like an
-    // app-composed personal thread that omits it.
     return { type: "host", workspace: { type: "personal" } };
   }
 
@@ -238,9 +215,9 @@ export async function resolveProjectDefaultThreadEnvironment(
     hostId,
     timeoutMs: COMMAND_TIMEOUT_MS,
     command: {
-      type: "host.list_branches",
+      type: "host.inspect_git_source",
       path: source.path,
-      limit: 1,
+      remoteRefresh: "background",
     },
   });
   const baseBranch = resolveDefaultWorktreeBaseBranch(checkout);
@@ -257,8 +234,6 @@ export async function resolveProjectDefaultThreadEnvironment(
     hostId,
     workspace: {
       type: "managed-worktree",
-      // Pin the inspected ref so downstream provisioning does not need to
-      // inspect again or race a changing default branch.
       baseBranch: { kind: "named", name: baseBranch },
     },
   };
@@ -269,8 +244,6 @@ export function resolveCreateThreadEnvironment(
 ): EnvironmentArgs {
   const parentThread = args.parentThread ?? null;
   const hasLiveParent = isLiveParentThread({ parentThread });
-  // Only a same-project personal parent shares its environment. A parent from
-  // another project works in a different checkout, so the child keeps its own.
   if (
     args.projectId === PERSONAL_PROJECT_ID &&
     hasLiveParent &&
@@ -331,8 +304,6 @@ export function resolveThreadExecutionPermissionMode(
   const supported = registry.getSupportedPermissionModes(
     args.thread.providerId,
   );
-  // A null clamp means the provider supports nothing at or below the parent's
-  // mode; returning the ceiling lets provider validation reject the pairing.
   return (
     clampPermissionModeToCeiling({
       ceiling,
@@ -371,12 +342,6 @@ function resolvePreferredThreadExecutionPermissionMode(
   return args.projectExecutionPermissionMode ?? defaultPermissionMode;
 }
 
-/**
- * Resolve a historical permission fact into the current execution contract.
- * Stored events remain unchanged; only future work is translated. Legacy
- * workspace-write keeps its workspace boundary, while legacy readonly falls
- * back to Accept Edits instead of being accepted as a public writable alias.
- */
 function normalizeRecordedPermissionMode(
   permissionMode: RecordedPermissionMode,
 ): PermissionMode {

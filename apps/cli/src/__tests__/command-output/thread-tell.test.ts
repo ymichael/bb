@@ -32,14 +32,47 @@ describe("bb thread tell command output", () => {
     });
   });
 
-  it("bb thread tell says when the target is awaiting user interaction and the message is held", async () => {
-    const post = vi.fn(async () => ({ ok: true, delivery: "deferred" }));
+  it("bb thread tell names the typed reason a message queued for", async () => {
+    // The server says WHY, so the CLI stops inferring it from the flags it
+    // sent — which is what let the old four-way delivery enum collapse.
+    const post = vi.fn(async () => ({
+      ok: true,
+      delivery: "queued",
+      queuedMessage: {
+        id: "qm_1",
+        waitingOn: { kind: "interaction" },
+        sendAt: null,
+      },
+    }));
     stubServerApi({ "v1.threads.:id.send.$post": post });
 
     await runCommand(["thread", "tell", "thread-blocked", "hello"], register);
 
     expect(vi.mocked(console.log).mock.calls[0]?.[0]).toBe(
-      "Thread thread-blocked is awaiting user interaction; message held and delivers once the interaction settles",
+      "Thread thread-blocked message queued (waiting for a pending interaction); it dispatches when that clears",
+    );
+  });
+
+  it("bb thread tell names the plugin a message is waiting on", async () => {
+    const post = vi.fn(async () => ({
+      ok: true,
+      delivery: "queued",
+      queuedMessage: {
+        id: "qm_2",
+        waitingOn: {
+          kind: "plugin",
+          pluginId: "concurrency-limit",
+          reason: "4 of 4 running",
+        },
+        sendAt: null,
+      },
+    }));
+    stubServerApi({ "v1.threads.:id.send.$post": post });
+
+    await runCommand(["thread", "tell", "thread-limited", "hello"], register);
+
+    expect(vi.mocked(console.log).mock.calls[0]?.[0]).toBe(
+      "Thread thread-limited message queued (concurrency-limit: 4 of 4 running); it dispatches when that clears",
     );
   });
 
@@ -151,9 +184,6 @@ describe("bb thread tell command output", () => {
     });
   });
 
-  // Plan mode is keyed on the structured /plan command mention the composer
-  // sends, never on literal text; without the mention the Claude CLI answers
-  // "/plan isn't available in this environment" (#2019).
   it("bb thread tell --plan sends the composer's /plan command mention", async () => {
     const post = vi.fn(async () => ({ ok: true }));
     stubServerApi({ "v1.threads.:id.send.$post": post });

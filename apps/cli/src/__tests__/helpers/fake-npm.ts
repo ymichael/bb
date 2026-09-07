@@ -2,23 +2,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { delimiter, join } from "node:path";
 import { vi } from "vitest";
 
-/**
- * A stand-in `npm` on PATH — the seam every CLI command that shells out to npm
- * is tested through.
- *
- * Two behaviours, because two commands matter:
- *
- * - `npm install` reproduces npm's actual config rule (NODE_ENV=production
- *   means `omit=dev`; a command-line `--include=dev` outranks it) rather than
- *   recording arguments, so tests pin the outcome — the declared tree is on
- *   disk — instead of a flag string the CLI happens to pass today (issue
- *   #1133).
- * - `npm view <spec> version --json` answers the published-version probe.
- *   BB_TEST_NPM_VIEW selects the answer: `published` (default), `missing` (npm
- *   exits 0 printing nothing — the package exists, that version does not),
- *   `e404` (unknown package), or `error` (a network failure, i.e. the probe
- *   could not conclude anything).
- */
 const FAKE_NPM = `#!/usr/bin/env node
 const { mkdirSync, readFileSync } = require("node:fs");
 const { join } = require("node:path");
@@ -45,6 +28,22 @@ if (args[0] === "view") {
   process.exit(0);
 }
 
+// BB_TEST_NPM_INSTALL=fail stands in for the installs that die before they
+// touch the tree — an unwritable cache, a refused proxy, a missing platform
+// binary. npm always explains itself on stderr; the CLI has to pass that on.
+if (process.env.BB_TEST_NPM_INSTALL === "fail") {
+  process.stderr.write("npm error code EPERM\\nnpm error syscall open\\nnpm error Your cache folder contains root-owned files\\n");
+  process.exit(1);
+}
+
+if (process.env.BB_TEST_NPM_INSTALL === "fail-noisy-stdout") {
+  process.stderr.write("npm error code EPERM\\nnpm error syscall open\\n");
+  for (let line = 1; line <= 9; line += 1) {
+    process.stdout.write("progress line " + line + "\\n");
+  }
+  process.exit(1);
+}
+
 // npm treats NODE_ENV=production as omit=dev; a command-line --include=dev
 // outranks it. BB_TEST_NPM_ALWAYS_OMIT_DEV forces the omission to stand in for
 // an install that silently drops packages.
@@ -66,10 +65,6 @@ for (const name of Object.keys(installed)) {
 }
 `;
 
-/**
- * Write the fake npm into `workDir/bin` and put it first on PATH, so a real npm
- * can never service the command under test. Returns the bin directory.
- */
 export async function installFakeNpm(workDir: string): Promise<string> {
   const binDir = join(workDir, "bin");
   await mkdir(binDir, { recursive: true });

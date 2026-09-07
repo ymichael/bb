@@ -13,11 +13,6 @@ export interface JsonRpcWireMessage {
   error?: { code?: unknown; message?: unknown; data?: unknown };
 }
 
-/**
- * One canonical event the kit assembled from a `thread/delta` notification.
- * `logIndex` is that notification's position in the client's log, so a rule
- * can judge the event's order against a response on the same wire.
- */
 export interface AssembledConformanceEvent {
   threadId: string;
   event: ThreadEvent;
@@ -28,23 +23,13 @@ function isWireMessage(value: unknown): value is JsonRpcWireMessage {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The addressee of a `thread/delta` batch; the collector validates the rest. */
 const threadDeltaAddressSchema = z
   .object({ threadId: z.string() })
   .passthrough();
 
-/**
- * A polling JSON-RPC client over a conformance transport. Accumulates every
- * message the bridge emits (responses, notifications, bridge-initiated
- * requests) into one ordered log so grammar checks can assert sequences, and
- * assembles each `thread/delta` batch through the runtime's real delta
- * assembler as it arrives — one stateful assembler for the whole run, so the
- * ids the rules see are the ids the runtime would mint.
- */
 export class ConformanceClient {
   private nextId = 1;
   readonly log: JsonRpcWireMessage[] = [];
-  /** Every assembled event, in wire order. */
   readonly events: AssembledConformanceEvent[] = [];
 
   constructor(
@@ -63,9 +48,6 @@ export class ConformanceClient {
       if (raw.method !== THREAD_DELTA_NOTIFICATION_METHOD) {
         continue;
       }
-      // An invalid thread/delta throws out of the collector and fails the
-      // run loudly: the runtime adapter would drop the batch, and a bridge
-      // must not pass conformance on output the runtime cannot read.
       const events = this.collector.assembleMessage(raw);
       const address = threadDeltaAddressSchema.parse(raw.params);
       for (const event of events) {
@@ -102,7 +84,6 @@ export class ConformanceClient {
     return id;
   }
 
-  /** Poll until `resolve` yields a value or the deadline passes (→ null). */
   async waitFor<T>(resolve: () => T | undefined): Promise<T | null> {
     const deadline = Date.now() + this.timeoutMs;
     for (;;) {
@@ -126,7 +107,6 @@ export class ConformanceClient {
     );
   }
 
-  /** A settle window: drain for the given quiet period without expectations. */
   async settle(quietMs: number): Promise<void> {
     const deadline = Date.now() + quietMs;
     while (Date.now() < deadline) {
@@ -154,10 +134,6 @@ export class ConformanceClient {
 
 let clientRequestCounter = 0;
 
-/**
- * Deterministic valid `creq_` ids for kit-driven turns (the id alphabet
- * excludes ambiguous characters; randomness is unnecessary here).
- */
 export function nextConformanceClientRequestId(): string {
   const alphabet = "23456789abcdefghijkmnpqrstuvwxyz";
   clientRequestCounter += 1;

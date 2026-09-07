@@ -5,7 +5,10 @@ import {
   type GitProcessOptions,
 } from "./git.js";
 
-function isSamePathOrNestedUnder(childPath: string, parentPath: string): boolean {
+function isSamePathOrNestedUnder(
+  childPath: string,
+  parentPath: string,
+): boolean {
   const relativePath = path.relative(parentPath, childPath);
   return (
     relativePath === "" ||

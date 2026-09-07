@@ -6,15 +6,6 @@ import {
 } from "@bb/domain";
 import { z } from "zod";
 
-/**
- * The desktop shell reads `/api/v1/system/config` to drive the native browser
- * view's shortcut resolver and the application-menu accelerators. The shell
- * and the server are shipped separately (a desktop build talks to whatever
- * server it finds), so a newer server may send command ids this shell does
- * not know. Parsing the whole response with the shell's strict command enum
- * would then reject every binding. This parser accepts any command id, keeps
- * the bindings this shell understands, and drops the rest.
- */
 const desktopKeybindingSchema = appKeybindingSchema.extend({
   command: z.string(),
 });

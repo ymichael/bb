@@ -55,7 +55,6 @@ describe("usePluginFrontendBoot", () => {
     await act(async () => {
       markRouteContentPainted();
     });
-    // Idle in jsdom = two animation frames (no requestIdleCallback).
     await act(async () => {
       await vi.advanceTimersByTimeAsync(50);
     });
@@ -92,7 +91,6 @@ describe("usePluginFrontendBoot", () => {
   });
 
   it("settles after the floor even when system config never resolves", () => {
-    // System config never resolves here: the boot must not wait forever.
     mocks.systemConfigData = undefined;
     const { result } = renderHook(() => {
       usePluginFrontendBoot();
@@ -106,8 +104,6 @@ describe("usePluginFrontendBoot", () => {
   });
 
   it("never settles a boot that is still in flight when the floor elapses", async () => {
-    // Content scripts can take seconds each; a slow valid boot must not be
-    // reported as settled (and its panels as missing) by the floor.
     let finishBoot: () => void = () => {};
     mocks.bootPluginFrontends.mockImplementation(() => {
       markPluginFrontendBootStarted();

@@ -30,11 +30,6 @@ export type WebSocketConnectedEvent =
   | { reconnected: false }
   | {
       reconnected: true;
-      /**
-       * Watermark for reconnect catch-up: the last moment the previous socket
-       * was known to be healthy. Data fetched after it may still be current;
-       * data fetched before it may have missed change events.
-       */
       disconnectedAt: number;
     };
 type ConnectedCallback = (event: WebSocketConnectedEvent) => void;
@@ -44,21 +39,10 @@ export type WebSocketConnectionState =
   | "connected"
   | "reconnecting";
 
-/**
- * Browser-visible liveness for the realtime socket. Browsers expose no
- * WebSocket-level ping, and a half-open socket (Wi-Fi to LTE switch, iOS
- * background suspend, tunnel hiccup) stays `OPEN` forever while delivering
- * nothing — the app would sit on stale data with a green connection badge.
- * While the document is visible the manager sends an app-level `ping` on an
- * interval and treats any inbound frame as proof of life; a probe with no
- * answer within the timeout forces a reconnect. Hidden documents send nothing
- * (iOS suspends timers anyway) and probe once on the next visible/online.
- */
 export const REALTIME_PING_INTERVAL_MS = 25_000;
 export const REALTIME_PONG_TIMEOUT_MS = 5_000;
 
 export interface WebSocketManagerBrowserEvents {
-  /** Fires on visibilitychange, pageshow and window focus. */
   subscribeToVisibility: (listener: () => void) => () => void;
   isDocumentVisible: () => boolean;
   subscribeToOnline: (listener: () => void) => () => void;
@@ -92,9 +76,6 @@ export class WebSocketManager {
   private threadOpenCallbacks = new Set<ThreadOpenCallback>();
   private threadPaneActionCallbacks = new Set<ThreadPaneActionCallback>();
   private pluginSignalCallbacks = new Set<PluginSignalCallback>();
-  // Ephemeral "open this file in the secondary panel" intents, keyed by thread.
-  // Held in memory only (cleared on reload) so a thread that is not currently
-  // viewed opens the file when it is next viewed. Last write wins per thread.
   private pendingOpenFileByThreadId = new Map<string, ThreadOpenFile>();
   private connectedCallbacks = new Set<ConnectedCallback>();
   private connectionStateCallbacks = new Set<ConnectionStateCallback>();
@@ -102,9 +83,7 @@ export class WebSocketManager {
   private connectionState: WebSocketConnectionState = "connecting";
   private readonly browserEvents: WebSocketManagerBrowserEvents;
   private unsubscribeBrowserEvents: (() => void) | null = null;
-  /** Last moment the current socket proved it was alive (open or any frame). */
   private lastServerActivityAt = 0;
-  /** Set when a connected socket is lost; consumed by the next onopen. */
   private disconnectedAt: number | null = null;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private pongTimer: ReturnType<typeof setTimeout> | null = null;
@@ -116,9 +95,6 @@ export class WebSocketManager {
   connect(): void {
     if (this.socket) return;
 
-    // In dev mode, connect directly to the server to bypass Vite's WS proxy
-    // which does not handle reconnection after backend restarts.
-    // In production, use the same origin (server serves the app).
     const url =
       buildDevWebSocketUrl({ path: "/ws" }) ??
       `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}/ws`;
@@ -140,7 +116,6 @@ export class WebSocketManager {
       this.hasConnected = true;
       this.setConnectionState("connected");
       this.startPingLoop();
-      // Re-subscribe to all active subscriptions
       for (const subscription of this.subscriptions.values()) {
         this.sendMessage({ type: "subscribe", target: subscription.target });
       }
@@ -160,11 +135,6 @@ export class WebSocketManager {
 
     socket.onclose = () => {
       if (this.pongTimer !== null) {
-        // The close confirms what the unanswered probe suspected: the socket
-        // was already dead when the ping went out (iOS resume typically
-        // delivers visibilitychange first and the close a moment later).
-        // Reconnect right away instead of waiting out partysocket's first
-        // backoff, and watermark from the last inbound frame.
         this.replaceSocket(this.lastServerActivityAt);
         return;
       }
@@ -174,19 +144,11 @@ export class WebSocketManager {
     this.installBrowserEvents();
   }
 
-  /**
-   * Drop the current socket and connect again right away, skipping
-   * partysocket's backoff. Used when the browser tells us the network is back
-   * or the tab is visible again, and when a liveness probe gets no answer.
-   */
   reconnectNow(): void {
     const socket = this.socket;
     if (!socket) {
       return;
     }
-    // A live-looking socket that failed its probe: use the watermark from the
-    // last inbound frame, not "now" — anything fetched after it may have raced
-    // a dead connection. A closed socket was already watermarked by its close.
     this.replaceSocket(
       socket.readyState === WebSocket.OPEN
         ? this.lastServerActivityAt
@@ -200,8 +162,6 @@ export class WebSocketManager {
       return;
     }
     this.markSocketLost(disconnectedAt);
-    // partysocket ignores reconnect() while a backoff wait holds its connect
-    // lock, so replace the instance instead of asking it to retry.
     socket.onopen = null;
     socket.onmessage = null;
     socket.onclose = null;
@@ -237,12 +197,6 @@ export class WebSocketManager {
     this.startPingLoop();
   }
 
-  /**
-   * The browser signalled a change that often kills sockets silently. A
-   * closed socket (waiting out partysocket's backoff) reconnects immediately;
-   * an OPEN one is probed and reconnects only if the probe times out; an
-   * attempt already in flight is left alone.
-   */
   private probeOrReconnect(): void {
     if (!this.socket || !this.browserEvents.isDocumentVisible()) {
       return;
@@ -282,14 +236,11 @@ export class WebSocketManager {
     if (this.socket?.readyState !== WebSocket.OPEN) {
       return;
     }
-    // A frame that just arrived is proof enough; do not add traffic to a
-    // socket that is visibly alive (a streaming turn delivers many per second).
     if (Date.now() - this.lastServerActivityAt < REALTIME_PONG_TIMEOUT_MS) {
       return;
     }
     this.sendMessage({ type: "ping" });
     if (this.pongTimer !== null) {
-      // A probe is already outstanding; its timer decides.
       return;
     }
     this.pongTimer = setTimeout(() => {
@@ -305,7 +256,6 @@ export class WebSocketManager {
     }
   }
 
-  /** Any inbound frame proves the socket is alive, not only a pong. */
   private noteServerActivity(): void {
     this.lastServerActivityAt = Date.now();
     this.clearPongTimer();
@@ -319,27 +269,18 @@ export class WebSocketManager {
     this.setConnectionState(this.hasConnected ? "reconnecting" : "connecting");
   }
 
-  /**
-   * Parse and dispatch one raw server message. Public only so tests can
-   * exercise the routing without a live socket.
-   */
   handleIncomingMessage(data: string): void {
     let parsed: unknown;
     try {
       parsed = JSON.parse(data);
     } catch {
-      // Ignore malformed messages
       return;
     }
 
-    // Answer to our liveness probe; receipt already cleared the pong timer.
     if (pongMessageLenientSchema.safeParse(parsed).success) {
       return;
     }
 
-    // Ephemeral thread-open broadcast. Notify layout listeners immediately;
-    // when it includes a file, buffer that file per thread until the target
-    // pane's secondary panel is ready to consume it.
     const threadOpen = threadOpenSignalLenientSchema.safeParse(parsed);
     if (threadOpen.success) {
       if (threadOpen.data.file !== null) {
@@ -363,8 +304,6 @@ export class WebSocketManager {
       return;
     }
 
-    // Ephemeral plugin realtime signal (bb.realtime.publish). Not buffered:
-    // only live useRealtime subscribers care, and V1 has no replay.
     const pluginSignal = pluginSignalLenientSchema.safeParse(parsed);
     if (pluginSignal.success) {
       for (const cb of this.pluginSignalCallbacks) {
@@ -373,9 +312,6 @@ export class WebSocketManager {
       return;
     }
 
-    // Lenient parse: tolerate a newer server (unknown fields stripped,
-    // unknown change kinds filtered) instead of dropping whole messages
-    // on additive contract changes.
     const msg = changedMessageLenientSchema.safeParse(parsed);
     if (msg.success) {
       for (const cb of this.callbacks) {
@@ -461,11 +397,6 @@ export class WebSocketManager {
     };
   }
 
-  /**
-   * Return and clear the buffered "open file" intent for a thread, if any. The
-   * secondary panel calls this when the thread becomes visible so the file
-   * opens exactly once and is not re-opened on a later visit.
-   */
   consumePendingOpenFile(threadId: string): ThreadOpenFile | null {
     const pending = this.pendingOpenFileByThreadId.get(threadId);
     if (!pending) {
@@ -510,8 +441,6 @@ export class WebSocketManager {
   }
 }
 
-// Singleton instance — preserved across Vite HMR so the WebSocket connection
-// and its state survive module re-evaluation during dev rebuilds.
 function createOrReuse(): WebSocketManager {
   if (import.meta.hot?.data) {
     const existing = import.meta.hot.data.wsManager as

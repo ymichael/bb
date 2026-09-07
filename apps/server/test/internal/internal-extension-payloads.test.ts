@@ -1,10 +1,3 @@
-/**
- * Extension payloads are validated at ingest against the owning plugin's
- * declared schema. A passing payload persists as the extension item or
- * thread-state event the daemon sent; an undeclared kind, a schema miss, or
- * an oversized payload persists as a visible `provider/unhandled` in the same
- * batch slot instead of being dropped or stored unvalidated.
- */
 import { eq } from "drizzle-orm";
 import { events } from "@bb/db";
 import { threadScope, turnScope, type ExtensionKind } from "@bb/domain";
@@ -37,7 +30,6 @@ const PRESENTATION = {
   icon: { glyph: "Target" },
 };
 
-/** Registers a provider plugin with the extension kinds it declares. */
 function registerExtensionProvider(
   harness: TestAppHarness,
   args: {
@@ -51,6 +43,7 @@ function registerExtensionProvider(
 ) {
   harness.deps.providerRegistry.register({
     ...buildPluginProviderRegistration({
+      iconHash: null,
       available: true,
       pluginId: args.pluginId,
       declaration: validatePluginProviderDeclaration({
@@ -79,8 +72,6 @@ function registerExtensionProvider(
 
 async function setup() {
   const harness = await createTestAppHarness();
-  // A provider plugin that declares one extension kind with both surfaces:
-  // `goal` items carry an objective, `goal` state carries a status.
   registerExtensionProvider(harness, {
     pluginId: PLUGIN_ID,
     providerId: PROVIDER_ID,
@@ -160,8 +151,6 @@ function extensionItemEvent(
         type: "extension",
         id: "item-1",
         kind,
-        // The wire envelope is parsed by the route; an invalid payload shape
-        // must still be a JSON value to reach the validator at all.
         payload: payload as never,
         status: "pending",
         presentation: PRESENTATION,
@@ -259,7 +248,6 @@ describe("extension payload ingest validation", () => {
         },
       ]);
       expect(response.status).toBe(200);
-      // Both slots were accepted: the replacement keeps the batch shape.
       await expect(readJson(response)).resolves.toMatchObject({
         acceptedEvents: [
           { eventIndex: 0 },
@@ -276,7 +264,6 @@ describe("extension payload ingest validation", () => {
       ]);
       expect(rows[1]).toMatchObject({
         itemKind: null,
-        // The row keeps the original scope and parent.
         scopeKind: "turn",
         turnId: "turn-1",
         data: {
@@ -311,20 +298,16 @@ describe("extension payload ingest validation", () => {
     try {
       const response = await post(harness, session.id, [
         turnStarted(thread.id),
-        // No plugin "provider-nobody" is registered — and whatever it
-        // declares, it is not the plugin behind this thread's provider.
         extensionItemEvent(
           thread.id,
           { objective: "x" },
           "provider-nobody/goal",
         ),
-        // The plugin is registered but declares no "widget" kind.
         extensionItemEvent(
           thread.id,
           { objective: "x" },
           `${PLUGIN_ID}/widget`,
         ),
-        // Declared, schema-valid, but past the size cap.
         extensionItemEvent(thread.id, {
           objective: "x".repeat(EXTENSION_PAYLOAD_MAX_BYTES + 1),
         }),
@@ -369,7 +352,6 @@ describe("extension payload ingest validation", () => {
       expect(
         harness.deps.providerRegistry.getExtensionKindSchemas(GOAL_KIND),
       ).toBe(registration?.extensionKinds.goal);
-      // Re-register under a fresh handle so the test owns the disposer.
       const handle = harness.deps.providerRegistry.register({
         ...minimalProviderRegistration({
           pluginId: PLUGIN_ID,
@@ -407,15 +389,6 @@ describe("extension payload ingest validation", () => {
   });
 });
 
-/**
- * An extension kind belongs to the plugin whose id prefixes it, and only a
- * thread of that plugin's own provider may carry it. The declared schema says
- * what a payload looks like, not who may write one: clients pick the kind's
- * renderer by the kind alone, so a bridge of another plugin that emits the
- * kind would persist a row rendered as the owning plugin's UI. It is refused
- * the way a foreign presentation glyph is — replaced by a `provider/unhandled`
- * whose reason names the kind and the plugins on both sides.
- */
 describe("extension kind ownership at ingest", () => {
   const OTHER_PLUGIN_ID = "provider-gadgets";
   const OTHER_PROVIDER_ID = "gadgets";
@@ -423,7 +396,6 @@ describe("extension kind ownership at ingest", () => {
   it("refuses another plugin's kind on a thread of this provider, and keeps it on the owner's own thread", async () => {
     const { harness, session, thread } = await setup();
     try {
-      // A second plugin registers its own provider; it declares nothing.
       registerExtensionProvider(harness, {
         pluginId: OTHER_PLUGIN_ID,
         providerId: OTHER_PROVIDER_ID,
@@ -436,14 +408,12 @@ describe("extension kind ownership at ingest", () => {
         providerId: OTHER_PROVIDER_ID,
         status: "active",
       });
-      // Schema-valid payloads: only ownership can refuse them.
       const foreign = await post(harness, session.id, [
         turnStarted(other.id),
         extensionItemEvent(other.id, { objective: "Ship it" }),
         extensionStateEvent(other.id, { status: "active" }),
       ]);
       expect(foreign.status).toBe(200);
-      // Every slot was accepted: the replacement keeps the batch shape.
       await expect(readJson(foreign)).resolves.toMatchObject({
         acceptedEvents: [
           { eventIndex: 0 },
@@ -464,7 +434,6 @@ describe("extension kind ownership at ingest", () => {
         scopeKind: "turn",
         turnId: "turn-1",
         data: {
-          // Counted under the emitting thread's provider, not the kind's.
           providerId: OTHER_PROVIDER_ID,
           rawType: `extension/item:${GOAL_KIND}`,
           rawEvent: {
@@ -491,7 +460,6 @@ describe("extension kind ownership at ingest", () => {
         },
       });
 
-      // The same events on the owning plugin's own thread persist as sent.
       const own = await post(harness, session.id, [
         turnStarted(thread.id),
         extensionItemEvent(thread.id, { objective: "Ship it" }),
@@ -520,8 +488,6 @@ describe("extension kind ownership at ingest", () => {
   it("refuses every extension kind on a thread whose provider has no live registration", async () => {
     const { harness, session, thread } = await setup();
     try {
-      // No plugin registers a provider by this id, so nothing can vouch for
-      // the thread's rows — the same rule a namespaced glyph is held to.
       const orphan = seedThread(harness.deps, {
         projectId: thread.projectId,
         environmentId: thread.environmentId,

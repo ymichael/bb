@@ -1,16 +1,19 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { findCachedProviderInfo } from "@/hooks/queries/system-queries";
+import {
+  findCachedProviderInfo,
+  useSystemProviders,
+} from "@/hooks/queries/system-queries";
 import {
   findLocalPathProjectSourceForHost,
   type EnvironmentStatus,
   type Host,
+  type ProviderInfo,
   type ReasoningLevel,
   type ServiceTier,
   type ThreadListEntry,
 } from "@bb/domain";
-import type { NewThreadRequest } from "@get-bb/plugin-sdk";
 import type {
   SidebarBootstrapResponse,
   TerminalSession,
@@ -18,6 +21,7 @@ import type {
 import {
   NewThreadComposer,
   type NewThreadComposerState,
+  type NewThreadComposerSubmission,
 } from "@/components/promptbox/NewThreadComposer";
 import { ProviderCliVersionBanner } from "@/components/promptbox/banner/ProviderCliVersionBanner";
 import {
@@ -36,13 +40,16 @@ import {
   type ProjectMachineSetupDialogTarget,
 } from "@/components/dialogs/ProjectMachineSetupDialog";
 import { HEADER_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
-import { useRightPanelToggleIconName } from "@/components/secondary-panel/panelToggleControlState";
+import { RIGHT_PANEL_TOGGLE_ICON_NAME } from "@/components/secondary-panel/panelToggleControlState";
 import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
 import type {
   SecondaryPanelPaneRenderContext,
   SecondaryPanelRenderableTab,
 } from "@/components/secondary-panel/ThreadSecondaryPanel";
-import { LazyBrowserTabDeck } from "@/components/secondary-panel/lazySecondaryPanelComponents";
+import {
+  LazyBrowserTabDeck,
+  preloadThreadSecondaryPanel,
+} from "@/components/secondary-panel/lazySecondaryPanelComponents";
 import type { BrowserAddressFocusRequest } from "@/components/secondary-panel/BrowserTabContent";
 import { EmptyStatePanel } from "@bb/shared-ui/empty-state";
 import { Icon } from "@bb/shared-ui/icon";
@@ -183,7 +190,6 @@ import {
 
 const ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS = "pt-14";
 
-// Fill the scroll area and center the no-projects welcome both axes.
 const ROOT_COMPOSE_EMPTY_WELCOME_CONTENT_CLASS =
   "min-h-full flex-1 items-center justify-center pb-12";
 const EMPTY_TERMINAL_SESSIONS: readonly TerminalSession[] = [];
@@ -266,7 +272,19 @@ export function RootComposeRightPanelToggle({
 }: RootComposeRightPanelToggleProps) {
   const shortcut = useAppCommandShortcut("panel.toggle");
   const rightPanelLabel = isOpen ? "Hide right panel" : "Show right panel";
-  const rightPanelIconName = useRightPanelToggleIconName();
+  const rightPanelIconName = RIGHT_PANEL_TOGGLE_ICON_NAME;
+
+  useEffect(() => {
+    if (typeof window.requestIdleCallback === "function") {
+      const idleCallback = window.requestIdleCallback(
+        preloadThreadSecondaryPanel,
+        { timeout: 1000 },
+      );
+      return () => window.cancelIdleCallback(idleCallback);
+    }
+    const timeout = window.setTimeout(preloadThreadSecondaryPanel, 1000);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   return (
     <Button
@@ -279,6 +297,8 @@ export function RootComposeRightPanelToggle({
       }
       aria-keyshortcuts={shortcut?.ariaKeyshortcuts}
       aria-expanded={isOpen}
+      onFocus={preloadThreadSecondaryPanel}
+      onPointerDown={preloadThreadSecondaryPanel}
       onClick={onToggle}
     >
       <Icon name={rightPanelIconName} />
@@ -290,8 +310,6 @@ export function RootComposeRightPanelToggle({
   );
 }
 
-// react-router's location.state is freeform unknown — narrow it here at the
-// system boundary before reading.
 function readReuseEnvironmentIdFromLocationState(
   state: unknown,
 ): string | null {
@@ -338,10 +356,6 @@ function readForkThreadCreateSeedFromLocationState(
   ) {
     return null;
   }
-  // History state can outlive a release. The deprecated "workspace-write"
-  // alias maps onto the same workspace sandbox as "accept-edits"; legacy
-  // "readonly" (or any unknown value) invalidates the seed rather than being
-  // silently reinterpreted as a writable mode.
   const seedPermissionMode =
     value.permissionMode === "workspace-write"
       ? "accept-edits"
@@ -390,8 +404,6 @@ export function hasSingleUseRootComposeTargetState(state: unknown): boolean {
   );
 }
 
-// react-router's location.state is freeform unknown — narrow it here at the
-// system boundary before reading.
 export function readInitialPromptFromLocationState(
   state: unknown,
 ): string | null {
@@ -484,7 +496,7 @@ export function LegacyProjectComposeRedirect({
     });
   }, [location.state, navigate, projectId, setRootComposeProjectId]);
 
-  return <RouteLoadingSkeleton />;
+  return <RouteLoadingSkeleton isBoundedPane={false} />;
 }
 
 export function RootComposeView() {
@@ -517,15 +529,16 @@ export function RootComposeView() {
     [setRootComposeProjectId],
   );
   const handleSubmit = useCallback(
-    async (request: NewThreadRequest) => {
+    async (request: NewThreadComposerSubmission) => {
       const shouldNavigateToCreatedThread = shouldNavigateAfterThreadCreate({
         isForkDraft: forkSeed !== null,
         navigateToThreadAfterCreate,
       });
+      const { sendAt, ...requestFields } = request;
       const createRequest =
         forkSeed === null
           ? {
-              ...request,
+              ...requestFields,
               ...(rootComposeSectionId
                 ? { sectionId: rootComposeSectionId }
                 : {}),
@@ -542,7 +555,9 @@ export function RootComposeView() {
               serviceTier: request.serviceTier,
             });
       if (createRequest === null) return;
-      const thread = await createThread.mutateAsync(createRequest);
+      const thread = await createThread.mutateAsync(
+        sendAt === undefined ? createRequest : { ...createRequest, sendAt },
+      );
       setLastCreatedThreadId(thread.id);
       setForkSeed(null);
       setRootComposeSectionId(null);
@@ -672,9 +687,6 @@ function RootComposeSurface({
   const pluginComposerHost = useMemo(
     () => ({
       ...sharedPluginComposerHost,
-      // Root may be showing the empty welcome instead of a mounted editor.
-      // Route focus through the shared request channel so the subscription
-      // below first reveals the composer and then focuses it.
       focus: () => requestComposerFocus(promptDraft.storageKey),
     }),
     [promptDraft.storageKey, sharedPluginComposerHost],
@@ -701,18 +713,9 @@ function RootComposeSurface({
     [promptBoxRef, promptDraft, setStartedComposing],
   );
 
-  // Both location-state effects below write the draft store and then clear
-  // the state through a router transition. The store write re-renders this
-  // view synchronously with a new `promptDraft` object, before the transition
-  // commits, so an effect that depends on `promptDraft` itself would re-run
-  // against the same location state, write again, and starve the transition
-  // until React aborts the loop. Depend on the stable setters instead.
   const setPromptDraft = promptDraft.setDraft;
   const restorePromptDraftIfEmpty = promptDraft.restoreIfEmpty;
 
-  // `?initialPrompt=` seeds the composer from outside the app — the mobile
-  // shell's share extension, a bookmark, a shortcut. The parameter is removed
-  // straight away so a reload or a back navigation does not seed it twice.
   useEffect(() => {
     const initialPrompt = readInitialPromptFromSearch(location.search);
     if (initialPrompt === null) return;
@@ -760,8 +763,6 @@ function RootComposeSurface({
       setProviderModelReasoning(nextForkSeed);
       setPermissionMode(nextForkSeed.permissionMode);
       setServiceTier(nextForkSeed.serviceTier);
-      // New-thread selection state intentionally ignores seed.environment;
-      // this explicit write is what pins the picker to the fork environment.
       seedEnvironmentSelectionValue(
         encodeReuseValue(nextForkSeed.environmentId),
       );
@@ -832,6 +833,14 @@ function RootComposeSurface({
     () => buildMobileRecentThreads({ sidebarNavigation }),
     [sidebarNavigation],
   );
+  const systemProviders = useSystemProviders().data;
+  const mobileRecentProvidersById = useMemo(() => {
+    const byId = new Map<string, ProviderInfo>();
+    for (const provider of systemProviders ?? []) {
+      byId.set(provider.id, provider);
+    }
+    return byId;
+  }, [systemProviders]);
   const mobileRecentProjectNamesById = useMemo(() => {
     const namesById = new Map<string, string>();
     if (!sidebarNavigation) return namesById;
@@ -893,13 +902,13 @@ function RootComposeSurface({
     [activeFixedSecondaryTab, isPersistedSecondaryPanelOpen],
   );
   const activeFixedSecondaryTabId = activeFixedSecondaryTab?.id ?? null;
-  const renderSecondaryPanelAsDrawer = useIsCompactViewport();
+  const isCompactViewport = useIsCompactViewport();
   const secondaryPanelDrawerVisibility =
     useThreadSecondaryPanelDrawerVisibility({
-      isCompactViewport: renderSecondaryPanelAsDrawer,
+      isCompactViewport,
       threadId: ROOT_COMPOSE_FIXED_PANEL_STATE_ID,
     });
-  const isSecondaryPanelOpen = renderSecondaryPanelAsDrawer
+  const isSecondaryPanelOpen = isCompactViewport
     ? secondaryPanelDrawerVisibility.isDrawerVisible
     : isPersistedSecondaryPanelOpen;
   const touchFixedPanelTabsState = useTouchFixedPanelTabsState(
@@ -914,8 +923,6 @@ function RootComposeSurface({
     ROOT_COMPOSE_FIXED_PANEL_STATE_ID,
     null,
   );
-  // Route-driven panel remounts are passive. Explicit terminal actions keep
-  // this request pending until the asynchronously mounted xterm handles it.
   const [shouldAutoFocusTerminal, setShouldAutoFocusTerminal] = useState(false);
   const handleTerminalAutoFocusHandled = useCallback(
     () => setShouldAutoFocusTerminal(false),
@@ -924,6 +931,7 @@ function RootComposeSurface({
   const removeFixedTerminalTab = useRemoveFixedRightTerminalTab(
     ROOT_COMPOSE_FIXED_PANEL_STATE_ID,
     null,
+    secondaryPanelDrawerVisibility.closeDrawer,
   );
   const setRootSecondaryPanel = useSetThreadSecondaryPanelSelection(
     ROOT_COMPOSE_FIXED_PANEL_STATE_ID,
@@ -975,16 +983,17 @@ function RootComposeSurface({
         : rootPanelHostPathTerminalTarget,
     [rootPanelEnvironmentId, rootPanelHostPathTerminalTarget],
   );
-  const { threadStorageFiles: rootThreadStorageFiles } = useThreadStorageViewer(
-    {
-      fileListEnabled: shouldLoadThreadStorageFileList({
-        hasThread: rootPanelThreadId !== null,
-        isSecondaryPanelOpen,
-        secondaryTabs: fixedPanelTabsState.secondary.tabs,
-      }),
-      threadId: rootPanelThreadId ?? undefined,
-    },
-  );
+  const {
+    checkThreadStorageFileExists: checkRootThreadStorageFileExists,
+    threadStorageFiles: rootThreadStorageFiles,
+  } = useThreadStorageViewer({
+    fileListEnabled: shouldLoadThreadStorageFileList({
+      hasThread: rootPanelThreadId !== null,
+      isSecondaryPanelOpen,
+      secondaryTabs: fixedPanelTabsState.secondary.tabs,
+    }),
+    threadId: rootPanelThreadId ?? undefined,
+  });
   const environmentTerminalsListQuery = useEnvironmentTerminals(
     rootPanelEnvironmentId ?? "",
     {
@@ -1043,6 +1052,7 @@ function RootComposeSurface({
     openPluginPanel,
     openTab,
     orderedSecondaryFileTabs,
+    reopenClosedTab,
     reorderTab,
     selectFileSearchResult,
     updateBrowserTab,
@@ -1051,11 +1061,13 @@ function RootComposeSurface({
     syncThreadId: null,
     environmentId: rootPanelEnvironmentId,
     fileOwnerThreadId: rootPanelThreadId,
+    onCloseLastTab: secondaryPanelDrawerVisibility.closeDrawer,
     preserveWorkspaceTabsAcrossContexts: true,
     projectHostId: rootProjectHostId,
     projectId: isProjectless ? null : projectId,
     retainedTerminalId,
-    storageFiles: rootThreadStorageFiles?.files,
+    storageFileExists: checkRootThreadStorageFileExists,
+    storageFiles: rootThreadStorageFiles,
     terminalSessions: loadedTerminalSessions,
   });
   const rootPluginPanelActions = usePluginNewThreadPanelActions({
@@ -1140,7 +1152,7 @@ function RootComposeSurface({
   } = useThreadSecondaryPanelVisibility({
     closePersistedPanel: closeRootSecondaryPanel,
     drawerVisibility: secondaryPanelDrawerVisibility,
-    isCompactViewport: renderSecondaryPanelAsDrawer,
+    isCompactViewport,
     isPersistedOpen: isPersistedSecondaryPanelOpen,
     openPersistedCommitDiff: () => undefined,
     openPersistedDiffFile: () => undefined,
@@ -1205,9 +1217,6 @@ function RootComposeSurface({
     }),
     [handleOpenLiveFilePreview],
   );
-  // Click handler for inserted mention pills in the root composer: threads
-  // navigate, files open the root right-panel preview. Directories and commands
-  // stay display-only.
   const resolveMentionLink = useCallback<PromptMentionLinkResolver>(
     (resource) => {
       if (resource.kind === "thread") {
@@ -1386,6 +1395,11 @@ function RootComposeSurface({
     handleOpenNewTab();
     return true;
   });
+  useAppCommandHandler("panel.reopenClosedTab", () => {
+    if (!isFocusedPane || !reopenClosedTab()) return false;
+    openCompactDrawer();
+    return true;
+  });
   useAppCommandHandler("file.quickOpen", () => {
     if (!isFocusedPane) return false;
     handleOpenNewTab();
@@ -1497,9 +1511,6 @@ function RootComposeSurface({
     ],
   );
   const handleCloseWindowRequest = useCallback(() => {
-    // Gate on the visible panel state, not the persisted flag: on compact
-    // viewports the drawer can be dismissed while tabs stay persisted, and
-    // Cmd+W must not consume hidden tabs.
     if (!isSecondaryPanelOpen) {
       return false;
     }
@@ -1514,8 +1525,6 @@ function RootComposeSurface({
       }
       return true;
     }
-    // No closable tab is active: hide the panel before letting the next
-    // Cmd+W close the window.
     closeSecondaryPanel();
     return true;
   }, [
@@ -1759,17 +1768,14 @@ function RootComposeSurface({
     },
     [openWorkspaceFile],
   );
-  // Standalone compose keeps its panel toggle pinned to the viewport corner.
-  // Multi-pane compose publishes its panel model to SplitThreadArea instead,
-  // which owns the one stable window-level toggle.
-  // The shared position class keeps this footprint paired with the no-drag
-  // cutout the macOS window-drag strip carves for it while the panel is closed
-  // (see RootComposeSecondaryContent).
   const showPinnedToggle =
-    (paneContext?.secondaryPanelHost ?? null) === null && !isSecondaryPanelOpen;
+    (paneContext?.secondaryPanelHost ?? null) === null &&
+    (!isSecondaryPanelOpen || isCompactViewport);
   const rootPanelToggle = showPinnedToggle ? (
     <div
-      className={`fixed z-40 ${ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS}`}
+      className={`fixed z-40 ${ROOT_COMPOSE_PINNED_PANEL_TOGGLE_POSITION_CLASS} ${
+        isSecondaryPanelOpen ? "pointer-events-none invisible" : ""
+      }`}
     >
       <RootComposeRightPanelToggle
         isOpen={isSecondaryPanelOpen}
@@ -1793,7 +1799,6 @@ function RootComposeSurface({
     },
     [setPromptTextAndMentions, setStartedComposing],
   );
-  // Focus the composer once it mounts in place of the welcome screen.
   useEffect(() => {
     if (!startedComposing) return;
     if (isProviderCliVersionBlocked) return;
@@ -1828,9 +1833,6 @@ function RootComposeSurface({
   const handleMachineSetupComplete = useCallback(
     ({ hostId: setUpHostId }: ProjectMachineSetupCompletion) => {
       setMachineSetupTarget(null);
-      // Mirror a normal selection of that machine: prefer worktree mode; the
-      // non-git downgrade effect above falls back to local work if the new
-      // source's checkout doesn't support worktrees.
       setEnvironmentSelectionValue(encodeHostValue(setUpHostId, "worktree"));
     },
     [setEnvironmentSelectionValue],
@@ -1848,8 +1850,7 @@ function RootComposeSurface({
     }
     return (
       <div className="flex">
-        {/* `-ml-1.5` shifts the pill 6px left so its icon column lines up
-            with the prompt controls below the card. */}
+        {}
         <div
           aria-label={`Forking ${forkSeed.sourceThreadTitle}`}
           className="-ml-1.5 inline-flex h-7 max-w-full items-center gap-1.5 rounded-full bg-muted py-0 pl-2.5 pr-1 text-xs font-medium text-muted-foreground"
@@ -1905,10 +1906,6 @@ function RootComposeSurface({
     selectedProviderId,
   ]);
 
-  // The composer renders immediately with loading pickers; only a failed
-  // bootstrap with no projects at all replaces it (see B28). While the
-  // bootstrap is in flight the project picker shows a loading label and the
-  // projectId-dependent queries inside NewThreadComposer stay disabled.
   if (!projects && sidebarNavigationError) {
     return (
       <PageShell contentClassName="min-h-full items-center justify-center">
@@ -1932,6 +1929,7 @@ function RootComposeSurface({
   const promptBox = renderPromptBox({
     id: "root-compose-prompt",
     autoFocus: !isProviderCliVersionBlocked,
+    allowSoftKeyboardAutoFocus: isCompactViewport,
     banner: promptBanner,
     header: promptHeader,
     blockedReason: isProviderCliVersionBlocked
@@ -1980,6 +1978,17 @@ function RootComposeSurface({
                   ? ROOT_COMPOSE_EMPTY_WELCOME_CONTENT_CLASS
                   : ROOT_COMPOSE_SIDEBAR_ACTION_ALIGNED_TOP_PADDING_CLASS
               }
+              compactScrollContent={
+                showEmptyWelcome ? null : (
+                  <RootComposeMobileRecents
+                    highlightedThreadId={lastCreatedThreadId}
+                    projectNamesById={mobileRecentProjectNamesById}
+                    providersById={mobileRecentProvidersById}
+                    showCreatingRow={isSubmitting}
+                    threads={mobileRecentThreads}
+                  />
+                )
+              }
               isSecondaryPanelOpen={isSecondaryPanelOpen}
               onToggleSecondaryPanel={handleToggleSecondaryPanel}
               secondaryPanel={{
@@ -1997,9 +2006,6 @@ function RootComposeSurface({
                 renderBrowserDeck,
                 isOpen: isSecondaryPanelOpen,
                 fixedTabs: [],
-                // The shell, tab strip, launcher, resize, and drawer behavior are
-                // shared with threads. Info, Diff, and conversation full-screen
-                // stay thread-only because no thread exists on this surface yet.
                 showConversationCollapseControl: false,
                 onClose: closeSecondaryPanel,
                 onCollapse: closeSecondaryPanel,
@@ -2020,15 +2026,7 @@ function RootComposeSurface({
                   }
                 />
               ) : (
-                <>
-                  {promptBox}
-                  <RootComposeMobileRecents
-                    highlightedThreadId={lastCreatedThreadId}
-                    projectNamesById={mobileRecentProjectNamesById}
-                    showCreatingRow={isSubmitting}
-                    threads={mobileRecentThreads}
-                  />
-                </>
+                promptBox
               )}
             </RootComposeSecondaryContent>
           </AppNavigationHostProvider>

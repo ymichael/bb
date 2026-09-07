@@ -12,9 +12,8 @@ import {
 } from "@/lib/plugin-slots";
 import { resetAllCrashedPluginSlotsForTest } from "./PluginSlotMount";
 import { PluginPendingInteractionComposer } from "./PluginPendingInteractionComposer";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
-// The composer can stop the thread (a provider's request), which needs the
-// query client like every mutation hook.
 function renderComposer(ui: React.ReactElement) {
   return render(
     <QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>,
@@ -26,16 +25,9 @@ function registrations(
     PluginRegistrationSet["pendingInteractions"]
   >,
 ): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
+  return makePluginRegistrationSet({
     pendingInteractions,
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-  };
+  });
 }
 
 const interaction: PluginPendingInteraction = {
@@ -59,12 +51,7 @@ const interaction: PluginPendingInteraction = {
 afterEach(() => {
   cleanup();
   resetPluginSlotStoreForTest();
-  // A crashed slot instance is remembered for the lifetime of the module, so
-  // without this a renderer that throws in one test disables that same
-  // plugin/slot pair for every test that runs after it.
   resetAllCrashedPluginSlotsForTest();
-  // restore, not clear: `vi.clearAllMocks` only drops recorded calls, leaving
-  // the `console` spies below installed and silencing later tests.
   vi.restoreAllMocks();
 });
 
@@ -122,9 +109,6 @@ describe("PluginPendingInteractionComposer", () => {
   });
 
   it("resolves the form through the slot store once the renderer registers", () => {
-    // A plugin bundle can still be loading when a request surfaces; the
-    // composer shows the fallback and picks the form up from the slot store
-    // without a remount once the renderer registers.
     function Renderer({ interaction: view }: PluginPendingInteractionProps) {
       return <div>form {view.title}</div>;
     }

@@ -12,8 +12,7 @@ function isStoredAudioInputDeviceId(
   value: string,
 ): value is NonNullable<PreferredAudioInputDeviceId> {
   return (
-    value.trim().length > 0 &&
-    value.length <= MAX_AUDIO_INPUT_DEVICE_ID_LENGTH
+    value.trim().length > 0 && value.length <= MAX_AUDIO_INPUT_DEVICE_ID_LENGTH
   );
 }
 

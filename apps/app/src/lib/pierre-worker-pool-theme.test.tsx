@@ -11,8 +11,6 @@ import {
 
 function createFakePool() {
   const setRenderOptions = vi.fn(() => Promise.resolve());
-  // Only `setRenderOptions` is exercised; the sync never touches the rest of
-  // the manager.
   const pool = { setRenderOptions } as unknown as WorkerPoolManager;
   return { pool, setRenderOptions };
 }
@@ -34,9 +32,6 @@ afterEach(() => {
 
 describe("useSyncPierreWorkerPoolTheme", () => {
   it("does not call setRenderOptions when the pool already has the current theme", () => {
-    // `setRenderOptions` initializes the pool (spawning every worker plus a
-    // main-thread highlighter) before it compares options, so a redundant
-    // call on mount is what used to spawn the workers on every workspace.
     const { pool, setRenderOptions } = createFakePool();
     const constructedTheme = {
       dark: defaultResolvedCodeTheme.dark,
@@ -70,14 +65,11 @@ describe("useSyncPierreWorkerPoolTheme", () => {
       theme: { dark: "github-dark", light: defaultResolvedCodeTheme.light },
     });
 
-    // An unrelated re-render must not resend the same theme.
     rerender(<ThemeSync pool={pool} constructedTheme={constructedTheme} />);
     expect(setRenderOptions).toHaveBeenCalledTimes(1);
   });
 
   it("applies the current theme to a pool constructed with a different one", () => {
-    // A pool that outlived a theme change (Pierre keeps one page-wide
-    // singleton) must be brought up to date on the next mount.
     const { pool, setRenderOptions } = createFakePool();
 
     render(

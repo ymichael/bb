@@ -38,18 +38,12 @@ describe("production static cache headers", () => {
     const harness = await createTestAppHarness();
     const serverApp = createApp(harness.deps, { staticDir });
     try {
-      // The shell is `no-cache` plus a build-id ETag: browsers, the desktop
-      // window and the connect edge revalidate with If-None-Match on every
-      // navigation (a cheap 304), so a new build is never masked by a fresh
-      // private copy whose hashed assets are gone, and unlike `no-store` it
-      // stays eligible for the WebKit back/forward cache.
       const rootResponse = await serverApp.app.request("/");
       expect(rootResponse.headers.get("cache-control")).toBe("no-cache");
       expect(rootResponse.headers.get("etag")).toMatch(/^W\/"[0-9a-f]{32}"$/u);
 
       const fallbackResponse = await serverApp.app.request("/threads/thr_123");
       expect(fallbackResponse.headers.get("cache-control")).toBe("no-cache");
-      // Same document, same validator: the fallback IS the shell.
       expect(fallbackResponse.headers.get("etag")).toBe(
         rootResponse.headers.get("etag"),
       );
@@ -137,10 +131,6 @@ describe("production static cache headers", () => {
         code: "not_found",
       });
 
-      // A missing hashed asset is a stale reference, not a client route. The
-      // single-page-app fallback would answer it with index.html at status
-      // 200, and the browser would report a MIME type error for a script
-      // instead of the missing file.
       const assetMissResponse = await serverApp.app.request(
         "/assets/does-not-exist.js",
       );

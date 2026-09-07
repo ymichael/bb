@@ -64,7 +64,6 @@ describe("fetchConnectAccountServers", () => {
       }),
     ).resolves.toEqual({ ok: false, reason: "unavailable" });
 
-    // The plugin route answers 503 with a string error when the plugin is off.
     await expect(
       fetchConnectAccountServers({
         serverUrl: "http://127.0.0.1:38886",
@@ -80,7 +79,6 @@ describe("fetchConnectAccountServers", () => {
       }),
     ).resolves.toEqual({ ok: false, reason: "plugin-disabled" });
 
-    // The RPC handler rethrows ConnectListError codes as the error message.
     await expect(
       fetchConnectAccountServers({
         serverUrl: "http://127.0.0.1:38886",
@@ -96,7 +94,6 @@ describe("fetchConnectAccountServers", () => {
       }),
     ).resolves.toEqual({ ok: false, reason: "not-paired" });
 
-    // Any other handler failure, non-JSON body, or unknown shape.
     await expect(
       fetchConnectAccountServers({
         serverUrl: "http://127.0.0.1:38886",
@@ -191,7 +188,6 @@ describe("createConnectServerSync", () => {
       },
     ]);
 
-    // Within 60s: list should not re-fetch.
     now += 10_000;
     sync.onListRequested();
     await Promise.resolve();
@@ -199,9 +195,6 @@ describe("createConnectServerSync", () => {
 
     now += 60_000;
     const listSync = new Promise<void>((resolve) => {
-      // onListRequested fires syncNow without returning the promise; wait via
-      // a subsequent syncNow that coalesces onto the same in-flight work, or
-      // completes immediately if the list-triggered run already finished.
       sync.onListRequested();
       void sync.syncNow().then(resolve);
     });
@@ -263,7 +256,6 @@ describe("createConnectServerSync", () => {
     expect(logs).toEqual(["connect server sync skipped (unavailable)"]);
     expect(onServersCalls).toBe(0);
 
-    // A different reason inside the same streak is logged once more.
     mode = "disabled";
     await sync.syncNow();
     expect(skipped).toEqual(["unavailable", "unavailable", "plugin-disabled"]);
@@ -322,7 +314,6 @@ describe("createConnectServerSync without a local server", () => {
         headers: { "x-bb-connect-machine": "bbcm_desktop" },
       }),
     );
-    // selfHandle drops out: "This Mac" is its own menu entry.
     expect(received).toEqual([
       {
         handle: "other",

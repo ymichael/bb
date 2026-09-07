@@ -25,25 +25,6 @@ import {
   appendThreadEventInTransaction,
 } from "../threads/thread-events.js";
 
-/**
- * The timeline record of an interaction (docs/provider-plugin-api.md §4).
- *
- * Every status change of every interaction — any approval subject, a user
- * question, a plugin request — appends one `system/interaction/lifecycle`
- * event carrying the interaction's lifecycle record, with the payload and
- * the resolution paired by kind. The projection decides what to show: a
- * permission grant and a user question get a row of their own; a command or
- * file-change approval shows on the provider's own item, a plan review on
- * the provider's plan tool call, a tool use on the provider's tool call, and
- * a plugin request on the plugin's form.
- *
- * A command or file-change approval additionally writes the provider's item
- * with its approval status (`waiting_for_approval`, `denied`) so the item's
- * row reflects the ask while the provider has not yet streamed the item or
- * never will after a denial. Folding that status into the lifecycle event at
- * read time is the projection change that deletes these item writes.
- */
-
 interface PendingInteractionTimelineTransactionDeps {
   db: DbTransaction;
   hub: DbNotifier;
@@ -56,7 +37,6 @@ type ApprovalTimelineItem = Extract<
   ThreadEventItem,
   { type: "commandExecution" | "fileChange" }
 >;
-/** The approval subjects whose item carries the approval status. */
 type ApprovalTimelineItemSubject = Extract<
   PendingInteractionApprovalSubject,
   { kind: "command" | "file_change" }
@@ -103,11 +83,6 @@ function buildApprovalItem(
   }
 }
 
-/**
- * The item write a command or file-change approval makes at this status, or
- * null when the status leaves the item alone: `resolving` is transient, and
- * an allowed item is the provider's to stream.
- */
 function approvalItemWrite(
   interaction: ApprovalPendingInteraction,
   subject: ApprovalTimelineItemSubject,
@@ -160,11 +135,6 @@ function approvalItemWriteFor(interaction: PendingInteraction): {
   return item === null ? null : { interaction, item };
 }
 
-/**
- * The events one status change appends, in order: the lifecycle record, then
- * the provider's item when the status touches it. One thread read serves
- * both: appending the first never changes the thread's environment.
- */
 function buildPendingInteractionTimelineWrites(
   db: Pick<AppDeps, "db">["db"] | DbTransaction,
   interaction: PendingInteraction,

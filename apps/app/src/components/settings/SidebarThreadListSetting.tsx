@@ -24,10 +24,6 @@ const BUILT_IN_OPTION = {
   description: "Projects, sections, and nested threads.",
 } as const;
 
-/**
- * Automatic activation remains the default. This control lets the user pin
- * BB's list or a specific plugin provider on this client.
- */
 export function SidebarThreadListSetting() {
   const { threadLists } = usePluginSlots();
   const [preference, setPreference] = useAtom(threadListProviderAtom);
@@ -48,7 +44,6 @@ export function SidebarThreadListSetting() {
       description: slot.description ?? `From the ${slot.pluginId} plugin.`,
     })),
   ];
-  // An unavailable explicit provider renders BB's list until it returns.
   const selected =
     options.find((option) => option.key === preference) ?? BUILT_IN_OPTION;
 

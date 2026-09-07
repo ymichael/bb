@@ -10,13 +10,6 @@ const MODES: readonly { value: ThemeModePreference; label: string }[] = [
   { value: "dark", label: "Dark" },
 ];
 
-/**
- * `/settings/appearance`: light or dark for this phone (`bb.theme`).
- *
- * Only the native chrome reads it — the add-server screen, connect enrolment,
- * device settings, and the shell's load-failure screen. The palette lives with
- * the server and the page renders it, so it is not repeated here.
- */
 export function AppearanceSettingsScreen() {
   const theme = useTheme();
   return (

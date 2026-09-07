@@ -53,12 +53,6 @@ function activityIntentsSignature(
   return intents.map(activityIntentSignature).join("\u001e");
 }
 
-// View rows are immutable — `useTimelineViewRowsCache` preserves row identity
-// across renders for unchanged data — so signature computation is safe to
-// memoize by row reference. A miss is the streaming-update path (new row);
-// a hit covers all cross-render reuse, including duplicate invocations from
-// `areTimelineRowViewPropsEqual`, `useTimelineRowTitleRenderState`, and
-// `TimelineExpandableBody`'s `contentKey`.
 const rowSignatureCache = new WeakMap<ThreadTimelineViewRow, string>();
 const rowsSignatureCache = new WeakMap<
   readonly ThreadTimelineViewRow[],
@@ -76,9 +70,6 @@ export function timelineRowsSignature(
 }
 
 function timelineRowBaseSignature(row: ThreadTimelineViewRow): string {
-  // sourceSeqEnd guards high-mutation fields omitted from signatures below,
-  // including output, text, and diffs. In-place row content mutations must
-  // advance the source sequence to avoid stale memoized UI.
   return joinSignatureParts([
     row.kind,
     row.id,
@@ -91,11 +82,6 @@ function timelineRowBaseSignature(row: ThreadTimelineViewRow): string {
   ]);
 }
 
-/**
- * The bridge presentation is persisted per item and only changes between an
- * item's open and its close (a close's presentation wins), so the fields a
- * title or icon reads from are enough to break memo equality.
- */
 function presentationSignature(
   presentation: TimelineRowPresentation | undefined,
 ): string | null {
@@ -211,8 +197,6 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         row.callId,
         row.extensionKind,
         row.completedAt,
-        // The payload is opaque plugin JSON; a plugin renderer may read any
-        // of it, so the whole serialized value takes part.
         JSON.stringify(row.payload),
       ]);
     case "delegation":
@@ -239,7 +223,6 @@ function timelineWorkRowRenderSignature(row: TimelineViewWorkRow): string {
         row.summary,
         row.error,
         row.usage?.totalTokens ?? null,
-        // Every progress-mutated agent field must break memo equality.
         row.workflow
           ? row.workflow.agents
               .map((agent) =>

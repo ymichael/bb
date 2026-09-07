@@ -1,11 +1,3 @@
-// The lazy `@pierre/trees` chunk: the only module that imports the tree
-// library at runtime. `useThreadStorageBrowser` imports this module with a
-// dynamic `import()` to build the tree model the first time a thread has
-// storage files to show, and `ThreadStorageBrowser` renders the tree through
-// `React.lazy` (see lazySecondaryPanelComponents.tsx). That keeps ~420 KB raw
-// of tree model, renderer and preact out of the thread route's static closure;
-// `bundle-budget.json` names this file as the package's only gate. Keep
-// anything else out of here: it rides along in the tree chunk.
 import { useMemo, type CSSProperties } from "react";
 import {
   FileTree as FileTreeModel,
@@ -16,11 +8,6 @@ import { usePreferredTheme } from "@/hooks/useTheme";
 
 export type ThreadStorageTreeModel = FileTreeModel;
 
-/**
- * Builds the storage browser's tree model. The caller owns it and must call
- * `model.cleanUp()` when done: that unsubscribes the selection listener and
- * destroys the controller (see render/FileTree.ts in pierrecomputer/pierre).
- */
 export function createThreadStorageTreeModel(
   onSelectionChange: FileTreeSelectionChangeListener,
 ): ThreadStorageTreeModel {
@@ -62,8 +49,6 @@ const FILE_TREE_BASE_HOST_STYLE: FileTreeHostStyle = {
   "--trees-fg-override": "var(--foreground)",
   "--trees-focus-ring-color-override": "var(--ring)",
   "--trees-font-family-override": "var(--font-sans)",
-  // Match the info page's compact text-xs rows and the app's smaller icon/caret
-  // scale (the tree's chevron caret + file icons size off --trees-icon-width).
   "--trees-font-size-override": "var(--text-xs)",
   "--trees-icon-width-override": "14px",
   "--trees-item-margin-x-override": "0",

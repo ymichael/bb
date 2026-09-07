@@ -27,8 +27,6 @@ describe("decodeToolCallResponsePayload", () => {
     });
   });
 
-  // The bug: an image-only result decoded to the literal "OK" with the image
-  // dropped, so browser_screenshot reported success and returned nothing.
   it("decodes an image-only result into an image rather than OK", () => {
     expect(
       decodeToolCallResponsePayload({
@@ -93,8 +91,6 @@ describe("decodeToolCallResponsePayload", () => {
     ).toBe(true);
   });
 
-  // A tool result contract carries inline base64 only, so a remote reference
-  // has to survive as text; dropping it is what this fix exists to stop.
   it("keeps a non-data image url as text", () => {
     expect(
       decodeToolCallResponsePayload({
@@ -214,7 +210,6 @@ describe("buildBridgeToolCallContent", () => {
     ]);
   });
 
-  // The pending-call failure paths resolve without an images key.
   it("tolerates a result with no images key", () => {
     expect(buildBridgeToolCallContent({ content: "transport closed" })).toEqual(
       [{ type: "text", text: "transport closed" }],

@@ -15,16 +15,12 @@ import {
 export interface MiniMapSlot {
   paneId: string;
   rect: PaneRect;
-  /** The pane represented by the sidebar item. */
   isMe: boolean;
-  /** The focused pane (drawn in the accent token). */
   isFocused: boolean;
 }
 
 interface PaneContentSplitIndicator {
-  /** This content is open in a pane while the layout is split (>1 pane). */
   isOpenInSplit: boolean;
-  /** Mini-map slots for the sidebar glyph, or null when there is nothing to show. */
   miniMap: MiniMapSlot[] | null;
 }
 
@@ -33,13 +29,6 @@ const NO_INDICATOR: PaneContentSplitIndicator = {
   miniMap: null,
 };
 
-/**
- * Subscribed instead of `splitLayoutAtom` when the indicator cannot show
- * (compact viewport, or the caller disabled it). Every sidebar row calls these
- * hooks; a live layout subscription there re-rendered every mounted row on
- * each thread navigation on phones, where the layout still reconciles but the
- * result is always {@link NO_INDICATOR}.
- */
 const NULL_LAYOUT_ATOM = atom<SplitLayout | null>(null);
 
 function useSplitLayoutForIndicator(enabled: boolean): {
@@ -85,11 +74,6 @@ function buildSplitIndicator(
   };
 }
 
-/**
- * Split-membership state for any routable sidebar item. Reads the global split
- * layout so thread, compose, and plugin rows can draw the same pane-position
- * preview without prop threading through the sidebar tree.
- */
 export function usePaneContentSplitIndicator(
   content: PaneContent,
   enabled: boolean,
@@ -113,11 +97,6 @@ export function usePaneContentSplitIndicator(
   }, [content, enabled, isCompact, layout]);
 }
 
-/**
- * Split-membership state for a collapsed sidebar area. Every pane occupied by
- * one of the area's hidden threads is filled, so one rollup remains accurate
- * when more than one descendant is open in the split layout.
- */
 export function useThreadGroupSplitIndicator(
   threads: readonly ThreadSplitIndicatorTarget[],
   enabled: boolean,

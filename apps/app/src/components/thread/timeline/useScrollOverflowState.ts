@@ -6,21 +6,6 @@ import {
   type RefObject,
 } from "react";
 
-/**
- * Tracks whether a scroll element has hidden content above and/or below the
- * visible area so callers can render edge-fade affordances only when the
- * fades actually communicate something.
- *
- * Implemented with two zero-height sentinel elements at the top and bottom
- * of the scrolling content and an `IntersectionObserver` rooted on the
- * scroll element. This is intentional: the alternative (`ResizeObserver` +
- * reading `scrollTop`/`scrollHeight`) forces synchronous layout per fire,
- * and ResizeObserver fires every animation frame while a parent expand
- * transition is interpolating the container's height — which made the
- * timeline expand/collapse animation visibly choppy. IntersectionObserver
- * is async and only delivers callbacks when a sentinel actually crosses
- * the visible boundary, so it doesn't pile up work during animations.
- */
 interface ScrollOverflowSentinelRefs<TElement extends HTMLElement> {
   scrollRef: RefObject<TElement | null>;
   topSentinelRef: RefObject<HTMLDivElement | null>;
@@ -35,17 +20,7 @@ interface ScrollOverflowStateBinding<
 }
 
 interface UseScrollOverflowStateOptions {
-  /**
-   * Enables observation after a conditionally-rendered scroll region mounts.
-   * Disable it while the region is absent so reopening rebinds fresh nodes.
-   */
   enabled?: boolean;
-  /**
-   * Adds a measurement fallback for compact scroll regions whose overflow
-   * affordance must appear immediately on mount. IntersectionObserver remains
-   * the primary path; this fallback covers environments where sentinel
-   * intersections are unavailable or stale until the user scrolls.
-   */
   measureOverflow?: boolean;
 }
 

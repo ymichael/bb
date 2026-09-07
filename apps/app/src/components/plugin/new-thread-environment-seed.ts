@@ -5,24 +5,11 @@ import {
 } from "@/components/pickers/environment-picker-value";
 import type { RootComposeSelectedBranch } from "@/views/root-compose-thread-environment";
 
-/**
- * Picker seed derived from a previously submitted environment: the encoded
- * environment-picker selection plus the branch pick that reproduces it. The
- * inverse of `resolveRootComposeThreadEnvironment`, up to the limits listed
- * on `NewThreadComposerProps.defaultEnvironment`.
- */
 interface NewThreadEnvironmentSeed {
   selectionValue: string;
   branch: RootComposeSelectedBranch | null;
 }
 
-/**
- * Maps `NewThreadRequest.environment` back to picker selections. Returns null
- * for the variants the composer cannot represent — `project-default` (the
- * composer always resolves a concrete environment) and a `personal` workspace
- * without a `hostId` (the picker only encodes concrete hosts) — so the
- * composer falls back to its own environment default.
- */
 export function newThreadEnvironmentArgsToSeed(
   environment: CreateThreadEnvironmentArgs,
 ): NewThreadEnvironmentSeed | null {
@@ -51,8 +38,6 @@ export function newThreadEnvironmentArgsToSeed(
           : null,
     };
   }
-  // Unmanaged. `path` has no picker control — the composer always submits
-  // `path: null` — so it is not represented here.
   return {
     selectionValue: encodeHostValue(hostId, "local"),
     branch:

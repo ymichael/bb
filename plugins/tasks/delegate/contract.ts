@@ -17,14 +17,10 @@ export const delegationRpcContract = defineRpcContract({
       .strict(),
     output: z.object({ threadId: threadIdSchema }).strict(),
   },
-  // Plugin RPC names cannot contain dots, so this is the wire spelling of
-  // the conceptual `taskThreads.attach` operation.
   taskThreadsAttach: {
     input: z.object({ taskId: idSchema, threadId: threadIdSchema }).strict(),
     output: z.object({ threadId: threadIdSchema }).strict(),
   },
-  // Inverse of taskThreadsAttach: removes the (task, thread) row. Fails when
-  // the thread is not attached to the task.
   taskThreadsDetach: {
     input: z.object({ taskId: idSchema, threadId: threadIdSchema }).strict(),
     output: z.object({ threadId: threadIdSchema }).strict(),

@@ -6,9 +6,7 @@ import {
   usedByScrollStep,
 } from "../src/index";
 
-/** A row wide enough for its items: the common case, and it shows no carets. */
 const FITS = { scrollLeft: 0, scrollWidth: 180, clientWidth: 240 };
-/** Fourteen plugin names in a card-width row, scrolled to the start. */
 const AT_START = { scrollLeft: 0, scrollWidth: 900, clientWidth: 240 };
 
 describe("usedByScrollState", () => {
@@ -20,8 +18,6 @@ describe("usedByScrollState", () => {
   });
 
   it("offers no carets for a row that is exactly full, or over by a rounding error", () => {
-    // Sub-pixel layout maths must not put a caret on a row that reads as
-    // fitting, because pressing it would move nothing.
     expect(
       usedByScrollState({ scrollLeft: 0, scrollWidth: 240, clientWidth: 240 }),
     ).toEqual({ canScrollLeft: false, canScrollRight: false });
@@ -49,12 +45,10 @@ describe("usedByScrollState", () => {
   });
 
   it("offers only the left caret at the end", () => {
-    // scrollWidth - clientWidth = 660: the far extent.
     expect(usedByScrollState({ ...AT_START, scrollLeft: 660 })).toEqual({
       canScrollLeft: true,
       canScrollRight: false,
     });
-    // Browsers can report a fractional scrollLeft just shy of the extent.
     expect(usedByScrollState({ ...AT_START, scrollLeft: 659.4 })).toEqual({
       canScrollLeft: true,
       canScrollRight: false,
@@ -69,7 +63,6 @@ describe("usedByScrollStep", () => {
   });
 
   it("still advances usefully in a very narrow row", () => {
-    // Without a floor, a 40px row would page by 8px, or backwards.
     expect(usedByScrollStep(40)).toBe(80);
   });
 });

@@ -8,24 +8,22 @@ import {
 } from "@/lib/plugin-slots";
 import { BUILT_IN_FILE_OPENER_PREFERENCE } from "@/lib/file-opener-preference";
 import { FileOpenersSettingsSection } from "./FileOpenersSettingsSection";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 function registerNotesOpener() {
-  setPluginSlotRegistrations("notes", {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [
-      {
-        id: "editor",
-        title: "Notes editor",
-        extensions: ["md", "mdx"],
-        component: () => null,
-      },
-    ],
-    messageDirectives: [],
-  });
+  setPluginSlotRegistrations(
+    "notes",
+    makePluginRegistrationSet({
+      fileOpeners: [
+        {
+          id: "editor",
+          title: "Notes editor",
+          extensions: ["md", "mdx"],
+          component: () => null,
+        },
+      ],
+    }),
+  );
 }
 
 afterEach(() => {

@@ -1,15 +1,5 @@
 import { z } from "zod";
 
-/**
- * Snapshot of the latest provider task/todo state observed by the timeline
- * projection. Tail-only state on the thread timeline response —
- * mirrors `activeThinking` semantics: present on `latest` page requests,
- * `null` on older pages or when no candidate was observed.
- *
- * Item status carries `completed` so the expanded UI can show progress
- * through the list. The summary count and visibility predicate filter to
- * pending + in_progress only — completed-only snapshots hide the section.
- */
 const threadTimelinePendingTodoItemStatusSchema = z.enum([
   "pending",
   "in_progress",

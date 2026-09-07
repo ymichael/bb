@@ -78,7 +78,6 @@ function parseArgs(argv: string[]): SeedCommandArgs | null {
       return value;
     };
     switch (argument) {
-      // pnpm forwards the "--" separator to the script; skip it.
       case "--":
         break;
       case "--help":
@@ -151,9 +150,6 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
     for (const suffix of ["", "-shm", "-wal"]) {
       rmSync(`${databasePath}${suffix}`, { force: true });
     }
-    // The database reset also wipes the daemon's server-side API key. Remove
-    // the local credentials so the daemon re-enrolls under the persisted
-    // host id instead of retrying a dead key.
     rmSync(join(dataDir, "auth.json"), { force: true });
     log(dim("●"), "removed the existing database file and host credentials");
   }
@@ -175,8 +171,6 @@ async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
       onProgress: (message) => log(dim("○"), dim(message)),
     });
     db.$client.pragma("wal_checkpoint(TRUNCATE)");
-    // Real directories keep the host daemon's git probes from failing when a
-    // seeded thread or environment is opened.
     for (const workspacePath of result.projectWorkspacePaths) {
       if (existsSync(join(workspacePath, ".git"))) {
         continue;

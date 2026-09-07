@@ -13,8 +13,6 @@ export default {
   title: "thread/timeline/User Message Markdown",
 };
 
-// ThreadTimelinePane caps content at 760px; match it so the bubble reflects
-// production width.
 function TimelineStage({
   children,
   revealMessageActions = false,
@@ -39,8 +37,6 @@ function resolveThreadLink(link: TimelineTitleLink): string | null {
     : null;
 }
 
-// File/command pills render interactive when a click action resolves; a no-op
-// keeps the story self-contained while still showing the interactive style.
 const resolveMentionLink = () => () => {};
 
 const acceptedMessage: TimelineConversationTurnRequest = {
@@ -49,7 +45,6 @@ const acceptedMessage: TimelineConversationTurnRequest = {
   status: "accepted",
 };
 
-// Builds a mention spanning the first occurrence of `token` in `text`.
 function mentionAt(
   text: string,
   token: string,
@@ -143,7 +138,6 @@ const QUOTE_BODY = [
   "Which phase is safe to deploy on a Friday?",
 ].join("\n");
 
-// Long enough to overflow the collapsed clamp and reveal "Show more".
 const LONG_BODY = [
   "# Migration rollout",
   "",

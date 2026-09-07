@@ -32,8 +32,6 @@ import {
 } from "./api.js";
 import { sha256Hex } from "./tokens.js";
 
-// Real in-memory SQLite (never mock the DB): apply the same connect-db
-// migration chain the worker runs, then drive the product-state functions.
 const MIGRATIONS_DIR = fileURLToPath(
   new URL("../../../../packages/connect-db/migrations", import.meta.url),
 );
@@ -123,7 +121,6 @@ describe("claimHandle", () => {
     expect(await claimHandle(deps, "u1", "ab")).toEqual({ error: "too-short" });
 
     await claimHandle(deps, "u1", "sawyer");
-    // A second account cannot take a handle already used as another server's subdomain.
     expect(await claimHandle(deps, "u2", "sawyer")).toEqual({ error: "taken" });
   });
 
@@ -174,7 +171,6 @@ describe("createServer (connect another bb)", () => {
   it("enforces the per-account server cap", async () => {
     seedUser("u1");
     await claimHandle(deps, "u1", "sawyer");
-    // One primary already; add up to the cap, then the next is rejected.
     for (let i = 1; i < MAX_PER_ACCOUNT; i++) {
       expect("ok" in (await createServer(deps, "u1", `sawyer-${i}`))).toBe(
         true,
@@ -267,7 +263,6 @@ describe("redeemConnectCode (multi-server routing label)", () => {
     const desktop = await createServer(deps, "u1", "sawyer-desktop");
     if (!("ok" in desktop)) throw new Error("setup");
 
-    // Primary starts unpaired (no credential hash); second server is the redeem target.
     const primary = db
       .select()
       .from(server)
@@ -284,14 +279,11 @@ describe("redeemConnectCode (multi-server routing label)", () => {
     if ("error" in result)
       throw new Error(`${result.error} (${result.status})`);
 
-    // (a) Wire handle is the second server's routing label, not the primary account handle.
     expect(result.handle).toBe("sawyer-desktop");
     expect(result.serverId).toBe(desktop.server.id);
-    // (b) tunnelUrl is keyed by that subdomain.
     expect(result.tunnelUrl).toBe("wss://sawyer-desktop.getbb.app/__tunnel");
     expect(result.credential.startsWith("bbcred_")).toBe(true);
 
-    // (c) Credential hash lands on the second server only; primary is untouched.
     const second = db
       .select()
       .from(server)
@@ -325,7 +317,6 @@ describe("redeemConnectCode (multi-server routing label)", () => {
     if ("error" in result)
       throw new Error(`${result.error} (${result.status})`);
 
-    // Primary server: subdomain === account handle — byte-identical pre-fix behavior.
     expect(result.handle).toBe("sawyer");
     expect(result.tunnelUrl).toBe("wss://sawyer.getbb.app/__tunnel");
   });
@@ -357,7 +348,6 @@ describe("disconnectServer (server-scoped)", () => {
     const desktop = await createServer(deps, "u1", "sawyer-desktop");
     if (!("ok" in desktop)) throw new Error("setup");
 
-    // Pair both servers (give each a credential).
     db.update(server).set({ credentialHash: "hash", revokedAt: null }).run();
 
     const r = await disconnectServer(deps, "u1", desktop.server.id);
@@ -373,7 +363,6 @@ describe("disconnectServer (server-scoped)", () => {
     expect(target?.credentialHash).toBeNull();
     expect(target?.revokedAt).not.toBeNull();
 
-    // The primary is untouched.
     const primary = db
       .select()
       .from(server)
@@ -414,11 +403,9 @@ describe("removeServer (delete a never-paired row)", () => {
       db.select().from(server).where(eq(server.id, desktop.server.id)).get(),
     ).toBeUndefined();
 
-    // The address is now free (availability treats any live row as taken).
     const avail = await checkAvailability(deps, "sawyer-desktop");
     expect(avail.available).toBe(true);
 
-    // The primary is untouched.
     expect(
       db.select().from(server).where(eq(server.subdomain, "sawyer")).get(),
     ).toBeDefined();
@@ -524,7 +511,6 @@ describe("getAccountState (adaptive single / multi)", () => {
     expect(online.connected).toBe(true);
     expect(online.online).toBe(true);
 
-    // Stale heartbeat → connected but offline.
     db.update(server)
       .set({ lastSeenAt: new Date(Date.now() - 10 * 60 * 1000) })
       .run();

@@ -17,19 +17,11 @@ import { cn } from "@bb/shared-ui/lib/utils";
 
 export interface FileTreePanelProps {
   entries: readonly FlatEntry[];
-  /** Absolute path the entries are relative to; "" until the listing lands. */
   root: string;
-  /** True while the listing is in flight; the panel opens before it lands. */
   isLoading: boolean;
   error: string | null;
   truncated: boolean;
-  /** The file currently in the editor, revealed and highlighted. */
   activePath: string;
-  /**
-   * The editor's own background, so the tree reads as part of the same
-   * surface as the code rather than as BB chrome laid over it. Null until the
-   * code theme resolves, which falls back to BB's recessed surface token.
-   */
   background: string | null;
   onOpenFile: (path: string) => void;
   onClose: () => void;
@@ -53,21 +45,12 @@ export function FileTreePanel({
   const [menu, setMenu] = useState<ContextMenuState | null>(null);
   const activeRowRef = useRef<HTMLButtonElement | null>(null);
   const panelRef = useRef<HTMLDivElement | null>(null);
-  // Seeded from storage so a resize survives hiding and reshowing the panel.
   const [height, setHeight] = useState(readStoredTreeHeight);
   const heightRef = useRef(height);
   heightRef.current = height;
-  // The height the user asked for, which is not always the one on screen: a
-  // pane too short to honour it renders the clamped height and restores this
-  // one when the pane grows again.
   const requestedHeightRef = useRef(height);
-  // The height the drag started from, so the panel tracks the total pointer
-  // delta. Accumulating per move event instead would drift: every move the
-  // clamp absorbs would be lost, and dragging back would not return the seam
-  // to the pointer.
   const dragStartHeightRef = useRef<number | null>(null);
 
-  /** The space the tree and the editor share. */
   const availableHeight = (): number =>
     panelRef.current?.parentElement?.clientHeight ?? window.innerHeight;
 
@@ -89,9 +72,6 @@ export function FileTreePanel({
     storeTreeHeight(heightRef.current);
   };
 
-  // A stored height can be taller than the pane the panel opens in — a short
-  // window, or a secondary panel split small — and the pane can change size
-  // under it. Re-fit on both rather than letting the tree take the surface.
   useLayoutEffect(() => {
     const parent = panelRef.current?.parentElement;
     if (parent === null || parent === undefined) return;
@@ -118,8 +98,6 @@ export function FileTreePanel({
           label: "Copy absolute path",
           onSelect: () =>
             copy(
-              // The daemon may hand back a Windows root; joining with "/"
-              // there would produce a path nothing on that host accepts.
               root === ""
                 ? node.path
                 : root.includes("\\")
@@ -143,8 +121,6 @@ export function FileTreePanel({
   const tree = useMemo(() => buildTree(entries), [entries]);
   const filtered = useMemo(() => filterTree(tree, query), [tree, query]);
 
-  // Reveal the open file: every directory above it starts expanded. Re-runs
-  // when the editor moves to another file, so the tree follows along.
   useEffect(() => {
     setExpanded((current) => {
       const next = new Set(current);
@@ -153,16 +129,12 @@ export function FileTreePanel({
     });
   }, [activePath]);
 
-  // Scroll the revealed file into view once the rows for it exist.
   useEffect(() => {
     activeRowRef.current?.scrollIntoView({ block: "nearest" });
   }, [activePath, entries.length]);
 
   const effectiveExpanded = useMemo(() => {
     if (filtered.expand.size === 0) return expanded;
-    // While filtering, matches are shown regardless of what the user has
-    // collapsed; their own expansion state is preserved for when the query
-    // is cleared.
     return new Set([...expanded, ...filtered.expand]);
   }, [expanded, filtered.expand]);
 
@@ -176,15 +148,10 @@ export function FileTreePanel({
   };
 
   return (
-    // Sits above the toolbar, so the divider goes on the bottom edge to
-    // separate the tree from the file bar beneath it.
     <div
       ref={panelRef}
       style={{
         height,
-        // Rows and the filter row are transparent, so this one declaration
-        // carries the whole panel. The hover and active tints over it are
-        // translucent BB tokens, which composite onto it correctly.
         ...(background === null ? {} : { backgroundColor: background }),
       }}
       className={cn(
@@ -192,19 +159,13 @@ export function FileTreePanel({
         background === null && "bg-surface-recessed",
       )}
     >
-      {/*
-        The tree's own bar, on the same surface token as the file bar below
-        it: the two stack, and reading as one strip of chrome is what keeps
-        the tree's background from looking like a third surface.
-      */}
+      {}
       <div className="flex h-9 shrink-0 items-center gap-1.5 bg-surface-raised px-4">
         <input
           type="text"
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
-            // Escape clears a query first, and closes only once the box is
-            // empty — so it never discards a filter and the panel in one press.
             if (event.key !== "Escape") return;
             event.stopPropagation();
             if (query !== "") setQuery("");
@@ -214,9 +175,6 @@ export function FileTreePanel({
           aria-label="Filter files"
           spellCheck={false}
           className={cn(
-            // A translucent inset rather than an app surface token: the panel
-            // now sits on the editor's background, and an opaque field on it
-            // would be a second, unrelated surface.
             "h-6 min-w-0 flex-1 rounded-sm bg-state-hover px-2 text-sm text-foreground",
             "placeholder:text-muted-foreground",
             "focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-none",
@@ -282,12 +240,6 @@ export function FileTreePanel({
   );
 }
 
-/**
- * The draggable seam between the tree and the editor, in the same idiom as
- * BB's own pane dividers: a hairline that is the border, plus a taller
- * transparent hit target straddling it so the pointer does not have to find
- * one pixel.
- */
 function ResizeHandle({
   onResize,
   onResizeEnd,
@@ -300,7 +252,6 @@ function ResizeHandle({
   const dividerRef = useRef<HTMLDivElement | null>(null);
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
-    // Only the primary button drags; a right-click here opens the app menu.
     if (event.button !== 0) return;
     event.preventDefault();
     const target = event.currentTarget;
@@ -309,8 +260,6 @@ function ResizeHandle({
     const divider = dividerRef.current;
     if (divider !== null) divider.dataset.dragging = "true";
     onResizeStart();
-    // Capture on the hit target so the drag survives the pointer leaving it —
-    // which it does immediately, since the seam moves out from under it.
     target.setPointerCapture(pointerId);
 
     const move = (moveEvent: PointerEvent) => {
@@ -341,8 +290,6 @@ function ResizeHandle({
       aria-orientation="horizontal"
       tabIndex={0}
       onKeyDown={(event) => {
-        // The keyboard path a pointer-only divider owes: same clamping, one
-        // row at a time, so the tree is reachable without a pointer.
         if (event.key === "ArrowUp") onResize(-KEYBOARD_RESIZE_STEP_PX);
         else if (event.key === "ArrowDown") onResize(KEYBOARD_RESIZE_STEP_PX);
         else return;
@@ -364,10 +311,8 @@ function ResizeHandle({
   );
 }
 
-/** One row of the tree, so a keyboard resize moves by something meaningful. */
 const KEYBOARD_RESIZE_STEP_PX = 24;
 
-/** Clipboard write with the same toast treatment as the toolbar's path copy. */
 function copy(text: string, successMessage: string): void {
   void navigator.clipboard
     .writeText(text)

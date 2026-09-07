@@ -76,7 +76,6 @@ describe("renderExistingServerDialogHtml", () => {
     expect(html).toContain('data-choice="connect"');
     expect(html).toContain('data-choice="quit"');
     expect(html).not.toContain('data-choice="replace"');
-    // The warning only makes sense next to a stop button.
     expect(html).not.toContain("agent threads stop too");
   });
 

@@ -111,7 +111,7 @@ describe("usePromptMentions", () => {
     });
     await waitFor(() => {
       expect(result.current.isLoading).toBe(false);
-      expect(result.current.suggestions).toHaveLength(1);
+      expect(result.current.results.suggestions).toHaveLength(1);
     });
   });
 });

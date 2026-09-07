@@ -111,9 +111,6 @@ describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
         hostId: host.id,
         path: "/tmp/seed-without-run-project",
       });
-      // A ready source environment lets the unmanaged workspace reuse it so
-      // provisioning completes synchronously — the point where a normal start
-      // would dispatch a provider run.
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -151,8 +148,6 @@ describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
         },
       });
 
-      // The displayed thread-start turn is attributed to the source agent so it
-      // renders as "Message from {source}".
       const turnRequest = threadStartTurnRequest(harness, fork.id);
       expect(turnRequest.initiator).toBe("agent");
       expect(turnRequest.senderThreadId).toBe(sourceThread.id);
@@ -205,8 +200,6 @@ describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
         providerThreadId: "provider-earlier-source",
         sequence: 5,
       });
-      // The earlier turn's completion names the session that recorded the
-      // checkpoint; the later turn runs in a replacement session.
       seedEvent(harness.deps, {
         threadId: sourceThread.id,
         environmentId: environment.id,
@@ -298,8 +291,6 @@ describe("thread creation with startedOnBehalfOf (seed-without-run)", () => {
       expect(turnRequest.initiator).toBe("user");
       expect(turnRequest.senderThreadId).toBeNull();
 
-      // A normal start dispatches the provider thread.start command once
-      // provisioning advances.
       const queuedStart = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -335,11 +326,9 @@ describe("canThreadSpawnChild", () => {
         parentThreadId: level3.id,
       });
 
-      // Depths 1..3 are below the cap so a new child stays within it.
       expect(canThreadSpawnChild(harness.deps, { thread: root })).toBe(true);
       expect(canThreadSpawnChild(harness.deps, { thread: level2 })).toBe(true);
       expect(canThreadSpawnChild(harness.deps, { thread: level3 })).toBe(true);
-      // Depth 4 is at the cap — no further children allowed.
       expect(canThreadSpawnChild(harness.deps, { thread: level4 })).toBe(false);
     });
   });
@@ -409,8 +398,6 @@ describe("canThreadSpawnChild", () => {
 });
 
 describe("thread creation child-thread boundary validation", () => {
-  // Each case shares one project + ready source environment so the source
-  // thread is live, same-project, and creation resolves an environment.
   async function withChildBoundaryHarness(
     name: string,
     run: (args: {
@@ -656,9 +643,6 @@ describe("thread creation child-thread boundary validation", () => {
     );
   });
 
-  // A side chat is a plain fork now: it does NOT snapshot the source thread's
-  // permission mode, so an explicitly requested mode wins and later source
-  // changes never reach it.
   it.each<PermissionMode>(["accept-edits", "auto", "full"])(
     "keeps the requested permission mode when forking from a %s source",
     async (sourcePermissionMode) => {
@@ -667,7 +651,6 @@ describe("thread creation child-thread boundary validation", () => {
       await withChildBoundaryHarness(
         `side-chat-native-fork-${sourcePermissionMode}`,
         async ({ harness, hostId, path, projectId, sourceThreadId }) => {
-          // Give the source a live provider session so the side chat clones it.
           seedThreadRuntimeState(harness.deps, {
             environmentId:
               getThread(harness.db, sourceThreadId)?.environmentId ?? null,
@@ -696,9 +679,6 @@ describe("thread creation child-thread boundary validation", () => {
             startedOnBehalfOf: null,
           });
 
-          // The fork's thread.start carries the source provider session id so
-          // it clones the full history, AND it still carries the user's
-          // question so that turn runs immediately.
           const queuedStart = await waitForQueuedCommand(
             harness,
             ({ command }) =>
@@ -802,9 +782,6 @@ describe("thread creation child-thread boundary validation", () => {
         expect(persistedSideChat?.originKind).toBe("fork");
         expect(persistedSideChat?.sourceThreadId).toBe(sourceThreadId);
         expect(persistedSideChat?.parentThreadId).toBeNull();
-        // Visibility is the caller's choice now: the side-chat plugin forks
-        // with an explicit `visibility: "hidden"`, and a request that omits it
-        // gets the ordinary visible default.
         expect(persistedSideChat?.visibility).toBe("visible");
       },
     );
@@ -1059,9 +1036,6 @@ describe("thread creation child-thread boundary validation", () => {
         environmentId: environment.id,
         providerId: "acp-amp",
       });
-      // The source has a live provider session, so only the provider mismatch
-      // can block the fork. A provider session ID means nothing to another
-      // provider, so BB must not hand it to a codex agent.
       seedThreadRuntimeState(harness.deps, {
         environmentId: environment.id,
         providerThreadId: "acp-amp-session",
@@ -1093,8 +1067,6 @@ describe("thread creation child-thread boundary validation", () => {
     await withChildBoundaryHarness(
       "fork-no-source-session",
       async ({ harness, hostId, path, projectId, sourceThreadId }) => {
-        // Source has no turn/started ⇒ no provider session to clone. The create
-        // must fail rather than silently dispatch a fresh, history-less start.
         const error = await captureCreateError(() =>
           createThreadFromRequest(harness.deps, {
             environment: {

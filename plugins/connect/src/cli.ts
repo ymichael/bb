@@ -10,12 +10,6 @@ import { parseSharePort } from "./shares.js";
 import type { ConnectTunnel } from "./tunnel.js";
 import type { ConnectStatus } from "./types.js";
 
-// `bb connect` — resolved through the plugin CLI proxy. The dashboard-issued
-// command `npx -p bb-app@latest bb connect --code <code> --server <url>` must
-// keep working verbatim, so the root command takes the pairing flags and
-// `status` / `off` / `expose` / `unexpose` / `shares` / `servers` /
-// `machine-code` are subcommands.
-
 interface ParsedFlags {
   flags: Map<string, string | true>;
 }
@@ -118,11 +112,6 @@ function notPairedError(): string {
   return "this bb is not connected to getbb.app — run `bb connect` for how to pair";
 }
 
-/**
- * Human copy for a failed `machine-code`. The typed code is stable (the panel
- * maps the same codes); the dashboard host is named so the limit message tells
- * the user where to free a slot.
- */
 function machineCodeErrorText(
   error: MachineCodeError,
   dashboardUrl: string,
@@ -391,8 +380,6 @@ export function registerConnectCli(args: {
         });
         const code = stringFlag(parsed, "code");
         if (code === undefined) {
-          // Bare `bb connect` is a how-to, not an argument error: it is a
-          // brand-new user's first command, copied without flags.
           return { exitCode: 0, stdout: `${helpText()}\n` };
         }
         const server = stringFlag(parsed, "server");

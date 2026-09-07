@@ -50,14 +50,11 @@ describe("scheduleDeferredPluginFrontendBoot", () => {
     expect(h.idleCallbacks).toHaveLength(0);
 
     await h.paint();
-    // Painted, but not yet idle: plugin parse/eval must not land in the same
-    // frame as the route's first paint.
     expect(h.boot).not.toHaveBeenCalled();
     expect(h.idleCallbacks).toHaveLength(1);
 
     h.idleCallbacks[0]!();
     expect(h.boot).toHaveBeenCalledTimes(1);
-    // The fallback timer is cleared so it cannot fire boot a second time.
     expect(h.timers.size).toBe(0);
     h.fireTimeout();
     expect(h.boot).toHaveBeenCalledTimes(1);

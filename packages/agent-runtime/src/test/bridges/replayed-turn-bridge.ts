@@ -1,13 +1,3 @@
-/**
- * A bridge that replays a completed turn: every `turn/start` opens its turn,
- * settles it, and then emits `turn.open` for the same provider turn id again
- * — the malformed stream a third-party bridge the conformance kit never ran
- * against could produce. The runtime's live grammar gate (`turn/starts-once`)
- * must drop the replayed `turn/started` before it reaches a consumer.
- *
- * Minimal on purpose: initialize, thread/start, turn/start. Anything else is
- * METHOD_NOT_FOUND.
- */
 import {
   type ThreadDelta,
   BRIDGE_JSON_RPC_ERRORS,
@@ -50,7 +40,6 @@ export function handleLine(line: string): void {
   }
   const inbound = inboundSchema.safeParse(raw);
   if (!inbound.success) {
-    // Responses to requests this bridge never sends, or noise.
     return;
   }
   const { id, method, params } = inbound.data;
@@ -123,7 +112,6 @@ export function handleLine(line: string): void {
         providerTurnId,
       },
       { kind: "turn.boundary", status: "completed", providerTurnId },
-      // The replay: the provider re-announces a turn it already settled.
       { kind: "turn.open", providerTurnId },
     ]);
     return;

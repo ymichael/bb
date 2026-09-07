@@ -25,21 +25,11 @@ export const COARSE_POINTER_GLYPH_BOX_CLASS =
 export const COARSE_POINTER_CHECK_SLOT_CLASS =
   "h-3.5 w-3.5 max-md:pointer-coarse:h-5 max-md:pointer-coarse:w-5";
 
-// Shared box geometry (and thus the pointer/focus hit target) for header icon
-// buttons. The glyph size is layered on separately so a reduced-glyph variant
-// can shrink the artwork without touching the button footprint.
 const HEADER_ICON_BUTTON_BOX_CLASS =
   "h-[28px] w-[28px] rounded-md p-0 max-md:pointer-coarse:h-[36px] max-md:pointer-coarse:w-[36px]";
 
 export const COARSE_POINTER_HEADER_ICON_BUTTON_CLASS = `${HEADER_ICON_BUTTON_BOX_CLASS} [&_svg]:size-[16px] max-md:pointer-coarse:[&_svg]:size-[20px]`;
 
-// Same button box as above, but paints the glyph one optical step smaller.
-// Some glyphs (e.g. the maximize/restore double-arrows, which cover ~66% of the
-// 24px icon grid) read visibly larger than the compact controls they sit beside
-// (the close X covers ~32%) at the shared 16px size. Rendering them at 13px fine
-// / 16px coarse (~0.81x) matches their painted footprint to the sibling
-// controls while keeping the 28/36px hit target identical. Other surfaces
-// already reduce these same glyphs (prompt box 12px, panel collapse 14px).
 export const COARSE_POINTER_HEADER_REDUCED_GLYPH_ICON_BUTTON_CLASS = `${HEADER_ICON_BUTTON_BOX_CLASS} [&_svg]:size-[13px] max-md:pointer-coarse:[&_svg]:size-[16px]`;
 
 export const COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS =

@@ -7,23 +7,22 @@ import {
 import { promptDraftToInput } from "@bb/client-core";
 import type { PromptDraftState } from "@bb/client-core";
 import type { PromptInput } from "@bb/domain";
-import type { InlineQueuedMessageEditState } from "./useInlineQueuedMessageEditing";
+
+export interface InlineComposerDraftSession {
+  editSessionId: number;
+  setDraft: (update: (current: PromptDraftState) => PromptDraftState) => void;
+}
 
 interface UseActiveComposerDraftArgs {
   draftScope: PromptDraftScope;
-  inlineEditingQueuedMessage: InlineQueuedMessageEditState | null;
-  inlineEditingQueuedMessageRef: React.RefObject<InlineQueuedMessageEditState | null>;
-  commitInlineQueuedMessage: (
-    next: InlineQueuedMessageEditState | null,
-  ) => void;
+  inlineDraft: PromptDraftState | null;
+  inlineSessionRef: React.RefObject<InlineComposerDraftSession | null>;
 }
 
 interface UseActiveComposerDraftResult {
   promptDraft: ReturnType<typeof usePromptDraftStorage>;
-  /** The persisted bottom-composer draft, independent of any inline edit. */
   currentPromptDraft: PromptDraftState;
   currentPromptDraftInput: PromptInput[];
-  /** The inline edit draft when present, otherwise the bottom draft. */
   activeComposerDraft: PromptDraftState;
   activeComposerDraftInput: PromptInput[];
   setActiveComposerDraft: (draft: PromptDraftState) => void;
@@ -31,17 +30,10 @@ interface UseActiveComposerDraftResult {
   removeActiveComposerAttachment: (path: string) => void;
 }
 
-/**
- * Exposes the persisted bottom draft plus an active draft view for the inline
- * queued-message editor and the currently published plugin host. Active writes
- * route through the inline-edit ref so back-to-back plugin composer actions in
- * one event observe each other's updates.
- */
 export function useActiveComposerDraft({
   draftScope,
-  inlineEditingQueuedMessage,
-  inlineEditingQueuedMessageRef,
-  commitInlineQueuedMessage,
+  inlineDraft,
+  inlineSessionRef,
 }: UseActiveComposerDraftArgs): UseActiveComposerDraftResult {
   const promptDraft = usePromptDraftStorage(draftScope);
   const setStoredPromptDraft = promptDraft.setDraft;
@@ -60,8 +52,7 @@ export function useActiveComposerDraft({
     () => promptDraftToInput(currentPromptDraft),
     [currentPromptDraft],
   );
-  const activeComposerDraft =
-    inlineEditingQueuedMessage?.draft ?? currentPromptDraft;
+  const activeComposerDraft = inlineDraft ?? currentPromptDraft;
   const activeComposerDraftInput = useMemo(
     () => promptDraftToInput(activeComposerDraft),
     [activeComposerDraft],
@@ -69,59 +60,41 @@ export function useActiveComposerDraft({
 
   const setActiveComposerDraft = useCallback(
     (draft: PromptDraftState) => {
-      const current = inlineEditingQueuedMessageRef.current;
+      const current = inlineSessionRef.current;
       if (current) {
-        commitInlineQueuedMessage({ ...current, draft });
+        current.setDraft(() => draft);
         return;
       }
       setStoredPromptDraft(draft);
     },
-    [
-      commitInlineQueuedMessage,
-      inlineEditingQueuedMessageRef,
-      setStoredPromptDraft,
-    ],
+    [inlineSessionRef, setStoredPromptDraft],
   );
   const handleChangeMessage = useCallback(
     (text: string, mentions: PromptTextMention[]) => {
-      const current = inlineEditingQueuedMessageRef.current;
+      const current = inlineSessionRef.current;
       if (current) {
-        commitInlineQueuedMessage({
-          ...current,
-          draft: { ...current.draft, mentions, text },
-        });
+        current.setDraft((draft) => ({ ...draft, mentions, text }));
         return;
       }
       setStoredPromptTextAndMentions(text, mentions);
     },
-    [
-      commitInlineQueuedMessage,
-      inlineEditingQueuedMessageRef,
-      setStoredPromptTextAndMentions,
-    ],
+    [inlineSessionRef, setStoredPromptTextAndMentions],
   );
   const removeActiveComposerAttachment = useCallback(
     (path: string) => {
-      const current = inlineEditingQueuedMessageRef.current;
+      const current = inlineSessionRef.current;
       if (current) {
-        commitInlineQueuedMessage({
-          ...current,
-          draft: {
-            ...current.draft,
-            attachments: current.draft.attachments.filter(
-              (attachment) => attachment.path !== path,
-            ),
-          },
-        });
+        current.setDraft((draft) => ({
+          ...draft,
+          attachments: draft.attachments.filter(
+            (attachment) => attachment.path !== path,
+          ),
+        }));
         return;
       }
       removeStoredPromptAttachment(path);
     },
-    [
-      commitInlineQueuedMessage,
-      inlineEditingQueuedMessageRef,
-      removeStoredPromptAttachment,
-    ],
+    [inlineSessionRef, removeStoredPromptAttachment],
   );
 
   return {

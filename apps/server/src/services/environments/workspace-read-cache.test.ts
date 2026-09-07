@@ -121,7 +121,6 @@ describe("EnvironmentReadCache", () => {
     const stale = cache.read({ ...READ, load: counter.load });
     cache.invalidateEnvironment("env-1");
 
-    // A reader arriving after the change must not join the pre-change probe.
     const fresh = cache.read({ ...READ, load: counter.load });
     expect(counter.loads).toHaveLength(2);
 
@@ -130,7 +129,6 @@ describe("EnvironmentReadCache", () => {
     await expect(stale).resolves.toBe("pre-change");
     await expect(fresh).resolves.toBe("post-change");
 
-    // The detached probe's late completion must not overwrite the cache.
     await expect(cache.read({ ...READ, load: counter.load })).resolves.toBe(
       "post-change",
     );
@@ -226,8 +224,6 @@ describe("WorkspaceReadCaches", () => {
     const caches = new WorkspaceReadCaches({ hub, now: () => 0 });
     const primed = await primeBoth(caches);
 
-    // The status probe records the observed branch (metadata-changed) while
-    // it is still in flight; that must not detach the probe.
     hub.emit({
       type: "changed",
       entity: "environment",

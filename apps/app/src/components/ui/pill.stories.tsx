@@ -12,10 +12,6 @@ const variants: readonly PillVariant[] = [
   "emphasis",
 ];
 
-// Lowercase, single-token labels — matching the status/type tags pills carry in
-// the app (the workflow-run status enum is all lowercase: queued/running/failed/
-// …; thread-type pills are child/fork/side chat). Descriptive multi-word labels
-// (e.g. "Invalid local path") stay sentence case.
 const VARIANT_CONTENT: Record<PillVariant, string> = {
   secondary: "managed",
   destructive: "failed",

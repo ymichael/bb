@@ -5,10 +5,6 @@ import { atomFamily } from "jotai-family";
 import { z } from "zod";
 import { createLocalStorageSyncStorage } from "./browser-storage";
 
-// Per-thread "recently visited" list for the browser new-tab screen. Kept in
-// localStorage (there is no server user-settings store) and capped; deduped by
-// URL so revisiting a page moves it to the front rather than duplicating it.
-
 const BROWSER_HISTORY_STORAGE_PREFIX = "bb.thread.browserHistory";
 const BROWSER_HISTORY_STORAGE_VERSION = "1";
 const BROWSER_HISTORY_MAX_ENTRIES = 24;
@@ -60,8 +56,9 @@ export function getBrowserHistoryStorageKey(threadId: string): string {
   )}-${BROWSER_HISTORY_STORAGE_VERSION}`;
 }
 
-const disabledBrowserHistoryAtom =
-  atom<readonly BrowserHistoryEntry[]>(EMPTY_BROWSER_HISTORY);
+const disabledBrowserHistoryAtom = atom<readonly BrowserHistoryEntry[]>(
+  EMPTY_BROWSER_HISTORY,
+);
 
 const browserHistoryAtomFamily = atomFamily((threadId: string) =>
   atomWithStorage<readonly BrowserHistoryEntry[]>(
@@ -98,7 +95,10 @@ export function useBrowserHistory(
           visitedAt: Date.now(),
         };
         const withoutDuplicate = current.filter((entry) => entry.url !== url);
-        return [next, ...withoutDuplicate].slice(0, BROWSER_HISTORY_MAX_ENTRIES);
+        return [next, ...withoutDuplicate].slice(
+          0,
+          BROWSER_HISTORY_MAX_ENTRIES,
+        );
       });
     },
     [setEntries],

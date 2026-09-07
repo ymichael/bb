@@ -32,19 +32,22 @@ upgrade, failed to load, or missing); run `bb plugin list` for the detail.
 All commands support --json for machine-readable output.
 
 To make a repo work with bb worktrees, run `bb guide environments` for the
-repo-level `.bb-env-setup.sh` setup hook. Run `bb guide agent-configuration` for
-the data-dir and workspace files that customize agent behavior.
+repo-level `.bb-env-setup.sh` and `.bb-env-teardown.sh` hooks. Run `bb guide
+agent-configuration` for the data-dir and workspace files that customize agent
+behavior.
 
 Run `bb guide <chapter>` for command details:
 
   threads              Spawning, inspecting, messaging, and managing threads
-  environments         Environment setup hooks, operations, commits, and merges
+  environments         Environment lifecycle hooks, operations, commits, and merges
   agent-configuration  AGENTS.md and skills files that shape agents
   providers            Discovering providers and models
   projects             Project CRUD and sources
   machines             Listing and targeting execution machines
   terminals            Persistent PTY sessions across all supported scopes
-  customization        Theming the app palette
+  browser              Experimental built-in browser tabs and control leases
+  customization        Theming the app palette, settings, mobile push
+                       notifications
   plugins              Installing plugins, plugin marketplaces, and their
                        contributed bb commands
   automations          Scheduling and editing recurring or one-shot work

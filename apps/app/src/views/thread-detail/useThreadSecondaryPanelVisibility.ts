@@ -13,7 +13,6 @@ type ThreadSecondaryPanelOpenHandler = (panel: ThreadSecondaryPanel) => void;
 type ThreadSecondaryPanelDiffFileOpenHandler = (path: string) => void;
 type ThreadSecondaryPanelCommitDiffOpenHandler = (sha: string) => void;
 export interface ThreadSecondaryPanelFileOpenOptions {
-  /** Per-open viewer choice (link context menu); absent = extension default. */
   viewer?: FileOpenerOverride;
 }
 export type ThreadSecondaryPanelWorkspaceFileOpenHandler = (

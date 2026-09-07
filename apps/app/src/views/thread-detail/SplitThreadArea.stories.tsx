@@ -9,6 +9,10 @@ import { createStore, Provider as JotaiProvider } from "jotai";
 import { makeThread } from "../../../.ladle/story-fixtures";
 import { conversationRow } from "@/test/fixtures/thread-timeline-rows";
 import {
+  makeThreadResponse,
+  makeThreadTimelineResponse,
+} from "@/test/fixtures/thread-responses";
+import {
   threadDetailBootstrapQueryKey,
   threadQueryKey,
   threadTimelineQueryKey,
@@ -29,7 +33,7 @@ const ACTIVE_THREAD_ID = "thr_split_active";
 const MENTIONED_THREAD_ID = "thr_dcwivn5n8w";
 
 function storyThread(id: string, title: string): ThreadResponse {
-  return {
+  return makeThreadResponse({
     ...makeThread({
       id,
       projectId: PROJECT_ID,
@@ -37,13 +41,8 @@ function storyThread(id: string, title: string): ThreadResponse {
       title,
       titleFallback: title,
     }),
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-    activeBackgroundAgentCount: 0,
     canSpawnChild: false,
-  };
+  });
 }
 
 const idleThread = storyThread(IDLE_THREAD_ID, "Fix Thread Drag Sync");
@@ -72,7 +71,7 @@ function storyTimeline(
     timeUsedSeconds: 185,
   };
 
-  return {
+  return makeThreadTimelineResponse({
     rows: [
       conversationRow({
         id: `${threadId}:user:1`,
@@ -93,13 +92,7 @@ function storyTimeline(
         }),
       ),
     ],
-    activePromptMode: null,
-    activeThinking: null,
-    activeWorkflows: [],
-    activeBackgroundCommands: [],
-    pendingTodos: null,
     goal,
-    modelFallback: null,
     maxSeq: goal.sourceSeq,
     timelinePage: {
       kind: "latest",
@@ -108,7 +101,7 @@ function storyTimeline(
       hasOlderRows: false,
       olderCursor: null,
     },
-  };
+  });
 }
 
 const idleTimeline = storyTimeline(

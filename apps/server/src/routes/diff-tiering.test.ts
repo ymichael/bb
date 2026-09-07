@@ -148,8 +148,9 @@ describe("selectInitialPatchPaths", () => {
   });
 
   it("includes a diff at exactly the inline-patch file ceiling", () => {
-    const files = Array.from({ length: DIFF_FILES_INLINE_PATCH_MAX_FILES }, (_, i) =>
-      makeEntry({ path: `f${i}.ts`, loadMode: "auto" }),
+    const files = Array.from(
+      { length: DIFF_FILES_INLINE_PATCH_MAX_FILES },
+      (_, i) => makeEntry({ path: `f${i}.ts`, loadMode: "auto" }),
     );
     expect(selectInitialPatchPaths(files)).toHaveLength(
       DIFF_FILES_INLINE_PATCH_MAX_FILES,

@@ -24,7 +24,6 @@ import {
 import { AppCommandProvider } from "@/components/commands/AppCommandProvider";
 import { BrowserTabContent } from "./BrowserTabContent";
 
-// A control-key chord so the test does not depend on jsdom platform detection.
 const FIND_KEYBINDING = {
   command: "browser.find" as const,
   desktopOnly: true,
@@ -272,7 +271,6 @@ describe("BrowserTabContent find in page", () => {
 
     act(() => harness.emitState(browserState({ isLoading: true })));
     expect(screen.queryByTestId("browser-find-match-count")).toBeNull();
-    // The bar stays open with its query; only the count is gone.
     expect(findInput().value).toBe("needle");
   });
 

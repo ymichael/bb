@@ -1,14 +1,11 @@
-import {
-  appToast,
-  AppToastContent,
-  type AppToastOptions,
-  type AppToastTone,
-} from "./app-toast";
+import { appToast, AppToastContent, type AppToastTone } from "./app-toast";
 import { AppToastCommitDescription } from "./app-toast-descriptions";
-import { ArchivedThreadToastTitle } from "../thread/ArchivedThreadToastTitle";
+import { ArchivedThreadToastDescription } from "../thread/ArchivedThreadToastDescription";
+import { pluginNotificationDescription } from "../plugin/PluginNotificationDescription";
 import { Button } from "@bb/shared-ui/button";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { toast as sonnerToast } from "sonner";
 
 export default {
   title: "Toasts",
@@ -28,12 +25,16 @@ interface ToastExample {
 interface CurrentToast {
   title: ReactNode;
   description?: ReactNode;
+  dismissible?: boolean;
   tone: ToastTone;
+  primaryAction?: () => void;
   primaryActionLabel?: string;
+  secondaryAction?: () => void;
   secondaryActionLabel?: string;
 }
 
 interface CurrentToastPreviewProps {
+  onDismiss?: () => void;
   toast: CurrentToast;
 }
 
@@ -53,9 +54,6 @@ interface GitSuccessDescriptionParams {
 const LIVE_TOAST_DURATION = Infinity;
 const GIT_SUCCESS_COMMIT_SHA = "e547e81c0ffee1234567890abcdef123456789";
 const GIT_SUCCESS_COMMIT_SUBJECT = "Update provider CLI health toasts";
-const SQUASH_MERGE_SUCCESS_COMMIT_SHA =
-  "a83f4d2b055e5eed1234567890abcdef1234567";
-const SQUASH_MERGE_SUCCESS_COMMIT_SUBJECT = "Merge toast UX fixes";
 
 function gitSuccessDescription({
   commitSha,
@@ -79,7 +77,7 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     current: {
       tone: "message",
       title: "Claude Code update queued",
-      description: "Waiting for the current install or update to finish.",
+      description: "Starts after the current update.",
     },
   },
   {
@@ -110,6 +108,62 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     },
   },
   {
+    id: "plugin-update-failed",
+    group: "Plugin management",
+    label: "update failed",
+    source: "UpdatePluginDialog / PluginUpdatesCard",
+    usage: [
+      "Plugin update fails",
+      "Plugin name opens its installed detail page",
+    ],
+    current: {
+      tone: "error",
+      title: "Plugin update failed",
+      description: pluginNotificationDescription(
+        { id: "usage", name: "Usage" },
+        "installed",
+        "bb connect: timed out waiting for the tunnel client.",
+      ),
+    },
+  },
+  {
+    id: "plugin-updated",
+    group: "Plugin management",
+    label: "update success",
+    source: "UpdatePluginDialog / PluginUpdatesCard",
+    usage: [
+      "Plugin update succeeds",
+      "Plugin name opens its installed detail page",
+    ],
+    current: {
+      tone: "success",
+      title: "Plugin updated",
+      description: pluginNotificationDescription(
+        { id: "usage", name: "Usage" },
+        "installed",
+        "Now running 1.4.0.",
+      ),
+    },
+  },
+  {
+    id: "plugin-installed",
+    group: "Plugin management",
+    label: "install success",
+    source: "AddPluginDialog",
+    usage: [
+      "Plugin install succeeds",
+      "Plugin name opens its installed detail page",
+    ],
+    current: {
+      tone: "success",
+      title: "Plugin installed",
+      description: pluginNotificationDescription(
+        { id: "linear", name: "Linear" },
+        "installed",
+      ),
+    },
+  },
+  {
     id: "git-loading",
     group: "Git actions",
     label: "git loading",
@@ -136,21 +190,6 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     },
   },
   {
-    id: "git-squash-merge-success",
-    group: "Git actions",
-    label: "squash merge success",
-    source: "useThreadGitActions",
-    usage: ["Squash merge action succeeds"],
-    current: {
-      tone: "success",
-      title: "Squash merge completed",
-      description: gitSuccessDescription({
-        commitSha: SQUASH_MERGE_SUCCESS_COMMIT_SHA,
-        commitSubject: SQUASH_MERGE_SUCCESS_COMMIT_SUBJECT,
-      }),
-    },
-  },
-  {
     id: "git-error",
     group: "Git actions",
     label: "git error",
@@ -167,16 +206,18 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     group: "Thread actions",
     label: "archive success",
     source: "ThreadActionsProvider",
-    usage: ["Thread archive succeeds", "Title opens the archived thread"],
+    usage: ["Thread archive succeeds", "Thread name opens the archived thread"],
     current: {
       tone: "success",
-      title: (
-        <ArchivedThreadToastTitle
+      title: "Thread Archived",
+      description: (
+        <ArchivedThreadToastDescription
           archivedThreadCount={1}
           threadTitle="Audit recurring permission failures"
           onOpenThread={() => undefined}
         />
       ),
+      secondaryActionLabel: "Undo",
     },
   },
   {
@@ -190,13 +231,15 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     ],
     current: {
       tone: "success",
-      title: (
-        <ArchivedThreadToastTitle
+      title: "Thread Archived",
+      description: (
+        <ArchivedThreadToastDescription
           archivedThreadCount={3}
           threadTitle="Investigate intermittent provider CLI health check timeouts on managed environments"
           onOpenThread={() => undefined}
         />
       ),
+      secondaryActionLabel: "Undo",
     },
   },
   {
@@ -267,7 +310,8 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     current: {
       tone: "message",
       title: "Opening in editor",
-      description: "apps/app/src/components/settings/UpdatesSettingsSection.tsx",
+      description:
+        "apps/app/src/components/settings/UpdatesSettingsSection.tsx",
     },
   },
   {
@@ -286,7 +330,10 @@ const TOAST_EXAMPLES: readonly ToastExample[] = [
     group: "Clipboard",
     label: "copy error",
     source: "copyToClipboardWithToast",
-    usage: ["Clipboard unavailable or write fails", "Default unless overridden"],
+    usage: [
+      "Clipboard unavailable or write fails",
+      "Default unless overridden",
+    ],
     current: {
       tone: "error",
       title: "Failed to copy",
@@ -330,53 +377,23 @@ function toastCatalogId(example: ToastExample): string {
   return `toast-catalog:${example.id}`;
 }
 
-function buildLiveToastOptions(example: ToastExample): AppToastOptions {
+function showToastExample(example: ToastExample): void {
   const id = toastCatalogId(example);
   const { current } = example;
-  const options: AppToastOptions = {
-    id,
-    duration: LIVE_TOAST_DURATION,
-  };
-
-  if (current.description !== undefined) {
-    options.description = current.description;
-  }
-  if (current.secondaryActionLabel) {
-    options.cancel = {
-      label: current.secondaryActionLabel,
-      onClick: () => appToast.dismiss(id),
-    };
-  }
-  if (current.primaryActionLabel) {
-    options.action = {
-      label: current.primaryActionLabel,
-      onClick: () => appToast.dismiss(id),
-    };
-  }
-
-  return options;
-}
-
-function showToastExample(example: ToastExample): void {
-  const { current } = example;
-  const options = buildLiveToastOptions(example);
-  switch (current.tone) {
-    case "success":
-      appToast.success(current.title, options);
-      return;
-    case "warning":
-      appToast.warning(current.title, options);
-      return;
-    case "error":
-      appToast.error(current.title, options);
-      return;
-    case "loading":
-      appToast.loading(current.title, options);
-      return;
-    case "message":
-      appToast.message(current.title, options);
-      return;
-  }
+  sonnerToast.custom(
+    () => (
+      <CurrentToastPreview
+        toast={current}
+        onDismiss={() => sonnerToast.dismiss(id)}
+      />
+    ),
+    {
+      className: "bb-app-toast",
+      dismissible: current.dismissible ?? true,
+      duration: LIVE_TOAST_DURATION,
+      id,
+    },
+  );
 }
 
 function showAllToastExamples(): void {
@@ -386,14 +403,28 @@ function showAllToastExamples(): void {
   }
 }
 
-function CurrentToastPreview({ toast }: CurrentToastPreviewProps) {
+function CurrentToastPreview({ onDismiss, toast }: CurrentToastPreviewProps) {
+  const [visible, setVisible] = useState(true);
+
+  if (!visible) {
+    return null;
+  }
+
+  const dismiss = () => {
+    setVisible(false);
+    onDismiss?.();
+  };
+
   return (
     <AppToastContent
       action={
         toast.primaryActionLabel
           ? {
               label: toast.primaryActionLabel,
-              onClick: () => undefined,
+              onClick: () => {
+                toast.primaryAction?.();
+                dismiss();
+              },
             }
           : undefined
       }
@@ -401,11 +432,16 @@ function CurrentToastPreview({ toast }: CurrentToastPreviewProps) {
         toast.secondaryActionLabel
           ? {
               label: toast.secondaryActionLabel,
-              onClick: () => undefined,
+              onClick: () => {
+                toast.secondaryAction?.();
+                dismiss();
+              },
             }
           : undefined
       }
       description={toast.description}
+      dismissible={toast.dismissible}
+      onDismiss={dismiss}
       title={toast.title}
       tone={toast.tone}
     />

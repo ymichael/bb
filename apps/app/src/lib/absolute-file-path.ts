@@ -113,10 +113,6 @@ export function resolveAbsoluteFilePath({
   return buildAbsoluteFilePath({ path, rootPath });
 }
 
-/**
- * Parent directory of an absolute path, used as the base for resolving relative
- * links inside a previewed file. Returns the filesystem root for top-level paths.
- */
 export function getAbsoluteDirname({ path }: GetAbsoluteDirnameArgs): string {
   const trimmed = trimTrailingSlash(path);
   const lastSlashIndex = trimmed.lastIndexOf("/");

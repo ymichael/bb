@@ -1,8 +1,3 @@
-/**
- * Applies an opacity to a theme token (`#rrggbb`, `#rrggbbaa`, `#rgb`, or
- * `rgb()/rgba()`), the RN stand-in for Tailwind's `bg-muted/70`. Unknown
- * formats are returned unchanged.
- */
 export function withAlpha(color: string, alpha: number): string {
   const clamped = Math.min(1, Math.max(0, alpha));
   const hex = /^#([0-9a-f]{3,8})$/iu.exec(color.trim());
@@ -38,12 +33,6 @@ export function withAlpha(color: string, alpha: number): string {
   return color;
 }
 
-/**
- * The opaque color of `overlay` at `alpha` composited onto `base` (both
- * `#rgb[a]` / `#rrggbb[aa]` / `rgb[a]()`), for chrome that must match a
- * translucent scrim drawn elsewhere (the navigator header above a dimmed
- * screen). Falls back to `base` when a color cannot be parsed.
- */
 export function blendOver(
   base: string,
   overlay: string,

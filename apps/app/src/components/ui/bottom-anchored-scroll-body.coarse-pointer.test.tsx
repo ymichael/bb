@@ -6,12 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BottomAnchoredScrollBody } from "@/components/ui/bottom-anchored-scroll-body";
 import { threadTimelineScrollAnchorAtomFamily } from "@/lib/thread-timeline-scroll-anchor";
 
-// Per-scroll-event costs on coarse pointers: the transient-scrollbar attribute
-// is written once per scroll burst (the at-rest `.thread-scrollbar` rules hide
-// the thumb on every platform, so a touch flick still has to flip it), the
-// scroll-anchor capture throttle relaxes to the coarse cadence, and captures
-// reuse a cached row NodeList that the ResizeObserver invalidates.
-
 interface ScrollMetrics {
   scrollHeight: number;
   clientHeight: number;
@@ -156,11 +150,6 @@ describe("BottomAnchoredScrollBody on coarse pointers", () => {
       attributeFilter: ["data-scrollbar-scrolling"],
     });
 
-    // `.thread-scrollbar` paints the thumb transparent at rest on every
-    // platform, and Android Chrome / iOS apply `scrollbar-color` to their
-    // overlay indicators, so a touch flick still has to flip the attribute —
-    // once per burst: the steady-state events must not re-set it, since each
-    // attribute write is a style invalidation while the browser is scrolling.
     for (let scrollTop = 10; scrollTop <= 50; scrollTop += 10) {
       scrollArea.scrollTop = scrollTop;
       fireEvent.scroll(scrollArea);
@@ -168,7 +157,6 @@ describe("BottomAnchoredScrollBody on coarse pointers", () => {
     expect(scrollArea.getAttribute("data-scrollbar-scrolling")).toBe("true");
     expect(attributeWrites.takeRecords()).toHaveLength(1);
 
-    // The thumb hides again once scrolling goes idle.
     vi.runAllTimers();
     expect(scrollArea.hasAttribute("data-scrollbar-scrolling")).toBe(false);
     attributeWrites.disconnect();
@@ -176,14 +164,9 @@ describe("BottomAnchoredScrollBody on coarse pointers", () => {
 
   it("captures scroll anchors at the relaxed coarse cadence", () => {
     stubMediaQueries(new Set(["(pointer: coarse)"]));
-    // Fake performance.now so the throttle windows below are deterministic.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     const { scrollArea } = renderTimeline("coarse-thread", ["row-a"]);
 
-    // Move the clock past the throttle window so the first capture writes
-    // immediately, leaving the throttle's lastWriteAt equal to now. (Running
-    // pending timers instead would also fire the scrollbar idle timeout and
-    // advance the clock 600ms past that write.)
     vi.advanceTimersByTime(1_000);
     fireEvent.scroll(scrollArea);
     expect(readAnchor("coarse-thread")).not.toBeNull();
@@ -192,18 +175,13 @@ describe("BottomAnchoredScrollBody on coarse pointers", () => {
       null,
     );
 
-    // A capture 50ms into the window arms a trailing write for the remainder
-    // of the coarse throttle: 250 - 50 = 200ms out.
     vi.advanceTimersByTime(50);
     fireEvent.scroll(scrollArea);
     expect(readAnchor("coarse-thread")).toBeNull();
 
-    // The fine-pointer cadence (100ms window → 50ms remainder) must not fire
-    // on a coarse pointer...
     vi.advanceTimersByTime(199);
     expect(readAnchor("coarse-thread")).toBeNull();
 
-    // ...but the trailing write still records the resting position at 250ms.
     vi.advanceTimersByTime(1);
     expect(readAnchor("coarse-thread")).toEqual({
       rowId: "",
@@ -241,8 +219,6 @@ describe("BottomAnchoredScrollBody row NodeList cache", () => {
     });
     const queryRows = vi.spyOn(scrollArea, "querySelectorAll");
 
-    // Move the clock past the throttle window so every capture below writes
-    // immediately instead of arming a trailing timeout.
     vi.advanceTimersByTime(1_000);
     scrollArea.scrollTop = 150;
     fireEvent.wheel(scrollArea);
@@ -254,14 +230,11 @@ describe("BottomAnchoredScrollBody row NodeList cache", () => {
     });
     expect(queryRows).toHaveBeenCalledTimes(1);
 
-    // A second capture in the same layout reuses the cached NodeList.
     vi.advanceTimersByTime(200);
     scrollArea.scrollTop = 140;
     fireEvent.scroll(scrollArea);
     expect(queryRows).toHaveBeenCalledTimes(1);
 
-    // A ResizeObserver delivery means rows may have mounted or unmounted;
-    // the next capture queries fresh.
     getLatestResizeObserver().trigger();
     vi.advanceTimersByTime(200);
     scrollArea.scrollTop = 130;

@@ -58,10 +58,6 @@ export function ThreadTerminalContent({
   onOpenLink,
   onSelectionAddToChat,
 }: ThreadTerminalContentProps) {
-  // Keep the terminal UI entirely unmounted until its panel is shown: mounting
-  // ThreadTerminalView initializes xterm and its socket. Once mounted, a
-  // hidden-but-persisted panel (compact drawer closed) keeps it alive so the
-  // next open does not re-create xterm and replay the scrollback.
   if (!controller.shouldMountTerminalView) {
     return null;
   }

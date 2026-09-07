@@ -15,7 +15,7 @@ const gitReservedBranchNames = new Set([
   "REVERT_HEAD",
 ]);
 
-function isValidGitBranchName(name: GitBranchNameCandidate) {
+export function isValidGitBranchName(name: GitBranchNameCandidate) {
   const components = name.split("/");
   return (
     name.length > 0 &&
@@ -107,28 +107,27 @@ const defaultBranchRelationSchema = z.enum([
   "diverged",
   "unknown",
 ]);
-export type DefaultBranchRelation = z.infer<
-  typeof defaultBranchRelationSchema
->;
+export type DefaultBranchRelation = z.infer<typeof defaultBranchRelationSchema>;
 
-export const projectSourceCheckoutSchema = z.object({
-  /** Local branches under refs/heads, safe for checkout and write targets. */
-  branches: z.array(z.string()),
-  branchesTruncated: z.boolean(),
+export const gitSourceInspectionSchema = z.object({
   checkout: gitCheckoutRefSchema,
   defaultBranch: z.string().min(1).nullable(),
   defaultBranchRelation: defaultBranchRelationSchema.nullable(),
   hasUncommittedChanges: z.boolean(),
   operation: workspaceGitOperationSchema,
   originDefaultBranch: z.string().min(1).nullable(),
-  /** Remote-tracking branches under refs/remotes, for base/diff selection. */
+});
+export type GitSourceInspection = z.infer<typeof gitSourceInspectionSchema>;
+
+export const gitBranchOptionsSchema = z.object({
+  branches: z.array(z.string()),
+  branchesTruncated: z.boolean(),
   remoteBranches: z.array(z.string()),
   remoteBranchesTruncated: z.boolean(),
-  /**
-   * Exact classification of the requested branch/ref, resolved before branch
-   * list pagination so callers can validate selected refs even when they are
-   * not present in the current page.
-   */
   selectedBranch: gitBranchRefClassificationSchema.nullable(),
 });
+
+export const projectSourceCheckoutSchema = gitSourceInspectionSchema.extend(
+  gitBranchOptionsSchema.shape,
+);
 export type ProjectSourceCheckout = z.infer<typeof projectSourceCheckoutSchema>;

@@ -1,53 +1,3 @@
-// Stub bb connect apex + gate for the mobile app's Maestro flows.
-//
-// The real topology is `https://getbb.app` (apex: redeems pairing codes) and
-// `https://<handle>.getbb.app` (gate: mints the desktop-session cookie, lists
-// the account's servers, and proxies everything else to the bb server behind
-// the tunnel only when a session cookie is present). This stub plays both on
-// one TLS port in front of the harness backend (`e2e:mobile-backend`):
-//
-//   apex   https://localhost:<port>           POST /api/connect/redeem-machine
-//   gate   https://<handle>.localhost:<port>  POST /api/connect/desktop-session
-//                                             GET  /api/connect/servers
-//                                             everything else → upstream bb
-//                                             (HTTP + WebSocket), 401 HTML
-//                                             sign-in page without a session
-//
-// TLS is required: iOS App Transport Security refuses plain http to a
-// qualified hostname and `@bb/connect-client` insists that the server lives
-// under the apex (`<label>.<apex-host>`), which rules out bare IPs. The stub
-// generates a local CA + leaf certificate with the `openssl` CLI under
-// `~/.bb-mobile-e2e/connect-stub-certs` (once) and prints the `xcrun simctl
-// keychain … add-root-cert` command that makes a simulator trust it; set
-// `BB_MOBILE_E2E_SIMULATOR=<udid|booted>` to run that command on start.
-// macOS and the iOS Simulator resolve `*.localhost` to loopback.
-//
-// Control endpoints (no auth, for flows; also served over plain HTTP on
-// 127.0.0.1:<control port> so curl / Maestro `runScript` need no CA):
-//   GET  /__stub/state            counters + live sessions/machines
-//   POST /__stub/expire-session   every session cookie stops working and live
-//                                 sockets are closed; the credential still
-//                                 mints new sessions (the app self-heals)
-//   POST /__stub/revoke-machine   credentials + sessions are revoked and
-//                                 sockets closed; re-minting fails with 401
-//                                 (the app shows "needs to be paired again")
-//   POST /__stub/reset            back to the initial state
-//
-// Pairing codes: `BB_MOBILE_E2E_CONNECT_CODE` (default STUB-PAIR) can be
-// redeemed any number of times (each redeem mints a fresh credential), so a
-// flow can re-pair after a revoke. Sentinel codes reproduce the apex's error
-// answers: EXPIRED-CODE (410), USED-CODE (409 already-used), LIMIT-CODE
-// (409 machine-limit); anything else is 404 invalid-code.
-//
-// Env: BB_MOBILE_E2E_GATE_PORT (42998), BB_MOBILE_E2E_STUB_CONTROL_PORT
-// (42997), BB_MOBILE_E2E_STUB_LOG=1 (one line per gate request), BB_MOBILE_E2E_UPSTREAM_URL
-// (http://127.0.0.1:${BB_MOBILE_E2E_PORT ?? 41999}), BB_MOBILE_E2E_STUB_HANDLE
-// (stub), BB_MOBILE_E2E_CONNECT_CODE (STUB-PAIR), BB_MOBILE_E2E_SESSION_TTL_MS
-// (3600000), BB_MOBILE_E2E_STUB_CERT_DIR, BB_MOBILE_E2E_SIMULATOR.
-//
-// Usage (from the repo root):
-//   pnpm --filter @bb/integration-tests e2e:mobile-backend
-//   pnpm --filter @bb/integration-tests e2e:mobile-connect-stub
 import { execFileSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -65,8 +15,6 @@ const DEFAULT_CODE = "STUB-PAIR";
 const DEFAULT_HANDLE = "stub";
 const OTHER_HANDLE = "other";
 const DEFAULT_SESSION_TTL_MS = 60 * 60 * 1000;
-// Same names as the real gate (apps/connect/src/cloud-dev.ts). `__Secure-`
-// requires the Secure flag, which the stub can honor because it speaks TLS.
 const DESKTOP_SESSION_COOKIE = "__Secure-bb-connect.desktop_session";
 const MACHINE_CREDENTIAL_HEADER = "x-bb-connect-machine";
 const GATE_AUTH_HEADER = "x-bb-gate-auth";
@@ -127,10 +75,6 @@ const apexUrl = `https://localhost:${gatePort}`;
 const serverUrl = `https://${handle}.localhost:${gatePort}`;
 const otherServerUrl = `https://${OTHER_HANDLE}.localhost:${gatePort}`;
 const cookieDomain = process.env.BB_MOBILE_E2E_COOKIE_DOMAIN ?? ".localhost";
-
-// ---------------------------------------------------------------------------
-// Certificates
-// ---------------------------------------------------------------------------
 
 interface TlsMaterial {
   key: Buffer;
@@ -253,10 +197,6 @@ function installRootCertificate(simulator: string, caPath: string): void {
   }
 }
 
-// ---------------------------------------------------------------------------
-// State
-// ---------------------------------------------------------------------------
-
 interface Machine {
   id: string;
   credential: string;
@@ -271,8 +211,8 @@ interface Session {
   invalidatedAt: number | null;
 }
 
-const machines = new Map<string, Machine>(); // by credential
-const sessions = new Map<string, Session>(); // by cookie value
+const machines = new Map<string, Machine>();
+const sessions = new Map<string, Session>();
 const liveSockets = new Set<Duplex>();
 const counters = {
   redeems: 0,
@@ -290,7 +230,6 @@ function now(): number {
 
 const verbose = process.env.BB_MOBILE_E2E_STUB_LOG === "1";
 
-/** One line per request/upgrade when BB_MOBILE_E2E_STUB_LOG=1. */
 function trace(line: string): void {
   if (verbose) process.stderr.write(`connect-stub: ${line}\n`);
 }
@@ -350,10 +289,6 @@ function revokeMachines(): number {
   return count;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function parseCookie(header: string | undefined, name: string): string | null {
   if (!header) return null;
   for (const part of header.split(";")) {
@@ -369,8 +304,6 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
 }
 
 function signInPage(label: string, url: string): string {
-  // Shape of apps/connect/src/worker.ts `signInPage`: HTML, regardless of
-  // Accept, linking to the account app.
   return `<!doctype html><html><head><meta charset="utf-8"><title>Sign in · ${label}</title></head><body><h1>Sign in to bb connect</h1><p>You need a session to reach <code>${label}</code>.</p><p><a href="${apexUrl}/dashboard?returnTo=${encodeURIComponent(url)}">Sign in</a></p></body></html>`;
 }
 
@@ -396,13 +329,6 @@ function headerValue(value: string | string[] | undefined): string | null {
   return value ?? null;
 }
 
-/**
- * Headers forwarded upstream: visitor-supplied gate headers are stripped, and
- * like the tunnel client (`@bb/tunnel-client` `headersForLoopbackRequest`)
- * an `Origin` equal to the public gate origin is rewritten to the loopback
- * origin so the bb server's browser-origin guard accepts the request (React
- * Native's WebSocket sends `Origin: https://<gate host>`).
- */
 function upstreamHeaders(
   req: http.IncomingMessage,
   auth: "session" | "machine",
@@ -429,10 +355,6 @@ function upstreamHeaders(
   if (machineId) headers[GATE_MACHINE_ID_HEADER] = machineId;
   return headers;
 }
-
-// ---------------------------------------------------------------------------
-// Handlers
-// ---------------------------------------------------------------------------
 
 async function handleRedeemMachine(
   req: http.IncomingMessage,
@@ -466,7 +388,6 @@ async function handleRedeemMachine(
   process.stderr.write(
     `connect-stub: redeemed ${code} → machine ${machine.id}\n`,
   );
-  // Same shape as the apex (`handle` is the account's primary handle).
   return json(res, 200, {
     credential: machine.credential,
     machineId: machine.id,
@@ -632,7 +553,6 @@ async function handleRequest(
     return void res.end("bb connect: not found\n");
   }
 
-  // Daemon / machine CLI traffic: the machine credential on /api/v1*.
   const presented = headerValue(req.headers[MACHINE_CREDENTIAL_HEADER]);
   if (isMachinePath(pathname) && presented !== null) {
     const machine = activeMachine(presented);
@@ -647,7 +567,6 @@ async function handleRequest(
     return void res.end("bb connect: machine not authorized\n");
   }
 
-  // Visitor request: session cookie or the HTML sign-in page.
   const cookieHeader = headerValue(req.headers.cookie) ?? undefined;
   const session = activeSession(
     parseCookie(cookieHeader, DESKTOP_SESSION_COOKIE),
@@ -682,9 +601,6 @@ function handleUpgrade(
   if (!session) {
     counters.unauthenticatedUpgrades += 1;
     const body = signInPage(url.host, url.toString());
-    // Flush the full response before the FIN: SocketRocket must read the
-    // status line ("Received bad response code from server: 401.") rather
-    // than see a reset, which would look like a plain network failure.
     socket.end(
       [
         "HTTP/1.1 401 Unauthorized",
@@ -729,17 +645,12 @@ function handleUpgrade(
   socket.on("close", cleanup);
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
-
 function main(): void {
   const tls = ensureCertificates();
   const simulator = process.env.BB_MOBILE_E2E_SIMULATOR;
   if (simulator) installRootCertificate(simulator, tls.caPath);
 
   const listeners: https.Server[] = [];
-  // Bind v4 and v6 loopback explicitly: iOS may pick either for `*.localhost`.
   for (const host of ["127.0.0.1", "::1"]) {
     const server = https.createServer(
       { key: tls.key, cert: tls.cert },
@@ -764,8 +675,6 @@ function main(): void {
     listeners.push(server);
   }
 
-  // Plain-HTTP control listener so flows (Maestro `runScript`, curl) can
-  // drive the stub without trusting its certificate. Only `/__stub/*`.
   const control = http.createServer((req, res) => {
     const pathname = new URL(req.url ?? "/", "http://localhost").pathname;
     if (pathname.startsWith("/__stub/"))

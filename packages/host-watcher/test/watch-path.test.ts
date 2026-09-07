@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import parcelWatcher from "@parcel/watcher";
 import { afterEach, describe, expect, it, vi } from "vitest";
-// Import the ESM namespace so Vitest can spy on the exported pathExists binding.
 import * as pathExistsModule from "../src/path-exists.js";
 import { watchPathChanges as watchPathChangesImpl } from "../src/watch-path.js";
 
@@ -40,7 +39,6 @@ const sleep: Sleep = (durationMs) =>
   });
 
 async function settleAsyncWatchWork(): Promise<void> {
-  // Let watcher startup/retry microtasks finish before restoring shared spies.
   await Promise.resolve();
   await sleep(0);
   await Promise.resolve();
@@ -130,7 +128,6 @@ afterEach(async () => {
   );
 });
 
-// These tests mutate shared module spies, so keep them out of Vitest parallelism.
 describe.sequential("watchPathChanges", () => {
   it("watches the target path and reports changed paths within that subtree", async () => {
     const dataDir = await makeTempDir("bb-watch-path-");
@@ -418,9 +415,6 @@ describe.sequential("watchPathChanges", () => {
         [],
       );
 
-      // The dropped-events error is recoverable: no watch error is surfaced,
-      // the subscription is re-established, and every tracked child is re-emitted
-      // so downstream collectors reconcile against current on-disk state.
       await waitFor(
         () => onChange.mock.calls.length,
         (callCount) => callCount >= 1,

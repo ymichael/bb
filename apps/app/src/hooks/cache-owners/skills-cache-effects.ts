@@ -6,7 +6,6 @@ interface ProjectSkillsInvalidationArg extends QueryClientArg {
   projectId: string;
 }
 
-/** Invalidate the project skills list after a skill is deleted. */
 export function invalidateProjectSkillsMutationQueries({
   projectId,
   queryClient,

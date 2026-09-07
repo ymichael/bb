@@ -1,30 +1,13 @@
 import { POINTER_COARSE_QUERY } from "@bb/shared-ui/hooks/use-pointer-coarse";
 
-/**
- * Each `@pierre/diffs` worker downloads and compiles ~830 KB of JavaScript and
- * then holds a Shiki heap. Diff highlighting rarely has more than a few files
- * in flight, so a small pool already saturates the visible work; a large one
- * only multiplies the boot cost and memory.
- */
 const DIFF_WORKER_POOL_MAX_SIZE = 4;
-/**
- * Phones and tablets: two workers keep highlighting off the main thread while
- * leaving cores and memory for scrolling and the composer.
- */
 const DIFF_WORKER_POOL_CONSTRAINED_MAX_SIZE = 2;
 const DIFF_WORKER_POOL_MIN_SIZE = 1;
-/**
- * `navigator.deviceMemory` (Chromium only; Safari does not expose it) reports
- * whole gigabytes, rounded down. Four gigabytes covers every phone and the
- * low-end tablets and laptops where extra workers cause memory pressure.
- */
 const CONSTRAINED_DEVICE_MEMORY_GB = 4;
 
 interface DiffWorkerPoolEnvironment {
   hardwareConcurrency: number | undefined;
-  /** `(pointer: coarse)` matches: a touch-first device. */
   coarsePointer: boolean;
-  /** `navigator.deviceMemory` in gigabytes when the browser exposes it. */
   deviceMemory: number | undefined;
 }
 
@@ -51,7 +34,6 @@ export function computeDiffWorkerPoolSize({
 
 function readDeviceMemory(): number | undefined {
   if (typeof navigator === "undefined") return undefined;
-  // Not in lib.dom: Chromium-only Device Memory API. Narrow immediately.
   const value: unknown = Reflect.get(navigator, "deviceMemory");
   return typeof value === "number" && Number.isFinite(value)
     ? value

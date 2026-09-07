@@ -9,6 +9,10 @@ import {
   pendingInteractionSchema,
   permissionModeInputSchema,
   promptInputSchema,
+  clientTurnRequestIdSchema,
+  queuedMessageWaitHolderSchema,
+  queuedMessageWaitingOnSchema,
+  queuedMessageWaitReasonSchema,
   reasoningLevelSchema,
   rawThreadIdSchema,
   serviceTierSchema,
@@ -16,6 +20,7 @@ import {
   threadListEntrySchema,
   threadQueuedMessageSchema,
   threadSearchSourceKindSchema,
+  threadStatusSchema,
   threadTimelineActivePromptModeSchema,
   threadTimelineGoalSchema,
   threadTimelineModelFallbackSchema,
@@ -79,12 +84,6 @@ export type ExistingThreadExecutionInputSources = z.infer<
   typeof existingThreadExecutionInputSourcesSchema
 >;
 
-// "started on behalf of another thread/agent": the thread-start turn is
-// attributed to {initiator} and rendered as "Message from {senderThreadId}".
-// null ⇒ a normal user-initiated start. A non-null value also flags the
-// thread-start turn as seed-without-run (the started agent waits for the user's
-// first message), mirroring the `client/turn/requested` event whose
-// `senderThreadId` is non-null only for agent/system starts.
 export const startedOnBehalfOfInitiatorSchema = z.enum(["agent", "system"]);
 
 export const startedOnBehalfOfSchema = z.object({
@@ -98,22 +97,9 @@ export const createThreadRequestSchema = z
     projectId: z.string().min(1),
     providerId: z.string().min(1).optional(),
     origin: threadCreateOriginSchema,
-    /**
-     * Id of the plugin that spawned this thread. Present exactly when
-     * origin is "plugin" (enforced below); persisted for attribution.
-     */
     originPluginId: z.string().min(1).optional(),
-    /**
-     * Hidden threads stay out of sidebar organization and attention surfaces.
-     * Omitted, a child inherits parentThreadId's visibility and a root is
-     * visible; side chats stay hidden.
-     */
     visibility: threadVisibilitySchema.optional(),
     title: z.string().min(1).optional(),
-    // A source-derived side-chat preload may establish the cloned provider
-    // session without a first prompt. Normal starts and forks require at least
-    // one input entry, enforced by the refinement below rather than a blanket
-    // `.min(1)`.
     input: z.array(promptInputSchema),
     model: z.string().min(1).optional(),
     serviceTier: serviceTierSchema.optional(),
@@ -127,6 +113,14 @@ export const createThreadRequestSchema = z
     sourceSeqEnd: z.number().int().nonnegative().optional(),
     startedOnBehalfOf: startedOnBehalfOfSchema.nullable().default(null),
     originKind: threadOriginKindSchema.nullable().default(null),
+    /**
+     * Epoch ms at which this thread's first message should dispatch. Present ⇒
+     * the thread is created `pending` with no turn and no environment work,
+     * and the first message is queued as a row waiting on the clock. Absent
+     * ⇒ attempt the dispatch now; when nothing blocks it no queued row is ever
+     * created and creation runs exactly as it did before the queue existed.
+     */
+    sendAt: z.number().int().nonnegative().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.origin === "plugin" && value.originPluginId === undefined) {
@@ -167,23 +161,17 @@ const agentOnlyPromptInputSchema = promptInputSchema.and(
 export const forkThreadRequestSchema = z
   .object({
     sourceThreadId: z.string().min(1),
-    /**
-     * Anchor the fork on the completed source turn containing this sequence:
-     * the cloned provider session and the inherited timeline both end with
-     * that turn (a user message row anchors before its own turn). Absent
-     * forks the session tip and inherits every completed turn.
-     */
     sourceSeqEnd: z.number().int().nonnegative().optional(),
     input: z.array(promptInputSchema).min(1).optional(),
-    /** Context persisted on the fork start but hidden from user-facing output. */
     agentContextSeed: z.array(agentOnlyPromptInputSchema).min(1).optional(),
     title: z.string().min(1).optional(),
     permissionMode: permissionModeInputSchema.optional(),
     visibility: threadVisibilitySchema.default("visible"),
-    workspace: z.enum(["isolated", "reuse"]).default("isolated"),
+    environment: createThreadEnvironmentArgsSchema.optional(),
     origin: threadCreateOriginSchema.default("sdk"),
     originPluginId: z.string().min(1).optional(),
   })
+  .strict()
   .superRefine((value, ctx) => {
     if (value.origin === "plugin" && value.originPluginId === undefined) {
       ctx.addIssue({
@@ -202,7 +190,7 @@ export const forkThreadRequestSchema = z
   });
 export type ForkThreadRequest = z.infer<typeof forkThreadRequestSchema>;
 
-export const sendMessageRequestSchema = z.object({
+const sendMessageRequestBaseSchema = z.object({
   input: z.array(promptInputSchema).min(1),
   model: z.string().optional(),
   serviceTier: serviceTierSchema.optional(),
@@ -211,31 +199,50 @@ export const sendMessageRequestSchema = z.object({
   executionInputSources: existingThreadExecutionInputSourcesSchema.optional(),
   mode: sendMessageModeSchema,
   senderThreadId: z.string().min(1).optional(),
+  /**
+   * Epoch ms at which this message should dispatch. Present ⇒ nothing is sent
+   * now; the message is queued as a row waiting on the clock, and the due
+   * sweep re-attempts it then. Absent ⇒ attempt the dispatch now.
+   */
+  sendAt: z.number().int().nonnegative().optional(),
 });
+
+export const sendMessageRequestSchema = sendMessageRequestBaseSchema;
 export type SendMessageRequest = z.infer<typeof sendMessageRequestSchema>;
 
 /**
- * How a `send` request was taken:
- * - `sent`: dispatched now (a new turn or a steer into the active turn).
- * - `queued`: placed in the thread queue; it sends when the thread is next idle.
- * - `deferred`: the thread awaits user interaction, which a prompt cannot
- *   interrupt. The server holds the message and delivers it in the requested
- *   mode as soon as the interaction settles.
+ * How a `send` request was taken.
+ *
+ * Two outcomes, because there are two: the attempt cleared and dispatched, or
+ * something blocked it and it queued. The four-way `sent`/`queued`/`deferred`/
+ * `held` split this replaces described WHICH queueing mechanism took the
+ * message, and there is only one now — so the useful half of that answer, WHY
+ * it is waiting, moved onto the queued arm where it can be typed.
  */
-export const sendMessageDeliverySchema = z.enum(["sent", "queued", "deferred"]);
+export const sendMessageDeliverySchema = z.enum(["sent", "queued"]);
 export type SendMessageDelivery = z.infer<typeof sendMessageDeliverySchema>;
 
-export const sendMessageResponseSchema = z.object({
-  ok: z.literal(true),
-  delivery: sendMessageDeliverySchema,
-});
+/**
+ * A discriminated union rather than a flat record with nullable extras: a
+ * `sent` message has no queued row and no wait, and modelling those as "null
+ * for now" would invite every caller to check fields that cannot exist.
+ */
+export const sendMessageResponseSchema = z.discriminatedUnion("delivery", [
+  z.object({ ok: z.literal(true), delivery: z.literal("sent") }),
+  z.object({
+    ok: z.literal(true),
+    delivery: z.literal("queued"),
+    queuedMessage: threadQueuedMessageSchema,
+  }),
+]);
 export type SendMessageResponse = z.infer<typeof sendMessageResponseSchema>;
 
-export const editMessageRequestSchema = sendMessageRequestSchema
-  .omit({ mode: true })
+// `sendAt` is deliberately dropped: an edit rewrites a message that has
+// already been dispatched, so there is nothing left to schedule.
+export const editMessageRequestSchema = sendMessageRequestBaseSchema
+  .omit({ mode: true, sendAt: true })
   .extend({
     operationId: z.string().min(1),
-    /** Omission targets the latest editable message with no staleness guard. */
     expectedRequestSequence: z.number().int().nonnegative().optional(),
   })
   .strict();
@@ -249,6 +256,63 @@ export const editMessageResponseSchema = z
   })
   .strict();
 export type EditMessageResponse = z.infer<typeof editMessageResponseSchema>;
+
+/**
+ * The reason a retry carries when the caller names none. Filled here at the
+ * boundary so the queued row, its card and `bb thread queue list` all read the
+ * same word whether the retry came from a plugin, the CLI or the app.
+ */
+export const DEFAULT_TURN_RETRY_REASON = "Retry";
+
+export const retryTurnRequestSchema = z
+  .object({
+    /**
+     * The failed turn to re-submit. Null means the thread's own most recent
+     * turn, which is the one whose failure put it in `error` — the only turn a
+     * caller who did not watch the failure happen can mean.
+     */
+    turnRequestId: clientTurnRequestIdSchema.nullable().default(null),
+    /**
+     * Epoch ms to retry at. Null attempts the retry now (it may still queue
+     * behind a busy thread or a plugin wait, like any other dispatch); a future
+     * instant queues the row on the clock, which is what a rate-limit window
+     * wants.
+     */
+    sendAt: z.number().int().nonnegative().nullable().default(null),
+    /** Why the turn is being retried, shown verbatim on the queued row. */
+    reason: queuedMessageWaitReasonSchema.default(DEFAULT_TURN_RETRY_REASON),
+  })
+  .strict();
+export type RetryTurnRequest = z.infer<typeof retryTurnRequestSchema>;
+
+/**
+ * What a retry did, mirroring `sendMessageResponseSchema`: a retry is a
+ * dispatch of a turn that already exists, so it is delivered or queued on
+ * exactly the same terms as a send. The two retry-specific facts ride along,
+ * because a caller that let the server pick the turn has no other way to learn
+ * which one it picked.
+ */
+export const retryTurnResponseSchema = z.discriminatedUnion("delivery", [
+  z.object({
+    ok: z.literal(true),
+    delivery: z.literal("sent"),
+    /** The ORIGINAL request of the retry chain, which the retry re-submits. */
+    turnRequestId: clientTurnRequestIdSchema,
+    /** Which attempt this retry is: 2 is the first retry. */
+    attempt: z.number().int().min(2),
+  }),
+  z.object({
+    ok: z.literal(true),
+    delivery: z.literal("queued"),
+    turnRequestId: clientTurnRequestIdSchema,
+    attempt: z.number().int().min(2),
+    /** The row now carrying the retry; addressable for send-now or cancel. */
+    queuedMessageId: z.string().min(1),
+    waitingOn: queuedMessageWaitingOnSchema,
+    sendAt: z.number().int().nonnegative().nullable(),
+  }),
+]);
+export type RetryTurnResponse = z.infer<typeof retryTurnResponseSchema>;
 
 export const sendQueuedMessageModeSchema = z.enum(["auto", "steer"]);
 export type SendQueuedMessageMode = z.infer<typeof sendQueuedMessageModeSchema>;
@@ -298,10 +362,7 @@ export type SetQueuedMessageGroupBoundaryRequest = z.infer<
   typeof setQueuedMessageGroupBoundaryRequestSchema
 >;
 
-export const sendQueuedMessageResponseSchema = z.object({
-  ok: z.literal(true),
-  queuedMessage: threadQueuedMessageSchema,
-});
+export const sendQueuedMessageResponseSchema = sendMessageResponseSchema;
 export type SendQueuedMessageResponse = z.infer<
   typeof sendQueuedMessageResponseSchema
 >;
@@ -351,13 +412,8 @@ export type ThreadSearchHighlightRange = z.infer<
 export const threadSearchMatchSchema = z
   .object({
     sourceKind: threadSearchSourceKindSchema,
-    // Title matches carry the whole title. Message matches carry a bounded
-    // snippet around the first hit (an ellipsis marks each cut side), and the
-    // highlight ranges are offsets into that snippet.
     text: z.string(),
     highlightRanges: z.array(threadSearchHighlightRangeSchema),
-    // Event sequence of the message this match came from, so the UI can deep-link
-    // to it in the conversation. Null for title/title_fallback matches.
     sourceSeq: z.number().int().nonnegative().nullable(),
   })
   .strict();
@@ -389,13 +445,15 @@ export const threadSearchResponseSchema = z
   .strict();
 export type ThreadSearchResponse = z.infer<typeof threadSearchResponseSchema>;
 
-// canSpawnChild is a server-derived policy flag: true when the thread's
-// hierarchy depth is below MAX_THREAD_HIERARCHY_DEPTH, so a fork/side-chat may
-// be created under it. Computed on the server so clients never recompute the
-// depth cap.
 export const threadResponseSchema = threadWithRuntimeSchema.extend({
   activeBackgroundAgentCount: z.number().int().nonnegative(),
   canSpawnChild: z.boolean(),
+  // How many messages are waiting on this thread's queue right now — waiting on
+  // the clock, on the running turn, on provisioning, on an interaction, or on
+  // a plugin. The count alone drives the pending-region and thread-row badges;
+  // `GET /threads/:id/queued-messages` supplies the reasons once a surface
+  // actually renders them.
+  queuedMessageCount: z.number().int().nonnegative(),
 });
 export type ThreadResponse = z.infer<typeof threadResponseSchema>;
 
@@ -446,6 +504,25 @@ export type RespondPluginInteractionRequest = z.infer<
   typeof respondPluginInteractionRequestSchema
 >;
 
+/**
+ * Filters for the cross-thread queue list — the replacement for the hold
+ * list, and cross-thread for the same reason it was: "what is queued right
+ * now" is a whole-workspace question (`bb thread queue list` with no thread, a
+ * limiter plugin's own bookkeeping, a router recovering its rows after a
+ * restart) that no single thread's list can answer.
+ *
+ * `waitHolder` is the indexed one. It answers "every row this plugin is
+ * holding", which is exactly what a plugin needs on restart and what the
+ * orphan sweep needs per uninstalled plugin.
+ */
+export const queuedMessageListQuerySchema = z.object({
+  threadId: z.string().min(1).optional(),
+  waitHolder: queuedMessageWaitHolderSchema.optional(),
+});
+export type QueuedMessageListQuery = z.infer<
+  typeof queuedMessageListQuerySchema
+>;
+
 export const threadQueuedMessageListResponseSchema = z.array(
   threadQueuedMessageSchema,
 );
@@ -470,9 +547,6 @@ export const updateThreadRequestSchema = z
     title: z.string().min(1).nullable(),
     sectionId: z.string().min(1).nullable(),
     parentThreadId: z.string().min(1).nullable(),
-    // Sticky thread-level execution overrides applied on the next turn. `null`
-    // clears the override; an omitted field is left unchanged. Settable
-    // together or independently.
     model: z.string().min(1).nullable(),
     reasoningLevel: reasoningLevelSchema.nullable(),
     visibility: threadVisibilitySchema,
@@ -498,15 +572,9 @@ export type ReorderPinnedThreadRequest = z.infer<
   typeof reorderPinnedThreadRequestSchema
 >;
 
-/** Which root a secondary-panel file path is relative to. */
 export const panelFileSourceSchema = z.enum(["workspace", "thread-storage"]);
 export type PanelFileSource = z.infer<typeof panelFileSourceSchema>;
 
-/**
- * Requested placement for a thread opened in the app's split layout. Edge
- * placements add panes through the eighth pane; at the cap they replace the
- * focused pane. `replace` always replaces the focused pane.
- */
 export const threadOpenSplitSchema = z.enum([
   "right",
   "down",
@@ -516,7 +584,6 @@ export const threadOpenSplitSchema = z.enum([
 ]);
 export type ThreadOpenSplit = z.infer<typeof threadOpenSplitSchema>;
 
-/** Optional secondary-panel file to open with a thread. */
 export const threadOpenFileSchema = z
   .object({
     source: panelFileSourceSchema,
@@ -532,12 +599,6 @@ const threadOpenFileLenientSchema = z.object({
   lineNumber: z.number().int().positive().nullable(),
 });
 
-/**
- * Ephemeral server→client WebSocket message asking connected clients to open a
- * thread in the current split layout and, optionally, a file in that thread's
- * secondary panel. Broadcast to every client; nothing is persisted. Strict
- * schema guards the server's outgoing boundary.
- */
 export const threadOpenSignalSchema = z
   .object({
     type: z.literal("thread-open"),
@@ -549,10 +610,6 @@ export const threadOpenSignalSchema = z
   .strict();
 export type ThreadOpenSignal = z.infer<typeof threadOpenSignalSchema>;
 
-/**
- * Lenient counterpart for INBOUND parsing on clients (the web app), tolerant of
- * a newer server. Output stays assignable to {@link ThreadOpenSignal}.
- */
 export const threadOpenSignalLenientSchema = z.object({
   type: z.literal("thread-open"),
   projectId: z.string(),
@@ -561,24 +618,19 @@ export const threadOpenSignalLenientSchema = z.object({
   file: threadOpenFileLenientSchema.nullable(),
 });
 
-/** Request body for POST /threads/:id/open (threadId comes from the path). */
 export const threadOpenRequestSchema = z
   .object({
-    // Omission preserves ordinary thread/file-open behavior, while an explicit
-    // placement lets callers choose how the pane should open.
     split: threadOpenSplitSchema.optional(),
     file: threadOpenFileSchema.nullable(),
   })
   .strict();
 export type ThreadOpenRequest = z.infer<typeof threadOpenRequestSchema>;
 
-/** Response for POST /threads/:id/open: how many connected clients received it. */
 export const threadOpenResponseSchema = z.object({
   delivered: z.number().int().nonnegative(),
 });
 export type ThreadOpenResponse = z.infer<typeof threadOpenResponseSchema>;
 
-/** Presentation action for one thread pane in each connected app window. */
 export const threadPaneActionSchema = z.enum([
   "maximize",
   "restore",
@@ -588,7 +640,6 @@ export const threadPaneActionSchema = z.enum([
 ]);
 export type ThreadPaneAction = z.infer<typeof threadPaneActionSchema>;
 
-/** Request body for POST /threads/:id/pane-action. */
 export const threadPaneActionRequestSchema = z
   .object({ action: threadPaneActionSchema })
   .strict();
@@ -596,7 +647,6 @@ export type ThreadPaneActionRequest = z.infer<
   typeof threadPaneActionRequestSchema
 >;
 
-/** Ephemeral server→client request to change an already-open thread pane. */
 export const threadPaneActionSignalSchema = z
   .object({
     type: z.literal("thread-pane-action"),
@@ -609,7 +659,6 @@ export type ThreadPaneActionSignal = z.infer<
   typeof threadPaneActionSignalSchema
 >;
 
-/** Lenient inbound parser for clients connected to a newer server. */
 export const threadPaneActionSignalLenientSchema = z.object({
   type: z.literal("thread-pane-action"),
   projectId: z.string(),
@@ -617,7 +666,6 @@ export const threadPaneActionSignalLenientSchema = z.object({
   action: threadPaneActionSchema,
 });
 
-/** Number of connected app clients that received the pane action. */
 export const threadPaneActionResponseSchema = z.object({
   delivered: z.number().int().nonnegative(),
 });
@@ -638,22 +686,101 @@ export const threadListQuerySchema = z.object({
   parentThreadId: z.string().min(1).optional(),
   sourceThreadId: z.string().min(1).optional(),
   archived: z.enum(["true", "false"]).optional(),
-  /** Restrict to threads filed directly under this section. */
   sectionId: z.string().min(1).optional(),
-  /** Restrict to loose threads — those not filed under any section. */
   unsectioned: z.enum(["true", "false"]).optional(),
-  /** Filter by parent thread presence: "true" means child threads; "false" means root threads. */
   hasParent: z.enum(["true", "false"]).optional(),
-  /** Restrict to threads spawned with this origin. */
   originKind: threadOriginKindSchema.optional(),
-  /** Restrict to threads spawned by this plugin. */
   originPluginId: z.string().min(1).optional(),
-  /** Include hidden threads; omitted/false keeps the default visible-only list. */
   includeHidden: z.enum(["true", "false"]).optional(),
   limit: z.string().regex(/^\d+$/).optional(),
   offset: z.string().regex(/^\d+$/).optional(),
 });
 export type ThreadListQuery = z.infer<typeof threadListQuerySchema>;
+
+/**
+ * Grouping for `GET /threads/count`. Omitted, the route answers one total.
+ * `host` groups by the host the thread's environment lives on; a thread with
+ * no environment yet counts under the `null` key.
+ */
+export const threadCountGroupBySchema = z.enum(["host", "provider", "project"]);
+export type ThreadCountGroupBy = z.infer<typeof threadCountGroupBySchema>;
+
+/**
+ * Filters for `GET /threads/count`. Every value is a string because this is a
+ * query string; the route parses them once at the boundary.
+ *
+ * `parentThreadId` is deliberately three-valued and unambiguous: omitted means
+ * "do not filter on parentage", the literal `"none"` means root threads only
+ * (`parent_thread_id IS NULL`), and any other value is that parent's id. An
+ * empty string would have been ambiguous with an omitted parameter, and a
+ * thread id can never be `"none"` (ids are prefixed `thr_`).
+ */
+export const THREAD_COUNT_ROOT_PARENT = "none";
+
+export const threadCountQuerySchema = z.object({
+  status: threadStatusSchema.optional(),
+  hostId: z.string().min(1).optional(),
+  providerId: z.string().min(1).optional(),
+  projectId: z.string().min(1).optional(),
+  parentThreadId: z.string().min(1).optional(),
+  groupBy: threadCountGroupBySchema.optional(),
+  /** Count archived threads too; omitted/false excludes them (deleted always are). */
+  includeArchived: z.enum(["true", "false"]).optional(),
+  /** Count hidden threads too; omitted/false counts visible threads only. */
+  includeHidden: z.enum(["true", "false"]).optional(),
+});
+export type ThreadCountQuery = z.infer<typeof threadCountQuerySchema>;
+
+/**
+ * `total` is always the count of every matching thread. `groups` is present
+ * exactly when `groupBy` was requested — an ungrouped count has no group list,
+ * rather than one anonymous group.
+ */
+export const threadCountResponseSchema = z.object({
+  total: z.number().int().nonnegative(),
+  groups: z
+    .array(
+      z.object({
+        /** The host/provider/project id, or null for threads with none. */
+        key: z.string().nullable(),
+        count: z.number().int().nonnegative(),
+      }),
+    )
+    .optional(),
+});
+export type ThreadCountResponse = z.infer<typeof threadCountResponseSchema>;
+
+/**
+ * One thread currently occupying capacity — canonical status `starting` or
+ * `active`. Archived and deleted threads are excluded (neither runs); hidden
+ * ones are not, because a hidden thread burns a real slot on a real machine.
+ *
+ * The row is an id and the machine that id is occupying, and nothing else.
+ * `hostId` is here because a per-host pool cannot be derived from an id
+ * without a query per row; every other question a caller might ask is
+ * answerable by fetching the thread it names.
+ *
+ * **Exact inside the `message.dispatch` hook, a snapshot everywhere else.**
+ * Hook passes run one at a time under a server-wide lock, and a cleared first
+ * attempt commits its `pending → starting` flip before that lock releases — so
+ * the next handler in line sees the admission the previous one granted. Read
+ * anywhere else (a background service, an HTTP client, a `turn.failed`
+ * listener) it is an ordinary query that races with every concurrent dispatch,
+ * exactly like `threads.count`.
+ * See {@link threadRunningResponseSchema}'s consumers in the plugin authoring
+ * guide for the one boundary case: a warm follow-up's `idle → active` flip
+ * commits just after the lock, so admissions of already-live threads can be
+ * momentarily invisible.
+ */
+export const threadRunningEntrySchema = z.object({
+  id: z.string(),
+  /** The machine it runs on; null while no environment has been chosen. */
+  hostId: z.string().nullable(),
+});
+export type ThreadRunningEntry = z.infer<typeof threadRunningEntrySchema>;
+
+export const threadRunningResponseSchema = z.array(threadRunningEntrySchema);
+export type ThreadRunningResponse = z.infer<typeof threadRunningResponseSchema>;
 
 export const threadSearchQuerySchema = z.object({
   query: z.string().trim().min(2),
@@ -683,32 +810,11 @@ export const timelinePageMetadataSchema = z
 
 export const threadTimelineQuerySchema = z
   .object({
-    /**
-     * When `"true"`, completed turns carry their child rows inline and every
-     * command/tool row carries its full inline output (bounded by the 32 K
-     * inline cap). The default window collapses completed turns and replaces
-     * the running turn's large outputs with a head+tail preview marked by
-     * `outputPreview`; read those whole via `timelineTurnSummaryDetails`.
-     */
     includeNestedRows: z.enum(["true", "false"]),
     segmentLimit: z.string().regex(/^\d+$/),
     beforeAnchorSeq: z.string().regex(/^[1-9]\d*$/),
     beforeAnchorId: z.string().min(1),
-    /**
-     * When `"true"`, the response omits row generation and returns
-     * `rows: []` with the tail-only fields (`activeThinking`,
-     * `activeWorkflows`, `pendingTodos`, `contextWindowUsage`) populated
-     * normally. Used by the CLI to read tail state without paying for the full
-     * row payload on every `bb status` invocation. Implies `latest` page
-     * semantics.
-     */
     summaryOnly: z.enum(["true", "false"]),
-    /**
-     * The `maxSeq` the client last received for this window. When provided and
-     * the server can still reconstruct what the client holds, the response is a
-     * `delta` (changed rows only) instead of the full `rows`; otherwise the
-     * server returns the full window and the client replaces.
-     */
     afterSequence: z.string().regex(/^\d+$/),
   })
   .partial()
@@ -806,7 +912,6 @@ export type ThreadHostFileContentQuery = z.infer<
 >;
 
 export const threadFilesRawQuerySchema = z.object({
-  /** Absolute filesystem path of an HTML file on the thread's host. */
   path: z.string().min(1),
 });
 export type ThreadFilesRawQuery = z.infer<typeof threadFilesRawQuerySchema>;
@@ -826,9 +931,9 @@ export type TimelineTurnSummaryDetailsResponse = z.infer<
 
 export const threadTimelineResponseSchema = z.object({
   rows: z.array(timelineRowSchema),
+  contextBoundarySeq: z.number().int().nonnegative().nullable(),
   activePromptMode: threadTimelineActivePromptModeSchema.nullable(),
   activeThinking: activeThinkingSchema.nullable(),
-  /** Running workflows, most recently started first. */
   activeWorkflows: z.array(timelineWorkflowWorkRowSchema),
   activeBackgroundCommands: z.array(timelineWorkflowWorkRowSchema),
   pendingTodos: threadTimelinePendingTodosSchema.nullable(),
@@ -836,25 +941,13 @@ export const threadTimelineResponseSchema = z.object({
   modelFallback: threadTimelineModelFallbackSchema.nullable(),
   contextWindowUsage: threadContextWindowUsageSchema.optional(),
   timelinePage: timelinePageMetadataSchema,
-  /** Thread high-water event sequence this window reflects; bumps on append. */
   maxSeq: z.number().int().nonnegative(),
-  /**
-   * Present only when the request supplied a usable `afterSequence`: the
-   * changed rows + ordering to apply to the client's previous window. When
-   * present, `rows` is empty and the client merges via `applyTimelineDelta`.
-   */
   delta: timelineDeltaSchema.optional(),
 });
 export type ThreadTimelineResponse = z.infer<
   typeof threadTimelineResponseSchema
 >;
 
-/**
- * Lightweight attachment counts for a conversation-outline item. The full
- * {@link timelineConversationAttachmentsSchema} carries image URLs and file
- * paths the outline never renders, so the outline ships only the counts the
- * minimap needs to label an attachment-only message.
- */
 export const threadConversationOutlineAttachmentSummarySchema = z
   .object({
     imageCount: z.number().int().nonnegative(),
@@ -865,14 +958,6 @@ export type ThreadConversationOutlineAttachmentSummary = z.infer<
   typeof threadConversationOutlineAttachmentSummarySchema
 >;
 
-/**
- * A single conversation message in the thread's full table-of-contents
- * outline. `id` matches the corresponding timeline row id (both are projected
- * by the same builder), so the minimap can scroll-spy and jump to a row once
- * it is paginated into the loaded window. `preview` is already whitespace-
- * normalized and length-clamped server-side to keep the payload small for
- * very long threads.
- */
 export const threadConversationOutlineItemSchema = z
   .object({
     id: z.string().min(1),
@@ -889,7 +974,6 @@ export type ThreadConversationOutlineItem = z.infer<
 export const threadConversationOutlineResponseSchema = z
   .object({
     items: z.array(threadConversationOutlineItemSchema),
-    /** Thread high-water event sequence this outline reflects. */
     maxSeq: z.number().int().nonnegative(),
   })
   .strict();
@@ -899,13 +983,6 @@ export type ThreadConversationOutlineResponse = z.infer<
 
 export const threadStorageFileListResponseSchema =
   workspaceFileListResponseSchema.extend({
-    /**
-     * Absolute on-host path to the thread's storage directory. Useful for
-     * clients that need to construct a full path for filesystem operations
-     * (e.g. opening a storage file in the user's editor). The path is on
-     * the thread's host machine, so it is only usable when that host is the
-     * user's local machine.
-     */
     storageRootPath: z.string(),
   });
 export type ThreadStorageFileListResponse = z.infer<
@@ -914,13 +991,6 @@ export type ThreadStorageFileListResponse = z.infer<
 
 export const threadStoragePathListResponseSchema =
   workspacePathListResponseSchema.extend({
-    /**
-     * Absolute on-host path to the thread's storage directory. Useful for
-     * clients that need to construct a full path for filesystem operations
-     * (e.g. opening a storage file in the user's editor). The path is on
-     * the thread's host machine, so it is only usable when that host is the
-     * user's local machine.
-     */
     storageRootPath: z.string(),
   });
 export type ThreadStoragePathListResponse = z.infer<

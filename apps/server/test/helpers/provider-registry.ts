@@ -1,15 +1,3 @@
-/**
- * Test registries seeded with the first-party providers.
- *
- * Production gets its providers from the four first-party provider plugins;
- * there is no core seed to fall back on. Most server tests need those
- * providers but cannot afford to install and run four plugins, so this helper
- * takes the SAME declarations those plugins register — by invoking their
- * server entrypoints against the SDK's fake plugin host
- * (`captureFirstPartyProviderDeclarations`) — and pushes them through the
- * same mapping the plugin runtime uses. Nothing is re-stated here, so a
- * declaration change cannot drift from what the tests assume.
- */
 import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
@@ -55,10 +43,6 @@ const FIRST_PARTY_PROVIDER_PLUGIN_IDS = [
   "provider-acp",
 ] as const;
 
-/**
- * The loaded first-party declarations, keyed by plugin id — for tests that
- * pin the projected `ProviderInfo` against the declarations themselves.
- */
 export async function loadFirstPartyProviderDeclarations(): Promise<
   ReadonlyMap<string, readonly NormalizedPluginProviderDeclaration[]>
 > {
@@ -74,17 +58,8 @@ export async function loadFirstPartyProviderDeclarations(): Promise<
   return new Map(entries);
 }
 
-/** No stored plugin settings: every per-command option hook sees defaults. */
 const NO_PLUGIN_SETTINGS = (): Readonly<Record<string, never>> => ({});
 
-/**
- * The declared icons of a first-party plugin (`bb.branding.experimental_icons`),
- * name → plugin-relative path. The plugin runtime resolves a provider icon in
- * the namespaced form (`"<pluginId>/<name>"`) against the branding snapshots
- * it took at load; a harness that reads only the path form would register
- * those providers with no icon bytes, and the logo route would answer 404 for
- * a provider that has a logo in production.
- */
 async function declaredIcons(pluginId: string): Promise<Map<string, string>> {
   const manifest = pluginPackageJsonSchema.parse(
     JSON.parse(
@@ -97,17 +72,11 @@ async function declaredIcons(pluginId: string): Promise<Map<string, string>> {
   return new Map(Object.entries(manifest.bb.branding.experimental_icons ?? {}));
 }
 
-/**
- * The icon byte snapshot the plugin runtime captures at registration, for
- * either declared form: a plugin-relative path, or one of the plugin's own
- * declared icons by its namespaced glyph. The provider-logo route serves
- * exactly these bytes.
- */
 function providerIconSnapshot(args: {
   pluginId: string;
   icon: string | undefined;
   icons: ReadonlyMap<string, string>;
-}): { bytes: Uint8Array; contentType: string } | null {
+}): { bytes: Uint8Array; contentType: string; hash: string } | null {
   const namespaced =
     args.icon === undefined ? null : parseNamespacedGlyph(args.icon);
   const asset =
@@ -119,19 +88,6 @@ function providerIconSnapshot(args: {
   return readPluginProviderIcon(firstPartyPluginRootDir(args.pluginId), asset);
 }
 
-/**
- * Registers the first-party providers into an existing registry, exactly as
- * their four plugins would. `excludePluginIds` models a plugin the user disabled
- * (or that failed to load), whose provider is then absent from the registry.
- *
- * Pass `artifacts` to also record a STUB bridge artifact per bridge-shipping
- * plugin. In production a loaded provider plugin always has one, and every
- * bridge-bound command carries a `bridgeLaunch` naming it, so a harness that
- * registers providers without artifacts models a state that cannot happen and
- * every command build fails. The stub is metadata only — no bytes are servable
- * from it. Tests that need the real bundle use
- * {@link recordFirstPartyProviderBridgeArtifacts}, which overwrites the stub.
- */
 export async function registerFirstPartyProviders(
   registry: ProviderRegistryService,
   options: {
@@ -148,9 +104,6 @@ export async function registerFirstPartyProviders(
     }
     const declarations = await captureFirstPartyProviderDeclarations(pluginId);
     const icons = await declaredIcons(pluginId);
-    // The artifact lands before the registration flushes, as the plugin
-    // runtime records it before the load commits: a picker request that
-    // wakes on the registration must find the bridge already there.
     if (
       options.artifacts !== undefined &&
       !unavailable.has(pluginId) &&
@@ -169,13 +122,12 @@ export async function registerFirstPartyProviders(
           available: !unavailable.has(pluginId),
           pluginId,
           declaration,
+          iconHash: null,
           readSettings: NO_PLUGIN_SETTINGS,
         }),
         ...(icon === null ? {} : { icon }),
         pluginId,
         iconNames: new Set(icons.keys()),
-        // The bundled order: codex, claude-code, pi, acp — the same install
-        // rank the plugin runtime assigns from the bundled plugin list.
         installRank: {
           bundledIndex: FIRST_PARTY_PROVIDER_PLUGIN_IDS.indexOf(pluginId),
           installedAt: 0,
@@ -185,15 +137,6 @@ export async function registerFirstPartyProviders(
   }
 }
 
-/**
- * A full registration for a test that states only the provider's info and
- * server capabilities. The registry takes every field filled — the
- * declaration validator and `buildPluginProviderRegistration` are the one
- * place defaults are decided — so a partial test registration states the
- * empty values here rather than through a third defaulting layer in the
- * registry. `installRank` stays the registry's own optional: omitting it
- * ranks last.
- */
 export function minimalProviderRegistration(args: {
   pluginId: string;
   info: ProviderInfo;
@@ -216,13 +159,6 @@ export function minimalProviderRegistration(args: {
   };
 }
 
-/**
- * A one-line bundle standing in for a built host artifact: real bytes at a real
- * path, so the internal plugin host artifact route serves them and a daemon
- * that downloads and hash-verifies it succeeds. Used only for first-party
- * plugins whose bridge the server tests never launch; the fake providers get
- * the real scripted echo artifact (`registerFakeProviders`).
- */
 export function stubHostArtifact(pluginId: string): PluginHostArtifactSnapshot {
   const bytes = Buffer.from(`// stub host artifact for ${pluginId}\n`);
   const path = join(tmpdir(), `bb-stub-host-artifact-${pluginId}.mjs`);
@@ -260,16 +196,6 @@ async function buildFirstPartyBridgeArtifact(
   };
 }
 
-/**
- * Builds and records the first-party provider bridge artifacts, exactly as the
- * plugin runtime does on load. Without this a graduated provider has no
- * `bridgeLaunch`, so the daemon has no bridge for it at all — which is the
- * whole point of the artifact route and therefore worth exercising rather
- * than stubbing. Bridges are rebuilt from source so a stale `dist/` cannot
- * make a test pass against yesterday's bridge — once per worker process:
- * the sources do not change during a run, and the ~0.6s esbuild pass was
- * paid by every integration harness, one per test.
- */
 export async function recordFirstPartyProviderBridgeArtifacts(
   artifacts: PluginHostArtifactRegistry,
 ): Promise<void> {
@@ -297,11 +223,6 @@ async function hasHostEntry(rootDir: string): Promise<boolean> {
   );
 }
 
-/**
- * The root set a listing forwards for a registered provider whose plugin
- * resolved nothing: its declared skill and command roots, read back from the
- * registry so a test pins the forwarding, not the plugin's declaration.
- */
 export function declaredNativeRootSet(
   registry: ProviderRegistryService,
   providerId: string,
@@ -317,19 +238,12 @@ export function declaredNativeRootSet(
   };
 }
 
-/** A registry holding the first-party providers, in product order. */
 export async function createTestProviderRegistry(): Promise<ProviderRegistryService> {
   const registry = createProviderRegistryService();
   await registerFirstPartyProviders(registry);
   return registry;
 }
 
-/**
- * A well-formed `bridgeLaunch` for tests that only need a valid command on the
- * wire — transport plumbing (hub routing, online-RPC retries) that never
- * launches a bridge. Tests about which bridge a provider actually resolves to
- * must go through `resolveBridgeLaunchForProviderId` instead.
- */
 export const TRANSPORT_TEST_BRIDGE_LAUNCH: HostDaemonBridgeLaunch = {
   pluginId: "provider-pi",
   source: { kind: "artifact", digest: "a".repeat(64), byteLength: 1 },
@@ -345,26 +259,14 @@ export const TRANSPORT_TEST_BRIDGE_LAUNCH: HostDaemonBridgeLaunch = {
   },
 };
 
-/**
- * Provider ids the fake-stack integration tests create threads on. `fake` is
- * the default there; the alpha/beta pair exercises per-provider process
- * isolation. All three run the scripted echo bridge.
- */
 const FAKE_PROVIDER_IDS = ["fake", "fake-alpha", "fake-beta"] as const;
 
-/** The scripted echo provider's plugin root (`tests/scripted-echo-provider`). */
 export function scriptedEchoProviderRootDir(): string {
   return fileURLToPath(
     new URL("../../../../tests/scripted-echo-provider", import.meta.url),
   );
 }
 
-/**
- * Build the scripted echo bridge artifact exactly as the plugin runtime builds
- * a real provider plugin's `bb.host` entry. Rebuilt from source per call, like
- * the first-party bridges above, so a stale `dist/` cannot make a test pass
- * against yesterday's bridge.
- */
 export async function buildScriptedEchoProviderArtifact(): Promise<PluginHostArtifactSnapshot> {
   const toolchain = await resolvePluginBuildToolchain(
     join(tmpdir(), "bb-plugin-build-toolchain"),
@@ -383,14 +285,6 @@ export async function buildScriptedEchoProviderArtifact(): Promise<PluginHostArt
   };
 }
 
-/**
- * Declare the fake providers into a registry, each backed by the scripted
- * echo bridge artifact, the way a real provider plugin would be. Every
- * bridge-bound command carries a `bridgeLaunch`, and the daemon really runs
- * the artifact through the bridge-protocol adapter — there is no test-only
- * adapter path. Capabilities are permissive: those tests are about
- * lifecycle, not policy.
- */
 export async function registerFakeProviders(
   registry: ProviderRegistryService,
   artifacts: PluginHostArtifactRegistry,
@@ -400,6 +294,7 @@ export async function registerFakeProviders(
     const pluginId = `provider-${providerId}`;
     registry.register({
       ...buildPluginProviderRegistration({
+        iconHash: null,
         available: true,
         pluginId,
         declaration: validatePluginProviderDeclaration({
@@ -427,14 +322,6 @@ export async function registerFakeProviders(
   }
 }
 
-/**
- * The declarations the ACP plugin builds for the agents this `customAgents`
- * setting declares — through the plugin's own factory, not a hand-built copy.
- *
- * A test that states its own declaration proves the server reads a shape, not
- * that the plugin produces it. That gap is how `nativeSkillRoots` reached the
- * launch spec and never the declaration.
- */
 export async function acpProviderDeclarationsFromSetting(
   entries: readonly JsonValue[],
 ): Promise<NormalizedPluginProviderDeclaration[]> {
@@ -460,10 +347,6 @@ export async function acpProviderDeclarationsFromSetting(
   return configured;
 }
 
-/**
- * One configured ACP agent as a `withTestHarness({ extraProviders })` entry.
- * The setting entry's `id` is the slug: the provider id is `acp-<id>`.
- */
 export async function configuredAcpProvider(
   entry: Record<string, JsonValue>,
 ): Promise<{ declaration: PluginProviderDeclaration; pluginId: string }> {
@@ -474,11 +357,6 @@ export async function configuredAcpProvider(
   return { declaration, pluginId: "provider-acp" };
 }
 
-/**
- * A user-configured ACP agent in the registry, registered the way the ACP
- * plugin registers one from its own settings. `entry` is the setting entry,
- * so the provider id is `acp-<entry.id>`.
- */
 export async function registerConfiguredAcpProvider(
   registry: ProviderRegistryService,
   entry: Record<string, JsonValue>,
@@ -490,6 +368,7 @@ export async function registerConfiguredAcpProvider(
         available: true,
         pluginId,
         declaration,
+        iconHash: null,
         readSettings: NO_PLUGIN_SETTINGS,
       }),
       pluginId,

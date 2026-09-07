@@ -66,12 +66,11 @@ describe("provider declaration target-state fields", () => {
       "low",
       "high",
     ]);
-    expect(
-      Object.keys(normalized.extensionKinds ?? {}).sort(),
-    ).toEqual(["goal", "permission-profile"]);
-    expect(normalized.extensionKinds?.goal?.state).toBe(
-      goalSchema,
-    );
+    expect(Object.keys(normalized.extensionKinds ?? {}).sort()).toEqual([
+      "goal",
+      "permission-profile",
+    ]);
+    expect(normalized.extensionKinds?.goal?.state).toBe(goalSchema);
     expect(Object.isFrozen(normalized.strings)).toBe(true);
     expect(Object.isFrozen(normalized.serviceTiers)).toBe(true);
   });
@@ -88,7 +87,6 @@ describe("provider declaration target-state fields", () => {
     expect(() =>
       validatePluginProviderDeclaration(
         declaration({
-          // installUrl missing
           strings: {
             signInHint: "Sign in",
             expiredHint: "Expired",
@@ -107,9 +105,7 @@ describe("provider declaration target-state fields", () => {
       ),
     ).toThrow(/duplicated/u);
     expect(() =>
-      validatePluginProviderDeclaration(
-        declaration({ reasoningLevels: [] }),
-      ),
+      validatePluginProviderDeclaration(declaration({ reasoningLevels: [] })),
     ).toThrow(/non-empty array/u);
     expect(() =>
       validatePluginProviderDeclaration(
@@ -140,9 +136,6 @@ describe("provider declaration target-state fields", () => {
       ),
     ).toThrow(/Standard Schema v1/u);
   });
-  // A skill root is resolved against a directory the user did not choose, so
-  // it must be relative and free of dot segments. These are the shapes that
-  // would escape it.
   it("rejects a skill root that is not a relative path", () => {
     const roots = [
       ["an absolute path", "/etc/skills"],
@@ -152,12 +145,13 @@ describe("provider declaration target-state fields", () => {
       ["an empty segment", "skills//more"],
     ] as const;
     for (const [label, root] of roots) {
-      expect(() =>
-        validatePluginProviderDeclaration(
-          declaration({
-            experimental_nativeSkillRoots: { user: [root], project: [] },
-          }),
-        ),
+      expect(
+        () =>
+          validatePluginProviderDeclaration(
+            declaration({
+              experimental_nativeSkillRoots: { user: [root], project: [] },
+            }),
+          ),
         label,
       ).toThrow(/relative paths without dot segments/u);
     }
@@ -194,7 +188,14 @@ describe("provider declaration target-state fields", () => {
     );
 
     expect(normalized.experimental_nativeSkillRoots).toEqual({
-      user: [{ path: ".agents/skills", recursive: false, ancestors: false, namePrefix: "" }],
+      user: [
+        {
+          path: ".agents/skills",
+          recursive: false,
+          ancestors: false,
+          namePrefix: "",
+        },
+      ],
       project: [],
     });
     expect(normalized.experimental_nativeCommandRoots).toBeUndefined();
@@ -205,7 +206,9 @@ describe("provider declaration target-state fields", () => {
     const normalized = validatePluginProviderDeclaration(
       declaration({
         experimental_nativeSkillRoots: {
-          project: [{ path: ".cursor/skills", recursive: true, ancestors: true }],
+          project: [
+            { path: ".cursor/skills", recursive: true, ancestors: true },
+          ],
           user: [{ path: ".claude/plugins/one/skills", namePrefix: "one:" }],
         },
         experimental_nativeCommandRoots: { project: [".claude/commands"] },
@@ -213,11 +216,32 @@ describe("provider declaration target-state fields", () => {
       }),
     );
     expect(normalized.experimental_nativeSkillRoots).toEqual({
-      project: [{ path: ".cursor/skills", recursive: true, ancestors: true, namePrefix: "" }],
-      user: [{ path: ".claude/plugins/one/skills", recursive: false, ancestors: false, namePrefix: "one:" }],
+      project: [
+        {
+          path: ".cursor/skills",
+          recursive: true,
+          ancestors: true,
+          namePrefix: "",
+        },
+      ],
+      user: [
+        {
+          path: ".claude/plugins/one/skills",
+          recursive: false,
+          ancestors: false,
+          namePrefix: "one:",
+        },
+      ],
     });
     expect(normalized.experimental_nativeCommandRoots).toEqual({
-      project: [{ path: ".claude/commands", recursive: false, ancestors: false, namePrefix: "" }],
+      project: [
+        {
+          path: ".claude/commands",
+          recursive: false,
+          ancestors: false,
+          namePrefix: "",
+        },
+      ],
       user: [],
     });
     expect(normalized.experimental_resolvesNativeRoots).toBe(true);
@@ -228,18 +252,24 @@ describe("provider declaration target-state fields", () => {
           experimental_nativeCommandRoots: { user: ["../commands"] },
         }),
       ),
-    ).toThrow(/experimental_nativeCommandRoots\.user\.0\.path Roots must be relative paths without dot segments/u);
+    ).toThrow(
+      /experimental_nativeCommandRoots\.user\.0\.path Roots must be relative paths without dot segments/u,
+    );
     expect(() =>
       validatePluginProviderDeclaration(
         declaration({
-          experimental_nativeSkillRoots: { user: [{ path: ".agents/skills", ancestors: true }] },
+          experimental_nativeSkillRoots: {
+            user: [{ path: ".agents/skills", ancestors: true }],
+          },
         }),
       ),
     ).toThrow(/Only project roots may walk ancestors/u);
     expect(() =>
       validatePluginProviderDeclaration(
         declaration({
-          experimental_nativeSkillRoots: { user: [{ path: ".agents/skills", namePrefix: "no colon" }] },
+          experimental_nativeSkillRoots: {
+            user: [{ path: ".agents/skills", namePrefix: "no colon" }],
+          },
         }),
       ),
     ).toThrow(/ending in ':'/u);
@@ -250,9 +280,6 @@ describe("provider declaration target-state fields", () => {
     ).toThrow(/experimental_resolvesNativeRoots must be a boolean/u);
   });
 
-  // A declaration names the two relative sides only; host-absolute roots are
-  // the resolver's answer (`experimental_resolvesNativeRoots`). The side that
-  // once carried them is refused by name, not silently dropped.
   it("refuses the removed host-absolute side", () => {
     expect(() =>
       validatePluginProviderDeclaration(
@@ -272,24 +299,27 @@ describe("provider declaration target-state fields", () => {
     ).toThrow(/models\.scope must be one of host, workspace/u);
   });
 
-  // Filled once, here, so no consumer re-decides what an absent field means.
   it("defaults the model catalog scope to workspace", () => {
-    expect(
-      validatePluginProviderDeclaration(declaration()).models
-        .scope,
-    ).toBe("workspace");
+    expect(validatePluginProviderDeclaration(declaration()).models.scope).toBe(
+      "workspace",
+    );
   });
 });
 
 describe("provider declaration fields renamed in SDK 0.4.16", () => {
-  // One row per field S2 renamed. A plugin built against an SDK before
-  // 0.4.16 that still passes the old key must fail registration with the new
-  // name, not load with the field dropped.
   it.each([
     ["experimental_family", "family", "my-agent"],
     ["experimental_strings", "strings", { signInHint: "x", expiredHint: "y" }],
-    ["experimental_serviceTiers", "serviceTiers", [{ id: "fast", label: "Fast" }]],
-    ["experimental_reasoningLevels", "reasoningLevels", [{ id: "low", label: "Low" }]],
+    [
+      "experimental_serviceTiers",
+      "serviceTiers",
+      [{ id: "fast", label: "Fast" }],
+    ],
+    [
+      "experimental_reasoningLevels",
+      "reasoningLevels",
+      [{ id: "low", label: "Low" }],
+    ],
     ["experimental_extensionKinds", "extensionKinds", {}],
     ["experimental_models", "models", { scope: "workspace" }],
     ["experimental_env", "env", { passthrough: ["HOME"] }],
@@ -326,7 +356,7 @@ describe("provider declaration fields renamed in SDK 0.4.16", () => {
     ["experimental_providerHealth", "maintenance.health"],
     ["experimental_providerUsage", "maintenance.usage"],
     ["experimental_providerInstallation", "maintenance.installation"],
-  ] as const)('rejects capabilities.%s and names %s', (oldKey, newKey) => {
+  ] as const)("rejects capabilities.%s and names %s", (oldKey, newKey) => {
     const base = declaration();
     const stale = {
       ...base,
@@ -338,9 +368,6 @@ describe("provider declaration fields renamed in SDK 0.4.16", () => {
   });
 
   it("reports the move before the visibility rule that depends on it", () => {
-    // Old plugins set experimental_providerHealth: true to unlock the
-    // "installed" visibility. They must see the move, not a complaint about
-    // a maintenance.health they could not declare.
     const base = declaration();
     const stale = {
       ...base,

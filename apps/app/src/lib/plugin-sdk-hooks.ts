@@ -21,6 +21,7 @@ import type {
   PluginProvidersState,
   PluginSettingsState,
   ExperimentalAppPanel,
+  ExperimentalComposerSubmitOptions,
   ExperimentalFixedTabTargetState,
   ExperimentalPluginFixedTabReference,
   JsonValue,
@@ -68,24 +69,11 @@ import {
   useAppFixedTabTarget,
 } from "@/lib/app-fixed-tab-navigation";
 
-/**
- * Host implementations of the `@get-bb/plugin-sdk/app` hooks (plugin design
- * §5.2). Every hook requires the PluginContext provider that PluginSlotMount
- * wraps around mounted slot components; the fetch-backed parts are split
- * into pure functions taking an injected `fetch` so tests can exercise the
- * response mapping without a server.
- */
-
 type FetchLike = (
   input: string,
   init?: RequestInit,
 ) => Promise<Pick<Response, "ok" | "status" | "json">>;
 
-/**
- * Runtime-only compatibility for bundles built against SDK 0.4.1 before the
- * composer-scoped status API was withdrawn. Keep this unadvertised no-op until
- * those bundles are outside the supported upgrade window.
- */
 const legacySetThreadRowStatus = (_status: unknown): void => {};
 export function isAutomationEditRoutePath(pathname: string): boolean {
   return (
@@ -142,11 +130,6 @@ function serializePluginRpcInput(value: unknown): string {
   return JSON.stringify(value);
 }
 
-/**
- * POST /api/v1/plugins/:id/rpc/:method. Resolves with the handler's result;
- * throws an Error carrying the server's message on `{ ok: false }` or
- * non-JSON/HTTP failures.
- */
 export async function callPluginRpc(
   fetchImpl: FetchLike,
   pluginId: string,
@@ -191,16 +174,10 @@ export async function callPluginRpc(
   return body.result;
 }
 
-/**
- * GET /api/v1/plugins/:id/settings, reduced to the plugin-visible values:
- * secrets arrive as `{ set: boolean }` markers and are excluded by shape, so
- * a secret value can never reach plugin frontend code. Returns null when
- * settings are unavailable (plugin not running, experiment off).
- */
 export async function fetchPluginSdkSettings(
   fetchImpl: FetchLike,
   pluginId: string,
-): Promise<Record<string, string | boolean> | null> {
+): Promise<Record<string, string | number | boolean> | null> {
   const response = await fetchImpl(
     `/api/v1/plugins/${encodeURIComponent(pluginId)}/settings`,
   );
@@ -216,9 +193,13 @@ export async function fetchPluginSdkSettings(
   ) {
     return null;
   }
-  const values: Record<string, string | boolean> = {};
+  const values: Record<string, string | number | boolean> = {};
   for (const [key, value] of Object.entries(body.values)) {
-    if (typeof value === "string" || typeof value === "boolean") {
+    if (
+      typeof value === "string" ||
+      (typeof value === "number" && Number.isFinite(value)) ||
+      typeof value === "boolean"
+    ) {
       values[key] = value;
     }
   }
@@ -236,8 +217,6 @@ export function useRpc<
     }),
     [pluginId],
   );
-  // The runtime transport is contract-agnostic; the plugin supplies Contract
-  // from its type-only backend import and the server enforces its schemas.
   return client as PluginRpcClient<Contract>;
 }
 
@@ -246,7 +225,6 @@ export function useRealtime(
   handler: (payload: unknown) => void,
 ): void {
   const pluginId = usePluginId();
-  // Keep the latest handler without resubscribing per render.
   const handlerRef = useRef(handler);
   useEffect(() => {
     handlerRef.current = handler;
@@ -261,7 +239,6 @@ export function useRealtime(
   );
 }
 
-/** Exposes the lifecycle of the same socket that backs `useRealtime`. */
 export function useRealtimeConnectionState(): PluginRealtimeConnectionState {
   return useServerConnectionState();
 }
@@ -281,10 +258,6 @@ export function useSettings(): PluginSettingsState {
 
 const EMPTY_PROVIDERS: readonly never[] = [];
 
-/**
- * The provider directory for plugins: the host's own provider roster query
- * (shared cache, realtime invalidation), in picker order.
- */
 export function useProviders(): PluginProvidersState {
   const query = useSystemProviders();
   const providers = query.data;
@@ -308,11 +281,6 @@ export function useBbContext(): BbContext {
   );
 }
 
-/**
- * `BbNavigate` plus the one-release alias for the renamed `openUrl`, for
- * plugins built against an SDK before 0.4.16. Removal target: bb 0.42 (see
- * plugin-sdk-deprecated-aliases.ts).
- */
 interface BbNavigateWithDeprecatedAliases extends BbNavigate {
   experimental_openUrl: BbNavigate["openUrl"];
 }
@@ -325,9 +293,6 @@ export function useBbNavigate(): BbNavigate {
   const appNavigation = useAppNavigationHost();
   const toThread = useCallback(
     (threadId: string) => {
-      // The canonical thread path carries the owning project, which the
-      // plugin does not know — resolve it, falling back to the projectless
-      // path when the lookup fails.
       void sdk.threads
         .get({ threadId })
         .then((thread) =>
@@ -361,8 +326,6 @@ export function useBbNavigate(): BbNavigate {
       const replacesAutomationEditRoute =
         pluginId === AUTOMATIONS_PLUGIN_ID &&
         isAutomationEditRoutePath(location.pathname);
-      // RootComposeView reads `focusPrompt`/`initialPrompt` off the location
-      // state to seed and focus the composer (single-use, cleared after read).
       void navigate(getRootComposeRoutePath(), {
         ...(replacesAutomationEditRoute ? { replace: true } : {}),
         state: {
@@ -564,7 +527,6 @@ function notifyComposerInputLock(storageKey: string): void {
   for (const listener of [...listeners]) listener();
 }
 
-/** Read whether any plugin currently owns an input lock for this composer. */
 export function getComposerInputLock(storageKey: string | null): boolean {
   if (storageKey === null) return false;
   return (inputLocksByStorageKey.get(storageKey)?.size ?? 0) > 0;
@@ -611,7 +573,6 @@ function subscribeComposerInputLock(
   };
 }
 
-/** Subscribe a prompt-box host to plugin-owned input locks for its draft key. */
 export function useComposerInputLock(storageKey: string | null): boolean {
   const subscribe = useCallback(
     (listener: ComposerInputLockListener) =>
@@ -625,7 +586,6 @@ export function useComposerInputLock(storageKey: string | null): boolean {
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
-/** Reactive read-side of the active composer, with a route-backed fallback. */
 export function useComposerView(): ComposerView {
   const providedView = useContext(PluginComposerViewContext);
   const composerHost = usePluginComposerHost();
@@ -660,15 +620,6 @@ export function useComposerView(): ComposerView {
   return providedView ?? fallback;
 }
 
-/**
- * Programmatic composer-draft access (plugin design §5.2): the same shared
- * localStorage-backed draft store the built-in "Add to chat" affordances
- * write to. A transient host takes precedence while a queued message is being
- * edited; otherwise thread context targets that thread's draft and every
- * other surface targets the new-thread draft. Focus requests ride the
- * composer-focus bus when the active composer does not provide its own focus
- * primitive.
- */
 export function useComposer(): PluginComposerApi {
   const pluginId = usePluginId();
   const slotOwnershipRegistry = useContext(PluginSlotOwnershipContext);
@@ -832,16 +783,12 @@ export function useComposer(): PluginComposerApi {
       const provider = mention.provider.trim();
       const label = mention.label.trim() || mention.id;
       if (provider.length === 0 || provider.includes(":")) {
-        // Provider ids exclude ":" (enforced at registration) — a bad id
-        // would corrupt the composite itemId the server splits at send.
         console.warn(
           `[plugin:${pluginId}] useComposer().insertMention: invalid provider id "${mention.provider}"`,
         );
         return;
       }
       const current = getCurrent();
-      // Append at the END so existing mention offsets stay valid (the same
-      // invariant addQuote relies on).
       const separator =
         current.text.length === 0 || /\s$/u.test(current.text) ? "" : " ";
       const start = current.text.length + separator.length;
@@ -872,6 +819,23 @@ export function useComposer(): PluginComposerApi {
   const focus = focusActiveComposer;
   const composerText = composerHostDraft?.text ?? routeDraft.text;
 
+  const hostSubmit = composerHost?.submit;
+  const experimental_submit = useCallback(
+    async (options: ExperimentalComposerSubmitOptions) => {
+      if (!scopeOwnership.isActive()) {
+        throw new Error("This composer is no longer active.");
+      }
+      if (hostSubmit === undefined) {
+        throw new Error("This composer cannot schedule a submission.");
+      }
+      if (!Number.isFinite(options.sendAt) || options.sendAt <= Date.now()) {
+        throw new Error("Pick a time in the future.");
+      }
+      await hostSubmit({ sendAt: options.sendAt });
+    },
+    [hostSubmit, scopeOwnership],
+  );
+
   return useMemo(
     () => ({
       scope:
@@ -889,12 +853,14 @@ export function useComposer(): PluginComposerApi {
       addQuote,
       insertMention,
       focus,
+      experimental_submit,
     }),
     [
       addQuote,
       clear,
       composerScope,
       composerText,
+      experimental_submit,
       focus,
       insertMention,
       projectId,

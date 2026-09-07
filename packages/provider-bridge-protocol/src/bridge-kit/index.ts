@@ -1,16 +1,3 @@
-/**
- * The provider bridge kit: the runtime-agnostic building blocks a bridge
- * process uses to speak the canonical protocol — JSON-RPC plumbing, the stdio
- * harness, tool-call and interaction codecs, provider-dialect parsing
- * helpers, and the visibility classification every bb-authored bridge shares.
- * Timeline assembly (turn/item id minting, accepted-input correlation, item
- * settlement) is not here: bridges emit `thread/delta` and the runtime's
- * delta assembler owns all of it.
- *
- * A bridge ships from its plugin as a self-contained bundle, so everything
- * here must stay free of `@bb/agent-runtime` (the runtime imports the kit, not
- * the other way round).
- */
 export * from "./adapter-utils.js";
 export * from "./bounded-line-reader.js";
 export * from "./bridge-harness.js";

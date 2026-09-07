@@ -22,11 +22,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// The projection composes a step's id from its first child row, same shape as
-// bundle ids. Mirroring the formula here lets stories target the projected
-// step with `initialExpanded` without flipping the scope to active. If the
-// projection's id formula changes, thread-view's tests will catch it before
-// this helper does.
 function workSummaryId(children: readonly TimelineRow[]): string {
   const first = children[0];
   if (!first) {
@@ -46,18 +41,6 @@ type ExplorationRowArgs = { callId: string; seq: number } & (
   | { kind: "list"; pattern: string; path: string | null }
 );
 
-// ---------------------------------------------------------------------------
-// Step summaries are produced by `buildTimelineViewRows` when an
-// assistant-message boundary closes an open step that holds multiple
-// summarizable work rows. Concept transitions inside the step (commands ->
-// file-changes -> commands, exploration -> file-changes, etc.) become bundles
-// inside the step-summary's children.
-//
-// Raw rows below are pulled from thr_zeb7z9afmw turn 019dd185 — sequences
-// 35564..36155. The trailing assistant message is just an em-dash so the
-// boundary is visible without dominating the story canvas.
-// ---------------------------------------------------------------------------
-
 const THREAD_ID = "thr_zeb7z9afmw";
 const TURN_ID = "019dd185-ef12-7d50-aa48-47882e9c8aaf";
 
@@ -74,7 +57,6 @@ const closingAssistantMessage: TimelineRow = conversationRow({
   attachments: null,
 });
 
-// ---- Commands: real turbo build/test commands from the same turn ----------
 const commandTurboBuild: TimelineRow = commandRow({
   id: `${THREAD_ID}:command:call_buildDomainCoreUi`,
   threadId: THREAD_ID,
@@ -200,7 +182,6 @@ const commandGitDiffStat: TimelineRow = commandRow({
   durationMs: 500,
 });
 
-// ---- File changes: real diffs from the same turn --------------------------
 const fileChangeAssistantStream: TimelineRow = fileChangeRow({
   id: `${THREAD_ID}:fileChange:35564`,
   threadId: THREAD_ID,
@@ -310,7 +291,6 @@ const fileChangeToViewMessages: TimelineRow = fileChangeRow({
   approvalStatus: null,
 });
 
-// ---- Exploration rows (Read / Grep / Glob as file-read / search rows) -----
 function explorationRow(args: ExplorationRowArgs): TimelineRow {
   const base = {
     threadId: THREAD_ID,
@@ -379,11 +359,6 @@ const globTests = explorationRow({
   path: "packages/core-ui/test",
 });
 
-// ---- Step compositions ----------------------------------------------------
-// Each array is "work rows that share an open step" + the closing assistant
-// message that flushes them into a step-summary.
-
-// 4 commands → 3 file-changes → 2 commands (3 bundles)
 const mixedThreeBundlesRows: TimelineRow[] = [
   commandTurboBuild,
   commandTurboTestServer,
@@ -397,7 +372,6 @@ const mixedThreeBundlesRows: TimelineRow[] = [
   closingAssistantMessage,
 ];
 
-// 2 reads → 2 file-changes (2 bundles)
 const exploreThenEditRows: TimelineRow[] = [
   readAssistantStream,
   readIndex,
@@ -406,7 +380,6 @@ const exploreThenEditRows: TimelineRow[] = [
   closingAssistantMessage,
 ];
 
-// 2 reads → 1 grep → 1 glob (single exploration bundle, ~4 children)
 const explorationOnlyRows: TimelineRow[] = [
   readAssistantStream,
   readIndex,
@@ -415,7 +388,6 @@ const explorationOnlyRows: TimelineRow[] = [
   closingAssistantMessage,
 ];
 
-// 2 commands → 4 file-changes (2 bundles) — typical "verify, then edit" shape
 const commandsThenFilesRows: TimelineRow[] = [
   commandTurboBuild,
   commandTurboTestServer,
@@ -426,7 +398,6 @@ const commandsThenFilesRows: TimelineRow[] = [
   closingAssistantMessage,
 ];
 
-// Single concept all the way (4 commands) — single bundle inside the step.
 const allCommandsRows: TimelineRow[] = [
   commandTurboBuild,
   commandTurboTestServer,

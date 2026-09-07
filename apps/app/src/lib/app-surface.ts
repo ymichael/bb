@@ -8,11 +8,6 @@ import { isInsideNativeShell } from "@/lib/native-shell";
 
 const APP_SURFACE_MOBILE: RequestAppSurface = "mobile";
 
-/**
- * Which client this request comes from. The bb mobile shell renders this same
- * page inside a WebView, and traffic from a phone must not land in the `web`
- * bucket: the server uses the surface to reason about who is at the keyboard.
- */
 export function getAppSurface(): RequestAppSurface {
   if (typeof window !== "undefined" && window.bbDesktop !== undefined) {
     return APP_SURFACE_DESKTOP;

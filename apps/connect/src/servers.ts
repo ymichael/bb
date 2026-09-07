@@ -8,6 +8,7 @@ import {
 } from "@bb/connect-db";
 import {
   parseCookie,
+  sha256Hex,
   verifyMachineCredential,
   verifySessionCookie,
 } from "./session.js";
@@ -112,22 +113,6 @@ const serverCredentialCache = new Map<
 >();
 const SERVER_CRED_TTL_MS = 20_000;
 
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return [...new Uint8Array(digest)]
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-/**
- * Verify a durable server tunnel credential (the plaintext stored by a paired
- * bb). Returns the owning userId when the hash matches a non-revoked server row.
- * Same isolate-cache shape as machine credentials so a warm list endpoint does
- * not re-hash every call.
- */
 export async function verifyServerCredential(
   credential: string,
   db: ConnectDb,
@@ -152,7 +137,6 @@ export async function verifyServerCredential(
   return userId;
 }
 
-/** Revoke exactly the active server row authenticated by `credential`. */
 export async function revokeServerCredential(
   credential: string,
   db: ConnectDb,
@@ -175,17 +159,6 @@ export async function revokeServerCredential(
   return revoked ?? null;
 }
 
-/**
- * Resolve the authenticated account for account-scoped connect APIs.
- *
- * Accepts, in order:
- *   1. `x-bb-connect-machine` — machine credential (daemon) OR a paired
- *      server's tunnel credential (plugin passthrough uses the same header
- *      with the stored pairing secret).
- *   2. Owner better-auth session cookie.
- *
- * Returns null when nothing authenticates.
- */
 export async function resolveAccountUserId(
   request: Request,
   secret: string,
@@ -196,9 +169,6 @@ export async function resolveAccountUserId(
   if (presented) {
     const machineUserId = await verifyMachineCredential(presented, db);
     if (machineUserId) return machineUserId;
-    // Paired bbs store a server tunnel credential, not a machine credential.
-    // Accept it on the same header so the plugin can call this endpoint with
-    // its stored pairing secret without inventing a second auth scheme.
     const serverUserId = await verifyServerCredential(presented, db);
     if (serverUserId) return serverUserId;
   }
@@ -209,23 +179,11 @@ export async function resolveAccountUserId(
 }
 
 interface AccountServerListing {
-  /** Routing label (`server.subdomain`) — `<handle>.getbb.app`. */
   handle: string;
-  /** Human-readable row name; falls back to handle when empty. */
   name: string;
-  /**
-   * Best-effort tunnel liveness from `server.last_seen_at` vs
-   * `SERVER_OFFLINE_AFTER_MS` (same rule as the dashboard `online` flag).
-   * TunnelDO knows the live socket, but probing every DO would fan out per
-   * row; heartbeats already write last_seen_at while a tunnel is up.
-   */
   live: boolean;
 }
 
-/**
- * Every server row owned by `userId`, projected for account listing.
- * Targeted `WHERE user_id = ?` — never load-all-and-filter.
- */
 export async function listAccountServers(
   db: ConnectDb,
   userId: string,
@@ -257,7 +215,6 @@ export async function listAccountServers(
   });
 }
 
-/** `GET /api/connect/servers` — account-scoped server list for desktop/plugin. */
 export async function handleListAccountServers(
   request: Request,
   env: Env,
@@ -294,7 +251,6 @@ export async function handleListAccountServers(
   });
 }
 
-/** `POST /api/connect/disconnect` — revoke the presenting bb itself. */
 export async function handleDisconnectServer(
   request: Request,
   env: Env,
@@ -322,13 +278,10 @@ export async function handleDisconnectServer(
   try {
     const stub = env.TUNNEL_DO.get(env.TUNNEL_DO.idFromName(revoked.subdomain));
     await stub.fetch("https://tunnel/__control/close");
-  } catch {
-    // Best-effort: the credential is already revoked, so reconnect is blocked.
-  }
+  } catch {}
   return Response.json({ ok: true });
 }
 
-/** Exchange a durable pairing credential for a short-lived browser session. */
 export async function handleCreateDesktopSession(
   request: Request,
   env: Env,

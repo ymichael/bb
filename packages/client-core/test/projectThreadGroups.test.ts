@@ -1,4 +1,5 @@
 import type { ThreadListEntry } from "@bb/domain";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
 import {
   buildChronologicalThreadList,
@@ -45,46 +46,17 @@ compareAlphaDescending.compareItems = (left, right) =>
 function createThread(
   overrides: ThreadListEntryOverrides = {},
 ): ThreadListEntry {
-  return {
+  return makeThreadListEntry({
     id: "thr_1",
     projectId: "proj_1",
-    environmentId: null,
-    providerId: "codex",
     title: "Thread",
     titleFallback: "Thread",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
     lastReadAt: 0,
     latestAttentionAt: 2,
     createdAt: 1,
     updatedAt: 2,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
     ...overrides,
-  };
+  });
 }
 
 function summarizeNode(node: ProjectThreadNode): TreeSummary {
@@ -267,6 +239,7 @@ describe("buildProjectThreadGroups", () => {
         id: "worktree-a",
         parentThreadId: "parent",
         environmentId: "env_shared",
+        queuedWork: "none",
         environmentWorkspaceDisplayKind: "managed-worktree",
         createdAt: 10,
         latestAttentionAt: 100,
@@ -275,6 +248,7 @@ describe("buildProjectThreadGroups", () => {
         id: "worktree-b",
         parentThreadId: "parent",
         environmentId: "env_shared",
+        queuedWork: "none",
         environmentWorkspaceDisplayKind: "managed-worktree",
         createdAt: 20,
         latestAttentionAt: 200,
@@ -431,13 +405,11 @@ describe("buildProjectThreadGroups", () => {
       }),
     ];
 
-    // Default heuristic pins active rows ahead of idle ones.
     expect(summarizeItems(buildProjectThreadGroups(threads))).toEqual([
       "active-old",
       "idle-new",
     ]);
 
-    // The created comparator ignores status and sorts purely by createdAt desc.
     expect(
       summarizeItems(
         buildProjectThreadGroups(threads, compareByCreatedAtDescending),
@@ -475,6 +447,7 @@ describe("buildProjectThreadGroups", () => {
             id: "worktree-a",
             parentThreadId: "parent",
             environmentId: "env_shared",
+            queuedWork: "none",
             environmentWorkspaceDisplayKind: "managed-worktree",
             createdAt: 10,
             latestAttentionAt: 100,
@@ -483,6 +456,7 @@ describe("buildProjectThreadGroups", () => {
             id: "worktree-b",
             parentThreadId: "parent",
             environmentId: "env_shared",
+            queuedWork: "none",
             environmentWorkspaceDisplayKind: "managed-worktree",
             createdAt: 20,
             latestAttentionAt: 200,
@@ -557,8 +531,6 @@ describe("section bucketing", () => {
       ],
     );
 
-    // Same idle/attention threads tie-break on codepoint id; flat sections render
-    // as a block above the loose "Standalone" thread.
     expect(summarizeItems(items)).toEqual([
       { section: "chronological::sec_work", name: "Work", items: ["c"] },
       {
@@ -618,8 +590,6 @@ describe("section bucketing", () => {
       ],
     );
 
-    // Only the top-level parent picks the bucket; the child stays nested under it
-    // and does not create a second section row.
     expect(summarizeItems(items)).toEqual([
       {
         section: "chronological::sec_work",
@@ -789,8 +759,6 @@ describe("section bucketing", () => {
       [{ id: "sec_work", name: "Work" }],
     );
 
-    // The child follows its parent into the section as a nested row rather than
-    // splitting out as a loose top-level thread.
     expect(summarizeItems(items)).toEqual([
       {
         section: "chronological::sec_work",
@@ -906,7 +874,6 @@ describe("resolveSidebarProjectId", () => {
     const resolve = createSidebarProjectIdResolver(spyingMap);
 
     expect(all.map(resolve)).toEqual(Array(all.length).fill("proj_a"));
-    // Root and child resolve once; each grandchild stops at the cached child.
     expect(lookups).toEqual([
       "thr_root",
       "thr_child",

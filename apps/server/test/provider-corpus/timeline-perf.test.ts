@@ -1,33 +1,3 @@
-/**
- * Timeline-build performance baselines.
- *
- * 1. Corpus baseline (needs `BB_PROVIDER_CORPUS_DIR`): the 10 largest threads
- *    per provider, N=5 profiled builds each of the latest page and of the full
- *    page walk, after one warm-up build. Write mode records the numbers in
- *    `$BB_PROVIDER_CORPUS_DIR/snapshots/perf-baseline.json`; compare mode
- *    fails when a thread's normalized build cost exceeds its baseline by more
- *    than 10% or its median persisted event size by more than 15%.
- *
- *    Raw wall-clock p50/p95 from the build profiles are recorded and printed,
- *    but the gate uses a normalized cost: the minimum build time over the
- *    samples divided by the minimum time of a fixed CPU workload that shares
- *    no code with the timeline (JSON codec and sorting over a deterministic
- *    document), run once per sample right before the builds. Contention only
- *    ever adds time, so each minimum discards the contended samples on its
- *    own side and is the estimate closest to intrinsic cost; interleaving
- *    keeps both minima inside the same short window, so steady load and
- *    machine speed cancel; and a workload outside the timeline path means a
- *    uniform timeline regression still moves the ratio. (The minimum of the
- *    per-sample ratios is recorded as a diagnostic but not gated on: a stall
- *    on the calibration side drives it spuriously low.) On a 16-core
- *    workstation at load ~6 the raw p50 swung by up to 30% between two runs
- *    of the same commit while this ratio stayed within a few percent; the
- *    per-thread retry absorbs the rare burst.
- *
- * 2. CI micro-benchmark (always runs): every page of a synthetic 10k-event
- *    thread must build under a generous ceiling. It guards against a
- *    pathological regression, not against the budget the corpus baseline pins.
- */
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -58,40 +28,15 @@ import {
 } from "./synthetic-thread.js";
 
 const BUILD_SAMPLES = 5;
-/**
- * A burst of interference (another suite starting, a GC pause) can still hit
- * all five samples of one thread. Each thread is measured this many times:
- * write mode keeps the attempt with the median cost (the cheapest would mint
- * a lucky baseline that later runs cannot match), compare mode stops at the
- * first attempt that passes and fails only when every attempt exceeds the
- * budget.
- */
 const MEASUREMENT_ATTEMPTS = 3;
 const LARGEST_PER_PROVIDER = 10;
 const DURATION_TOLERANCE = 1.1;
-/**
- * A latest-page build on a well-windowed thread takes ~2–20 ms, where one
- * timer tick or cache miss is already 10%. The budget is 10% or this many
- * milliseconds of intrinsic cost, whichever is larger.
- */
 const DURATION_TOLERANCE_FLOOR_MS = 5;
 const DATA_BYTES_TOLERANCE = 1.15;
 const PER_THREAD_TIMEOUT_MS = 5 * 60_000;
 
-/**
- * Bump when the calibration workload changes shape: a baseline normalized
- * against a different workload is not comparable and must be rewritten.
- */
 const CALIBRATION_KIND = "json-sort-v1";
 
-/**
- * Measured locally at 150–170 ms minimum (160–250 ms p50) for the full page
- * walk of the 10k-event synthetic thread (12 pages, default variant) on a
- * 2026 Linux workstation. The gate takes the minimum of five walks, which a
- * loaded runner only exceeds when every sample is slow, and the ceiling is
- * ~10× the local minimum: a slow CI runner passes, while a pathological
- * regression (an unbounded reprojection, a quadratic pass) still fails.
- */
 const SYNTHETIC_EVENT_COUNT = 10_000;
 const SYNTHETIC_CEILING_MS = 1_500;
 
@@ -113,9 +58,7 @@ const buildCostSchema = z.object({
   p50Ms: z.number(),
   p95Ms: z.number(),
   minMs: z.number(),
-  /** `minMs` ÷ the calibration minimum of the same interleaved samples. */
   normalizedMin: z.number(),
-  /** Minimum over samples of the per-sample ratio; diagnostic only. */
   pairedRatioMin: z.number(),
 });
 type BuildCost = z.infer<typeof buildCostSchema>;
@@ -126,7 +69,6 @@ const perfThreadBaselineSchema = z.object({
   dataBytesMedian: z.number(),
   dataBytesP95: z.number(),
   dataBytesTotal: z.number(),
-  /** Calibration workload minimum across this thread's samples. */
   calibrationMinMs: z.number(),
   latest: buildCostSchema.extend({
     rowsProduced: z.number(),
@@ -156,10 +98,6 @@ const CURRENT_GATE_SETTINGS = {
   calibration: CALIBRATION_KIND,
 } satisfies z.infer<typeof perfGateSettingsSchema>;
 
-// ---------------------------------------------------------------------------
-// Calibration workload: deterministic CPU work with no timeline code in it.
-// ---------------------------------------------------------------------------
-
 function createLcg(seed: number): () => number {
   let state = seed >>> 0;
   return () => {
@@ -181,10 +119,8 @@ function buildCalibrationDocument(): string {
 }
 
 const CALIBRATION_DOCUMENT = buildCalibrationDocument();
-/** Keeps the workload's results alive so the JIT cannot elide the work. */
 let calibrationSink = 0;
 
-/** Runs the fixed workload once and returns its wall time in ms. */
 function runCalibrationWorkload(): number {
   const startedAt = performance.now();
   let checksum = 0;
@@ -201,10 +137,6 @@ function runCalibrationWorkload(): number {
   calibrationSink = (calibrationSink + checksum) % 1_000_003;
   return performance.now() - startedAt;
 }
-
-// ---------------------------------------------------------------------------
-// Measurement
-// ---------------------------------------------------------------------------
 
 function round(value: number, digits = 2): number {
   const factor = 10 ** digits;
@@ -224,7 +156,6 @@ function sumProfileDurations(pages: readonly BuiltTimelinePage[]): number {
   return pages.reduce((total, page) => total + page.profile.totalDurationMs, 0);
 }
 
-/** One warm-up build, then `BUILD_SAMPLES` measured builds. */
 function sample<T>(build: () => T): T[] {
   build();
   const samples: T[] = [];
@@ -268,26 +199,22 @@ function measureCorpusThread(
   const corpusThread = loadCorpusThread(threadId);
   const loaded = loadCorpusThreadIntoDb(corpusThread);
   try {
-    // Each sample runs the calibration workload right before the two builds,
-    // so the minima on both sides come from the same short window.
-    const samples = sample(
-      (): InterleavedSample => ({
-        calibrationMs: runCalibrationWorkload(),
-        latest: buildRouteTimelinePage({
-          db: loaded.db,
-          page: latestTimelinePage(),
-          registry,
-          thread: loaded.thread,
-          variant: "default",
-        }),
-        walk: buildAllRouteTimelinePages({
-          db: loaded.db,
-          registry,
-          thread: loaded.thread,
-          variant: "default",
-        }),
+    const samples = sample((): InterleavedSample => ({
+      calibrationMs: runCalibrationWorkload(),
+      latest: buildRouteTimelinePage({
+        db: loaded.db,
+        page: latestTimelinePage(),
+        registry,
+        thread: loaded.thread,
+        variant: "default",
       }),
-    );
+      walk: buildAllRouteTimelinePages({
+        db: loaded.db,
+        registry,
+        thread: loaded.thread,
+        variant: "default",
+      }),
+    }));
     const latestSamples = samples.map((entry) => entry.latest);
     const walkSamples = samples.map((entry) => entry.walk);
     const latestStageP50Ms: Record<string, number> = {};
@@ -357,7 +284,6 @@ function perfChecks(
   result: PerfThreadBaseline,
   expected: PerfThreadBaseline,
 ): string[] {
-  // The floor is expressed in the same normalized unit as the gate.
   const durationFloor = DURATION_TOLERANCE_FLOOR_MS / result.calibrationMinMs;
   const checks: [string, number, number, number, number][] = [
     [
@@ -403,12 +329,6 @@ interface MeasuredThread {
   result: PerfThreadBaseline;
 }
 
-/**
- * Measures up to `MEASUREMENT_ATTEMPTS` times. Without a baseline (write
- * mode) every attempt runs and the median-cost attempt wins; with one, the
- * first passing attempt wins and otherwise the cheapest failing attempt is
- * reported.
- */
 function measureThreadWithRetries(
   threadId: string,
   registry: ProviderRegistryService,
@@ -467,8 +387,6 @@ const corpusThreads = available
   : [];
 
 describe.skipIf(!available)("provider corpus timeline perf baseline", () => {
-  // The describe body runs at collection time even when skipped, so it must
-  // tolerate a missing corpus.
   const corpusDir = resolveProviderCorpusDir() ?? "";
   const snapshotsDir = path.join(corpusDir, "snapshots");
   const baselinePath = path.join(snapshotsDir, "perf-baseline.json");
@@ -564,8 +482,6 @@ describe.skipIf(!available)("provider corpus timeline perf baseline", () => {
       ];
     });
     const table = formatMarkdownTable(header, rows);
-    // A perf gate needs a machine that is not oversubscribed: with more
-    // runnable threads than cores even paired ratios drift by 10–20%.
     const [loadAverage1m = 0] = os.loadavg();
     const loadNote = `load average ${loadAverage1m.toFixed(1)} on ${os.cpus().length} cores${
       loadAverage1m > os.cpus().length
@@ -599,10 +515,6 @@ describe("timeline build micro-benchmark", () => {
       expect(synthetic.eventCount).toBeGreaterThanOrEqual(
         SYNTHETIC_EVENT_COUNT,
       );
-      // The latest page alone is bounded by segment windowing, so the whole
-      // walk is what scales with the thread: every page, default variant,
-      // summed over the build profiles (SQLite reads, decode, projection,
-      // pagination) rather than wall time, so disk noise does not count.
       const samples = sample(() =>
         buildAllRouteTimelinePages({
           db: synthetic.db,

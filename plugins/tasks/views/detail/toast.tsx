@@ -6,7 +6,6 @@ interface DetailToast {
   message: string;
 }
 
-/** Minimal transient toast state for the detail page (no host toast API). */
 export function useDetailToasts() {
   const [toasts, setToasts] = useState<DetailToast[]>([]);
   const nextIdRef = useRef(1);

@@ -16,14 +16,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Real command rows pulled from a live thread in ~/.bb-dev/bb.db
-// (thr_zeb7z9afmw — "Refactor projection / package boundary"). These are
-// non-parsed-intent commands (pnpm exec turbo run *, git status) — the kind
-// the agent runs that don't get classified as read/list_files/search.
-// Outputs are truncated to ~3KB so the story stays manageable.
-// ---------------------------------------------------------------------------
-
 const lintCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_sad2tEhg7JbBkt36PDVPgAbL",
   threadId: "thr_zeb7z9afmw",
@@ -89,9 +81,6 @@ const failedTestCommand: TimelineRow = commandRow({
   durationMs: 7119,
 });
 
-// Real interrupted command from thr_gnkq5q3vnt — `pnpm ladle` was killed by
-// the agent's controlling timeout (exit -1 = interrupted). The output ends
-// mid-stream with a SIGTERM rejection from pnpm.
 const interruptedCommand: TimelineRow = commandRow({
   id: "thr_gnkq5q3vnt:command:call_ladle_interrupted",
   threadId: "thr_gnkq5q3vnt",
@@ -113,9 +102,6 @@ const interruptedCommand: TimelineRow = commandRow({
   durationMs: 10000,
 });
 
-// Running command — status=pending, no exitCode/completedAt yet. Realistic
-// long-running test-watch command: the agent kicked off vitest and the row
-// is mid-flight.
 const runningCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_running",
   threadId: "thr_zeb7z9afmw",
@@ -136,8 +122,6 @@ const runningCommand: TimelineRow = commandRow({
   durationMs: null,
 });
 
-// Waiting for approval — destructive-looking command parked on the approval
-// gate. status=pending, approvalStatus=waiting_for_approval.
 const waitingApprovalCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_waiting_approval",
   threadId: "thr_zeb7z9afmw",
@@ -179,7 +163,6 @@ const gitStatusCommand: TimelineRow = commandRow({
   durationMs: 0,
 });
 
-// Denied — user rejected the approval request, command never ran.
 const deniedCommand: TimelineRow = commandRow({
   id: "thr_zeb7z9afmw:command:call_denied",
   threadId: "thr_zeb7z9afmw",
@@ -240,7 +223,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="collapsed — waiting for approval"
-        hint="approvalStatus=waiting_for_approval, parked before execution"
+        hint="approvalStatus=waiting_for_approval, queued before execution"
       >
         <TimelineStage>
           <ThreadTimelineRows

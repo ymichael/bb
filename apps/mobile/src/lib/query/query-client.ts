@@ -11,13 +11,6 @@ const TRANSIENT_READ_RETRY_COUNT = 2;
 export const TRANSIENT_READ_RETRY_DELAY_MS = 250;
 const DEFAULT_QUERY_STALE_TIME_MS = 2000;
 
-/**
- * Transport-level failures worth an immediate retry (mirrors
- * apps/app/src/hooks/queries/query-helpers.ts, plus React Native's
- * "Network request failed" and expo/fetch's "fetch failed: … Could not
- * connect to the server" wordings). HTTP errors from the server are not
- * transient: the server answered.
- */
 export function isTransientReadError(error: unknown): boolean {
   if (error instanceof BbHttpError) return false;
   const record = toRecord(error);
@@ -48,20 +41,12 @@ export function shouldRetryTransientReadQuery(
 
 export interface CreateProfileQueryClientOptions {
   defaultOptions?: QueryClientConfig["defaultOptions"];
-  /**
-   * Global mutation error sink (toast, log). Mutations that handle their own
-   * errors set `meta.showErrorToast: false` like the web app.
-   */
   onMutationError?: (
     error: unknown,
     mutation: Mutation<unknown, unknown, unknown, unknown>,
   ) => void;
 }
 
-/**
- * One QueryClient per server profile (keys are not server-scoped). Focus
- * refetching is driven by AppState (see `installAppStateQueryEvents`).
- */
 export function createProfileQueryClient(
   options: CreateProfileQueryClientOptions = {},
 ): QueryClient {

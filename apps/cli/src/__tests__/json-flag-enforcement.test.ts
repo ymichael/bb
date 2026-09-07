@@ -7,7 +7,6 @@ import { registerProviderCommands } from "../commands/provider.js";
 import { registerManagerCommands } from "../commands/manager.js";
 import { registerMachineCommands } from "../commands/machine.js";
 import { registerThreadCommands } from "../commands/thread/index.js";
-// Commands intentionally excluded from --json requirement
 const EXCLUDED_COMMANDS = new Set<string>();
 
 function collectLeafCommands(

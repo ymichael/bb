@@ -421,10 +421,6 @@ async function copyCollectedTree(args: StageTreeArgs): Promise<void> {
   }
 }
 
-/**
- * Copy one complete skill tree through the same bounded, symlink-rejecting
- * collector used for provider runtime staging.
- */
 export async function copyInjectedSkillSource(
   args: CopyInjectedSkillSourceArgs,
 ): Promise<void> {
@@ -528,13 +524,6 @@ async function writeStageRootOnce(args: WriteStageRootArgs): Promise<string> {
   return write;
 }
 
-/**
- * One root for every provider: the staged `skills/` directory, one
- * subdirectory per skill (`<path>/<name>/SKILL.md`), plus the skill list.
- * Each bridge maps it to its provider's own layout (a codex extra root, a
- * claude local plugin it assembles itself, a pi skill path, an ACP prompt
- * listing); the daemon stages no provider-native manifest.
- */
 function buildSkillRoots(args: BuildSkillRootsArgs): AgentRuntimeSkillRoot[] {
   return [
     {
@@ -624,12 +613,6 @@ function hashStoredTreeFiles(files: readonly CollectedSkillFile[]): string {
   return hash.digest("hex");
 }
 
-/**
- * Hash an installed skill directory with the same recipe used for skill trees,
- * so the result is directly comparable to a server tree hash. Returns null when
- * the directory is absent or is not a readable skill tree (a partially removed
- * or hand-edited copy simply reads as "not the expected tree").
- */
 export async function hashInstalledSkillDirectory(args: {
   name: string;
   skillDirectoryPath: string;
@@ -926,9 +909,6 @@ export async function cleanupInjectedSkillStagingDirs(
     entries.map(async (entry) => {
       const entryPath = path.join(stagingRootPath, entry.name);
       if (entry.name.startsWith(".tmp-")) {
-        // Temp dirs belong to in-flight writeStageRoot runs that may be
-        // racing this cleanup from a concurrent thread start; reap only
-        // stale leftovers from crashed stagings.
         let mtimeMs: number;
         try {
           mtimeMs = (await fs.stat(entryPath)).mtimeMs;

@@ -1,18 +1,3 @@
-/**
- * The one adapter the runtime drives: the Provider Bridge Protocol speaker.
- *
- * A bridge that speaks the canonical Provider Bridge Protocol
- * (@bb/provider-bridge-protocol) needs no bespoke adapter: commands map to
- * canonical methods, events arrive as already-translated ThreadEvents, and
- * session-behavior capabilities come from the initialize handshake — captured
- * here per process and consulted for gated session methods. Sessionless
- * maintenance methods are gated by the provider registration before a command
- * reaches this adapter.
- *
- * Execution options ride every command and the bridge reconciles them
- * internally, reporting any session rebuild via the mandatory
- * `session/replaced` notification; the runtime never diffs them.
- */
 import type {
   AvailableModel,
   ProviderCapabilities,
@@ -57,48 +42,23 @@ import { decodeNormalizedProviderToolCallRequest } from "@bb/provider-bridge-pro
 import { parseAvailableModelList } from "./shared/available-models.js";
 import type { AgentRuntimeProviderRecoveryHint } from "./types.js";
 
-/** A decoded recovery hint before the runtime stamps the provider id. */
 export type ProviderRecoveryHint = Omit<
   AgentRuntimeProviderRecoveryHint,
   "providerId"
 >;
 
-/**
- * The one adapter the runtime drives: the Provider Bridge Protocol speaker.
- * Every provider — first-party plugin bridges, third-party plugin bridges,
- * the test harness's scripted echo bridge — runs
- * behind this contract, so there is no provider-specific implementation and
- * no interface for one to hide behind. The runtime owns the command plane
- * (it builds requests through `buildCommandPlan`, sends them, and reads the
- * results); the adapter owns the wire: the handshake, the `thread/delta`
- * assembler, the tool-call and interaction codecs.
- */
 export interface BridgeProtocolAdapter {
   id: string;
   capabilities: BridgeEnforcedCapabilities;
-  /**
-   * Where approval escalation is enforced, as the handshake reported it.
-   * `runtime`: the runtime applies the thread's current policy to every
-   * forwarded request. `provider`: the bridge enforced the policy before
-   * forwarding, so a forwarded approval must not be reclassified against
-   * mutable thread settings.
-   */
   readonly approvalEnforcedBy: "runtime" | "provider";
   process: { command: string; args: string[]; env?: Record<string, string> };
   buildCommandPlan(command: AdapterCommand): ProviderCommandPlan;
-  /** The `initialize` handshake, sent before any thread work starts. */
   buildPostInitializeRequests(): readonly ProviderPostInitializeRequest[];
   parseModelListResult(result: unknown): {
     models: AvailableModel[];
     selectedOnlyModels: AvailableModel[];
   };
-  /** Assemble a bridge notification into canonical timeline events. */
   translateEvent(event: ProviderRuntimeEvent): ThreadEvent[];
-  /**
-   * A typed `provider/recovery` hint carried by this notification, or null
-   * for anything else. Decoded here (the adapter owns the wire), forwarded by
-   * the runtime to `onProviderRecovery` — never a timeline event.
-   */
   decodeRecoveryHint(event: ProviderRuntimeEvent): ProviderRecoveryHint | null;
   decodeToolCallRequest(
     request: ProviderInboundRequest,
@@ -111,19 +71,6 @@ export interface BridgeProtocolAdapter {
   ): ProviderInteractiveResponse;
 }
 
-/**
- * A bridge adapter is built from the provider's DECLARED capabilities, which
- * name the fork ladder directly ({@link ProviderFork}) rather than the two
- * booleans clients gate on. The adapter projects those booleans onto its
- * public {@link BridgeProtocolAdapter.capabilities}, and keeps the ladder to
- * bound what the initialize handshake may claim.
- */
-/**
- * The capabilities the daemon ENFORCES: every provider capability except
- * `modelCatalogScope`, which says how far one `model/list` answer travels.
- * The server memoizes on it and the app routes on it; no command the adapter
- * gates depends on it, so it never crosses to the daemon.
- */
 export type BridgeEnforcedCapabilities = Omit<
   ProviderCapabilities,
   "modelCatalogScope"
@@ -140,12 +87,6 @@ interface BridgeProtocolAdapterOptions {
   id: string;
   capabilities: BridgeAdapterCapabilities;
   process: { command: string; args: string[]; env?: Record<string, string> };
-  /**
-   * Provider-scoped options merged under `options.providerOptions` on every
-   * session and turn command (per-command values win). The transitional
-   * delivery path for data the provider's bridge needs but core does not
-   * interpret — e.g. the ACP launch spec.
-   */
   staticProviderOptions?: Record<string, unknown>;
 }
 
@@ -163,6 +104,7 @@ const sessionReplacedNotificationParamsSchema = z
     providerThreadId: z.string().min(1).nullable(),
     reason: z.string().min(1),
     contextLost: z.boolean().default(false),
+    showRuntimeNote: z.boolean().default(false),
   })
   .passthrough();
 
@@ -179,26 +121,13 @@ const interactionRequestParamsSchema = z.object({
   threadId: z.string().min(1).optional(),
   turnId: z.union([z.string().min(1), z.null()]),
   payload: pendingInteractionPayloadSchema,
-  /**
-   * The request's ids are provider-native (a thread/delta bridge holds no bb
-   * ids): translate the turn id and approval-subject item ids through the
-   * delta assembler's maps so the app sees the timeline's own ids.
-   */
   providerNativeIds: z.boolean().optional(),
 });
 
-/** The provider-native-id marker on a normalized tool-call request. */
 const providerNativeIdsParamsSchema = z
   .object({ providerNativeIds: z.boolean().optional() })
   .passthrough();
 
-/**
- * Execution options → canonical wire options. Core execution fields map
- * one-to-one; the plugin-derived `providerOptions` bag is merged over the
- * bridge's static options (declared `experimental_bridgeOptions`, the ACP
- * launch spec, the environment's extra write roots) so the bridge reads one
- * bag.
- */
 function toBridgeWireOptions(
   options: ProviderExecutionContext,
   staticProviderOptions?: Record<string, unknown>,
@@ -244,20 +173,12 @@ export function createBridgeProtocolAdapter(
     supportsFork: declaredFork !== "none",
     supportsSessionRewind: declaredFork === "checkpoint",
   };
-  /**
-   * The operative fork ladder: the declaration is a ceiling and the handshake
-   * may only narrow it, so the effective value is whichever of the two sits
-   * lower on the ordinal ladder. A bridge that claims more than its provider
-   * declared is held to the declaration.
-   */
   function effectiveFork(): ProviderFork {
     return PROVIDER_FORK_VALUES.indexOf(handshake.fork) <
       PROVIDER_FORK_VALUES.indexOf(declaredFork)
       ? handshake.fork
       : declaredFork;
   }
-  // The narrow grammar: bridges emit parsed semantic deltas (`thread/delta`)
-  // and this assembler constructs every canonical timeline event.
   const deltaAssembler = createDeltaAssembler({ providerId: options.id });
 
   function gate(
@@ -273,8 +194,6 @@ export function createBridgeProtocolAdapter(
   const adapter: BridgeProtocolAdapter = {
     id: options.id,
     capabilities,
-    // The handshake owns approval-policy placement; before it completes the
-    // runtime-owned default is the safe reading (every request re-checked).
     get approvalEnforcedBy() {
       return handshake.approvalEnforcedBy;
     },
@@ -288,9 +207,6 @@ export function createBridgeProtocolAdapter(
             method: BRIDGE_REQUEST_METHODS.modelList,
             params: {
               ...(command.cwd !== undefined ? { cwd: command.cwd } : {}),
-              // Model listing has no session to carry providerOptions, so the
-              // provider-scoped statics (e.g. the ACP launch spec the bridge
-              // resolves its list command from) ride the request directly.
               ...(options.staticProviderOptions !== undefined
                 ? { providerOptions: options.staticProviderOptions }
                 : {}),
@@ -323,8 +239,7 @@ export function createBridgeProtocolAdapter(
         case "provider/installation/status":
           return {
             kind: "request",
-            method:
-              BRIDGE_REQUEST_METHODS.providerInstallationStatus,
+            method: BRIDGE_REQUEST_METHODS.providerInstallationStatus,
             params: {
               providerId: options.id,
               ...(command.requirement !== undefined
@@ -350,9 +265,6 @@ export function createBridgeProtocolAdapter(
             },
           };
         case "skills/configure":
-          // Sent only to a bridge that declared it at the handshake; every
-          // other bridge runs without injected skills instead of failing to
-          // start on a METHOD_NOT_FOUND.
           if (!handshake.skills.configure) {
             return { kind: "noop", reason: "skills.configure not advertised" };
           }
@@ -403,11 +315,6 @@ export function createBridgeProtocolAdapter(
             },
           };
         case "thread/fork": {
-          // Without this gate a bridge that cannot fork (or can only fork at
-          // the tip) is sent the request anyway and answers however it likes —
-          // ACP rejects a checkpoint fork with FORK_CHECKPOINT_UNSUPPORTED,
-          // but a bridge that never advertised fork at all has no obligation
-          // to reject and may silently hand back a fresh, empty session.
           const fork = effectiveFork();
           if (fork === "none") {
             throw new Error(
@@ -471,11 +378,6 @@ export function createBridgeProtocolAdapter(
             params: {
               threadId: command.threadId,
               providerThreadId: command.providerThreadId,
-              // Central minting made turn ids runtime-owned: a bridge
-              // receives its provider's own turn id back (the assembler's
-              // reverse map) and does zero id translation. Bridges without
-              // native turn ids (pi, acp) have no mapping, so the bb id
-              // passes through unchanged.
               expectedTurnId:
                 deltaAssembler.getProviderTurnId(
                   command.threadId,
@@ -496,12 +398,7 @@ export function createBridgeProtocolAdapter(
             params: {
               threadId: command.threadId,
               providerThreadId: command.providerThreadId,
-              // The adapter command predates the daemon-level intent split;
-              // a stop with an active turn is an interrupt, an idle stop is
-              // a release. Phase 2a threads the daemon's explicit intent
-              // through instead.
               intent: command.activeTurnId !== null ? "interrupt" : "release",
-              // Same reverse mapping as turn/steer's expectedTurnId.
               activeTurnId:
                 command.activeTurnId === null
                   ? null
@@ -570,19 +467,12 @@ export function createBridgeProtocolAdapter(
             params: {
               protocolVersion: PROVIDER_BRIDGE_PROTOCOL_VERSION,
               client: { name: "bb", version: "1.0.0" },
-              // The assembler's grammar range, so a bridge that speaks a
-              // wider range emits only what this runtime can assemble.
               grammarVersions: ASSEMBLER_GRAMMAR_VERSIONS,
             },
           },
           onResult(result) {
             const parsed = initializeResultSchema.safeParse(result);
             if (!parsed.success) {
-              // A malformed handshake is as fatal as a wrong version: falling
-              // back to the default capabilities would run the bridge on
-              // guesses (and silently mask the shape drift that produced it).
-              // The post-initialize request is `required`, so this throw
-              // aborts the provider spawn as a legible startup error.
               throw new Error(
                 `Provider bridge "${options.id}" answered initialize with a malformed result (${parsed.error.issues
                   .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
@@ -591,12 +481,6 @@ export function createBridgeProtocolAdapter(
                   )}). The bridge and this runtime cannot negotiate a handshake; update or fix the "${options.id}" provider plugin.`,
               );
             }
-            // The version gates the handshake: a bridge on another major
-            // revision speaks a timeline dialect this runtime does not
-            // (version 1 emitted `thread/event`, which no longer exists), so
-            // failing startup legibly beats a silently empty timeline. The
-            // post-initialize request is `required`, so this throw aborts the
-            // provider spawn and surfaces the message as the startup error.
             if (
               parsed.data.protocolVersion !== PROVIDER_BRIDGE_PROTOCOL_VERSION
             ) {
@@ -604,10 +488,6 @@ export function createBridgeProtocolAdapter(
                 `Provider bridge "${options.id}" speaks Provider Bridge Protocol version ${parsed.data.protocolVersion}, but this runtime requires version ${PROVIDER_BRIDGE_PROTOCOL_VERSION}. Update the "${options.id}" provider plugin to a build published for protocol version ${PROVIDER_BRIDGE_PROTOCOL_VERSION}.`,
               );
             }
-            // Same gate for the delta grammar: a bridge whose range shares
-            // no version with the assembler's would connect and then have
-            // every `thread/delta` refused, which is the silently empty
-            // timeline the version gate above exists to prevent.
             const grammarVersion = negotiateGrammarVersion(
               ASSEMBLER_GRAMMAR_VERSIONS,
               parsed.data.capabilities.grammarVersions,
@@ -665,9 +545,21 @@ export function createBridgeProtocolAdapter(
         if (
           !parsed.success ||
           parsed.data.providerThreadId === null ||
-          !parsed.data.contextLost
+          (!parsed.data.contextLost && !parsed.data.showRuntimeNote)
         ) {
           return [];
+        }
+        if (!parsed.data.contextLost) {
+          return [
+            {
+              type: "provider/warning",
+              threadId: parsed.data.threadId,
+              providerThreadId: parsed.data.providerThreadId,
+              category: "general",
+              summary: parsed.data.reason,
+              scope: { kind: "thread" },
+            },
+          ];
         }
         return [
           {
@@ -702,8 +594,6 @@ export function createBridgeProtocolAdapter(
           },
         ];
       }
-      // provider/raw is droppable diagnostics by contract; anything else is
-      // forward skew from a newer bridge and is ignored the same way.
       return [];
     },
 
@@ -715,9 +605,6 @@ export function createBridgeProtocolAdapter(
       }
       const parsed = providerRecoveryNotificationSchema.safeParse(event.params);
       if (!parsed.success) {
-        // A malformed hint is dropped like any other malformed notification:
-        // the bridge's `provider/error` delta beside it carries the
-        // user-visible consequence.
         return null;
       }
       return {
@@ -752,10 +639,6 @@ export function createBridgeProtocolAdapter(
       ) {
         return decoded;
       }
-      // Provider-native ids: translate through the assembler's maps so the
-      // runtime routes against the timeline's own turn/item ids. Unknown ids
-      // pass through unchanged (the maps only miss when the id never appeared
-      // on the thread's delta stream).
       return {
         ...decoded,
         turnId:
@@ -786,9 +669,6 @@ export function createBridgeProtocolAdapter(
       let turnId = decoded.turnId;
       let payload = decoded.payload;
       if (providerNativeIds === true && threadId !== undefined) {
-        // Provider-native ids: the approval subject must reference the item
-        // id the app's timeline carries (the server materializes the approval
-        // row under subject.itemId), and the turn id must be the assembler's.
         turnId =
           turnId === null
             ? null
@@ -818,9 +698,6 @@ export function createBridgeProtocolAdapter(
     buildInteractiveResponse(
       args: BuildInteractiveResponseArgs,
     ): ProviderInteractiveResponse {
-      // The wire response IS the canonical resolution. The cast is a genuine
-      // boundary: PendingInteractionResolution is plain JSON data but TS
-      // cannot prove assignability into the recursive wire-response type.
       return args.resolution as unknown as ProviderInteractiveResponse;
     },
   };

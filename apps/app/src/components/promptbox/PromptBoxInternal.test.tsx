@@ -22,7 +22,10 @@ import {
 } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
-import { emptyPromptDraftState } from "@bb/client-core";
+import {
+  EMPTY_ORDERED_MENTION_SUGGESTIONS,
+  emptyPromptDraftState,
+} from "@bb/client-core";
 import {
   getComposerInputLock,
   useComposer,
@@ -51,6 +54,7 @@ import {
   resetPluginLogoStoreForTest,
   setPluginLogoUrls,
 } from "@/lib/plugin-logos";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 import {
   AUTOMATION_PROMPT_ACTION,
   CREATE_PLUGIN_PROMPT_ACTION,
@@ -66,6 +70,7 @@ import {
   type TypeaheadConfig,
 } from "./PromptBoxInternal";
 import { promptMentionClipboardContent } from "./mentions/prompt-mention-clipboard";
+import { orderPromptMentionSuggestions } from "@/hooks/promptMentionCandidates";
 import type {
   PromptMentionSuggestion,
   ProviderCommandSuggestion,
@@ -78,17 +83,9 @@ function pluginRegistrationSet(
     PluginRegistrationSet["composerCustomizations"]
   >,
 ): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
+  return makePluginRegistrationSet({
     composerCustomizations,
-    pendingInteractions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-  };
+  });
 }
 
 interface PromptChange {
@@ -123,7 +120,7 @@ function createPromptBoxProps(
     mentionMenuPlacement: "bottom",
     typeahead: {
       mention: {
-        suggestions: [],
+        results: EMPTY_ORDERED_MENTION_SUGGESTIONS,
         isLoading: false,
         isError: false,
         onQueryChange: vi.fn(),
@@ -142,7 +139,7 @@ function buildTypeaheadConfig({
   onCommandQueryChange = () => {},
 }: {
   mentionTriggers?: TypeaheadConfig["mention"]["triggers"];
-  mentionSuggestions?: TypeaheadConfig["mention"]["suggestions"];
+  mentionSuggestions?: readonly PromptMentionSuggestion[];
   onMentionQueryChange?: TypeaheadConfig["mention"]["onQueryChange"];
   commandSuggestions?: TypeaheadConfig["command"]["suggestions"];
   onCommandQueryChange?: (query: string | null) => void;
@@ -150,7 +147,10 @@ function buildTypeaheadConfig({
   return {
     mention: {
       triggers: mentionTriggers,
-      suggestions: mentionSuggestions,
+      results: orderPromptMentionSuggestions({
+        query: "",
+        suggestions: mentionSuggestions,
+      }),
       isLoading: false,
       isError: false,
       onQueryChange: onMentionQueryChange,
@@ -269,8 +269,9 @@ function renderPromptBox(
   options: {
     initialMentionRanges?: PromptTextMention[];
     mentionTriggers?: TypeaheadConfig["mention"]["triggers"];
-    mentionSuggestions?: TypeaheadConfig["mention"]["suggestions"];
+    mentionSuggestions?: readonly PromptMentionSuggestion[];
     commandSuggestions?: TypeaheadConfig["command"]["suggestions"];
+    onAttachFiles?: (files: File[]) => Promise<void> | void;
   } = {},
 ) {
   const changes: PromptChange[] = [];
@@ -302,7 +303,7 @@ function renderPromptBox(
           onCommandQueryChange,
         })}
         mentionMenuPlacement="bottom"
-        attachments={{}}
+        attachments={{ onAttachFiles: options.onAttachFiles }}
         promptActions={promptActions}
         promptBoxRef={promptBoxRef}
       />
@@ -346,9 +347,6 @@ function dispatchThroughEditorTarget({
 }
 
 async function selectPromptAction(label: string) {
-  // The prompt schedules passive autofocus on its first animation frame. Let
-  // that settle before opening the portaled menu so the frame cannot move
-  // focus back to the editor while the menu item is being selected.
   await waitFor(() =>
     expect(document.activeElement).toBe(getPromptEditorElement()),
   );
@@ -361,9 +359,6 @@ async function selectPromptAction(label: string) {
   const menu = await screen.findByRole("menu", { name: "Prompt actions" });
   const menuItem = within(menu).getByRole("menuitem", { name: label });
   fireEvent.click(menuItem);
-  // Radix removes the portaled menu asynchronously. Let that close settle so
-  // a following test or second action cannot select an item from the stale
-  // closing portal.
   await waitFor(() =>
     expect(screen.queryByRole("menu", { name: "Prompt actions" })).toBeNull(),
   );
@@ -415,15 +410,20 @@ function pastePlainText(text: string) {
 }
 
 function pasteClipboard({
+  files = [],
   html = "",
   plainText = "",
 }: {
+  files?: File[];
   html?: string;
   plainText?: string;
 }) {
   fireEvent.paste(getPromptEditorElement(), {
     clipboardData: {
-      items: [],
+      items: files.map((file) => ({
+        kind: "file",
+        getAsFile: () => file,
+      })),
       getData: (type: string) => {
         if (type === "text/html") return html;
         if (type === "text/plain") return plainText;
@@ -505,10 +505,6 @@ function mockIPadOSWebKit(): () => void {
 
 afterEach(async () => {
   cleanup();
-  // TipTap's React hook defers editor destruction by 1 ms so a Strict Mode
-  // remount can reuse the instance. Let that teardown finish while this
-  // test's jsdom window is still alive instead of leaking it into the next
-  // test (or the environment shutdown after the final test).
   await new Promise<void>((resolve) => setTimeout(resolve, 2));
   resetPluginLogoStoreForTest();
   resetPluginSlotStoreForTest();
@@ -1524,10 +1520,6 @@ describe("PromptBoxInternal submit shortcuts", () => {
         />,
       );
 
-      // A `compositionend` with no matching `compositionstart` leaves the view
-      // outside a composition. ProseMirror ignores that event, so the 500 ms
-      // guard must ignore it too, or it would swallow a real Magic Keyboard
-      // Enter.
       const editor = getPromptEditorElement();
       fireEvent.compositionEnd(editor, { data: "候補" });
       fireEvent.keyDown(editor, {
@@ -1579,7 +1571,6 @@ describe("PromptBoxInternal escape", () => {
 
     expect(onEscape).toHaveBeenCalledTimes(1);
     expect(wasNotCanceled).toBe(false);
-    // The cancel action owns what happens next; the editor must not also blur.
     expect(document.activeElement).toBe(getPromptEditorElement());
   });
 
@@ -1656,9 +1647,17 @@ describe("PromptBoxInternal size controls", () => {
     expect(
       screen.queryByRole("button", { name: /Make prompt box/u }),
     ).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Collapse prompt box" }),
-    );
+    const collapseButton = screen.getByRole("button", {
+      name: "Collapse prompt box",
+    });
+    expect(collapseButton.classList).toContain("text-subtle-foreground/75");
+    expect(collapseButton.classList).toContain("w-6");
+    expect(collapseButton.classList).toContain("px-0");
+    expect(collapseButton.parentElement?.classList).toContain("right-[13px]");
+    expect(
+      collapseButton.querySelector('[data-icon="ChevronDown"]')?.classList,
+    ).toContain("size-3.5");
+    fireEvent.click(collapseButton);
 
     expect(onCollapse).toHaveBeenCalledOnce();
     expect(document.activeElement).not.toBe(getPromptEditorElement());
@@ -1992,6 +1991,42 @@ describe("PromptBoxInternal plugin composer actions", () => {
 });
 
 describe("PromptBoxInternal compact layout", () => {
+  it("shows attachment upload progress on the submit button", () => {
+    const restoreMatchMedia = mockPointerCoarse(true);
+    try {
+      render(
+        <PromptBoxInternal
+          {...createPromptBoxProps({
+            attachments: { isAttaching: true },
+            compact: {
+              isCompact: true,
+              placeholder: "Ask a follow-up",
+            },
+            voice: {
+              state: "idle",
+              isSupported: true,
+              stream: null,
+              start: vi.fn(),
+              stop: vi.fn(),
+              cancel: vi.fn(),
+            },
+          })}
+        />,
+      );
+
+      const submit = screen.getByRole("button", {
+        name: "Uploading attachments...",
+      });
+      expect(submit.hasAttribute("disabled")).toBe(true);
+      expect(submit.querySelector('[data-icon="Spinner"]')).not.toBeNull();
+      expect(
+        screen.queryByRole("button", { name: "Start voice input" }),
+      ).toBeNull();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
   it("publishes the container-compact placeholder for CSS", () => {
     const baseProps = createPromptBoxProps();
     const view = render(
@@ -2199,6 +2234,38 @@ describe("PromptBoxInternal compact layout", () => {
     }
   });
 
+  it("keeps an unfocused compact submit stable on coarse pointers", () => {
+    const restoreMatchMedia = mockPointerCoarse(true);
+    try {
+      const onSubmit = vi.fn();
+      render(
+        <PromptBoxInternal
+          {...createPromptBoxProps({
+            value: "Transcript ready to send",
+            onSubmit,
+            compact: {
+              isCompact: true,
+              placeholder: "Ask a follow-up",
+            },
+          })}
+        />,
+      );
+
+      expect(document.activeElement).not.toBe(getPromptEditorElement());
+      const submit = screen.getByRole("button", { name: "Submit (Enter)" });
+      expect(
+        fireEvent.pointerDown(submit, {
+          button: 0,
+          pointerType: "touch",
+        }),
+      ).toBe(false);
+      fireEvent.click(submit, { detail: 1 });
+      expect(onSubmit).toHaveBeenCalledOnce();
+    } finally {
+      restoreMatchMedia();
+    }
+  });
+
   it("keeps the editor focused through a pointer submit", async () => {
     const onSubmit = vi.fn();
     render(
@@ -2239,9 +2306,6 @@ describe("PromptBoxInternal compact layout", () => {
     const editor = getPromptEditorElement();
     const submit = screen.getByRole("button", { name: "Submit (Enter)" });
 
-    // TipTap derives isFocused from focus and blur events. Model the iOS
-    // window where its blur event has arrived but the contenteditable still
-    // owns native focus and therefore still controls the software keyboard.
     editor.dispatchEvent(new FocusEvent("blur"));
     expect(document.activeElement).toBe(editor);
 
@@ -3092,6 +3156,105 @@ describe("PromptBoxInternal mention triggers", () => {
       expect(threadButton.className).toContain("bg-state-active"),
     );
   });
+
+  it("keeps the keyboard-selected mention when a stronger delayed result arrives", async () => {
+    const threadSuggestion: PromptMentionSuggestion = {
+      kind: "thread",
+      path: "thread:thr_atlas",
+      replacement: "Atlas launch notes",
+      projectId: "proj_atlas",
+      projectName: "Atlas",
+      threadId: "thr_atlas",
+      title: "Atlas launch notes",
+    };
+    const sectionSuggestion: PromptMentionSuggestion = {
+      kind: "section",
+      path: "section:sec_atlas_planning",
+      replacement: "Atlas planning",
+      sectionId: "sec_atlas_planning",
+      name: "Atlas planning",
+    };
+    const delayedExactSuggestion: PromptMentionSuggestion = {
+      kind: "plugin",
+      pluginId: "installed",
+      providerId: "plugins",
+      itemId: "plugins:atlas",
+      providerLabel: "Installed",
+      title: "Atlas",
+      subtitle: null,
+      icon: null,
+      replacement: "Atlas",
+    };
+    const changes: PromptChange[] = [];
+    const promptBoxRef = createRef<PromptBoxHandle>();
+
+    function Harness({
+      mentionSuggestions,
+    }: {
+      mentionSuggestions: readonly PromptMentionSuggestion[];
+    }) {
+      const [value, setValue] = useState("@atlas");
+      const [mentionRanges, setMentionRanges] = useState<PromptTextMention[]>(
+        [],
+      );
+      return (
+        <PromptBoxInternal
+          value={value}
+          mentionRanges={mentionRanges}
+          onChange={(nextValue, nextMentions) => {
+            changes.push({ mentions: nextMentions, value: nextValue });
+            setValue(nextValue);
+            setMentionRanges(nextMentions);
+          }}
+          onSubmit={vi.fn()}
+          typeahead={{
+            mention: {
+              results: orderPromptMentionSuggestions({
+                query: "atlas",
+                suggestions: mentionSuggestions,
+              }),
+              isLoading: false,
+              isError: false,
+              onQueryChange: vi.fn(),
+            },
+            command: INERT_TYPEAHEAD_COMMAND_CONFIG,
+          }}
+          mentionMenuPlacement="bottom"
+          promptBoxRef={promptBoxRef}
+        />
+      );
+    }
+
+    const initialSuggestions = [threadSuggestion, sectionSuggestion];
+    const view = render(<Harness mentionSuggestions={initialSuggestions} />);
+    await focusPromptEnd(promptBoxRef);
+
+    const sectionButton = await screen.findByRole("button", {
+      name: "Atlas planning",
+    });
+    fireEvent.keyDown(getPromptEditorElement(), { key: "ArrowDown" });
+    await waitFor(() =>
+      expect(sectionButton.className).toContain("bg-state-active"),
+    );
+
+    view.rerender(
+      <Harness
+        mentionSuggestions={[...initialSuggestions, delayedExactSuggestion]}
+      />,
+    );
+    await screen.findByRole("button", { name: "Atlas" });
+    await waitFor(() =>
+      expect(sectionButton.className).toContain("bg-state-active"),
+    );
+
+    fireEvent.keyDown(getPromptEditorElement(), { key: "Enter" });
+
+    await waitFor(() => expect(latestValue(changes)).toBe("@Atlas planning "));
+    expect(latestChange(changes)?.mentions[0]?.resource).toMatchObject({
+      kind: "section",
+      sectionId: "sec_atlas_planning",
+    });
+  });
 });
 
 describe("PromptBoxInternal selection reveal", () => {
@@ -3106,20 +3269,12 @@ describe("PromptBoxInternal selection reveal", () => {
     const lines = Array.from({ length: 40 }, (_, index) => `line ${index}`);
     const { promptBoxRef } = renderPromptBox(lines.join("\n"));
 
-    await focusPromptEnd(promptBoxRef);
-    await nextAnimationFrame();
-
     const scrollContainer = document.querySelector(
       "[data-promptbox-editor-scroll]",
     );
     if (!(scrollContainer instanceof HTMLElement)) {
       throw new Error("Prompt editor scroll container was not rendered");
     }
-    // jsdom does not lay out, so emulate a 100px viewport scrolled to the
-    // middle of the document. The selection anchor sits below the viewport
-    // (where the drag started) and the head sits above it (where the pointer
-    // is now). The browser's own drag autoscroll has already moved the
-    // viewport up toward the head.
     let scrollTop = 500;
     Object.defineProperty(scrollContainer, "scrollTop", {
       configurable: true,
@@ -3144,10 +3299,15 @@ describe("PromptBoxInternal selection reveal", () => {
       });
 
     try {
-      await waitFor(() => expect(view).not.toBeNull());
-      const liveView = view as unknown as EditorView;
+      await focusPromptEnd(promptBoxRef);
+      await nextAnimationFrame();
+
+      expect(view).not.toBeNull();
+      if (view === null) {
+        throw new Error("Expected focus reveal to capture the editor view");
+      }
+      const liveView: EditorView = view;
       const { doc } = liveView.state;
-      // The focusEnd reveal above captured `view`; reset the baseline it set.
       scrollTop = 500;
       await act(async () => {
         liveView.dispatch(
@@ -3158,9 +3318,6 @@ describe("PromptBoxInternal selection reveal", () => {
       });
       await nextAnimationFrame();
 
-      // The reveal must follow the head upward (scrollTop decreases). Before
-      // the fix it revealed `selection.to` (the anchor) and yanked the
-      // viewport back down, fighting the drag autoscroll on every pointer move.
       expect(scrollTop).toBeLessThan(500);
     } finally {
       coordsAtPosSpy.mockRestore();
@@ -3223,6 +3380,20 @@ describe("PromptBoxInternal prompt actions", () => {
       coordsAtPosSpy.mockRestore();
       scrollRectSpy.mockRestore();
     }
+  });
+
+  it("pastes clipboard text and attaches the clipboard image", async () => {
+    const onAttachFiles = vi.fn().mockResolvedValue(undefined);
+    const { changes, promptBoxRef } = renderPromptBox("Before ", {
+      onAttachFiles,
+    });
+    const image = new File(["image"], "photo.png", { type: "image/png" });
+
+    await focusPromptEnd(promptBoxRef);
+    pasteClipboard({ files: [image], plainText: "A photo" });
+
+    await waitFor(() => expect(latestValue(changes)).toBe("Before A photo"));
+    expect(onAttachFiles).toHaveBeenCalledWith([image]);
   });
 
   it("preserves blockquote structure when pasting copied blockquote html", async () => {
@@ -3453,7 +3624,6 @@ describe("PromptBoxInternal prompt actions", () => {
     await waitFor(() =>
       expect(latestValue(changes)).toBe(CREATE_PLUGIN_PROMPT_ACTION.text),
     );
-    // The seed is a sentence opener, not a command, so it carries no pill.
     expect(latestChange(changes)?.mentions).toEqual([]);
   });
 
@@ -3746,7 +3916,7 @@ describe("PromptBoxInternal command typeahead submit", () => {
           onSubmit={onSubmit}
           typeahead={{
             mention: {
-              suggestions: [],
+              results: EMPTY_ORDERED_MENTION_SUGGESTIONS,
               isLoading: false,
               isError: false,
               onQueryChange: () => {},
@@ -3796,9 +3966,6 @@ describe("PromptBoxInternal command typeahead submit", () => {
     await act(async () => {});
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
-    // The command mention is applied (and therefore submitted), not left as
-    // bare text — Codex reads the mention to trigger compaction and Claude
-    // sends the `/compact` text as-is.
     expect(latestChange(changes)?.mentions).toEqual([
       {
         start: 0,
@@ -3827,7 +3994,6 @@ describe("PromptBoxInternal command typeahead submit", () => {
     await act(async () => {});
 
     expect(onSubmit).not.toHaveBeenCalled();
-    // The pill is still inserted so the user can add arguments before sending.
     expect(latestChange(changes)?.mentions?.[0]?.resource).toMatchObject({
       name: "review",
       origin: "user",
@@ -3930,9 +4096,6 @@ describe("PromptBoxInternal command typeahead navigation", () => {
   });
 
   it("hoists an exactly-named user command above the skills section", async () => {
-    // Suggestions arrive in section order (skills first), the way the server
-    // hands them back — the exact-match hoist is PromptBoxInternal's job, so
-    // every composer that renders through it gets the same order.
     const { changes, promptBoxRef } = renderPromptBox("/plan", {
       commandSuggestions: [
         {
@@ -3984,9 +4147,6 @@ describe("PromptBoxInternal command typeahead navigation", () => {
     if (!(menu instanceof HTMLElement)) {
       throw new Error("Expected command menu");
     }
-    // The exact match leads, and its section stays whole rather than splitting
-    // around the skills — one header per section keeps rendered order equal to
-    // the array Arrow/Enter walk.
     expect(
       within(menu)
         .getAllByRole("button")
@@ -4050,7 +4210,6 @@ describe("voice recording escape", () => {
       />,
     );
 
-    // Stand in for the composer's own bubble-phase Escape-to-dismiss listener.
     const dismiss = vi.fn();
     const onWindowEscape = (event: Event) => {
       if ((event as KeyboardEvent).key === "Escape") dismiss();

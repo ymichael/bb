@@ -244,12 +244,10 @@ describe("bb.agents.registerTool", () => {
     expect((invalid.contentItems[0] as { text: string }).text).toContain(
       "query",
     );
-    // The model's bad arguments never count against the plugin.
     expect(
       service.list().find((p) => p.id === "zodded")?.handlerStats.errorCount,
     ).toBe(0);
 
-    // A throwing execute maps to an isError result and counts as an error.
     api!.agents.registerTool({
       name: "exploder",
       description: "Always throws",
@@ -271,6 +269,43 @@ describe("bb.agents.registerTool", () => {
     expect(
       service.list().find((p) => p.id === "zodded")?.handlerStats.errorCount,
     ).toBe(1);
+  });
+
+  it("uses a foreign zod schema's own JSON Schema converter", async () => {
+    const rootDir = await writePlugin(workDir, {
+      name: "bb-plugin-foreign-zod",
+      serverSource: "export default function plugin() {}",
+    });
+    await service.installPath(rootDir);
+    const api = service.getApi("foreign-zod")!;
+    const parameters = {
+      safeParse(input: unknown) {
+        return { success: true as const, data: input };
+      },
+      toJSONSchema() {
+        return {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+        };
+      },
+    };
+
+    expect(() =>
+      api.agents.registerTool({
+        name: "foreign_schema",
+        description: "Uses a foreign schema package",
+        parameters,
+        execute: () => "ok",
+      }),
+    ).not.toThrow();
+    expect(service.findAgentTool("foreign_schema")?.record.inputSchema).toEqual(
+      {
+        type: "object",
+        properties: { name: { type: "string" } },
+        required: ["name"],
+      },
+    );
   });
 
   it("rejects recursive tool schemas before they reach a provider", async () => {
@@ -362,8 +397,6 @@ describe("bb.agents.registerTool", () => {
       suppress: true,
       tint: { light: "#123456", dark: "#654321" },
     });
-    // The plugin's branding glyph ("Zap" in the fixture manifest) is the icon
-    // when the tool names none.
     expect(byName.get("plain_tool")?.presentation).toEqual({
       label: { pending: "Running plain_tool", completed: "Ran plain_tool" },
       icon: { glyph: "Zap" },
@@ -418,8 +451,6 @@ describe("bb.agents.registerTool", () => {
     await service.installPath(first);
     const entry = await service.installPath(second);
 
-    // The later plugin keeps running; the dropped tool rides its status
-    // detail, and its other tools are unaffected.
     expect(entry.status).toBe("running");
     expect(entry.statusDetail).toContain(
       'tool "shared_tool" is already registered by plugin "collide-a"',
@@ -549,9 +580,9 @@ describe("bb.agents.experimental_registerProvider (removed in SDK 0.4.16)", () =
     await service.installPath(rootDir);
     const api = service.getApi("current-agents")!;
 
-    expect(() => Reflect.get(api.agents, "experimental_registerProvider")).toThrow(
-      REMOVED_MESSAGE,
-    );
+    expect(() =>
+      Reflect.get(api.agents, "experimental_registerProvider"),
+    ).toThrow(REMOVED_MESSAGE);
     expect(Object.keys(api.agents).sort()).toEqual([
       "configure",
       "contributeInstructions",
@@ -752,8 +783,6 @@ describe("plugin tools reach thread runtime config", () => {
       command.dynamicTools.find((tool) => tool.name === "demo_lookup")
         ?.inputSchema,
     ).toMatchObject({ type: "object" });
-    // Per-tool instructions: built-in snippet + the plugin tool's snippet,
-    // and nothing for the description-only tool.
     expect(command.instructions).toContain("update_environment_directory");
     expect(command.instructions).toContain(
       'The following instructions come from the BB plugin "tooldemo" for its tool "demo_lookup":',
@@ -994,8 +1023,6 @@ describe("plugin tools reach thread runtime config", () => {
       sourceThreadId: alpha.thread.id,
     });
     const sideCommand = await build({ ...alpha, thread: sideThread }, 12);
-    // A side chat is an ordinary plugin-owned fork: it keeps the built-in
-    // mutable environment tool, and configure() selections apply as usual.
     expect(sideCommand.dynamicTools.map((tool) => tool.name)).toEqual([
       "update_environment_directory",
       "alpha_tool",
@@ -1023,8 +1050,6 @@ describe("plugin tools reach thread runtime config", () => {
         ?.handlerStats.errorCount,
     ).toBe(0);
     const betaAgain = await build(beta, 13);
-    // The side-chat resolution applied configure too, so this remains the
-    // fourth callback invocation without rebuilding the factory.
     expect(betaAgain.instructions).toContain("factory=1;configure=4");
 
     const betaExecution = await resolveExecutionOptions(harness.deps, {
@@ -1079,8 +1104,6 @@ describe("internal tool-call dispatch to plugin tools", () => {
         });
         const entry = await harness.pluginService.installPath(rootDir);
         expect(entry.status).toBe("running");
-        // A zod-backed tool registered on the live handle (mid-session
-        // registration surface; applies to sessions started afterwards).
         harness.pluginService.getApi("wired")!.agents.registerTool({
           name: "strict_add",
           description: "Adds two numbers",
@@ -1137,8 +1160,6 @@ describe("internal tool-call dispatch to plugin tools", () => {
           contentItems: [{ type: "inputText", text: "sum=5" }],
         });
 
-        // Zod-invalid arguments come back as an isError tool result, not a
-        // crash or a 4xx.
         const badResponse = await postToolCall("strict_add", { a: 2 });
         expect(badResponse.status).toBe(200);
         const bad = (await readJson(badResponse)) as {
@@ -1150,7 +1171,6 @@ describe("internal tool-call dispatch to plugin tools", () => {
           'Invalid arguments for tool "strict_add"',
         );
 
-        // The built-in tool still wins its name.
         const builtinResponse = await postToolCall(
           UPDATE_ENVIRONMENT_DIRECTORY_TOOL_NAME,
           { path: environmentPath },
@@ -1162,7 +1182,6 @@ describe("internal tool-call dispatch to plugin tools", () => {
         expect(builtin.success).toBe(true);
         expect(builtin.contentItems[0].text).toContain("already using");
 
-        // Unknown tools keep the unsupported-tool response.
         const unknownResponse = await postToolCall("never_registered", {});
         await expect(readJson(unknownResponse)).resolves.toEqual({
           success: false,

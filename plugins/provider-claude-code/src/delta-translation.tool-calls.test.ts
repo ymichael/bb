@@ -4,20 +4,9 @@ import {
   createClaudeDeltaHarness,
 } from "./delta-test-harness.js";
 
-/**
- * Tool-use and tool-result translation on the delta path — the claude
- * event-translation tool-call shard, ported fixture-for-fixture through
- * deltas and a real assembler. Item ids are assembler-minted: asserted via
- * the provider↔bb map (`harness.itemId`) instead of the old raw call ids.
- *
- * This shard stays separate from delta-translation.test.ts purely for
- * volume, exactly as before.
- */
-
 describe("claude tool-use translation (delta path)", () => {
   it("emits item/started for tool use blocks", () => {
     const harness = createClaudeDeltaHarness();
-    // First send an assistant message to start a turn
     harness.translate({
       type: "assistant",
       message: {
@@ -373,10 +362,6 @@ describe("claude tool-use translation (delta path)", () => {
       session_id: "sess-1",
     });
 
-    // Grammar v3: the Agent call is a foreground delegation whose child is
-    // identified by the call id (the SDK streams the sub-agent's messages
-    // under `parent_tool_use_id`); the sub-agent type and model ride the
-    // presentation detail.
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/started",
@@ -499,7 +484,6 @@ describe("claude tool-use translation (delta path)", () => {
       },
       session_id: "sess-1",
     });
-    // A background delegation settles on the thread-scoped event family.
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/delegation/completed",
@@ -614,8 +598,6 @@ describe("claude tool-use translation (delta path)", () => {
       }),
     );
 
-    // The results settle the same items; file contents and match lists are
-    // not row data, so the canonical items carry no output.
     const closed = harness.translate({
       type: "user",
       message: {
@@ -741,8 +723,6 @@ describe("claude tool-use translation (delta path)", () => {
         item: expect.objectContaining({
           type: "commandExecution",
           id: harness.itemId("tool-1"),
-          // Child-first parent: the assembler mints the parent's bb id on
-          // first reference instead of leaking the raw provider id.
           parentToolCallId: harness.itemId("agent-parent-1"),
         }),
       }),
@@ -754,7 +734,6 @@ describe("claude tool-use translation (delta path)", () => {
 describe("claude tool-result translation (delta path)", () => {
   it("emits item/completed for user tool results", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn
     harness.translate({
       type: "assistant",
       message: { role: "assistant", content: [{ type: "text", text: "x" }] },
@@ -812,8 +791,6 @@ describe("claude tool-result translation (delta path)", () => {
       session_id: "sess-1",
     });
 
-    // The SDK carries the structured result on the message envelope; the
-    // block's content is the friendly text every tool row shows.
     const events = harness.translate({
       type: "user",
       message: {

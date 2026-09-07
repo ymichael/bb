@@ -40,15 +40,15 @@ describe("@task mention provider", () => {
       });
       bb.storage
         .database()
-        .prepare<
-          [string, string]
-        >("UPDATE tasks SET updated_at = ? WHERE id = ?")
+        .prepare<[string, string]>(
+          "UPDATE tasks SET updated_at = ? WHERE id = ?",
+        )
         .run("2026-07-15T18:00:00.000Z", linkedTask.id);
       bb.storage
         .database()
-        .prepare<
-          [string, string]
-        >("UPDATE tasks SET updated_at = ? WHERE id = ?")
+        .prepare<[string, string]>(
+          "UPDATE tasks SET updated_at = ? WHERE id = ?",
+        )
         .run("2026-07-15T19:00:00.000Z", otherTask.id);
 
       expect(

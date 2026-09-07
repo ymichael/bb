@@ -21,7 +21,6 @@ function theme(
   };
 }
 
-/** Monaco's own guard: `defineTheme` throws on anything outside this set. */
 const MONACO_THEME_NAME = /^[a-zA-Z0-9-]+$/;
 
 describe("monacoThemeName", () => {
@@ -162,8 +161,6 @@ describe("applyCodeTheme", () => {
   });
 
   it("keys the widget base on the applied document, so a mid-switch frame stays coherent", () => {
-    // The app has flipped to dark but the dark document has not resolved yet:
-    // the light document is still what is painted.
     expect(
       applyCodeTheme(fakeMonaco([]), { mode: "dark", theme: theme() }).base,
     ).toBe("vs");
@@ -183,7 +180,6 @@ describe("editorBackground", () => {
   });
 
   it("reports nothing for a background the browser could not paint", () => {
-    // The caller keeps its BB surface token rather than setting a broken value.
     expect(
       editorBackground(
         theme({ bg: "not-a-color", colors: { "editor.background": "red" } }),

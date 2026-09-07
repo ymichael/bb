@@ -113,10 +113,11 @@ If any input is unclear, ask before bumping the version.
 
 4. Update the release notes. Add the new version's section to the repo-root
    `CHANGELOG.md`, and add its entry (ship date and headline) to
-   `RELEASE_META` in `apps/web/src/landing/changelog.ts`. The marketing site's
-   `/changelog` page renders `CHANGELOG.md` at build time, so both must land
-   before the release is published — redeploy `@bb/web` after the release
-   commit lands so the site shows the new version.
+   `RELEASE_META` in the repo-root `changelog-metadata.ts`. The marketing site's
+   `/changelog` page and the optional in-app Updates preview consume these
+   shared files, so both changes must land before the release is published —
+   redeploy `@bb/web` after the release commit lands so the site shows the new
+   version.
 
 5. Make any release documentation updates requested by the user.
 
@@ -124,7 +125,7 @@ If any input is unclear, ask before bumping the version.
 
    ```bash
    node .github/workflows/check-version-lockstep.mjs
-   pnpm exec turbo run typecheck test --filter=@bb/config --filter=@bb/server --filter=bb-app
+   pnpm exec turbo run typecheck test --filter=@bb/app --filter=@bb/config --filter=@bb/server --filter=bb-app
    pnpm exec turbo run smoke:tarball --filter=bb-app --force
    git diff --check
    ```

@@ -3,8 +3,8 @@ import { cleanup, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 import type { Label, Task, TaskThread } from "../../shared/contract.js";
+import { makeTask } from "../../test-fixtures.js";
 
-// jsdom lacks matchMedia/ResizeObserver; the list shell touches both.
 window.matchMedia ??= (query: string) => ({
   matches: false,
   media: query,
@@ -22,8 +22,6 @@ window.ResizeObserver ??= class {
 };
 Element.prototype.scrollIntoView ??= () => {};
 
-// loadPluginApp installs the fake SDK runtime; nothing SDK-touching may be
-// imported before it runs.
 const app = await loadPluginApp(() => import("../../app"));
 
 beforeEach(() => {
@@ -46,22 +44,15 @@ const project = {
 };
 
 function task(number: number, labelIds: string[] = []): Task {
-  return {
+  return makeTask({
     id: `01HZZZZZZZZZZZZZZZZZZZZZT${number}`,
     projectId: PROJECT_ID,
     number,
     key: `TSK-${number}`,
     title: `Task ${number}`,
-    description: "",
-    status: "todo",
-    priority: "none",
-    dueDate: null,
-    parentTaskId: null,
     position: number,
-    createdAt: "2026-07-15T00:00:00.000Z",
-    updatedAt: "2026-07-15T00:00:00.000Z",
     labelIds,
-  };
+  });
 }
 
 function thread(
@@ -137,7 +128,6 @@ describe("list-row Active chip", () => {
       threadsByTask: {
         [working.id]: [thread(working.id, "working", "W1")],
         [starting.id]: [thread(starting.id, "starting", "S1")],
-        // Historical attachments in every non-live state stay silent.
         [historical.id]: [
           thread(historical.id, "idle", "I1"),
           thread(historical.id, "completed", "C1"),
@@ -146,13 +136,11 @@ describe("list-row Active chip", () => {
       },
     });
     await slot.findByText("TSK-1");
-    // Tooltips carry the specific state; the visible pill text is "Active".
     await waitFor(() => {
       expect(slot.getByTitle("Agent working")).toBeTruthy();
     });
     expect(slot.getByTitle("Agent working").textContent).toBe("Active");
     expect(slot.getByTitle("Agent starting").textContent).toBe("Active");
-    // Exactly the two live rows carry a chip; historical/bare rows do not.
     expect(
       slot.getAllByText("Active", { selector: "span[title]" }),
     ).toHaveLength(2);
@@ -183,7 +171,6 @@ describe("list-row metadata rail", () => {
   it("fetches no comment/attachment data and renders no counts", async () => {
     const { slot, calls } = renderList({ tasks: [task(1), task(2)] });
     await slot.findByText("TSK-1");
-    // Give the meta query a tick to settle before asserting on RPC traffic.
     await waitFor(() =>
       expect(slot.getAllByRole("button").length > 0).toBe(true),
     );
@@ -213,11 +200,8 @@ describe("list-row metadata rail", () => {
     });
     await slot.findByText("TSK-1");
 
-    // One label renders its chip in both width variants, no overflow chip.
     expect(slot.getAllByText("bug").length).toBeGreaterThan(0);
 
-    // Four labels: the regular variant shows 2 chips + "+2", the narrow
-    // variant 1 chip + "+3". Hidden names live in the overflow tooltip.
     await waitFor(() => expect(slot.getByText("+2")).toBeTruthy());
     expect(slot.getByText("+3")).toBeTruthy();
     expect(slot.getByText("+2").getAttribute("title")).toBe(
@@ -226,7 +210,6 @@ describe("list-row metadata rail", () => {
     expect(slot.getByText("+3").getAttribute("title")).toBe(
       "frontend, needs-design, very-long-label-name-that-truncates",
     );
-    // Overflowed labels never render as visible chips.
     expect(slot.queryByText("needs-design")).toBeNull();
   });
 });

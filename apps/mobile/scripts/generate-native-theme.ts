@@ -1,24 +1,4 @@
 /// <reference types="node" />
-/**
- * Generates `src/theme/theme.native.ts` from the web app's CSS theme tokens.
- *
- * React Native has no `var()`, `color-mix()`, or `oklch()`, so this script
- * replays the web cascade (theme.css light/dark blocks, then the mobile-only
- * override layer in `src/theme/mobile-overrides.css`, then a built-in
- * palette's overrides) for every palette × mode and resolves each token to a
- * plain color string. The result is committed; a vitest drift test regenerates
- * it in memory and fails when it no longer matches.
- *
- * Cascade order is the whole contract: the mobile layer re-tunes the DEFAULT
- * palette to the iOS system look (pure black/white anchors, systemBlue tint,
- * system status colors, grouped-list surfaces) while palettes that set their
- * own anchors and literals (Nord, Dracula, …) still win because they cascade
- * last. Every mobile value derives from `--canvas`/`--ink` so those palettes
- * keep tinting the surfaces the layer touches.
- *
- * Run: `pnpm --filter @bb/mobile theme:generate`
- * (`node --conditions=source --import tsx scripts/generate-native-theme.ts`).
- */
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,11 +9,6 @@ const MOBILE_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const APP_ROOT = join(MOBILE_ROOT, "..", "app");
 const THEME_CSS_PATH = join(APP_ROOT, "src", "components", "ui", "theme.css");
 const PALETTES_DIR = join(APP_ROOT, "src", "lib", "themes");
-/**
- * The mobile-only override layer. Same `:root, .light` / `.dark` custom
- * property shape as theme.css plus a `@theme` block for the native type ramp
- * and the extra radii; the web app never loads it.
- */
 export const MOBILE_OVERRIDES_CSS_PATH = join(
   MOBILE_ROOT,
   "src",
@@ -50,16 +25,8 @@ export const NATIVE_THEME_OUTPUT_PATH = join(
 export const MODES = ["light", "dark"] as const;
 export type Mode = (typeof MODES)[number];
 
-/**
- * Chrome treats the hue of a color *converted* into oklch as powerless
- * (missing) when its chroma is at or below this value, so it carries the other
- * mix operand's hue forward. Colors written directly in `oklch()` keep their
- * hue even at chroma 0. Measured against Chrome 151 (`color-mix(in oklch, …)`
- * with `oklab(0.5 0.02 0)` → hue missing, `oklab(0.5 0.0200001 0)` → kept).
- */
 const POWERLESS_HUE_CHROMA = 0.02;
 
-/** Web-only tokens that are deliberately not part of the native theme. */
 const WEB_ONLY_TOKEN_PATTERNS: readonly { pattern: RegExp; reason: string }[] =
   [
     {
@@ -67,10 +34,6 @@ const WEB_ONLY_TOKEN_PATTERNS: readonly { pattern: RegExp; reason: string }[] =
       reason: "@pierre/diffs bridge; defined per mode only",
     },
   ];
-
-// ---------------------------------------------------------------------------
-// Tolerant CSS reading: rules → declarations. Only custom properties matter.
-// ---------------------------------------------------------------------------
 
 interface CssRule {
   prelude: string;
@@ -81,7 +44,6 @@ function stripComments(css: string): string {
   return css.replace(/\/\*[\s\S]*?\*\//g, "");
 }
 
-/** Splits `prelude { body }` rules at one nesting level; skips `@x …;`. */
 function splitRules(css: string): CssRule[] {
   const rules: CssRule[] = [];
   let index = 0;
@@ -115,7 +77,6 @@ function splitRules(css: string): CssRule[] {
   return rules;
 }
 
-/** Splits on `separator` outside parentheses. */
 function splitTopLevel(input: string, separator: string): string[] {
   const parts: string[] = [];
   let depth = 0;
@@ -134,7 +95,6 @@ function splitTopLevel(input: string, separator: string): string[] {
   return parts.map((part) => part.trim()).filter((part) => part.length > 0);
 }
 
-/** `--name: value` pairs of a rule body, in source order. */
 function parseCustomProperties(body: string): [string, string][] {
   const declarations: [string, string][] = [];
   for (const declaration of splitTopLevel(body, ";")) {
@@ -156,11 +116,6 @@ interface ModeRule {
   declarations: [string, string][];
 }
 
-/**
- * Selectors that match `<html>` in each mode. `.dark` is toggled on the root
- * element, so `:root` applies in both modes and `.light` only in light; all
- * three have equal specificity, which makes source order the whole cascade.
- */
 function modesForSelector(prelude: string): Mode[] {
   const selectors = prelude.split(",").map((selector) => selector.trim());
   const modes = new Set<Mode>();
@@ -188,7 +143,6 @@ function modeRules(css: string): ModeRule[] {
   return rules;
 }
 
-/** Final token → raw value map for one mode after the given rule lists. */
 function cascade(mode: Mode, ruleSets: ModeRule[][]): Map<string, string> {
   const tokens = new Map<string, string>();
   for (const rules of ruleSets) {
@@ -199,10 +153,6 @@ function cascade(mode: Mode, ruleSets: ModeRule[][]): Map<string, string> {
   }
   return tokens;
 }
-
-// ---------------------------------------------------------------------------
-// Value resolution: var() substitution, color-mix(), output formatting.
-// ---------------------------------------------------------------------------
 
 function substituteVars(
   value: string,
@@ -273,10 +223,6 @@ function parseMixOperand(input: string): MixOperand | null {
   };
 }
 
-/**
- * A color expression → culori color, or null when the value is not a color
- * (font stacks, lengths, gradients, shadows). Nested `color-mix()` is allowed.
- */
 function parseColorValue(input: string): Color | null {
   const value = input.trim();
   const mix = value.match(/^color-mix\((.*)\)$/s);
@@ -303,12 +249,10 @@ function parseColorValue(input: string): Color | null {
   return mixColors(space, first, second);
 }
 
-/** Normalizes the two operand percentages per CSS Color 5 §3.1. */
 function normalizeWeights(
   first: MixOperand,
   second: MixOperand,
 ): { p1: number; p2: number; alphaMultiplier: number } {
-  // Omitted percentages: both → 50/50; one → the complement of the other.
   const p1 =
     first.percentage ??
     (second.percentage === null ? 50 : 100 - second.percentage);
@@ -322,7 +266,6 @@ function normalizeWeights(
   };
 }
 
-/** Premultiplied-alpha linear interpolation of one non-hue channel. */
 function mixChannel(
   c1: number | undefined,
   c2: number | undefined,
@@ -332,14 +275,12 @@ function mixChannel(
   p2: number,
   alpha: number,
 ): number {
-  // A missing channel takes the other operand's value (CSS Color 4 §12.2).
   const v1 = c1 ?? c2 ?? 0;
   const v2 = c2 ?? c1 ?? 0;
   if (alpha === 0) return 0;
   return (v1 * a1 * p1 + v2 * a2 * p2) / alpha;
 }
 
-/** Shorter-arc hue interpolation; hue is never premultiplied. */
 function mixHue(
   h1: number | undefined,
   h2: number | undefined,
@@ -355,12 +296,6 @@ function mixHue(
   return hue < 0 ? hue + 360 : hue;
 }
 
-/**
- * `color-mix()` as Chrome computes it: convert both operands to the
- * interpolation space, carry missing components across, interpolate with
- * premultiplied alpha (hue excepted, shorter arc), then apply the alpha
- * multiplier for percentages summing below 100%.
- */
 function mixColors(
   space: MixSpace,
   first: MixOperand,
@@ -407,7 +342,6 @@ function channel255(value: number): number {
   return Math.round(Math.max(0, Math.min(1, value)) * 255);
 }
 
-/** `#rrggbb` for opaque colors, `rgba(r, g, b, a)` (3-decimal alpha) otherwise. */
 export function formatNativeColor(color: Color): string {
   const rgb = toRgb(color);
   const r = channel255(rgb.r);
@@ -420,7 +354,6 @@ export function formatNativeColor(color: Color): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/** `0.5rem` / `4px` / `calc(<length> ± <length>)` → CSS pixels (1rem = 16px). */
 function lengthToPx(input: string): number {
   const value = input.trim();
   const calc = value.match(/^calc\((.*)\)$/s);
@@ -446,10 +379,6 @@ function camelCase(tokenName: string): string {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Theme model
-// ---------------------------------------------------------------------------
-
 export interface NativeTextStyle {
   fontSize: number;
   lineHeight: number;
@@ -466,9 +395,7 @@ export interface NativeRadii {
   md: number;
   lg: number;
   xl: number;
-  /** Tailwind's `rounded-2xl` step (`--radius-2xl`). */
   xl2: number;
-  /** Tailwind's `rounded-full` (`--radius-full`): any pill/circle. */
   full: number;
 }
 
@@ -483,29 +410,17 @@ export const RADII_KEYS = [
 ] as const satisfies readonly (keyof NativeRadii)[];
 
 export interface NativeThemeModel {
-  /** palette → mode → camelCase token → RN color string. */
   themes: Map<BuiltInThemeId, Record<Mode, Record<string, string>>>;
-  /** Sorted camelCase color token names (identical across palettes/modes). */
   tokenKeys: string[];
-  /**
-   * Kebab-case names the mobile layer declares that theme.css does not. The
-   * web has no utility class for these; global.css maps them by hand.
-   */
   mobileOnlyTokens: string[];
   radii: NativeRadii;
-  /** Ordered by font size. */
   typography: [name: string, style: NativeTextStyle][];
   skipped: SkippedToken[];
 }
 
 export interface ThemeSources {
   themeCss: string;
-  /**
-   * Mobile-only override layer (`MOBILE_OVERRIDES_CSS_PATH`). Cascades after
-   * theme.css and before every palette, so palettes keep winning.
-   */
   mobileCss: string;
-  /** Palette override CSS per built-in id ("" for `default`). */
   paletteCss: ReadonlyMap<BuiltInThemeId, string>;
 }
 
@@ -514,7 +429,6 @@ function readSources(): ThemeSources {
   const mobileCss = readFileSync(MOBILE_OVERRIDES_CSS_PATH, "utf8");
   const paletteCss = new Map<BuiltInThemeId, string>();
   for (const id of BUILTIN_THEME_IDS) {
-    // "default" is theme.css itself (the registry maps it to "").
     if (id === "default") {
       paletteCss.set(id, "");
       continue;
@@ -536,7 +450,6 @@ function webOnlyReason(name: string): string | null {
   return null;
 }
 
-/** Custom properties of every `@theme` block (not `@theme inline`) in `css`. */
 function themeBlockProperties(css: string): Map<string, string> {
   const declared = new Map<string, string>();
   for (const rule of splitRules(stripComments(css))) {
@@ -548,12 +461,6 @@ function themeBlockProperties(css: string): Map<string, string> {
   return declared;
 }
 
-/**
- * Radii: `--radius-sm|md|lg|xl` from theme.css's `@theme inline` block
- * (derived from `--radius`), plus `--radius-2xl` / `--radius-full` from the
- * mobile layer's `@theme` block — the web leaves those at Tailwind's defaults
- * (1rem and `calc(infinity * 1px)`), which the native side needs as numbers.
- */
 function readRadii(
   themeCss: string,
   mobileCss: string,
@@ -589,12 +496,6 @@ function readRadii(
   };
 }
 
-/**
- * `--text-*` scale: theme.css's `@theme` overrides, then its coarse-pointer
- * `@media … (pointer: coarse) { :root {…} }` block (touch sizes are the
- * native base; there is no fine pointer on a phone), then the mobile layer's
- * `@theme` block on top, which carries the Apple text-style ramp.
- */
 function readTypography(
   themeCss: string,
   mobileCss: string,
@@ -639,7 +540,6 @@ function readTypography(
   );
 }
 
-/** Short label for a non-color token, for the generated header. */
 function describeNonColor(name: string, value: string): string {
   if (name.startsWith("font-")) return "font stack";
   if (value.startsWith("linear-gradient(")) return "gradient";
@@ -649,12 +549,6 @@ function describeNonColor(name: string, value: string): string {
   return `unsupported value (${value.slice(0, 40)})`;
 }
 
-/**
- * A token the mobile layer sets under `:root` must also get a `.dark` value:
- * `:root` reaches dark mode too, so without one the override would silently
- * replace theme.css's dark value. `.dark`-only overrides are fine (light keeps
- * the web value), as are `.light`-only ones.
- */
 function assertRootOverridesHaveDarkTwins(rules: ModeRule[]): void {
   const viaRoot = new Set<string>();
   const viaDark = new Set<string>();
@@ -676,18 +570,12 @@ function assertRootOverridesHaveDarkTwins(rules: ModeRule[]): void {
   }
 }
 
-/**
- * Builds the full native theme model from theme.css, the mobile override
- * layer, and the palette CSS strings.
- */
 export function buildNativeThemeModel(
   sources: ThemeSources = readSources(),
 ): NativeThemeModel {
   const baseRules = modeRules(sources.themeCss);
   const mobileRules = modeRules(sources.mobileCss);
   assertRootOverridesHaveDarkTwins(mobileRules);
-  // The default palette is theme.css with the mobile layer on top; every other
-  // palette cascades after both, so its anchors and literals keep winning.
   const defaultTokens = {
     light: cascade("light", [baseRules, mobileRules]),
     dark: cascade("dark", [baseRules, mobileRules]),
@@ -697,9 +585,6 @@ export function buildNativeThemeModel(
     ...cascade("dark", [baseRules]).keys(),
   ]);
 
-  // Classify every token once, from the default palette. The set of native
-  // color tokens must be identical in both modes: a token added to one mode
-  // only is the regression theme.test.ts guards against on the web.
   const allNames = [
     ...new Set([...defaultTokens.light.keys(), ...defaultTokens.dark.keys()]),
   ].sort();
@@ -793,10 +678,6 @@ export function buildNativeThemeModel(
     skipped,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Emission (Oxfmt-canonical so `oxfmt` is a no-op).
-// ---------------------------------------------------------------------------
 
 function quoteKey(key: string): string {
   return /^[A-Za-z_$][A-Za-z0-9_$]*$/.test(key) ? key : JSON.stringify(key);
@@ -925,9 +806,11 @@ export function renderNativeThemeSource(model: NativeThemeModel): string {
   ].join("\n");
 }
 
-/** Full pipeline: read sources → model → file contents. */
 export function generateNativeThemeSource(): string {
-  return renderNativeThemeSource(buildNativeThemeModel());
+  return renderNativeThemeSource(buildNativeThemeModel()).replace(
+    /\/\*[\s\S]*?\*\/\n?/g,
+    "",
+  );
 }
 
 function main(): void {

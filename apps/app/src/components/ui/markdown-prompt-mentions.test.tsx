@@ -10,9 +10,6 @@ import { RouteNavigationProvider } from "@/components/ui/app-route-anchor";
 import { MarkdownPreview } from "@/components/ui/markdown-preview";
 import { setPreferredTheme } from "@/hooks/useTheme";
 
-// Pure `substitutePromptMentions` cases live in the sibling `.test.ts` (node
-// env); this file covers the rendered pill output and needs jsdom.
-
 function markdownTree(node: ReactNode) {
   return (
     <MemoryRouter>
@@ -56,7 +53,6 @@ const COMMAND_RESOURCE: PromptMentionResource = {
   argumentHint: null,
 };
 
-// Builds a mention spanning the first occurrence of `token` in `text`.
 function mentionAt(
   text: string,
   token: string,
@@ -107,9 +103,6 @@ describe("MarkdownPreview prompt mentions", () => {
       />,
     );
 
-    // A file mention has no `@thread:` token shape, so the offset pipeline is the
-    // only thing that can surface it — proving the generalization over the
-    // thread-only regex path. The underscore-bearing label stays one pill.
     const labels = screen.getAllByText("foo_bar.ts");
     expect(labels).toHaveLength(1);
     expect(labels[0]?.closest("button")).not.toBeNull();

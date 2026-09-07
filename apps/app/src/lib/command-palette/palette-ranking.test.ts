@@ -50,7 +50,6 @@ describe("rankPaletteActions", () => {
   });
 
   it("matches the group so a query can name a section", () => {
-    // "Reload page" contains no "browser"; only its group does.
     expect(
       titlesOf(
         rankPaletteActions({

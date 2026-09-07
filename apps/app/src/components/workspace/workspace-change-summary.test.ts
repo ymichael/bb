@@ -216,7 +216,6 @@ describe("workspace-change-summary", () => {
       makeWorkspaceStatus({
         mergeBase: makeWorkspaceMergeBase({
           aheadCount: 2,
-          // Daemon returns oldest-first (git log --reverse).
           commits: [makeCommit("aaa1111"), makeCommit("bbb2222")],
         }),
       }),

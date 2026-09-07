@@ -1,16 +1,5 @@
-/**
- * Shared tool call helpers for bridge processes.
- *
- * Both claude-code and pi bridges forward tool calls from the provider SDK
- * to the host-daemon and feed responses back. This module provides:
- * - The JSON-RPC request type for forwarding tool calls
- * - Response decoding for tool call results from the host-daemon
- * - Generic JSON-RPC response decoding (for matching tool call responses)
- */
-
 import { z } from "zod";
 
-/** Kit-internal: the runtime's `item/tool/call` response result shape. */
 const providerToolCallResponseSchema = z.object({
   success: z.boolean(),
   contentItems: z.array(
@@ -27,10 +16,6 @@ const providerToolCallResponseSchema = z.object({
   ),
 });
 
-// ---------------------------------------------------------------------------
-// Tool call request — bridge → host-daemon
-// ---------------------------------------------------------------------------
-
 export interface BridgeToolCallRequest {
   jsonrpc: "2.0";
   id: string | number;
@@ -45,20 +30,12 @@ export interface BridgeToolCallRequest {
   };
 }
 
-// ---------------------------------------------------------------------------
-// JSON-RPC envelope schema — shared by both bridges for request decoding
-// ---------------------------------------------------------------------------
-
 export const bridgeRequestEnvelopeSchema = z.object({
   jsonrpc: z.literal("2.0"),
   id: z.union([z.string(), z.number()]),
   method: z.string(),
   params: z.record(z.string(), z.unknown()).optional(),
 });
-
-// ---------------------------------------------------------------------------
-// JSON-RPC response decoding — host-daemon → bridge
-// ---------------------------------------------------------------------------
 
 const jsonRpcErrorSchema = z.object({
   code: z.number(),
@@ -82,16 +59,6 @@ export type BridgeJsonRpcResponse =
   | z.infer<typeof jsonRpcSuccessResponseSchema>
   | z.infer<typeof jsonRpcErrorResponseSchema>;
 
-/**
- * Requests and responses share one id space on the bidirectional bridge
- * channel: both sides number their outgoing requests with a plain counter from
- * 1. `method` is what tells them apart — a response never carries one. Without
- * this check an inbound request whose id collides with an outstanding outgoing
- * request decodes as a success response (the schemas are non-strict and
- * `result: z.unknown()` also accepts a missing key), so the bridge settles the
- * wrong promise and drops the request without replying, leaving the caller to
- * time out 30s later with no diagnostic.
- */
 function isJsonRpcRequest(input: unknown): boolean {
   return (
     typeof input === "object" &&
@@ -113,33 +80,17 @@ export function decodeBridgeJsonRpcResponse(
   return success.success ? success.data : null;
 }
 
-// ---------------------------------------------------------------------------
-// Tool call response payload decoding
-// ---------------------------------------------------------------------------
-
-/** An image on a tool call result, split out of an `inputImage` data URL. */
 export interface BridgeToolCallImage {
   data: string;
   mimeType: string;
 }
 
-/**
- * A tool result block in the one shape every consumer already accepts: MCP's
- * `CallToolResult.content` (claude-code and acp) and pi's `AgentToolResult.content`
- * declare the same two members with the same field names.
- */
 export type BridgeToolCallContent =
   | { type: "text"; text: string }
   | { type: "image"; data: string; mimeType: string };
 
 const IMAGE_DATA_URL = /^data:(.+);base64,(.+)$/s;
 
-/**
- * Splits `data:<mime>;base64,<data>` into the parts a tool result carries.
- * Returns null for any other URL: both result contracts carry inline base64 and
- * have nowhere to put a remote reference, so the caller keeps such a URL as text
- * rather than dropping it.
- */
 function decodeImageDataUrl(imageUrl: string): BridgeToolCallImage | null {
   const match = IMAGE_DATA_URL.exec(imageUrl);
   if (match === null) {
@@ -201,9 +152,6 @@ export function decodeToolCallResponsePayload(result: unknown): {
     };
   }
   return {
-    // Keep the legacy aggregate fields for provider bridges that already use
-    // this published helper. New consumers use contentBlocks so interleaved
-    // text and images retain the plugin result's order.
     content: text,
     contentBlocks,
     images,
@@ -211,10 +159,6 @@ export function decodeToolCallResponsePayload(result: unknown): {
   };
 }
 
-/**
- * Renders a decoded payload as tool result blocks, dropping empty text so an
- * image-only result carries the image alone.
- */
 export function buildBridgeToolCallContent(result: {
   content: string;
   contentBlocks?: BridgeToolCallContent[];

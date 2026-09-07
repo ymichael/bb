@@ -70,7 +70,7 @@ describe("resolveRootComposeThreadEnvironment", () => {
     });
   });
 
-  it("sends default base branch for managed worktrees without an explicit pick", () => {
+  it("submits the resolved local default displayed by the selector", () => {
     expect(
       resolveRootComposeThreadEnvironment({
         defaultBranch: "main",
@@ -82,29 +82,12 @@ describe("resolveRootComposeThreadEnvironment", () => {
     ).toMatchObject({
       workspace: {
         type: "managed-worktree",
-        baseBranch: { kind: "default" },
+        baseBranch: { kind: "named", name: "main" },
       },
     });
   });
 
-  it("can submit the server-resolved default while branch metadata is still loading", () => {
-    expect(
-      resolveRootComposeThreadEnvironment({
-        defaultBranch: undefined,
-        defaultWorktreeBaseBranch: undefined,
-        environmentValue: hostWorktreeEnvironmentValue,
-        projectId,
-        selectedBranch: null,
-      }),
-    ).toMatchObject({
-      workspace: {
-        type: "managed-worktree",
-        baseBranch: { kind: "default" },
-      },
-    });
-  });
-
-  it("sends smart remote default base branch for managed worktrees without an explicit pick", () => {
+  it("submits the resolved remote default displayed by the selector", () => {
     expect(
       resolveRootComposeThreadEnvironment({
         defaultBranch: "main",
@@ -117,6 +100,23 @@ describe("resolveRootComposeThreadEnvironment", () => {
       workspace: {
         type: "managed-worktree",
         baseBranch: { kind: "named", name: "origin/main" },
+      },
+    });
+  });
+
+  it("falls back to default while branch metadata is unavailable", () => {
+    expect(
+      resolveRootComposeThreadEnvironment({
+        defaultBranch: undefined,
+        defaultWorktreeBaseBranch: undefined,
+        environmentValue: hostWorktreeEnvironmentValue,
+        projectId,
+        selectedBranch: null,
+      }),
+    ).toMatchObject({
+      workspace: {
+        type: "managed-worktree",
+        baseBranch: { kind: "default" },
       },
     });
   });

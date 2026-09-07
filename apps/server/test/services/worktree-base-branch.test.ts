@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   resolveDefaultWorktreeBaseBranch,
   resolveManagedDefaultBaseBranchSpec,
-  resolveManagedNamedBaseBranchSpec,
 } from "../../src/services/projects/worktree-base-branch.js";
 
 describe("resolveDefaultWorktreeBaseBranch", () => {
@@ -72,62 +71,5 @@ describe("resolveManagedDefaultBaseBranchSpec", () => {
         originDefaultBranch: "origin/main",
       }),
     ).toEqual({ kind: "named", name: "origin/main" });
-  });
-});
-
-describe("resolveManagedNamedBaseBranchSpec", () => {
-  it("prefers origin when the named default branch is equal or behind", () => {
-    for (const relation of ["equal", "local-behind"] as const) {
-      expect(
-        resolveManagedNamedBaseBranchSpec(
-          { kind: "named", name: "main" },
-          {
-            defaultBranch: "main",
-            defaultBranchRelation: relation,
-            originDefaultBranch: "origin/main",
-          },
-        ),
-      ).toEqual({ kind: "named", name: "origin/main" });
-    }
-  });
-
-  it("keeps the named default branch when local is ahead, diverged, unknown, or has no origin", () => {
-    for (const relation of ["local-ahead", "diverged", "unknown"] as const) {
-      expect(
-        resolveManagedNamedBaseBranchSpec(
-          { kind: "named", name: "main" },
-          {
-            defaultBranch: "main",
-            defaultBranchRelation: relation,
-            originDefaultBranch: "origin/main",
-          },
-        ),
-      ).toEqual({ kind: "named", name: "main" });
-    }
-    expect(
-      resolveManagedNamedBaseBranchSpec(
-        { kind: "named", name: "main" },
-        {
-          defaultBranch: "main",
-          defaultBranchRelation: null,
-          originDefaultBranch: null,
-        },
-      ),
-    ).toEqual({ kind: "named", name: "main" });
-  });
-
-  it("leaves names that are not the default branch untouched", () => {
-    for (const name of ["develop", "origin/main", "feature/x"]) {
-      expect(
-        resolveManagedNamedBaseBranchSpec(
-          { kind: "named", name },
-          {
-            defaultBranch: "main",
-            defaultBranchRelation: "local-behind",
-            originDefaultBranch: "origin/main",
-          },
-        ),
-      ).toEqual({ kind: "named", name });
-    }
   });
 });

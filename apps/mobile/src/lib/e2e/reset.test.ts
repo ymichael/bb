@@ -23,8 +23,6 @@ describe("resetAppState", () => {
     });
     await seed.setActiveProfile(b.id);
 
-    // A fresh store instance proves the wipe goes through persistence, not
-    // just in-memory state.
     const profileStore = createProfileStore({ storage });
     const preferences = { clearAll: vi.fn() };
     const disposeClients = vi.fn();

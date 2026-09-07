@@ -4,9 +4,6 @@ import {
   selectionAnchorFromPointerRelease,
 } from "./SelectableMessageProse.js";
 
-// Minimal fake node tree: a node "contains" another if it is the node itself
-// or appears in its descendant set. Avoids a full DOM while still exercising
-// the containment predicate.
 class FakeNode {
   descendants = new Set<FakeNode>();
   contains(other: unknown): boolean {

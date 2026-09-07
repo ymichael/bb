@@ -26,9 +26,6 @@ afterEach(() => {
 });
 
 it("publishes only the focused pane's opener", () => {
-  // A split mounts one thread view per pane, each with its own panel tabs, so
-  // an unscoped store would open a plugin's panel in whichever pane mounted
-  // last rather than the one the user is looking at.
   const left = vi.fn(() => true);
   const right = vi.fn(() => true);
   const { rerender } = render(

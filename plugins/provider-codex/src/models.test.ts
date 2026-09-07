@@ -88,7 +88,6 @@ describe("parseModelsResponse", () => {
     expect(
       models[0]?.supportedReasoningEfforts.map((e) => e.reasoningEffort),
     ).toEqual(["low", "high"]);
-    // Unknown default falls back to first supported effort.
     expect(models[0]?.defaultReasoningEffort).toBe("low");
   });
 

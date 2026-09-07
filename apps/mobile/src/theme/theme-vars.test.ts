@@ -17,22 +17,8 @@ const MOBILE_OVERRIDES_CSS = readFileSync(
   "utf8",
 );
 
-/**
- * Tokens that exist only in src/theme/mobile-overrides.css, with no web
- * counterpart (the generator lists them in theme.native.ts's header). Adding
- * one is deliberate: declare it in both modes of the override file, map it in
- * global.css (`--color-<name>: var(--<name>)`), and add it here and to
- * MOBILE_ONLY_COLOR_UTILITIES. If theme.css later grows the same name, drop
- * it from this set — the web then owns it.
- */
 const MOBILE_ONLY_TOKENS = new Set(["surface-grouped", "surface-grouped-cell"]);
 
-/**
- * `--color-*` utilities global.css exposes beyond the web `@theme inline`
- * list: the anchors, the sidebar search match, the pill chrome, the shadow
- * color (all theme.css tokens the web has no class for) and the mobile-only
- * grouped-list surfaces.
- */
 const MOBILE_ONLY_COLOR_UTILITIES = new Set([
   "canvas",
   "ink",
@@ -47,7 +33,6 @@ const MOBILE_ONLY_COLOR_UTILITIES = new Set([
   "surface-grouped-cell",
 ]);
 
-/** `--color-x: var(--y)` pairs inside every `@theme inline` block. */
 function colorMappings(css: string): Map<string, string> {
   const map = new Map<string, string>();
   for (const block of css.matchAll(/@theme inline\s*\{([\s\S]*?)\n\}/g)) {
@@ -60,7 +45,6 @@ function colorMappings(css: string): Map<string, string> {
   return map;
 }
 
-/** Custom property names declared anywhere in theme.css (`--name:`). */
 function declaredVars(css: string): Set<string> {
   return new Set(
     Array.from(css.matchAll(/^\s*--([a-z0-9-]+):/gm), (match) => match[1]),
@@ -121,7 +105,6 @@ describe("theme vars", () => {
         `--color-${utility} → --${cssVar}`,
       ).toBe(true);
     }
-    // Anything beyond the web list is deliberate and documented above.
     const extra = [...mobile.keys()].filter((utility) => !web.has(utility));
     expect(extra.sort()).toEqual([...MOBILE_ONLY_COLOR_UTILITIES].sort());
   });
@@ -138,9 +121,6 @@ describe("theme vars", () => {
     expect(px("radius-xl")).toBe(nativeRadii.xl);
     expect(px("radius-2xl")).toBe(nativeRadii.xl2);
     expect(px("radius-full")).toBe(nativeRadii.full);
-    // Line heights are `calc(lineHeight / fontSize)` ratios (see the comment
-    // in global.css: a px value inside Tailwind's `var(--tw-leading, …)`
-    // fallback is treated as an em multiplier by react-native-css).
     const ratio = (name: string): { lineHeight: number; fontSize: number } => {
       const match = GLOBAL_CSS.match(
         new RegExp(`--${name}:\\s*calc\\((\\d+)\\s*/\\s*(\\d+)\\)`),

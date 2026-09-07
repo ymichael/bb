@@ -2,12 +2,28 @@ import type Database from "better-sqlite3";
 import type { Context } from "hono";
 import type * as z from "zod";
 import type {
+  Environment,
+  Host,
+  PermissionMode,
+  PendingInteraction,
+  Project,
+  PromptInput,
+  ProviderErrorInfo,
   ProviderNativeRootInput,
   ProviderNativeRootsInputLike,
+  ProviderRateLimitState,
+  ReasoningLevel,
+  ServiceTier,
+  ThreadQueuedMessage,
 } from "@bb/domain";
 import type { ProviderFork } from "@bb/domain/provider-fork";
 import type { BbSdk } from "@bb/sdk";
-import type { ThreadResponse } from "@bb/server-contract";
+import type {
+  ExecutionInputFieldSource,
+  StartedOnBehalfOf,
+  ThreadCreateOrigin,
+  ThreadResponse,
+} from "@bb/server-contract";
 import type { JsonValue } from "./json-value.js";
 import type {
   PluginRpcContract,
@@ -45,11 +61,6 @@ export interface PluginLogger {
 // Settings (design §4.2).
 // ---------------------------------------------------------------------------
 
-/**
- * Declarative settings descriptors (`bb.settings.define`). Deliberately plain
- * data — not zod — so the host can render settings forms and the CLI can
- * parse values without executing plugin code.
- */
 export type PluginSettingDescriptor =
   | {
       type: "string";
@@ -62,27 +73,52 @@ export type PluginSettingDescriptor =
        * be multi-line.
        */
       experimental_multiline?: boolean;
+      /** Synchronously validate without transforming a proposed value. */
+      experimental_schema?: StandardSchemaV1<string, string>;
       default?: string;
     }
-  | { type: "boolean"; label: string; description?: string; default?: boolean }
+  | {
+      type: "boolean";
+      label: string;
+      description?: string;
+      /** Synchronously validate without transforming a proposed value. */
+      experimental_schema?: StandardSchemaV1<boolean, boolean>;
+      default?: boolean;
+    }
+  | {
+      type: "number";
+      label: string;
+      description?: string;
+      experimental_schema?: StandardSchemaV1<number, number>;
+      default?: number;
+    }
   | {
       type: "select";
       label: string;
       description?: string;
       options: string[];
+      /** Synchronously validate without transforming a proposed value. */
+      experimental_schema?: StandardSchemaV1<string, string>;
       default?: string;
     }
-  | { type: "project"; label: string; description?: string; default?: string };
+  | {
+      type: "project";
+      label: string;
+      description?: string;
+      /** Synchronously validate without transforming a proposed value. */
+      experimental_schema?: StandardSchemaV1<string, string>;
+      default?: string;
+    };
 
 export type PluginSettingDescriptors = Record<string, PluginSettingDescriptor>;
 
-export type PluginSettingValue = string | boolean;
+export type PluginSettingValue = string | number | boolean;
 
 /** `default` present → non-optional value; absent → `T | undefined`. */
 export type PluginSettingsValues<
   Ds extends Record<string, PluginSettingDescriptor>,
 > = {
-  [K in keyof Ds]: Ds[K] extends { default: string | boolean }
+  [K in keyof Ds]: Ds[K] extends { default: string | number | boolean }
     ? PluginSettingValueOf<Ds[K]>
     : PluginSettingValueOf<Ds[K]> | undefined;
 };
@@ -91,14 +127,22 @@ type PluginSettingValueOf<D extends PluginSettingDescriptor> = D extends {
   type: "boolean";
 }
   ? boolean
-  : string;
+  : D extends { type: "number" }
+    ? number
+    : string;
 
 export interface PluginSettingsHandle<
   Ds extends Record<string, PluginSettingDescriptor>,
 > {
   /** Load-safe: callable inside the factory. */
   get(): Promise<PluginSettingsValues<Ds>>;
-  /** Fires after values change through the settings route/CLI. */
+  /** Validate and persist this handle's fields; `null` unsets a stored value. */
+  experimental_set(
+    values: Partial<{
+      [K in keyof Ds]: PluginSettingValueOf<Ds[K]> | null;
+    }>,
+  ): Promise<PluginSettingsValues<Ds>>;
+  /** Fires after effective values change through any settings write. */
   onChange(
     listener: (
       next: PluginSettingsValues<Ds>,
@@ -138,7 +182,8 @@ export interface PluginStorage {
   database(): Database.Database;
   /**
    * Ordered-statement migration helper: statement index = migration id in a
-   * `_bb_migrations` table; unapplied statements run in one transaction.
+   * `_bb_migrations` table; unapplied statements run in one transaction. The
+   * host records each statement hash and rejects changed or reused indexes.
    * Append-only — never reorder or edit shipped statements.
    */
   migrate(db: Database.Database, statements: string[]): void;
@@ -149,9 +194,67 @@ export interface PluginStorage {
 // ---------------------------------------------------------------------------
 
 /**
- * Thread lifecycle events a plugin can observe (design §4.5). Observe-only:
- * handlers run fire-and-forget after the transition is applied and can never
- * block or veto it. `thread` is the same public DTO GET /threads/:id serves.
+ * Why a turn failed, assembled by core from the failed turn's own records so a
+ * listener never has to replay the event log to find out.
+ *
+ * Ids and failure facts only. There is no thread DTO and no copy of the
+ * message that failed: a retry re-submits the turn BY REFERENCE
+ * (`bb.sdk.threads.retry`), so the id is the whole of what a policy needs, and
+ * anything else about the thread is one `bb.sdk.threads.get` away and fresher
+ * for being read when it is used.
+ */
+export interface PluginTurnFailedEvent {
+  /** The thread the failed turn ran on. */
+  threadId: string;
+  /**
+   * The failed turn's `client/turn/requested` id — what
+   * `bb.sdk.threads.retry` takes as `turnRequestId`. On a retry's failure this
+   * is the RETRY's id; core walks back to the request the chain started from
+   * when it queues the next attempt.
+   */
+  requestId: string;
+  /** The provider turn, when the failure happened inside one. */
+  turnId: string | null;
+  /**
+   * The failure's structured classification: the provider's own report when
+   * the failure happened inside a turn, or the typed rejection code (a rate
+   * limit, an auth failure) when the provider refused the request at the
+   * door. Null when neither carried one, so a retry policy must handle null
+   * rather than assume.
+   */
+  errorInfo: ProviderErrorInfo | null;
+  /**
+   * Whether the provider accepted the turn's input before failing. True is a
+   * mid-stream failure — the input is already part of the provider's
+   * conversation, so core's retry continues it instead of re-sending the
+   * blocks. False is a request the provider never took, which a retry
+   * re-sends verbatim.
+   */
+  inputAccepted: boolean;
+  /**
+   * The most recent rate-limit snapshot this thread's provider reported, or
+   * null when the provider reports no windows.
+   */
+  rateLimits: ProviderRateLimitState | null;
+  /**
+   * Which attempt just failed: 1 is the original dispatch, 2 the first retry.
+   * A policy caps its own retries by comparing against this.
+   */
+  attemptNumber: number;
+}
+
+/**
+ * Lifecycle events a plugin can observe with `bb.events.on` (design §4.5).
+ *
+ * **Events are announcements core makes.** Something already happened; a
+ * handler is told about it and whatever it returns is IGNORED. Handlers run
+ * fire-and-forget after the change is applied and can never block or veto it.
+ * The surface that *can* is `bb.experimental_hooks`, where core asks a
+ * question and acts on the answer — the same split git draws between its
+ * post-commit and pre-commit hooks.
+ *
+ * `thread` is the same public DTO GET /threads/:id serves and `entry` is the
+ * queued row GET /threads/:id/queued-messages serves.
  */
 export interface PluginThreadEventPayloads {
   /** Fired after a thread row is created. */
@@ -168,6 +271,41 @@ export interface PluginThreadEventPayloads {
   "thread.archived": { thread: ThreadResponse };
   /** Fired after a thread is soft-deleted. */
   "thread.deleted": { thread: ThreadResponse };
+  /** Fired after a pending interaction row is committed. */
+  "interaction.pending": {
+    thread: ThreadResponse;
+    interaction: PendingInteraction;
+  };
+  /**
+   * Fired after a dispatch attempt is queued as a row — by a `message.dispatch`
+   * hook's `wait` decision, by a `sendAt` in the future, or by a core wait (the
+   * thread is busy, its turn is still starting, provisioning, or awaiting an
+   * interaction).
+   *
+   * Every listener sees every queued row, not just the ones it is holding: an
+   * observer that only wants its own filters on
+   * `entry.waitingOn?.kind === "plugin" && entry.waitingOn.pluginId === bb.pluginId`.
+   *
+   * A re-queue fires this again with the new wait, because a row that moved
+   * from one wait to another is news to whoever was waiting on the old one.
+   */
+  "message.queued": { entry: ThreadQueuedMessage };
+  /**
+   * Fired after a queued row's waits all cleared and it dispatched. The turn
+   * it carried runs after this, so a handler must not assume it has started.
+   */
+  "message.dispatched": { entry: ThreadQueuedMessage };
+  /**
+   * Fired after a turn failed and the thread has already landed in `error`.
+   *
+   * An announcement, not a question: the failure stands exactly as core
+   * applied it, and a listener that wants another attempt asks for one with
+   * `bb.sdk.threads.retry({ threadId, turnRequestId, sendAt })`. That retry is
+   * an ordinary dispatch attempt, so it still passes the `message.dispatch`
+   * hook — a retry coming back after a rate-limit window respects a limiter
+   * that is at capacity instead of jumping the queue.
+   */
+  "turn.failed": PluginTurnFailedEvent;
 }
 
 export type PluginThreadEventName = keyof PluginThreadEventPayloads;
@@ -175,6 +313,228 @@ export type PluginThreadEventName = keyof PluginThreadEventPayloads;
 export type PluginThreadEventHandler<E extends PluginThreadEventName> = (
   payload: PluginThreadEventPayloads[E],
 ) => void | Promise<void>;
+
+// ---------------------------------------------------------------------------
+// Hooks: the questions core asks (plans/dispatch-queue-rework.md).
+// ---------------------------------------------------------------------------
+
+/**
+ * What a `message.dispatch` hook answers.
+ *
+ * `proceed` lets the attempt continue. `wait` QUEUES the message as a row
+ * whose `waitingOn` names this plugin and carries `reason` verbatim; the
+ * row stays queued until `sendAt` comes due, capacity frees, the user sends
+ * it now, or the orphan sweep clears it because this plugin is no longer
+ * running. `sendAt` (epoch ms) sets the row's own `sendAt`, so core's due sweep
+ * re-attempts at that instant without the plugin holding a timer of its own —
+ * which is what a rate-limit window wants. `reject` refuses the attempt
+ * outright: `message` is shown to the user verbatim.
+ *
+ * There is deliberately no "handled it myself" answer and no amendment arm —
+ * a hook is a decision, never an owner or an author of the work.
+ */
+export type MessageDispatchHookDecision =
+  | { action: "proceed" }
+  | { action: "wait"; reason: string; sendAt?: number | null }
+  | { action: "reject"; message: string };
+
+/**
+ * The execution tuple as core resolved it before this hook ran. `model` and
+ * the three option fields are null only when no default has been resolved for
+ * them yet; `providerId` is always resolved.
+ */
+export interface PluginDispatchExecution {
+  providerId: string;
+  model: string | null;
+  reasoningLevel: ReasoningLevel | null;
+  serviceTier: ServiceTier | null;
+  permissionMode: PermissionMode | null;
+}
+
+/**
+ * Where each execution value came from. `explicit` is a user choice,
+ * `client-preference` a remembered client default, and null means core
+ * resolved it from project/provider defaults. A hook that must not act against
+ * a deliberate choice checks for `explicit` here.
+ */
+export interface PluginDispatchExecutionSources {
+  providerId: ExecutionInputFieldSource | null;
+  model: ExecutionInputFieldSource | null;
+  reasoningLevel: ExecutionInputFieldSource | null;
+  serviceTier: ExecutionInputFieldSource | null;
+  permissionMode: ExecutionInputFieldSource | null;
+}
+
+/**
+ * The prompt this dispatch carries. `blocks` is the message itself; `text` is
+ * the concatenated text of its text blocks, which is what a rules-based hook
+ * actually wants to match on.
+ */
+export interface PluginDispatchInput {
+  blocks: readonly PromptInput[];
+  text: string;
+}
+
+/**
+ * How this attempt would reach the provider.
+ *
+ * `start-turn` is a dispatch that begins a turn: a thread's first message, a
+ * plain send to an idle or `pending` thread, or a steer-mode message that
+ * found no running turn to join. `join-turn` is an injection into a turn that
+ * is already executing.
+ *
+ * Decision powers are identical for both — a steer is hooked exactly like a
+ * send, uniformly. A hook that limits concurrency proceeds on `join-turn`: the
+ * thread already holds its slot, so joining it asks for nothing new.
+ */
+export type PluginDispatchAttemptKind = "start-turn" | "join-turn";
+
+/**
+ * What core hands a `message.dispatch` hook: the one checkpoint, run before a
+ * message reaches a provider. The exception is a user's explicit Send-now on a
+ * queued row, which bypasses the pass by design — it is the user overriding
+ * policy, and a policy that could veto its own override would not be one.
+ *
+ * It runs identically whether the attempt is inline (someone just sent) or
+ * from a drain (a queued row became eligible again), and whether the message
+ * is a thread's first, a follow-up, a steer, or a retry of a failed turn. A
+ * handler must therefore be idempotent for one logical dispatch: passes re-run
+ * on every drain, on restart, and on retry.
+ */
+export interface MessageDispatchHookContext {
+  /**
+   * The target thread. Never null: thread creation is unhooked — it is a cheap
+   * row — so by the time the first message is decided about, the thread exists
+   * in `pending`, with its provider resolved and nothing provisioned.
+   */
+  thread: ThreadResponse;
+  project: Project;
+  /** Null until an environment is chosen (a queued or not-yet-provisioned thread). */
+  environment: Environment | null;
+  /**
+   * The machine the work will run on. Resolved from the environment when one
+   * is attached, and before that from the start intent the thread was created
+   * with — so a per-host policy counts a cold start against the pool it is
+   * about to occupy. Null only when neither names a machine.
+   */
+  host: Host | null;
+  input: PluginDispatchInput;
+  requestedExecution: PluginDispatchExecution;
+  /** Where each execution value came from. */
+  executionSources: PluginDispatchExecutionSources;
+  /** Whether this attempt starts a turn or joins a running one. */
+  attempt: PluginDispatchAttemptKind;
+  /**
+   * The queued row this attempt is re-trying, or null when the attempt is
+   * inline and no row has ever existed for it.
+   *
+   * This is how a hook tells a fresh send from a re-attempt of something it
+   * already decided about — the replacement for the old
+   * `isReleaseReevaluation`/`hold` pair. A hook that counts in-flight work
+   * should treat the two identically; a hook that logs should not
+   * double-count.
+   */
+  queuedMessage: ThreadQueuedMessage | null;
+  /** How the dispatch was requested; null for internal/core-driven sends. */
+  origin: ThreadCreateOrigin | null;
+  originPluginId: string | null;
+  startedOnBehalfOf: StartedOnBehalfOf | null;
+  parentThreadId: string | null;
+}
+
+/**
+ * The hooks a plugin can answer, each mapping its key to the context core
+ * hands the handler and the decision core acts on. `on()` and the handler type
+ * derive from this map — and so does the server's hook registry — so a
+ * half-added hook does not compile.
+ *
+ * One hook today: `message.dispatch`, THE admission checkpoint, run identically
+ * for a thread's first message, a follow-up, a steer, a retry, and every
+ * re-attempt a drain makes. It replaced the earlier `thread.create` +
+ * `turn.submit` pair, whose split was an accident of where the code happened to
+ * branch rather than a difference a plugin needed to see — the attempt's own
+ * `attempt` kind carries what actually differs.
+ */
+export interface PluginHookSignatures {
+  "message.dispatch": {
+    context: MessageDispatchHookContext;
+    decision: MessageDispatchHookDecision;
+  };
+}
+
+export type PluginHookName = keyof PluginHookSignatures;
+
+export type PluginHookHandler<K extends PluginHookName> = (
+  context: PluginHookSignatures[K]["context"],
+) =>
+  | PluginHookSignatures[K]["decision"]
+  | Promise<PluginHookSignatures[K]["decision"]>;
+
+export interface PluginHooks {
+  /**
+   * Answer a hook.
+   *
+   * **Hooks are questions core asks.** Core stops at a checkpoint, hands the
+   * handler a context, and ACTS ON what it returns — the opposite of
+   * `bb.events`, whose handlers are told what already happened and whose
+   * return value is ignored. It is the same split git draws between its
+   * pre-commit and post-commit hooks, and the reason the two live in separate
+   * namespaces rather than behind one `on`.
+   *
+   * Handlers for a hook run as a deterministic chain in plugin install order,
+   * a `reject` short-circuits the pass, and `wait` decisions are COLLECTED
+   * across the whole pass rather than short-circuiting. The attempt proceeds
+   * only when a pass yields no waits. When several plugins wait, the FIRST owns
+   * the row's `waitingOn` and the rest have their reasons appended to it, so
+   * one decision produces one card rather than one per plugin; each of them
+   * answers again on the next attempt, so nothing is lost by not owning the
+   * row.
+   *
+   * Fail-closed: a handler that throws or exceeds the 10 second decision box
+   * FAILS THE ATTEMPT with this plugin named. Decide in milliseconds — if the
+   * answer needs real work, return `wait` with a `sendAt` and answer again on
+   * the re-attempt.
+   *
+   * The whole pass runs under one server-wide lock, so a counting handler never
+   * races another attempt. It also means a handler that blocks delays every
+   * other attempt, up to the box.
+   *
+   * Passes re-run on every drain, on restart and on retry. A handler must be
+   * idempotent for one logical dispatch.
+   *
+   * At most one handler per hook per plugin; registering a second replaces
+   * nothing and throws.
+   */
+  on<K extends PluginHookName>(hook: K, handler: PluginHookHandler<K>): void;
+
+  /**
+   * Ask core to re-attempt the messages queued behind plugin waits.
+   *
+   * **The pair to `on`.** `on` answers the question core asks; `recheck`
+   * asks core to ask it again. Core owns the re-draining and the clock — the
+   * `sendAt` due sweep is still core's — and a plugin owns every other
+   * condition its own waits depend on. When that condition changes, say so
+   * here and answer the hook again on the re-attempt; there is no way to
+   * release a specific row, and there does not need to be.
+   *
+   * The walk re-attempts every plugin-queued row IN QUEUE ORDER, each one
+   * claimed exactly once, running the full `message.dispatch` pass over it —
+   * every plugin's handler, not just the caller's. A row that is still blocked
+   * simply re-queues, which is what makes an unwarranted request safe: nobody
+   * has to work out whether their own condition was the last one the message
+   * was waiting on. The existing per-thread re-queue pacing bounds the churn,
+   * so a plugin that stays full is not re-asked in a loop.
+   *
+   * Bursts coalesce: several calls before the walk starts produce one walk.
+   *
+   * **Resolves when the walk is SCHEDULED, not when it finishes.** The walk is
+   * a background pass with no caller to report to — its failures land on the
+   * rows, exactly as the due sweep's do. Awaiting completion would also mean
+   * awaiting a full hook pass from inside whatever called this, which for a
+   * handler holding the evaluation lock could not complete. Fire and forget.
+   */
+  recheck(hook: PluginHookName): Promise<void>;
+}
 
 // ---------------------------------------------------------------------------
 // Wire surfaces: HTTP, rpc, realtime (design §4.6/§4.7).
@@ -185,6 +545,35 @@ export type PluginHttpAuthMode = "local" | "token" | "none";
 export type PluginHttpHandler = (
   context: Context,
 ) => Response | Promise<Response>;
+
+export interface ExperimentalPluginWebSocket {
+  send(data: string | Uint8Array): void;
+  close(code?: number, reason?: string): void;
+  readonly readyState: number;
+}
+
+export interface ExperimentalPluginWebSocketContext {
+  request: Request;
+  url: URL;
+  headers: Headers;
+}
+
+export interface ExperimentalPluginWebSocketHandlers {
+  onOpen?(socket: ExperimentalPluginWebSocket): void | Promise<void>;
+  onMessage?(
+    socket: ExperimentalPluginWebSocket,
+    data: string | Uint8Array,
+  ): void | Promise<void>;
+  onClose?(
+    socket: ExperimentalPluginWebSocket,
+    event: { code: number; reason: string },
+  ): void | Promise<void>;
+  onError?(socket: ExperimentalPluginWebSocket, error: Error): void;
+}
+
+export type ExperimentalPluginWebSocketHandler = (
+  context: ExperimentalPluginWebSocketContext,
+) => ExperimentalPluginWebSocketHandlers;
 
 export interface PluginHttp {
   /**
@@ -200,6 +589,17 @@ export interface PluginHttp {
     method: string,
     path: string,
     handler: PluginHttpHandler,
+    opts?: { auth?: PluginHttpAuthMode },
+  ): void;
+
+  /**
+   * Register a WebSocket route in the same `/http/` namespace as `route`.
+   * A GET request upgrades only when it carries `Upgrade: websocket`.
+   * Auth modes and exact-path matching are identical to HTTP routes.
+   */
+  experimental_websocket(
+    path: string,
+    handler: ExperimentalPluginWebSocketHandler,
     opts?: { auth?: PluginHttpAuthMode },
   ): void;
 }
@@ -978,6 +1378,45 @@ export interface PluginProviders {
   register(declaration: PluginProviderDeclaration): {
     dispose(): void;
   };
+  experimental_contributeEnv(
+    providerId: string,
+    resolve: (
+      context: ExperimentalPluginProviderEnvContext,
+    ) =>
+      | readonly ExperimentalPluginProviderEnvEntry[]
+      | Promise<readonly ExperimentalPluginProviderEnvEntry[]>,
+  ): void;
+  experimental_contributeEnvHealth(
+    providerId: string,
+    resolve: (
+      context: ExperimentalPluginProviderEnvHealthContext,
+    ) =>
+      | ExperimentalPluginProviderEnvHealth
+      | null
+      | Promise<ExperimentalPluginProviderEnvHealth | null>,
+  ): void;
+}
+
+export interface ExperimentalPluginProviderEnvContext {
+  threadId: string;
+  projectId: string;
+  hostId: string;
+}
+
+export interface ExperimentalPluginProviderEnvEntry {
+  name: string;
+  value: string | { serverPath: string };
+  reason: string;
+  secret: boolean;
+}
+
+export interface ExperimentalPluginProviderEnvHealthContext {
+  hostId: string;
+}
+
+export interface ExperimentalPluginProviderEnvHealth {
+  label: string;
+  statusMessage: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -1066,6 +1505,12 @@ export interface PluginEvents {
 // ---------------------------------------------------------------------------
 
 export interface PluginServerApi {
+  /**
+   * The operator-configured public app URL from `BB_APP_URL`, or `null` when
+   * the operator has not configured one. This value is not bind-gated.
+   */
+  readonly experimental_appUrl: string | null;
+
   /**
    * This BB server's own loopback base URL (e.g. "http://127.0.0.1:38886"),
    * which serves the SPA + /api + /ws. For plugins that proxy or relay
@@ -1160,8 +1605,11 @@ export interface PluginHosts {
   /**
    * Replace this plugin's desired shared-loopback ports for one host. The
    * server aggregates declarations, owns generations, and delivers the
-   * resulting set to that host's daemon. Tunnel identity is deliberately not
-   * accepted here: it is owned by the daemon's trusted enrollment.
+   * resulting set to that host's daemon. When an enrolled host is offline,
+   * the server retains the declaration and delivers it on the next
+   * credentialed daemon session. A connected daemon that reports no machine
+   * credential is rejected. Tunnel identity is deliberately not accepted
+   * here: it is owned by the daemon's trusted enrollment.
    */
   declareSharedPorts(hostId: string, ports: readonly number[]): void;
 }
@@ -1211,8 +1659,18 @@ export interface BbPluginApi {
   readonly providers: PluginProviders;
   /** Host-rendered UI contributions (design §4.9). */
   readonly ui: PluginUi;
-  /** Additive plugin lifecycle listeners (design §4.5). */
+  /**
+   * Additive plugin lifecycle listeners (design §4.5). Announcements core
+   * makes: a handler's return value is ignored.
+   */
   readonly events: PluginEvents;
+  /**
+   * Questions core asks and acts on the answer to. Today: the dispatch
+   * checkpoint messages pass through on their way to a provider (a user's
+   * Send-now bypasses it by design), which a handler may let go, queue with a
+   * reason, or refuse.
+   */
+  readonly experimental_hooks: PluginHooks;
   /** Plugin-reported status (needs-configuration). */
   readonly status: PluginStatusApi;
   /** Read-only facts about the running server (loopback base URL). */

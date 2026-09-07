@@ -264,7 +264,6 @@ describe("builtin Keep Awake server entry", () => {
           hosts: { list: async () => [hostRecord("host-1")] },
         },
         experimental_callHostRpc: async () => {
-          // The daemon reports the worker exit before the call rejects.
           await harness?.experimental_emitHostWorkerExit("host-1");
           throw new Error("host plugin worker exited (1)");
         },
@@ -279,7 +278,6 @@ describe("builtin Keep Awake server entry", () => {
       await vi.advanceTimersByTimeAsync(0);
       expect(host.harness.experimental_hostRpcCalls).toHaveLength(1);
 
-      // Retry delays double: 1s, 2s, 4s, ... capped at 30s.
       await vi.advanceTimersByTimeAsync(999);
       expect(host.harness.experimental_hostRpcCalls).toHaveLength(1);
       await vi.advanceTimersByTimeAsync(1);
@@ -295,7 +293,6 @@ describe("builtin Keep Awake server entry", () => {
         7,
       );
 
-      // A configuration change still reconciles immediately.
       const before = host.harness.experimental_hostRpcCalls.length;
       const result = await host.harness.runCli(["disable"]);
       expect(result.exitCode).toBe(0);

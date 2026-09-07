@@ -7,7 +7,6 @@ import {
   type TestAppHarness,
 } from "../../helpers/test-app.js";
 
-// serverPort 3334 puts this host on the local-app origin allowlist.
 const BASE = "http://127.0.0.1:3334";
 const EVIL_ORIGIN = "https://evil.example";
 const PLUGIN_ID = "review-fixes";
@@ -80,8 +79,6 @@ describe("review fixes: idempotent enable, cli auth, dispose drain", () => {
     expect(globals.__rfLoads).toBe(1);
     const entry = await harness.pluginService.setEnabled(PLUGIN_ID, true);
     expect(entry?.status).toBe("running");
-    // The second load must have disposed the first instance (hooks fired
-    // once), not stacked a second live instance on top of it.
     expect(globals.__rfLoads).toBe(2);
     expect(globals.__rfDisposals).toBe(1);
   });
@@ -118,12 +115,9 @@ describe("review fixes: idempotent enable, cli auth, dispose drain", () => {
         body: JSON.stringify({ value: 42 }),
       },
     );
-    // Let the handler start its 150ms sleep, then reload mid-flight.
     await new Promise((resolve) => setTimeout(resolve, 30));
     await harness.pluginService.reload(PLUGIN_ID);
     const response = await inFlight;
-    // Without the drain, the handler's kv write lands on a poisoned handle
-    // and this comes back as an rpc error instead of "done".
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ ok: true, result: "done" });
   });

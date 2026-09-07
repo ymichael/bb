@@ -25,7 +25,6 @@ describe("listPreferenceScope", () => {
     expect(listPreferenceScope("01HZZZZZZZZZZZZZZZZZZZZZP1", false)).toBe(
       "project:01HZZZZZZZZZZZZZZZZZZZZZP1",
     );
-    // activeOnly wins over a project id (Active route is cross-project).
     expect(listPreferenceScope("01HZZZZZZZZZZZZZZZZZZZZZP1", true)).toBe(
       "active",
     );
@@ -206,7 +205,6 @@ describe("loadListPreference / storeListPreference", () => {
       filters: { statuses: ["done"], priorities: [], labelNames: [] },
       sort: "manual",
     });
-    // Older client must not down-convert a newer document.
     expect(window.localStorage.getItem(LIST_PREFERENCE_STORAGE_KEY)).toBe(
       future,
     );

@@ -6,8 +6,6 @@ export default {
   title: "right-panel/File preview",
 };
 
-// Mirror the right panel's surface: bg-background and the same horizontal
-// padding the panel uses for file-preview content (px-4 pb-3 pt-1).
 function PreviewStage({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-[360px] w-full max-w-[640px] min-w-0 flex-col overflow-hidden bg-background px-4 pb-3 pt-1">
@@ -142,9 +140,6 @@ const SAMPLE_IMAGE_URL =
     </svg>`,
   );
 
-// A generated source file well past the code-preview cap, so the story
-// exercises the capped prefix, the "Load full file" action, and virtualized
-// deep-link scrolling in one place.
 const LARGE_FILE_LINE_COUNT = 8_000;
 const LARGE_FILE_TARGET_LINE = 6_500;
 const SAMPLE_LARGE_TS = Array.from({ length: LARGE_FILE_LINE_COUNT }, (_, i) =>
@@ -156,8 +151,6 @@ const SAMPLE_LARGE_TS = Array.from({ length: LARGE_FILE_LINE_COUNT }, (_, i) =>
 ).join("\n");
 
 function noopOpenInEditor(path: string) {
-  // Stories don't actually open anything; the prop is wired so the
-  // open-in-editor affordance renders in the header.
   console.log("open in editor:", path);
 }
 
@@ -302,7 +295,9 @@ export function Overview() {
                 file: {
                   cacheKey: "story:skill-script",
                   name: "lint.ts",
-                  contents: SAMPLE_LARGE_TS.split("\n").slice(0, 400).join("\n"),
+                  contents: SAMPLE_LARGE_TS.split("\n")
+                    .slice(0, 400)
+                    .join("\n"),
                 },
               }}
             />

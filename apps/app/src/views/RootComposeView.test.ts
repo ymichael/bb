@@ -36,6 +36,12 @@ import {
   shouldNavigateAfterThreadCreate,
 } from "./RootComposeView";
 import { resolveRootComposeProjectFileRouting } from "./RootComposePanelTabContent";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
+import {
+  makeProjectWithThreadsResponse,
+  makeSidebarBootstrapResponse,
+} from "@/test/fixtures/projects";
+import { makeTerminalSession as makeTerminalSessionFixture } from "@/test/fixtures/terminal-sessions";
 import {
   resolveProjectSourceWorktreeDisabledReason,
   resolveComposeHostId,
@@ -277,81 +283,39 @@ function makeReuseThreadOption(environmentId: string): ReuseThreadOption {
 }
 
 function makeThread(args: MakeThreadArgs): ThreadListEntry {
-  return {
+  return makeThreadListEntry({
     id: args.id,
     projectId: args.projectId,
-    environmentId: null,
-    providerId: "codex",
     title: args.id,
     titleFallback: args.id,
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
     createdAt: 100,
-    updatedAt: 100,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-  };
+  });
 }
 
 function makeProject(args: MakeProjectArgs): ProjectWithThreadsResponse {
-  return {
+  return makeProjectWithThreadsResponse({
     id: args.id,
     kind: args.kind,
     name: args.name,
-    gitRemoteUrl: null,
-    sources: [],
     threads: [...args.threads],
-    defaultExecutionOptions: null,
     createdAt: 1,
     updatedAt: 1,
-  };
+  });
 }
 
 function makeTerminalSession(
   overrides: Partial<TerminalSession>,
 ): TerminalSession {
-  return {
+  return makeTerminalSessionFixture({
     id: "term_1",
     threadId: null,
     environmentId: null,
     hostId: "host_1",
-    title: "Terminal",
     initialCwd: "/repo",
-    cols: 100,
-    rows: 30,
-    status: "running",
-    exitCode: null,
-    closeReason: null,
     createdAt: 1,
     updatedAt: 1,
-    lastUserInputAt: null,
     ...overrides,
-  };
+  });
 }
 
 function makeProjectBranchesResponse(
@@ -376,44 +340,44 @@ function makeProjectBranchesResponse(
 
 describe("buildMobileRecentThreads", () => {
   it("includes projectless and every project thread", () => {
-    const sidebarNavigation: SidebarBootstrapResponse = {
-      sections: [],
-      personalProject: makeProject({
-        id: PERSONAL_PROJECT_ID,
-        kind: "personal",
-        name: "Personal",
-        threads: [
-          makeThread({
-            id: "thr_personal",
-            projectId: PERSONAL_PROJECT_ID,
+    const sidebarNavigation: SidebarBootstrapResponse =
+      makeSidebarBootstrapResponse({
+        personalProject: makeProject({
+          id: PERSONAL_PROJECT_ID,
+          kind: "personal",
+          name: "Personal",
+          threads: [
+            makeThread({
+              id: "thr_personal",
+              projectId: PERSONAL_PROJECT_ID,
+            }),
+          ],
+        }),
+        projects: [
+          makeProject({
+            id: "proj_app",
+            kind: "standard",
+            name: "App",
+            threads: [
+              makeThread({
+                id: "thr_app",
+                projectId: "proj_app",
+              }),
+            ],
+          }),
+          makeProject({
+            id: "proj_docs",
+            kind: "standard",
+            name: "Docs",
+            threads: [
+              makeThread({
+                id: "thr_docs",
+                projectId: "proj_docs",
+              }),
+            ],
           }),
         ],
-      }),
-      projects: [
-        makeProject({
-          id: "proj_app",
-          kind: "standard",
-          name: "App",
-          threads: [
-            makeThread({
-              id: "thr_app",
-              projectId: "proj_app",
-            }),
-          ],
-        }),
-        makeProject({
-          id: "proj_docs",
-          kind: "standard",
-          name: "Docs",
-          threads: [
-            makeThread({
-              id: "thr_docs",
-              projectId: "proj_docs",
-            }),
-          ],
-        }),
-      ],
-    };
+      });
 
     const threadIds = buildMobileRecentThreads({ sidebarNavigation }).map(
       (thread) => thread.id,

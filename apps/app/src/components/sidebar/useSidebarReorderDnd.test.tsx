@@ -70,7 +70,6 @@ describe("useSidebarReorderDnd", () => {
     expect(document.body.dataset.sidebarDragging).toBeUndefined();
     expect(onDragCancel).toHaveBeenCalledTimes(1);
 
-    // A late public callback from dnd-kit must not run owner cleanup twice.
     act(() => result.current.dndContextProps.onDragCancel?.(DRAG_CANCEL_EVENT));
     expect(onDragCancel).toHaveBeenCalledTimes(1);
   });
@@ -114,7 +113,6 @@ describe("SidebarTouchSensor", () => {
     const removeSpy = vi.spyOn(window, "removeEventListener");
 
     const teardown = SidebarTouchSensor.setup();
-    // Sidebar mounted at boot inside its closed drawer: no listener yet.
     expect(touchMoveListenerCalls(addSpy)).toHaveLength(0);
 
     act(() => setCompactSidebarDrawerShowing(true));

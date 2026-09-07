@@ -4,7 +4,6 @@ import { cn } from "@bb/shared-ui/lib/utils";
 interface DiffStatsTallyProps {
   insertions: number;
   deletions: number;
-  /** Drop a side when its count is 0 (e.g. show only `-2` instead of `+0 -2`). */
   hideZero?: boolean;
   className?: string;
 }

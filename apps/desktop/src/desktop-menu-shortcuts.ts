@@ -10,9 +10,9 @@ export interface ApplicationMenuAccelerators {
   openNewTab: string | undefined;
   openNewThread: string | undefined;
   openSettings: string | undefined;
+  reopenClosedTab: string | undefined;
 }
 
-/** Native fallback used before the server-owned binding config is available. */
 export const DEFAULT_APPLICATION_MENU_ACCELERATORS: ApplicationMenuAccelerators =
   {
     closeWindowOrSideTab: "CommandOrControl+W",
@@ -20,6 +20,7 @@ export const DEFAULT_APPLICATION_MENU_ACCELERATORS: ApplicationMenuAccelerators 
     openNewTab: "CommandOrControl+T",
     openNewThread: "CommandOrControl+N",
     openSettings: "CommandOrControl+,",
+    reopenClosedTab: "CommandOrControl+Shift+T",
   };
 
 const ELECTRON_KEY_NAMES: Readonly<Record<string, string>> = {
@@ -93,5 +94,9 @@ export function resolveApplicationMenuAccelerators(
     openNewTab: acceleratorForCommand(keybindings, "panel.newTab"),
     openNewThread: acceleratorForCommand(keybindings, "thread.new"),
     openSettings: acceleratorForCommand(keybindings, "settings.open"),
+    reopenClosedTab: acceleratorForCommand(
+      keybindings,
+      "panel.reopenClosedTab",
+    ),
   };
 }

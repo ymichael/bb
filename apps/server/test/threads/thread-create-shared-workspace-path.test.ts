@@ -20,8 +20,6 @@ describe("thread creation on a path another project already uses", () => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-shared-workspace-path",
       });
-      // A personal thread that switched its directory claims the folder for the
-      // personal project.
       ensurePersonalProject(harness.deps.db);
       const personalEnvironment = seedEnvironment(harness.deps, {
         hostId: host.id,
@@ -48,8 +46,6 @@ describe("thread creation on a path another project already uses", () => {
       });
 
       expect(thread.projectId).toBe(project.id);
-      // The new project gets its own environment for the folder; the personal
-      // claim stays where it was.
       const projectEnvironments = listEnvironments(harness.deps.db, project.id);
       expect(projectEnvironments).toHaveLength(1);
       expect(projectEnvironments[0]?.id).not.toBe(personalEnvironment.id);
@@ -66,8 +62,6 @@ describe("thread creation on a path another project already uses", () => {
     });
   });
 
-  // Sharing the claim must not share the hazards: the directory is still one
-  // physical folder, so guards about the folder stay cross-project.
   it("refuses a branch checkout while another project works in the directory", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
@@ -114,7 +108,6 @@ describe("thread creation on a path another project already uses", () => {
         }),
       ).rejects.toThrow("Cannot checkout branch while another thread is using");
 
-      // Rejected before any environment or checkout command existed.
       expect(listEnvironments(harness.deps.db, project.id)).toEqual([]);
     });
   });
@@ -167,9 +160,6 @@ describe("thread creation on a path another project already uses", () => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-managed",
       });
-      // A managed environment stores its path only once the host reports
-      // success. Until then the row cannot defend the directory, so the
-      // workspace root has to.
       const { project: owner } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         name: "Owning Project",

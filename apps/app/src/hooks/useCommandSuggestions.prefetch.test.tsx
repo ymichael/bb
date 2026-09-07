@@ -73,7 +73,6 @@ describe("useCommandSuggestions catalog prefetch", () => {
       environmentId: "env-1",
       signal: expect.any(AbortSignal),
     });
-    // No trigger is active, so the prefetch stays invisible to the menu.
     expect(result.current.suggestions).toEqual([]);
     expect(result.current.isLoading).toBe(false);
   });

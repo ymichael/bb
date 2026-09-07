@@ -98,9 +98,7 @@ async function waitForPidFile(
       if (Number.isInteger(pid) && pid > 0 && pid !== previousPid) {
         return pid;
       }
-    } catch {
-      // Keep polling until the spawned daemon writes its pid.
-    }
+    } catch {}
     await delay(50);
   }
   throw new Error("Timed out waiting for restarted daemon pid file");
@@ -156,10 +154,7 @@ async function runShellCommand(
 function signalProcessGroup(processGroupId: number): void {
   try {
     process.kill(-processGroupId, "SIGTERM");
-  } catch {
-    // The detached daemon moves to its own process group, so the shell's group
-    // may already be gone by the time the command exits.
-  }
+  } catch {}
 }
 
 async function runRestartProviderEnvBlock(

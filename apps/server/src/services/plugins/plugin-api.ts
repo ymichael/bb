@@ -1,8 +1,8 @@
+import { createHash } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { CronExpressionParser } from "cron-parser";
-import { z } from "zod";
 import {
   deletePluginKvValue,
   getPluginKvValue,
@@ -28,6 +28,9 @@ import type {
   PluginCliCommandInfo,
   PluginCliContext,
   PluginCliResult,
+  PluginHooks,
+  PluginHookHandler,
+  PluginHookName,
   PluginEvents,
   PluginHttp,
   PluginHttpAuthMode,
@@ -41,6 +44,12 @@ import type {
   PluginAiServiceDeclaration,
   PluginAiServices,
   PluginProviderDeclaration,
+  ExperimentalPluginProviderEnvContext,
+  ExperimentalPluginProviderEnvEntry,
+  ExperimentalPluginProviderEnvHealth,
+  ExperimentalPluginProviderEnvHealthContext,
+  ExperimentalPluginWebSocket,
+  ExperimentalPluginWebSocketHandler,
   PluginProviders,
   PluginRealtime,
   PluginRpc,
@@ -79,11 +88,15 @@ import {
   summarizeParseIssues,
   agentToolIconRefusalMessage,
   aiServiceAlreadyRegisteredMessage,
+  pluginHookAlreadyRegisteredMessage,
+  storePluginHook,
   providerAlreadyRegisteredMessage,
   providerIconRefusalMessage,
   undeclaredIconProblem,
+  validateSettingsUpdate,
   validatePluginAiServiceDeclaration,
   validatePluginProviderDeclaration,
+  zodSchemaToJsonSchema,
 } from "@get-bb/plugin-sdk/internal/host-policy";
 import type {
   AiServiceHostBinding,
@@ -94,11 +107,17 @@ import type { ServerLogger } from "../../types.js";
 import type { PluginInteractionResult } from "../interactions/pending-interactions.js";
 import { appendPluginLogLine } from "./plugin-log.js";
 import type { PluginHostArtifactSnapshot } from "./plugin-service-internal.js";
-import { readPluginSettingsValues } from "./plugin-settings.js";
+import {
+  readPluginSettingsValues,
+  writePluginSettingsUpdate,
+} from "./plugin-settings.js";
 
-// The backend plugin API contract lives in @get-bb/plugin-sdk (plugin authors
-// compile against it); this module implements it. Re-exported so server code
-// keeps one import site for plugin API types.
+const LEGACY_UNKNOWN_MIGRATION_HASH = "legacy-unknown";
+
+function migrationStatementHash(statement: string): string {
+  return createHash("sha256").update(statement).digest("hex");
+}
+
 export type {
   BbPluginApi,
   PluginAgentConfigurationContext,
@@ -110,11 +129,6 @@ export type {
   PluginThreadEventPayloads,
 } from "@get-bb/plugin-sdk";
 
-/**
- * Thrown when a plugin calls into an API handle that has been invalidated by
- * reload/disable (pi's stale-context discipline): captured `bb` references
- * from a previous load fail loudly instead of acting on dead state.
- */
 class PluginContextStaleError extends Error {
   constructor(pluginId: string) {
     super(
@@ -125,59 +139,52 @@ class PluginContextStaleError extends Error {
   }
 }
 
-/**
- * An error thrown from a background service's `start()` to mark the plugin
- * `needs-configuration` (e.g. no API key yet) instead of crash-looping: the
- * service is not restarted until the plugin is reloaded or its settings are
- * saved (which reloads it). Matched by name, so plugin code without a
- * runtime import can `throw Object.assign(new Error(msg), { name:
- * "NeedsConfigurationError" })`.
- */
 export function isNeedsConfigurationError(error: unknown): error is Error {
   return error instanceof Error && error.name === "NeedsConfigurationError";
 }
+
+/**
+ * The handler this plugin registered per hook, or null where it registered
+ * none. A mapped type over the hook-name union rather than a loose map: a hook
+ * added to the contract without an entry here fails to compile, which is what
+ * keeps the registry and the contract from drifting.
+ */
+export type PluginHookRecords = {
+  [K in PluginHookName]: PluginHookHandler<K> | null;
+};
 
 /** Per-event handler lists recorded by `bb.events.on`; dropped with the handle. */
 type PluginThreadEventHandlers = {
   [E in PluginThreadEventName]: Array<PluginThreadEventHandler<E>>;
 };
 
-/**
- * Wire surfaces (design §4.6/§4.7). Registration is load-safe: routes and
- * rpc handlers are recorded on the handle; the boot-time dispatcher in
- * routes/plugins.ts looks them up live per request, so reload swaps them
- * without touching Hono's routing table.
- */
 export interface PluginHttpRouteRecord {
-  /** Uppercased HTTP method. */
   method: string;
-  /** Exact-match path starting with "/" (no params/wildcards in V1). */
   path: string;
   auth: PluginHttpAuthMode;
   handler: PluginHttpHandler;
 }
 
-/** Runtime shape of a registered rpc method; inputs arrive JSON-parsed. */
+export interface PluginWebSocketRouteRecord {
+  path: string;
+  auth: PluginHttpAuthMode;
+  handler: ExperimentalPluginWebSocketHandler;
+  active: boolean;
+  sockets: Set<ExperimentalPluginWebSocket>;
+}
+
 export interface PluginRpcHandler {
   inputSchema: StandardSchemaV1;
   outputSchema: StandardSchemaV1;
   handler: (input: never) => unknown;
 }
 
-/** Runtime record of a registered native tool. */
 export interface PluginAgentToolRecord {
   name: string;
   description: string;
-  /** The plugin's declared row presentation (grammar v3), null when it
-   * declared none; the plugin service resolves the full presentation. */
   presentation: PluginAgentToolPresentation | null;
-  /** Instructions snippet for the thread-instructions assembly; null when
-   * the registration carried none (description-only). */
   instructions: string | null;
-  /** JSON-schema object sent to providers as the tool's input schema. */
   inputSchema: unknown;
-  /** Validates raw arguments: zod-backed for zod registrations,
-   * pass-through for raw JSON-schema ones. */
   parse(
     input: unknown,
   ): { ok: true; value: unknown } | { ok: false; error: string };
@@ -189,7 +196,6 @@ export interface PluginAgentToolRecord {
 
 export { RESERVED_AGENT_TOOL_NAMES };
 
-/** Runtime record of a registered mention provider. */
 interface PluginMentionProviderRecord {
   id: string;
   label: string;
@@ -202,20 +208,17 @@ interface PluginMentionProviderRecord {
   ) => { context: string } | Promise<{ context: string }>;
 }
 
-/** Runtime record of a registered background service. */
 export interface PluginBackgroundServiceRecord {
   name: string;
   start: (signal: AbortSignal) => void | Promise<void>;
 }
 
-/** Runtime record of a registered schedule; cron is validated at registration. */
 interface PluginScheduleRecord {
   name: string;
   cron: string;
   fn: () => void | Promise<void>;
 }
 
-/** Validated record of the plugin's `bb.cli.register` call. */
 interface PluginCliRegistrationRecord {
   name: string;
   summary: string;
@@ -233,47 +236,36 @@ type PluginSettingsListener = (
 
 export interface PluginApiHandle {
   api: BbPluginApi;
-  /** Dispose hooks in registration order (runner executes them LIFO). */
   disposeHooks: Array<() => void | Promise<void>>;
-  /** Settings schema + change listeners recorded by `settings.define`. */
   settings: {
     descriptors: PluginSettingDescriptors;
     listeners: PluginSettingsListener[];
   };
-  /** Every database handle vended by `storage.database()`; closed on dispose. */
   databaseHandles: Database.Database[];
-  /** Thread lifecycle handlers recorded by `bb.events.on`. */
   threadEventHandlers: PluginThreadEventHandlers;
+  /** Hook handlers recorded by `bb.experimental_hooks.on`. */
+  hooks: PluginHookRecords;
   /** HTTP routes recorded by `bb.http.route`; dropped with the handle. */
   httpRoutes: PluginHttpRouteRecord[];
-  /** RPC handlers recorded by `bb.rpc.register`; dropped with the handle. */
+  websocketRoutes: PluginWebSocketRouteRecord[];
   rpcHandlers: Map<string, PluginRpcHandler>;
-  /** Unexpected host-worker exit handlers registered by this generation. */
   hostWorkerExitHandlers: PluginHostWorkerExitHandler[];
-  /** Typed host signals registered by this generation. */
   hostSignalHandlers: PluginHostSignalHandler[];
-  /** Background services recorded by `bb.background.service`. */
   backgroundServices: PluginBackgroundServiceRecord[];
-  /** Schedules recorded by `bb.background.schedule`. */
   schedules: PluginScheduleRecord[];
-  /** The plugin's CLI command (`bb.cli.register`); null when none. */
   cli: { registration: PluginCliRegistrationRecord | null };
-  /** Native tools recorded by `bb.agents.registerTool`. */
   agentTools: PluginAgentToolRecord[];
-  /** Undisposed provider declarations staged by the factory. */
   listProviderDeclarations(): NormalizedPluginProviderDeclaration[];
-  /** Per-resolution selector from `bb.agents.configure` (at most one). */
+  providerEnvResolvers: ReadonlyMap<string, PluginProviderEnvResolver>;
+  providerEnvHealthResolvers: ReadonlyMap<
+    string,
+    PluginProviderEnvHealthResolver
+  >;
   agentConfigurationProvider: PluginAgentConfigurationProvider | null;
-  /**
-   * Dynamic thread-instructions provider from
-   * `bb.agents.contributeInstructions` (at most one; null when none).
-   */
   instructionProvider: PluginInstructionProvider | null;
-  /** Mention providers recorded by `bb.ui.registerMentionProvider`. */
   mentionProviders: PluginMentionProviderRecord[];
-  /** Publish factory-time host declarations and status only after commit. */
   activate(): void;
-  /** Poison every method on the handle. */
+  closeWebSockets(): void;
   invalidate(): void;
 }
 
@@ -290,22 +282,28 @@ interface PluginHostSignalHandler {
   }) => void | Promise<void>;
 }
 
-/** Provider registered by `bb.agents.contributeInstructions`. */
 type PluginInstructionProvider = (ctx: {
   threadId: string;
   projectId: string;
 }) => string | null;
 
-/** Provider registered by `bb.agents.configure`. */
 type PluginAgentConfigurationProvider = (
   context: PluginAgentConfigurationContext,
 ) => PluginAgentConfiguration;
 
-/**
- * Wrap the shared server-bound SDK for one plugin: thread creation gets
- * default attribution (`origin: "plugin"`, `originPluginId: <plugin id>`)
- * unless the plugin sets those fields explicitly.
- */
+export type PluginProviderEnvResolver = (
+  context: ExperimentalPluginProviderEnvContext,
+) =>
+  | readonly ExperimentalPluginProviderEnvEntry[]
+  | Promise<readonly ExperimentalPluginProviderEnvEntry[]>;
+
+export type PluginProviderEnvHealthResolver = (
+  context: ExperimentalPluginProviderEnvHealthContext,
+) =>
+  | ExperimentalPluginProviderEnvHealth
+  | null
+  | Promise<ExperimentalPluginProviderEnvHealth | null>;
+
 function wrapSdkForPlugin(sdk: BbSdk, pluginId: string): BbSdk {
   return {
     ...sdk,
@@ -335,30 +333,13 @@ function wrapSdkForPlugin(sdk: BbSdk, pluginId: string): BbSdk {
   };
 }
 
-/**
- * Registrations the server keeps staged until `activate()`:
- * `bb.providers.register` and `bb.experimental_aiServices.register`. A call
- * before activation validates the declaration, refuses an id that is
- * unregistrable, already registered by this plugin, or live under another
- * owner — so the collision fails the factory (and therefore the plugin load)
- * at call time, as the SDK doc promises, instead of in activate() after the
- * load has committed — and stages the entry. `flush()` registers the staged
- * entries live at activate(); on reload the previous instance was disposed
- * before that runs, so re-declared ids are free again. A call after
- * activation registers live, where the registry enforces collisions itself.
- * Each registration's dispose also rides the handle's dispose hooks so
- * unload/reload removes it.
- */
 function createStagedRegistrations<
   TDeclaration,
   TNormalized extends { id: string },
   TBinding,
 >(options: {
-  /** Shared host policy: the fake host validates identically. */
   validate: (declaration: TDeclaration) => TNormalized;
-  /** The call-time refusal; returns what the live registration binds to. */
   bind: (id: string) => TBinding;
-  /** True when a live registration owned by another plugin claims the id. */
   isTaken: (id: string) => boolean;
   registerLive: (
     declaration: TNormalized,
@@ -371,7 +352,6 @@ function createStagedRegistrations<
 }): {
   register(declaration: TDeclaration): { dispose(): void };
   flush(): void;
-  /** The undisposed declarations, in registration order. */
   values(): TNormalized[];
 } {
   const entries = new Map<
@@ -435,20 +415,20 @@ export function createPluginApi(options: {
   logger: ServerLogger;
   db: DbConnection;
   dataDir: string;
-  /** Undefined until the server is listening (bb.sdk is bind-gated). */
   getSdk: () => BbSdk | undefined;
-  /** Undefined until the server is listening (bb.server is bind-gated too). */
+  getAppUrl: () => string | null;
   getLoopbackBaseUrl: () => string | undefined;
-  /** Broadcasts a plugin-signal WS message (hub.notifyPluginSignal). */
   publishSignal: (channel: string, payload: unknown) => void;
-  /** Marks the plugin needs-configuration in the loader's status table. */
+  settingsChanged: () => void;
   reportNeedsConfiguration: (message: string) => void;
-  /** Returns the owning plugin id when another plugin already registered
-   * this agent tool name (cross-plugin collisions lose, design §4.4). */
   isAgentToolNameTaken: (name: string) => string | undefined;
-  /** Records an agent-tool registration problem as the plugin's status
-   * detail; the plugin itself keeps running. */
   reportAgentToolProblem: (message: string) => void;
+  /**
+   * Schedules a re-attempt of every plugin-queued row
+   * (`bb.experimental_hooks.recheck`). Coalescing, pacing and the walk
+   * itself belong to the queue; this only asks for it.
+   */
+  requestQueueDrain: () => void;
   /**
    * The names this plugin's manifest declares under
    * `bb.branding.experimental_icons`: what a namespaced glyph
@@ -483,43 +463,20 @@ export function createPluginApi(options: {
     hostId: string;
     signal?: AbortSignal;
   }) => Promise<unknown>;
-  /** Registers one validated provider declaration with the server's provider
-   * registry, bound to this plugin's id. Throws on a live id collision. */
   registerProvider: (declaration: NormalizedPluginProviderDeclaration) => {
     dispose(): void;
   };
-  /** Registers one validated AI-service declaration live, bound to the host
-   * artifact `assertAiServiceRegistrable` returned for it. Throws on a live
-   * id collision, and on an unbound binding: a service staged while its host
-   * artifact failed to build must never go live (the load that staged it
-   * fails before activate() flushes it). */
   registerAiService: (
     declaration: PluginAiServiceDeclaration,
     binding: AiServiceHostBinding<PluginHostArtifactSnapshot>,
   ) => {
     dispose(): void;
   };
-  /** True when a LIVE registration owned by core or another plugin already
-   * claims this provider id — the call-time collision check for staged
-   * registrations (this plugin's own previous-load entries are ignored:
-   * they are disposed before the staged replacements flush at activate). */
   isProviderIdTaken: (providerId: string) => boolean;
-  /** True when a LIVE AI-service registration owned by another plugin claims
-   * this id — the call-time collision check for staged registrations. */
   isAiServiceIdTaken: (serviceId: string) => boolean;
-  /** Throws when the server serves this id itself (`openai`, the builtin
-   * inference providers — a plugin cannot capture that traffic) or when this
-   * plugin declares no `bb.host` entry for the service to run on; otherwise
-   * returns what `registerAiService` binds the service to: the built
-   * artifact, or an unbound binding carrying the build problem when the
-   * declared entry failed to build. */
   assertAiServiceRegistrable: (
     serviceId: string,
   ) => AiServiceHostBinding<PluginHostArtifactSnapshot>;
-  /** Throws unless this plugin can actually execute this provider id — a
-   * bridge artifact it built, or an id the daemon bundles a bridge for. A
-   * declaration with no implementation behind it would list a provider whose
-   * every turn dies on the host. */
   assertProviderRegistrable: (providerId: string) => void;
 }): PluginApiHandle {
   const {
@@ -528,11 +485,14 @@ export function createPluginApi(options: {
     db,
     dataDir,
     getSdk,
+    getAppUrl,
     getLoopbackBaseUrl,
     publishSignal,
+    settingsChanged,
     reportNeedsConfiguration,
     isAgentToolNameTaken,
     reportAgentToolProblem,
+    requestQueueDrain,
     declaredIconNames,
     requestInteraction,
     ensureSharedPortTunnel,
@@ -566,8 +526,16 @@ export function createPluginApi(options: {
     "thread.failed": [],
     "thread.archived": [],
     "thread.deleted": [],
+    "interaction.pending": [],
+    "message.queued": [],
+    "message.dispatched": [],
+    "turn.failed": [],
+  };
+  const hooks: PluginHookRecords = {
+    "message.dispatch": null,
   };
   const httpRoutes: PluginHttpRouteRecord[] = [];
+  const websocketRoutes: PluginWebSocketRouteRecord[] = [];
   const rpcHandlers = new Map<string, PluginRpcHandler>();
   const hostWorkerExitHandlers: PluginHostWorkerExitHandler[] = [];
   const hostSignalHandlers: PluginHostSignalHandler[] = [];
@@ -579,8 +547,6 @@ export function createPluginApi(options: {
   }
 
   const prefix = `[plugin:${pluginId}]`;
-  // Every bb.log line goes to the prefixed server log and, as JSONL, to the
-  // per-plugin log file served by GET /plugins/:id/logs (`bb plugin logs`).
   function emitLog(
     level: "debug" | "info" | "warn" | "error",
     message: string,
@@ -690,9 +656,6 @@ export function createPluginApi(options: {
     },
   };
 
-  // One reused handle per plugin load: the SDK contract and the fake host
-  // both promise reuse, and a handle per call leaks fds until dispose (#1919).
-  // A plugin that closes the handle itself gets a fresh one on the next call.
   let databaseHandle: Database.Database | undefined;
   const storage: PluginStorage = {
     kv,
@@ -700,8 +663,6 @@ export function createPluginApi(options: {
       assertLive();
       if (databaseHandle?.open) return databaseHandle;
       if (databaseHandle) {
-        // The plugin closed it; drop the dead wrapper so repeated
-        // close-and-reopen calls do not grow the list until dispose.
         const index = databaseHandles.indexOf(databaseHandle);
         if (index !== -1) databaseHandles.splice(index, 1);
       }
@@ -717,23 +678,56 @@ export function createPluginApi(options: {
     migrate(database, statements) {
       assertLive();
       database.exec(
-        "CREATE TABLE IF NOT EXISTS _bb_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS _bb_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL, statement_hash TEXT)",
       );
-      const applied = new Set(
-        (
-          database.prepare("SELECT id FROM _bb_migrations").all() as Array<{
-            id: number;
-          }>
-        ).map((row) => row.id),
+      const migrationColumns = database
+        .prepare<[], { name: string }>("PRAGMA table_info(_bb_migrations)")
+        .all();
+      if (
+        !migrationColumns.some((column) => column.name === "statement_hash")
+      ) {
+        database.exec(
+          "ALTER TABLE _bb_migrations ADD COLUMN statement_hash TEXT",
+        );
+      }
+      const rows = database
+        .prepare<[], { id: number; statement_hash: string | null }>(
+          "SELECT id, statement_hash FROM _bb_migrations ORDER BY id",
+        )
+        .all();
+      const applied = new Map<number, string | null>();
+      for (const row of rows) applied.set(row.id, row.statement_hash);
+      const statementHashes = statements.map(migrationStatementHash);
+      statementHashes.forEach((statementHash, index) => {
+        const recordedHash = applied.get(index);
+        if (
+          recordedHash !== undefined &&
+          recordedHash !== null &&
+          recordedHash !== statementHash
+        ) {
+          throw new Error(
+            `migration ${index} does not match the recorded statement; append a new migration instead of changing or reusing an index`,
+          );
+        }
+      });
+      const adopt = database.prepare(
+        "UPDATE _bb_migrations SET statement_hash = ? WHERE id = ? AND statement_hash IS NULL",
       );
       const record = database.prepare(
-        "INSERT INTO _bb_migrations (id, applied_at) VALUES (?, ?)",
+        "INSERT INTO _bb_migrations (id, applied_at, statement_hash) VALUES (?, ?, ?)",
       );
       database.transaction(() => {
+        for (const row of rows) {
+          if (row.statement_hash !== null) continue;
+          adopt.run(
+            statementHashes[row.id] ?? LEGACY_UNKNOWN_MIGRATION_HASH,
+            row.id,
+          );
+        }
         statements.forEach((statement, index) => {
           if (applied.has(index)) return;
           database.exec(statement);
-          record.run(index, Date.now());
+          record.run(index, Date.now(), statementHashes[index]);
         });
       })();
     },
@@ -750,8 +744,45 @@ export function createPluginApi(options: {
       return {
         async get() {
           assertLive();
-          // The runtime record is untyped; the descriptor generics are the
-          // real contract, re-applied at this boundary.
+          return (await readPluginSettingsValues({
+            db,
+            dataDir,
+            pluginId,
+            descriptors: validated,
+          })) as Values;
+        },
+        async experimental_set(values) {
+          assertLive();
+          const rawValues: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(values)) {
+            rawValues[key] = value;
+          }
+          const errors = validateSettingsUpdate(validated, rawValues);
+          if (errors.length > 0) {
+            throw new Error(errors.join("; "));
+          }
+          const storeArgs = {
+            db,
+            dataDir,
+            pluginId,
+            descriptors: settingsRecord.descriptors,
+          };
+          const prev = await readPluginSettingsValues(storeArgs);
+          await writePluginSettingsUpdate({ ...storeArgs, values: rawValues });
+          const next = await readPluginSettingsValues(storeArgs);
+          if (JSON.stringify(next) !== JSON.stringify(prev)) {
+            for (const listener of settingsRecord.listeners) {
+              try {
+                listener(next, prev);
+              } catch (error) {
+                emitLog(
+                  "warn",
+                  `settings onChange listener failed: ${error instanceof Error ? error.message : String(error)}`,
+                );
+              }
+            }
+            if (activated) settingsChanged();
+          }
           return (await readPluginSettingsValues({
             db,
             dataDir,
@@ -767,8 +798,6 @@ export function createPluginApi(options: {
     },
   };
 
-  // Plugin sources are untyped at runtime (jiti-loaded TS): every wire
-  // registration validates loudly instead of failing at dispatch time.
   const http: PluginHttp = {
     route(method, path, handler, opts) {
       assertLive();
@@ -805,6 +834,35 @@ export function createPluginApi(options: {
       }
       httpRoutes.push({ method: normalizedMethod, path, auth, handler });
     },
+    experimental_websocket(path, handler, opts) {
+      assertLive();
+      if (typeof path !== "string" || !path.startsWith("/")) {
+        throw new Error(
+          `websocket route path must be a string starting with "/", got ${JSON.stringify(path)}`,
+        );
+      }
+      if (typeof handler !== "function") {
+        throw new Error(
+          `websocket route handler for ${path} must be a function`,
+        );
+      }
+      const auth = opts?.auth ?? "local";
+      if (auth !== "local" && auth !== "token" && auth !== "none") {
+        throw new Error(
+          `invalid auth mode "${String(auth)}" for websocket ${path} — use "local", "token", or "none"`,
+        );
+      }
+      if (websocketRoutes.some((route) => route.path === path)) {
+        throw new Error(`websocket route ${path} is already registered`);
+      }
+      websocketRoutes.push({
+        path,
+        auth,
+        handler,
+        active: true,
+        sockets: new Set(),
+      });
+    },
   };
 
   const rpc: PluginRpc = {
@@ -838,7 +896,7 @@ export function createPluginApi(options: {
       for (const [name, methodContractValue] of contractEntries) {
         if (!RPC_METHOD_PATTERN.test(name)) {
           throw new Error(
-            `invalid rpc method name "${name}" — use letters, digits, "-" and "_"`,
+            `invalid rpc method name "${name}" — use dot-separated segments with letters, digits, "-" and "_"`,
           );
         }
         const methodContract = readRpcMethodContract(name, methodContractValue);
@@ -872,9 +930,6 @@ export function createPluginApi(options: {
       if (typeof channel !== "string" || channel.length === 0) {
         throw new Error("realtime channel must be a non-empty string");
       }
-      // JSON round-trip up front: enforces serializability with a clear
-      // error at the publish site and strips prototypes/getters before the
-      // payload crosses the WS boundary.
       let normalized: unknown = null;
       if (payload !== undefined) {
         let json: string | undefined;
@@ -939,15 +994,9 @@ export function createPluginApi(options: {
   };
 
   const agentTools: PluginAgentToolRecord[] = [];
-  /** Provider registrations from `bb.providers.register`, staged until
-   * activate() like declareSharedPorts. */
   const providerRegistrations = createStagedRegistrations({
     validate: (declaration: PluginProviderDeclaration) => {
       const normalized = validatePluginProviderDeclaration(declaration);
-      // The SDK validator accepts any "<pluginId>/<name>" shape; only the
-      // host holds the manifest, so the plugin id and the declared name are
-      // checked here, at the register call, so the factory (and the load)
-      // fails like a bridgeless declaration does.
       const problem =
         normalized.icon === undefined
           ? null
@@ -965,6 +1014,11 @@ export function createPluginApi(options: {
     isActivated: () => activated,
     disposeHooks,
   });
+  const providerEnvResolvers = new Map<string, PluginProviderEnvResolver>();
+  const providerEnvHealthResolvers = new Map<
+    string,
+    PluginProviderEnvHealthResolver
+  >();
   let agentConfigurationProvider: PluginAgentConfigurationProvider | null =
     null;
   let instructionProvider: PluginInstructionProvider | null = null;
@@ -1043,9 +1097,6 @@ export function createPluginApi(options: {
         tool.presentation,
       );
       if (presentation?.icon !== undefined) {
-        // A namespaced glyph must name one of THIS plugin's declared icons;
-        // the SDK parser cannot know the manifest, so the host checks here
-        // with the same message shape the ingest rule uses.
         const problem = undeclaredIconProblem(
           pluginId,
           declaredIconNames,
@@ -1064,13 +1115,8 @@ export function createPluginApi(options: {
       let inputSchema: unknown;
       let parse: PluginAgentToolRecord["parse"];
       if (isZodSchemaLike(parameters)) {
-        // The server's own zod 4 converts the schema; a schema from an
-        // incompatible zod copy inside the plugin fails here with a clear
-        // registration error instead of a broken wire schema later.
         try {
-          inputSchema = z.toJSONSchema(parameters as z.ZodType, {
-            io: "input",
-          });
+          inputSchema = zodSchemaToJsonSchema(parameters);
         } catch (error) {
           throw new Error(
             `tool "${name}" parameters look like a zod schema but could not be converted to JSON Schema (${
@@ -1079,7 +1125,7 @@ export function createPluginApi(options: {
           );
         }
         parse = (input) => {
-          const result = (parameters as z.ZodType).safeParse(input);
+          const result = parameters.safeParse(input);
           if (result.success) return { ok: true, value: result.data };
           return { ok: false, error: summarizeParseIssues(result.error) };
         };
@@ -1088,8 +1134,6 @@ export function createPluginApi(options: {
         parameters !== null &&
         !Array.isArray(parameters)
       ) {
-        // Raw JSON-schema escape hatch: round-trip enforces serializability
-        // (the schema rides thread.start commands) and strips prototypes.
         try {
           inputSchema = JSON.parse(JSON.stringify(parameters));
         } catch {
@@ -1109,8 +1153,6 @@ export function createPluginApi(options: {
       );
       const owner = isAgentToolNameTaken(name);
       if (owner !== undefined) {
-        // Cross-plugin collision: the earlier registration wins; this one
-        // is dropped and surfaced as a status detail (design §4.4).
         const problem = `tool "${name}" is already registered by plugin "${owner}" — not registered`;
         if (activated) reportAgentToolProblem(problem);
         else pendingAgentToolProblems.push(problem);
@@ -1139,9 +1181,6 @@ export function createPluginApi(options: {
       agentTools.push(record);
     },
   };
-  // Deleted in SDK 0.4.16. A plugin compiled against an older SDK reaches
-  // for it at factory time; a bare TypeError would name no replacement.
-  // Non-enumerable, so the object still lists and spreads as the contract.
   Object.defineProperty(agents, "experimental_registerProvider", {
     enumerable: false,
     configurable: false,
@@ -1259,6 +1298,10 @@ export function createPluginApi(options: {
   };
 
   const server: PluginServerApi = {
+    get experimental_appUrl(): string | null {
+      assertLive();
+      return getAppUrl();
+    },
     get loopbackBaseUrl(): string {
       assertLive();
       const baseUrl = getLoopbackBaseUrl();
@@ -1373,8 +1416,6 @@ export function createPluginApi(options: {
       assertLive();
       const handlers = threadEventHandlers[event];
       if (handlers === undefined) {
-        // Plugin sources are untyped at runtime; fail loudly at registration
-        // instead of silently never firing.
         throw new Error(
           `unknown event "${String(event)}" — supported events: ${Object.keys(
             threadEventHandlers,
@@ -1385,12 +1426,71 @@ export function createPluginApi(options: {
     },
   };
 
-  const providers: PluginProviders = {
-    register: providerRegistrations.register,
+  const experimental_hooks: PluginHooks = {
+    on(hook, handler) {
+      assertLive();
+      if (hooks[hook] !== null) {
+        // Two handlers from one plugin for one hook would make the order
+        // within the plugin invisible. Say so at registration rather than
+        // silently keeping one.
+        throw new Error(pluginHookAlreadyRegisteredMessage(hook));
+      }
+      storePluginHook(hooks, hook, handler);
+    },
+    async recheck(hook) {
+      assertLive();
+      // One hook key exists; the parameter selects which question to re-pose
+      // and widens additively when a second key ever ships.
+      void hook;
+      // Resolves on SCHEDULING. The walk runs on a later macrotask, and the
+      // caller is not the one it reports to — a failed re-attempt lands on the
+      // row it failed, like every other background drain.
+      requestQueueDrain();
+    },
   };
 
-  /** AI-service registrations, staged like providers; each one binds to the
-   * host artifact the call-time check returned. */
+  const providers: PluginProviders = {
+    register: providerRegistrations.register,
+    experimental_contributeEnv(providerId, resolve) {
+      assertLive();
+      if (typeof providerId !== "string" || providerId.trim().length === 0) {
+        throw new Error(
+          "provider environment contribution requires a provider id",
+        );
+      }
+      if (providerEnvResolvers.has(providerId)) {
+        throw new Error(
+          `provider environment contribution for "${providerId}" is already registered`,
+        );
+      }
+      if (typeof resolve !== "function") {
+        throw new Error(
+          "provider environment contribution requires a resolver function",
+        );
+      }
+      providerEnvResolvers.set(providerId, resolve);
+    },
+    experimental_contributeEnvHealth(providerId, resolve) {
+      assertLive();
+      if (typeof providerId !== "string" || providerId.trim().length === 0) {
+        throw new Error(
+          "provider environment health contribution requires a provider id",
+        );
+      }
+      if (providerEnvHealthResolvers.has(providerId)) {
+        throw new Error(
+          `provider environment health contribution for "${providerId}" is already registered`,
+        );
+      }
+      if (typeof resolve !== "function") {
+        throw new Error(
+          "provider environment health contribution requires a resolver function",
+        );
+      }
+      providerEnvHealthResolvers.set(providerId, resolve);
+    },
+  };
+
   const aiServiceRegistrations = createStagedRegistrations({
     validate: validatePluginAiServiceDeclaration,
     bind: assertAiServiceRegistrable,
@@ -1419,6 +1519,7 @@ export function createPluginApi(options: {
     providers,
     ui,
     events,
+    experimental_hooks,
     status,
     server,
     hosts,
@@ -1447,7 +1548,9 @@ export function createPluginApi(options: {
     settings: settingsRecord,
     databaseHandles,
     threadEventHandlers,
+    hooks,
     httpRoutes,
+    websocketRoutes,
     rpcHandlers,
     hostWorkerExitHandlers,
     hostSignalHandlers,
@@ -1456,6 +1559,8 @@ export function createPluginApi(options: {
     cli: cliRecord,
     agentTools,
     listProviderDeclarations: providerRegistrations.values,
+    providerEnvResolvers,
+    providerEnvHealthResolvers,
     get agentConfigurationProvider() {
       return agentConfigurationProvider;
     },
@@ -1484,6 +1589,21 @@ export function createPluginApi(options: {
       if (pendingNeedsConfiguration !== null) {
         reportNeedsConfiguration(pendingNeedsConfiguration);
         pendingNeedsConfiguration = null;
+      }
+    },
+    closeWebSockets() {
+      for (const route of websocketRoutes) {
+        route.active = false;
+        for (const socket of route.sockets) {
+          try {
+            socket.close(1012, "Plugin reloaded or disabled");
+          } catch (error) {
+            emitLog(
+              "warn",
+              `websocket ${route.path} close failed: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+        }
       }
     },
     invalidate() {

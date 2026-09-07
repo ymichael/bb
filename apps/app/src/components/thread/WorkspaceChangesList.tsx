@@ -15,11 +15,6 @@ interface WorkspaceChangesListProps {
   files: readonly WorkspaceChangedFile[];
   className?: string;
   onFileClick?: WorkspaceChangedFileClickHandler;
-  /**
-   * When set, the list caps at `limit` files behind a "Show N more" / "Show
-   * less" toggle (like the Commits list) instead of the default scrollable
-   * box. `className` is ignored in this mode — the rollup sizes to content.
-   */
   limit?: number;
 }
 
@@ -31,13 +26,6 @@ interface WorkspaceChangesListItemProps {
 const WORKSPACE_CHANGE_ROW_CLASS =
   "grid grid-cols-[1.5rem_minmax(0,1fr)_auto] items-start gap-x-3";
 
-/**
- * Upper bound on rows the scrollable (non-`limit`) mode renders. Workspace
- * status carries every changed path, and a stray untracked build directory
- * can produce tens of thousands of files. Rendering all of them makes every
- * layout on the page cost hundreds of milliseconds, so the list shows the
- * leading slice and reports how many rows it left out.
- */
 export const WORKSPACE_CHANGES_LIST_MAX_ROWS = 200;
 
 function formatHiddenFileCount(count: number): string {

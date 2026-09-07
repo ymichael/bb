@@ -19,7 +19,6 @@ function fallbackLabel(machineId: string): string {
   return `machine-${idPrefix || "unknown"}`;
 }
 
-/** Convert a human-readable host name to the shared public-label grammar. */
 export function sanitizeMachineLabelBase(
   desiredName: string,
   machineId: string,
@@ -45,8 +44,6 @@ function labelWithSuffix(base: string, ordinal: number): string {
   return `${stem}${suffix}`;
 }
 
-/** Affected-row count from either driver shape: better-sqlite3 `{changes}` or
- * D1 `{meta: {changes}}`. Anything else is a broken driver — fail fast. */
 function affectedRows(result: unknown): number {
   if (typeof result === "object" && result !== null) {
     if ("changes" in result && typeof result.changes === "number") {
@@ -66,7 +63,6 @@ function affectedRows(result: unknown): number {
 }
 
 interface MachineLabelAssignmentHooks {
-  /** Test/control barrier before the one atomic source+claim update. */
   beforeAttach?: (candidate: string) => Promise<void>;
 }
 
@@ -74,7 +70,6 @@ function isLabelCollision(error: unknown): boolean {
   return error instanceof Error && /unique constraint/iu.test(error.message);
 }
 
-/** Assign once, suffixing through the namespace on collisions. */
 export async function assignMachineLabel(
   db: ConnectDb,
   machineId: string,
@@ -99,8 +94,6 @@ export async function assignMachineLabel(
     await hooks.beforeAttach?.(candidate);
     let updateResult: unknown;
     try {
-      // machine_label_claim_update runs inside this SQLite statement. Its
-      // global UNIQUE insert and the source update commit or roll back together.
       updateResult = await db
         .update(machine)
         .set({ subdomain: candidate })
@@ -142,7 +135,6 @@ function jsonError(error: string, status: number): Response {
   return Response.json({ error }, { status });
 }
 
-/** `POST /api/connect/machine-label`, authenticated by the daemon credential. */
 export async function handleAssignMachineLabel(
   request: Request,
   env: Env,

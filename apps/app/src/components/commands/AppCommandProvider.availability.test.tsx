@@ -57,7 +57,6 @@ vi.mock("@/hooks/queries/system-queries", () => ({
         ...defaultAppSettings,
         showKeyboardHints: false,
       },
-      // Empty on purpose: availability must not depend on these.
       keybindings: [],
       defaultKeybindings: [
         defaultBinding("thread.new", { none: ["modalOpen"] }),
@@ -86,8 +85,6 @@ function SplitContext() {
   return null;
 }
 
-// Asks on click, as the palette does: reading during render would run before
-// sibling handlers have registered.
 function Availability({
   command,
   target = null,
@@ -167,7 +164,6 @@ describe("isCommandAvailable", () => {
   });
 
   it("ignores `none` guards, which exist to stop chords stealing keystrokes", () => {
-    // The palette is itself a modal with a focused input.
     renderProvider(
       <>
         <div aria-modal="true" />
@@ -183,7 +179,6 @@ describe("isCommandAvailable", () => {
   });
 
   it("is true for a command the user left unbound", () => {
-    // Ships with a null shortcut, so it is absent from the merged bindings.
     renderProvider(
       <>
         <Handler command="thread.rename" />

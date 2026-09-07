@@ -93,7 +93,7 @@ describe("daemon lifecycle", () => {
     });
 
     await daemon.start();
-    await daemon.shutdown("test");
+    await daemon.shutdown("test", 0);
 
     const reacquired = await acquireDaemonLock(dataDir);
     await reacquired();
@@ -107,6 +107,7 @@ describe("daemon lifecycle", () => {
     const startupFailure = new Error("server unavailable");
     const shutdownRuntimes = vi.fn(async () => undefined);
     const releaseLock = vi.fn(async () => undefined);
+    const exitProcess = vi.fn();
     const daemon = createDaemon({
       identity: {
         hostId: "host-1",
@@ -119,6 +120,7 @@ describe("daemon lifecycle", () => {
       },
       releaseLock,
       shutdownRuntimes,
+      exitProcess,
     });
 
     await expect(daemon.start()).rejects.toBe(startupFailure);
@@ -126,6 +128,7 @@ describe("daemon lifecycle", () => {
 
     expect(shutdownRuntimes).toHaveBeenCalledOnce();
     expect(releaseLock).toHaveBeenCalledOnce();
+    expect(exitProcess).not.toHaveBeenCalled();
     expect(logger.info).toHaveBeenCalledWith(
       { mode: "shutdown", reason: "startup-failed" },
       "Shutting down host daemon",
@@ -172,7 +175,7 @@ describe("daemon lifecycle", () => {
 
     await daemon.start();
 
-    await expect(daemon.shutdown("test")).rejects.toThrow("release failed");
+    await expect(daemon.shutdown("test", 0)).rejects.toThrow("release failed");
     await expect(daemon.waitUntilStopped()).rejects.toThrow("release failed");
     expect(logger.error).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -203,8 +206,6 @@ describe("daemon lifecycle", () => {
     await daemon.start();
     signalSource.emit("SIGTERM");
     await expect(daemon.waitUntilStopped()).rejects.toThrow("release failed");
-    // The signal listener logs through stop(...).catch(...), which can run
-    // after waitUntilStopped observes the shutdown failure.
     await vi.waitFor(() => {
       expect(logger.error).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -216,9 +217,9 @@ describe("daemon lifecycle", () => {
     });
   });
 
-  it("forces the process to exit when a shutdown step never finishes", async () => {
+  it("forces the requested exit status when a shutdown step never finishes", async () => {
     const logger = createLogger();
-    const forceExit = vi.fn();
+    const exitProcess = vi.fn();
     const daemon = createDaemon({
       identity: {
         hostId: "host-1",
@@ -227,25 +228,94 @@ describe("daemon lifecycle", () => {
       },
       logger,
       releaseLock: () => new Promise<void>(() => undefined),
-      forceExit,
+      exitProcess,
       shutdownExitGraceMs: 10,
     });
 
     await daemon.start();
-    void daemon.shutdown("self-update");
+    void daemon.shutdown("daemon-lock-lost", 1);
 
     await vi.waitFor(() => {
-      expect(forceExit).toHaveBeenCalledWith(0);
+      expect(exitProcess).toHaveBeenCalledWith(1);
     });
     expect(logger.error).toHaveBeenCalledWith(
-      expect.objectContaining({ reason: "self-update" }),
+      expect.objectContaining({ reason: "daemon-lock-lost" }),
       "Host daemon shutdown did not end the process; forcing exit so the service manager can restart it.",
     );
   });
 
-  it("forces the process to exit when cleanup succeeds but the event loop stays alive", async () => {
+  it("exits the process immediately after clean shutdown", async () => {
     const logger = createLogger();
-    const forceExit = vi.fn();
+    const lifecycle: string[] = [];
+    const exitProcess = vi.fn(() => lifecycle.push("exitProcess"));
+    const daemon = createDaemon({
+      identity: {
+        hostId: "host-1",
+        hostName: "test-host",
+        instanceId: "instance-1",
+      },
+      logger,
+      flushEvents: async () => {
+        lifecycle.push("flushEvents");
+      },
+      shutdownRuntimes: async () => {
+        lifecycle.push("shutdownRuntimes");
+      },
+      releaseLock: async () => {
+        lifecycle.push("releaseLock");
+      },
+      exitProcess,
+      shutdownExitGraceMs: 60_000,
+    });
+
+    await daemon.start();
+    await daemon.shutdown("self-update", 0);
+
+    expect(lifecycle).toEqual([
+      "flushEvents",
+      "shutdownRuntimes",
+      "releaseLock",
+      "exitProcess",
+    ]);
+    expect(exitProcess).toHaveBeenCalledWith(0);
+  });
+
+  it("escalates an active clean shutdown after daemon lock loss", async () => {
+    const logger = createLogger();
+    const exitProcess = vi.fn();
+    let finishRelease: () => void = () => undefined;
+    const releaseBlocked = new Promise<void>((resolve) => {
+      finishRelease = resolve;
+    });
+    const releaseLock = vi.fn(async () => releaseBlocked);
+    const daemon = createDaemon({
+      identity: {
+        hostId: "host-1",
+        hostName: "test-host",
+        instanceId: "instance-1",
+      },
+      logger,
+      releaseLock,
+      exitProcess,
+      shutdownExitGraceMs: 60_000,
+    });
+
+    await daemon.start();
+    const signalShutdown = daemon.shutdown("SIGTERM", 0);
+    await vi.waitFor(() => {
+      expect(releaseLock).toHaveBeenCalledOnce();
+    });
+    const lockLossShutdown = daemon.shutdown("daemon-lock-lost", 1);
+    finishRelease();
+    await Promise.all([signalShutdown, lockLossShutdown]);
+
+    expect(exitProcess).toHaveBeenCalledOnce();
+    expect(exitProcess).toHaveBeenCalledWith(1);
+  });
+
+  it("preserves the requested failure status after daemon lock loss", async () => {
+    const logger = createLogger();
+    const exitProcess = vi.fn();
     const daemon = createDaemon({
       identity: {
         hostId: "host-1",
@@ -254,15 +324,48 @@ describe("daemon lifecycle", () => {
       },
       logger,
       releaseLock: async () => undefined,
-      forceExit,
-      shutdownExitGraceMs: 10,
+      exitProcess,
     });
 
     await daemon.start();
-    await daemon.shutdown("self-update");
+    await daemon.shutdown("daemon-lock-lost", 1);
 
-    await vi.waitFor(() => {
-      expect(forceExit).toHaveBeenCalledWith(0);
+    expect(exitProcess).toHaveBeenCalledWith(1);
+  });
+
+  it("exits promptly when a signal requests shutdown during startup", async () => {
+    const logger = createLogger();
+    const signalSource = new FakeSignalSource();
+    const exitProcess = vi.fn();
+    let resolveStartup: () => void = () => undefined;
+    const startup = new Promise<void>((resolve) => {
+      resolveStartup = resolve;
     });
+    const daemon = createDaemon({
+      identity: {
+        hostId: "host-1",
+        hostName: "test-host",
+        instanceId: "instance-1",
+      },
+      logger,
+      releaseLock: async () => undefined,
+      onStart: async () => startup,
+      signalSource,
+      exitProcess,
+      shutdownExitGraceMs: 60_000,
+    });
+
+    const startPromise = daemon.start();
+    signalSource.emit("SIGTERM");
+    await daemon.waitUntilStopped();
+
+    expect(exitProcess).toHaveBeenCalledWith(0);
+    expect(logger.info).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "Host daemon started",
+    );
+
+    resolveStartup();
+    await startPromise;
   });
 });

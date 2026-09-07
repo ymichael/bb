@@ -94,6 +94,7 @@ async function cleanupTempDirs(): Promise<void> {
 }
 
 class FakeTerminalPty implements TerminalPtyProcess {
+  disposeCount: number;
   readonly killCalls: (string | null)[];
   readonly resizeCalls: ResizeCall[];
   readonly writeCalls: (Buffer | string)[];
@@ -105,6 +106,7 @@ class FakeTerminalPty implements TerminalPtyProcess {
   ) => void)[];
 
   constructor() {
+    this.disposeCount = 0;
     this.killCalls = [];
     this.resizeCalls = [];
     this.writeCalls = [];
@@ -112,6 +114,10 @@ class FakeTerminalPty implements TerminalPtyProcess {
     this.exitListeners = [];
     this.registeredDataListeners = [];
     this.registeredExitListeners = [];
+  }
+
+  dispose(): void {
+    this.disposeCount += 1;
   }
 
   kill(signal?: string): void {
@@ -271,12 +277,6 @@ function createFakeWorkspace(path: string): HostWorkspace {
       commitSubject: "commit",
     })),
     reset: vi.fn(async () => undefined),
-    squashMerge: vi.fn(async () => ({
-      commitSha: "commit-1",
-      commitSubject: "commit",
-      merged: true,
-      targetBranch: "main",
-    })),
     runPullRequestAction: vi.fn(async () => undefined),
     destroy: vi.fn(async () => undefined),
   };
@@ -410,6 +410,7 @@ describe("TerminalManager", () => {
       BB_TERMINAL_SESSION_ID: "term-1",
       COLORTERM: "truecolor",
       DISABLE_AUTO_TITLE: "true",
+      FORCE_HYPERLINK: "1",
       PROMPT_EOL_MARK: "",
       TERM: "xterm-256color",
     });
@@ -1315,6 +1316,7 @@ describe("TerminalManager", () => {
     await vi.advanceTimersByTimeAsync(10);
 
     expect(pty.killCalls).toEqual([null, "SIGKILL"]);
+    expect(pty.disposeCount).toBe(1);
     expect(
       harness.messages.filter((message) => message.type === "terminal.exited"),
     ).toEqual([

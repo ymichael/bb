@@ -9,28 +9,10 @@ import {
   type PendingInteractionUserQuestionQuestion,
 } from "@bb/domain";
 
-/**
- * The interaction split (docs/provider-plugin-api.md §4) as the client
- * renders it.
- *
- * Approvals are the closed, policy-bearing set a permission mode may decide
- * without the user: command, fileChange, toolUse, permissionGrant. Requests
- * are the open set that always reaches the user or the plugin that owns
- * them: `userQuestion` and `planReview` render with core renderers; a
- * `"<pluginId>/<kind>"` request renders with the plugin through the
- * `pendingInteraction` slot.
- *
- * Two wire shapes feed this view. A plugin's own request arrives as
- * `kind: "plugin"` with an `origin`; a provider's plugin-defined request
- * arrives with the namespaced kind directly. A plan review rides the `plan`
- * approval subject (the pinned permission matrix keeps it there) and is
- * lifted into the request family here.
- */
 export type InteractionRequestView =
   | {
       family: "approval";
       payload: ApprovalPendingInteractionPayload;
-      /** `payload.subject`, less the plan subject the plan review lifts out. */
       subject: Exclude<PendingInteractionApprovalSubject, { kind: "plan" }>;
     }
   | {
@@ -42,23 +24,17 @@ export type InteractionRequestView =
       family: "request";
       kind: "plan_review";
       review: Extract<PendingInteractionApprovalSubject, { kind: "plan" }>;
-      /**
-       * The approval the review rides on: its resolution (`allow_once` /
-       * `deny`) carries the verdict back.
-       */
       approval: ApprovalPendingInteractionPayload;
     }
   | {
       family: "request";
       kind: ExtensionKind;
       pluginId: string;
-      /** The plugin-local request name — the renderer id the plugin registered. */
       name: string;
       title: string;
       data: JsonValue;
     };
 
-/** The parts of a pending interaction the classification reads. */
 interface RequestBearingInteraction {
   payload: PendingInteraction["payload"];
   origin?: PendingInteraction["origin"];
@@ -102,7 +78,6 @@ export function classifyInteractionRequest(
       return { family: "approval", payload, subject };
     }
     default: {
-      // The plugin member of the request family: a namespaced kind.
       if (isExtensionKind(payload.kind)) {
         const { pluginId, name } = parseExtensionKind(payload.kind);
         return {

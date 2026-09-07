@@ -40,17 +40,24 @@ removes the native Task tool. The preferences default off and apply
 when a provider thread is started, resumed, or forked; they do not modify the
 provider's global configuration.
 
-Subscription limit recovery
+Provider failure recovery
 
 The builtin Provider retry plugin is enabled on fresh installations and
-recognizes structured Codex and Claude Code subscription windows. If a provider
-terminally rejects an accepted turn whose execution settings remain available,
-the plugin waits in memory until the reported reset plus a short buffer, then
-starts one agent-only `Please continue.` turn on the existing provider
-conversation. Prior output or tool activity does not block recovery. Threads
-sharing a machine/provider subscription are released one at a time.
-Provider-native retries remain authoritative while the provider reports that
-it will retry on its own.
+recognizes structured Codex and Claude Code subscription windows and provider
+overloads. Subscription limits wait for the reported reset plus a short buffer
+and jitter. Overloads use exponential backoff and jitter, starting after 5–10
+seconds. If the provider accepted the failed input, core sends an agent-only
+continuation; if it rejected the input before starting, core re-sends the
+original message as agent-only. Prior output or tool activity does not block
+recovery. Provider-native retries remain authoritative while the provider
+reports that it will retry on its own.
+
+The plugin never blocks a send. It only reacts to a failure, because a
+remembered rate limit is a stale picture of the provider's state: if you raised
+your plan or the window opened early, the next send simply works. Several
+threads on one exhausted subscription therefore each fail once, then each
+schedule their own jittered retry. Automatic recovery stops after five total
+attempts for the turn.
 
 Automatic waits default to a maximum of six hours. Longer reset windows are not
 scheduled. Set `maximumWait` to `24 hours` or `No limit` under the plugin
@@ -58,18 +65,31 @@ settings, or run:
 
   bb plugin config provider-retry set maximumWait "24 hours"
 
-  bb provider-retry status [thread-id] [--json]    Inspect in-memory waits
+  bb provider-retry status [thread-id] [--json]    Inspect pending retries
   bb provider-retry cancel <thread-id> [--json]    Cancel an automatic retry
-  bb provider-retry retry <thread-id> [--json]     Request a manual retry
+  bb provider-retry retry <thread-id> [--json]     Send a pending retry now
 
-Timed waits exist only while the current bb server/plugin process remains
-running. Disabling/reloading the plugin or restarting the server clears them;
-the original failed thread remains available for `bb provider-retry retry`.
-Credit and spend-control exhaustion without a reset time is manual-only.
+A pending retry is a queued row on the thread, so it survives a server restart
+and appears above the composer with its reason and time. Credit and
+spend-control exhaustion does not reset on a clock, so nothing is scheduled for
+it — waiting does not fix it.
 
 Claude Code's native Workflow tool can be disabled separately on its provider
 page. This preference also defaults off and applies to newly started, resumed,
 or forked provider sessions.
+
+Claude Code can opt into releasing its native process after 30 seconds of
+quiescence while keeping the bb thread attached and resumable. This defaults
+off during its bake period. Enable it with
+`bb plugin config provider-claude-code set idleQueryReleaseEnabled true`.
+Changes apply on the next start, resume, or turn command and do not interrupt
+active work.
+
+Claude Code runs without its Claude in Chrome browser tools under bb by
+default. Enable them with
+`bb plugin config provider-claude-code set chromeEnabled true`. The host needs
+the Chrome extension and a claude.ai login. A change restarts the thread's
+Claude process before its next turn and keeps the conversation.
 
 Known ACP agents can appear automatically when their CLI is installed on the
 host. For example, opencode, omp, Grok Build's grok CLI, or Hermes' hermes CLI

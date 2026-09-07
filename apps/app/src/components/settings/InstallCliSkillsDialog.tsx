@@ -40,13 +40,6 @@ function machineStatusLabel(args: {
   return args.status === undefined ? null : MACHINE_STATUS_LABELS[args.status];
 }
 
-/**
- * Confirmation for the CLI skill install. With more than one machine it doubles
- * as the picker, listing each machine's current state; disconnected machines are
- * shown but unselectable, since the install is a live RPC to each daemon. With a
- * single machine there is nothing to choose, so the list is dropped and the
- * machine is named in the description instead.
- */
 function InstallCliSkillsDialogContent({
   hosts,
   onCancel,

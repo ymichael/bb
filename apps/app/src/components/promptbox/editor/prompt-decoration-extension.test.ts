@@ -369,13 +369,9 @@ describe("PromptDecorationExtension", () => {
         (decoration) => decoration.spec.className === ULTRACODE_HIGHLIGHT_CLASS,
       );
 
-    // Initial build is synchronous regardless of size.
     expect(ultracodeDecorations()).toHaveLength(1);
     const initialFrom = ultracodeDecorations()[0]!.from;
 
-    // An edit in a large doc maps the existing decoration instead of
-    // rebuilding: the new match is not highlighted yet, the old one tracks
-    // its shifted position.
     editor.commands.insertContentAt(1, "pre ");
     editor.commands.insertContentAt(
       editor.state.doc.content.size - 1,
@@ -384,12 +380,9 @@ describe("PromptDecorationExtension", () => {
     expect(ultracodeDecorations()).toHaveLength(1);
     expect(ultracodeDecorations()[0]!.from).toBe(initialFrom + "pre ".length);
 
-    // The deferred rebuild picks up the new match.
     vi.advanceTimersByTime(PROMPT_DECORATION_LARGE_DOC_REBUILD_DELAY_MS);
     expect(ultracodeDecorations()).toHaveLength(2);
 
-    // Editing inside an existing match can leave the mapped decoration stale
-    // until the deferred rule pass. That bounded lag is intentional.
     editor.commands.insertContentAt({ from: 10, to: 11 }, "x");
     expect(ultracodeDecorations()).toHaveLength(2);
     vi.advanceTimersByTime(PROMPT_DECORATION_LARGE_DOC_REBUILD_DELAY_MS);
@@ -423,8 +416,6 @@ describe("PromptDecorationExtension", () => {
     vi.advanceTimersByTime(25);
     expect(onDraftChange).toHaveBeenCalledTimes(1);
 
-    // The throttled rebuild fires at 200 ms; it changes no text and no
-    // sources, so observers stay quiet. An explicit refresh still notifies.
     vi.advanceTimersByTime(PROMPT_DECORATION_LARGE_DOC_REBUILD_DELAY_MS + 25);
     expect(onDraftChange).toHaveBeenCalledTimes(1);
     refreshPromptDecorations(editor);

@@ -1,11 +1,3 @@
-/**
- * Codex session/turn parameter builders.
- *
- * Pure translation from bb execution options to Codex app-server params.
- * Everything here is stateless; the stateful translation pipeline lives in
- * `translator.ts`.
- */
-
 import {
   jsonValueSchema,
   type PermissionEscalation,
@@ -28,11 +20,6 @@ import type { AskForApproval } from "./generated/codex-app-server/schema/v2/AskF
 import type { ApprovalsReviewer } from "./generated/codex-app-server/schema/v2/ApprovalsReviewer.js";
 import { mapBbReasoningLevelToCodex } from "./models.js";
 
-/**
- * The execution facts Codex param building actually reads. The bridge
- * assembles it from the wire options plus its provider-scoped
- * `providerOptions` bag.
- */
 export type CodexSessionOptions = {
   model?: string;
   serviceTier?: ServiceTier;
@@ -143,10 +130,6 @@ type GitHeadState =
   | { ref: string; type: "ref" }
   | { type: "unsafe" };
 
-/**
- * The construction-command shape instruction overrides read: bb instructions
- * plus the append/replace mode.
- */
 interface CodexInstructionSource {
   instructionMode: "append" | "replace";
   options: { instructions?: string };
@@ -306,10 +289,6 @@ function isPathInsideOrEqual(
   );
 }
 
-/**
- * Resolves directory symlinks before containment checks so mutable Git metadata
- * cannot smuggle Codex writable roots outside the trusted common dir.
- */
 function realpathContainedDirectory(
   args: RealpathContainedDirectoryArgs,
 ): RealpathContainedDirectoryResult {
@@ -355,8 +334,6 @@ function addRefWritableRoots(args: AddRefWritableRootsArgs): boolean {
     return true;
   }
 
-  // Missing ref/log dirs are valid; escaped existing dirs make the linked
-  // worktree metadata untrusted, so reject all extra Git roots.
   const refsRoot = realpathContainedDirectory({
     trustedParentPath: args.commonDir,
     candidatePath: path.join(args.commonDir, "refs"),
@@ -478,10 +455,6 @@ export function gitWritableRootsForWorkspace(
     candidatePath: path.join(commonDir, "objects"),
   });
   if (objectsRoot.status !== "contained") {
-    // Missing objects or shared object stores/alternates may be legitimate Git
-    // layouts, but Codex workspace-write should not follow object storage
-    // outside this worktree's trusted common dir. Fall back to workspace-only
-    // access.
     return [];
   }
 
@@ -590,10 +563,6 @@ export function toCodexReasoningEffort(
 ): CodexReasoningEffort {
   const codexEffort = mapBbReasoningLevelToCodex(reasoningLevel);
   if (codexEffort == null) {
-    // "none" is exposed by Cursor and some Pi models; "ultracode" is
-    // Claude-specific. Codex models never expose either, so model-switch
-    // reconciliation maps them away before here — but fail closed if
-    // something slips through.
     throw new Error(
       `Codex does not support the ${reasoningLevel} reasoning level.`,
     );
@@ -620,10 +589,6 @@ export function toCodexUserInput(input: PromptInput[]): CodexUserInput[] {
   });
 }
 
-/**
- * The shell env overrides expressed in Codex's native
- * `shell_environment_policy.set.*` config namespace.
- */
 function buildShellEnvironmentPolicyConfig(
   envVars?: Record<string, string>,
 ): Record<string, string> | undefined {
@@ -674,7 +639,6 @@ export function buildCodexConfig(
   return Object.keys(config).length > 0 ? config : undefined;
 }
 
-/** Structural dynamic-tool shape shared by adapter commands and wire params. */
 interface CodexDynamicToolInput {
   name: string;
   description: string;

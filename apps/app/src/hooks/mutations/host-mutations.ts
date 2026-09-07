@@ -10,7 +10,6 @@ interface RenameHostRequest {
   name: string;
 }
 
-/** Renames a machine. Errors render inline in the rename dialog. */
 export function useRenameHost() {
   const queryClient = useQueryClient();
 
@@ -26,11 +25,6 @@ export function useRenameHost() {
   });
 }
 
-/**
- * Removes (revokes + tombstones) a machine. Errors render inline in the
- * confirmation dialog — the server refuses to remove the primary host — so
- * the global error toast is suppressed.
- */
 export function useRemoveHost() {
   const queryClient = useQueryClient();
 
@@ -52,13 +46,6 @@ interface UpdateHostPermissionCeilingRequest {
   maxPermissionMode: PermissionMode;
 }
 
-/**
- * Sets a machine's permission ceiling. This calls the API client directly
- * instead of `sdk.hosts.*` on purpose: the ceiling is the control that stops
- * one paired machine from running privileged work on another, so it stays out
- * of the agent-facing SDK and the `bb` CLI. The server also refuses the route
- * for machine credentials.
- */
 export function useUpdateHostPermissionCeiling() {
   const queryClient = useQueryClient();
 
@@ -82,7 +69,6 @@ export function useUpdateHostPermissionCeiling() {
   });
 }
 
-/** Requests that an older daemon bypass its current self-update backoff. */
 export function useRetryHostUpdate() {
   return useMutation({
     mutationFn: (hostId: string) => sdk.hosts.retryUpdate({ hostId }),

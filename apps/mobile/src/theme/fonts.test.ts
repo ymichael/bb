@@ -28,8 +28,6 @@ describe("font platform modules", () => {
   });
 
   it("default (Android / node) names a real medium family and sends semibold as bold", () => {
-    // Below API 28 React Native maps any fontWeight < 700 on a family to its
-    // NORMAL face, so medium needs its own family and 600 must be 700.
     expect(defaultPlatform.SANS_FAMILIES).toEqual({
       regular: "sans-serif",
       medium: "sans-serif-medium",
@@ -100,7 +98,6 @@ describe("resolveFont", () => {
   });
 
   it("mono always resolves to a concrete family name", () => {
-    // DiffHunkView / file previews size gutters from `fonts.mono.*`.
     for (const weight of WEIGHTS) {
       expect(typeof resolveFont({ mono: true, weight }).fontFamily).toBe(
         "string",
@@ -130,7 +127,6 @@ describe("resolveFont", () => {
   });
 
   it("prefers the heaviest weight when a merged class string carries several", () => {
-    // cn() removes conflicts, but raw strings can still carry both.
     expect(resolveFont({ className: "font-medium font-bold" }).fontWeight).toBe(
       "700",
     );

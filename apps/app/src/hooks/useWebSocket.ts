@@ -29,7 +29,5 @@ export function useWebSocket(): void {
       unsubscribeConnected();
       unsubscribe();
     };
-    // Route deletion handling is route-derived. Keep it behind a ref so
-    // navigation cannot dispose cache effects and drop debounced invalidations.
   }, [queryClient]);
 }

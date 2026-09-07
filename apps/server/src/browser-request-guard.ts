@@ -138,12 +138,6 @@ function isJsonContentType(contentType: string | undefined): boolean {
   );
 }
 
-/**
- * Guards privileged local-browser boundaries without imposing credentials on
- * non-browser clients. Browsers send Origin; Node SDK, CLI, and server-to-server
- * callers commonly do not. Dynamic LAN/dev origins must share the request host
- * and use a configured BB port, while configured app origins match exactly.
- */
 export function browserRequestProblem(
   context: BrowserRequestContext,
   deps: BrowserRequestGuardDeps,

@@ -1,16 +1,3 @@
-/**
- * The Claude task-list tools (TaskCreate / TaskUpdate / TaskList / TaskGet)
- * folded into plan-steps snapshots.
- *
- * `TodoWrite` carries the whole list in one call; the task tools carry
- * deltas (a created task, a status patch) or partial snapshots (a listing, a
- * single read), and the list itself lives inside Claude Code. The bridge
- * keeps that list per thread and, after each successful call, emits the full
- * list as a settled `planSteps` item — the same snapshot shape `TodoWrite`
- * and codex `update_plan` produce — so the todo banner and the timeline read
- * one kind. An update to a task the fold never saw (the list predates this
- * session) produces no snapshot rather than a one-task plan.
- */
 import type { ThreadEventPlanStep } from "@get-bb/plugin-sdk/provider-bridge";
 import { z } from "zod";
 
@@ -72,7 +59,6 @@ export interface ClaudeTaskPlanItem {
   status: ClaudeTaskStatus;
 }
 
-/** Thread-lifetime task list, keyed by Claude's task id. */
 export type ClaudeTaskPlanState = Map<string, ClaudeTaskPlanItem>;
 
 export const CLAUDE_TASK_PLAN_TOOL_NAMES: ReadonlySet<string> = new Set([
@@ -121,11 +107,6 @@ function isSameTask(left: ClaudeTaskPlanItem, right: ClaudeTaskPlanItem) {
   );
 }
 
-/**
- * Folds one settled task-tool call into the list. Returns the full plan
- * snapshot when the list changed, null when the call was not a task tool,
- * failed, did not parse, or changed nothing.
- */
 export function foldClaudeTaskToolResult(args: {
   state: ClaudeTaskPlanState;
   toolName: string;
@@ -190,7 +171,6 @@ export function foldClaudeTaskToolResult(args: {
       state.clear();
       for (const raw of parsedOutput.data.tasks) {
         const task = taskListItemSchema.safeParse(raw);
-        // Deleted entries are tombstones in a listing, not live steps.
         if (!task.success || task.data.status === "deleted") continue;
         state.set(task.data.id, {
           id: task.data.id,

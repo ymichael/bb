@@ -15,17 +15,10 @@ const NO_SPLIT: PluginSidebarThreadSplit = {
   layout: null,
 };
 
-/**
- * Per-row drag-to-split support for a plugin thread list — the same two host
- * hooks the built-in `ThreadRow` uses, re-exposed as a prop bag plus plain
- * data. The plugin owns the element; the host owns the gesture.
- */
 export function useSidebarThreadSplit(
   threadId: string,
 ): PluginSidebarThreadSplit {
   const entry = useSidebarThreadEntry(threadId);
-  // An unknown thread still has to run both hooks unconditionally, so it uses
-  // placeholder content that can never match a real pane.
   const projectId = entry?.projectId ?? "";
   const title = entry ? getThreadDisplayTitle(entry) : "";
   const { onPointerDown } = useThreadRowSplitDrag({
@@ -46,8 +39,6 @@ export function useSidebarThreadSplit(
         ? null
         : indicator.miniMap.map((slot) => ({
             paneId: slot.paneId,
-            // Renamed from the host's terse w/h: a plugin contract should not
-            // inherit an internal abbreviation.
             rect: {
               x: slot.rect.x,
               y: slot.rect.y,

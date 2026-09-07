@@ -6,13 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { BottomAnchoredScrollBody } from "@/components/ui/bottom-anchored-scroll-body";
 import { threadTimelineScrollAnchorAtomFamily } from "@/lib/thread-timeline-scroll-anchor";
 
-// Companion to the scroll-preservation suite, focused on the geometry-read
-// budget of the resize path: the observed frame may read live
-// scrollHeight/clientHeight, but the rAF settle tail must run on the cached
-// max offset (at most one live verification read when a cached restore found
-// drift), and deliveries that carry ResizeObserver box sizes must refresh the
-// cache from them without forcing layout at all.
-
 interface ScrollMetrics {
   scrollHeight: number;
   clientHeight: number;
@@ -48,9 +41,6 @@ interface ManualAnimationFrames {
   hasPending: () => boolean;
 }
 
-// Unlike the scroll-preservation suite (which discards rAF callbacks because
-// the settle tail is irrelevant there), these tests drive the tail frame by
-// frame to observe what each one reads.
 function installManualAnimationFrames(): ManualAnimationFrames {
   let nextHandle = 1;
   const pending = new Map<number, FrameRequestCallback>();
@@ -122,9 +112,6 @@ interface ResizeEntryBoxes {
   borderBlockSize: number;
 }
 
-// The two boxes differ so a test can tell which one the component reads: the
-// scroll port's content box is its client height (padding excluded) and the
-// content wrapper's border box is the scroll height.
 function makeResizeEntry(
   target: Element,
   boxes: ResizeEntryBoxes,
@@ -186,9 +173,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-// Pin the viewport to the bottom of settled content and drain the mount tail,
-// then grow the content so the observed frame restores to the new bottom and
-// arms a fresh settle tail.
 function growContentWhilePinned() {
   const rendered = renderScrollBody();
   const { scrollArea } = rendered;
@@ -218,8 +202,6 @@ describe("BottomAnchoredScrollBody settle tail", () => {
       { scrollHeight: 500, clientHeight: 100 },
     );
 
-    // No drift after the observed frame: the tail's first cached comparison
-    // sees the pinned position and stops without a single forced layout.
     frames.runFrame();
     expect(scrollArea.scrollTop).toBe(400);
     expect(readScrollHeight).not.toHaveBeenCalled();
@@ -229,27 +211,22 @@ describe("BottomAnchoredScrollBody settle tail", () => {
 
   it("spends at most one live read when the settle tail corrects drift", () => {
     const { scrollArea } = growContentWhilePinned();
-    // Cascading layout (footer/prompt height settling) moved scrollTop after
-    // the observed frame without resizing the observed boxes.
     scrollArea.scrollTop = 390;
     const { readScrollHeight, readClientHeight } = installGeometryReadCounters(
       scrollArea,
       { scrollHeight: 500, clientHeight: 100 },
     );
 
-    // First tail frame corrects against the cache alone.
     frames.runFrame();
     expect(scrollArea.scrollTop).toBe(400);
     expect(readScrollHeight).not.toHaveBeenCalled();
     expect(readClientHeight).not.toHaveBeenCalled();
 
-    // The cached correction arms exactly one live verification read.
     frames.runFrame();
     expect(readScrollHeight).toHaveBeenCalledTimes(1);
     expect(readClientHeight).toHaveBeenCalledTimes(1);
     expect(scrollArea.scrollTop).toBe(400);
 
-    // Verification found the bottom stable, so the tail is done.
     frames.runFrame();
     expect(readScrollHeight).toHaveBeenCalledTimes(1);
     expect(readClientHeight).toHaveBeenCalledTimes(1);
@@ -266,8 +243,6 @@ describe("BottomAnchoredScrollBody settle tail", () => {
     getLatestResizeObserver().trigger();
     frames.runFrame();
 
-    // Detach mid-timeline (the detach edge spends its allowed verification
-    // read here, before the counters are installed).
     scrollArea.scrollTop = 150;
     fireEvent.wheel(scrollArea);
     fireEvent.scroll(scrollArea);
@@ -278,10 +253,6 @@ describe("BottomAnchoredScrollBody settle tail", () => {
       liveMetrics,
     );
 
-    // Content grows to 900 while detached. The delivery carries the observer's
-    // own box sizes, so the cache refresh needs no scrollHeight/clientHeight.
-    // The refresh must read the scroll port's content box (100) and the
-    // content wrapper's border box (900); the other box of each pair is off.
     getLatestResizeObserver().trigger([
       makeResizeEntry(scrollArea, {
         contentBlockSize: 100,
@@ -295,9 +266,6 @@ describe("BottomAnchoredScrollBody settle tail", () => {
     expect(readScrollHeight).not.toHaveBeenCalled();
     expect(readClientHeight).not.toHaveBeenCalled();
 
-    // The derived max offset (800) is what scroll classification runs on:
-    // 790 is outside the 4px threshold, so the viewport stays detached and
-    // the next growth (max offset 850) leaves it where it is...
     scrollArea.scrollTop = 790;
     fireEvent.scroll(scrollArea);
     liveMetrics.scrollHeight = 950;
@@ -315,15 +283,11 @@ describe("BottomAnchoredScrollBody settle tail", () => {
     expect(readScrollHeight).not.toHaveBeenCalled();
     expect(readClientHeight).not.toHaveBeenCalled();
 
-    // ...while 847 is within it, so this scroll re-attaches — still without
-    // a live read.
     scrollArea.scrollTop = 847;
     fireEvent.scroll(scrollArea);
     expect(readScrollHeight).not.toHaveBeenCalled();
     expect(readClientHeight).not.toHaveBeenCalled();
 
-    // Re-attached: the next growth's observed frame follows the bottom (its
-    // restore legitimately reads fresh geometry).
     liveMetrics.scrollHeight = 1_000;
     getLatestResizeObserver().trigger([
       makeResizeEntry(scrollArea, {

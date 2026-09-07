@@ -45,33 +45,14 @@ const COPY: Record<Exclude<ConnectionBannerKind, "hidden">, BannerCopy> = {
 const ENTER_MS = 220;
 const EXIT_MS = 160;
 
-/** Inset card: continuous corners, tinted fill, no hard border. */
 const CARD_RADIUS = 12;
 
-/** Outer spacing for hosts that do not pad the card (a list header). */
 const INSET_STYLE: ViewStyle = { marginHorizontal: 16, marginTop: 8 };
 
 interface ConnectionBannerProps {
-  /**
-   * Adds the row margins (16 horizontal, 8 top) when the host does not pad
-   * the card itself — e.g. as a list's `ListHeaderComponent`.
-   */
   inset?: boolean;
 }
 
-/**
- * Card under the header while the active profile is not connected
- * (offline, server restart, connect session trouble). Renders nothing when
- * the socket is up, and animates in and out of the layout. `auth-required`
- * (the connect gate refused this phone's credential: revoked in the
- * dashboard, or the account's device list was pruned) offers "Sign in
- * again", which re-pairs the same profile with a fresh code — the whole
- * card is the action — and is announced with the warning haptic.
- *
- * Placement: `Screen` renders it as the first scroll item (scrolling
- * screens) or floating under the bar (list screens on iOS); list screens
- * that want it in the flow pass it as their `ListHeaderComponent`.
- */
 export function ConnectionBanner({ inset = false }: ConnectionBannerProps) {
   const router = useRouter();
   const kind = useConnectionBanner();
@@ -139,7 +120,6 @@ export function ConnectionBanner({ inset = false }: ConnectionBannerProps) {
       entering={FadeInUp.duration(ENTER_MS)}
       exiting={FadeOutUp.duration(EXIT_MS)}
       layout={LinearTransition.duration(ENTER_MS)}
-      // Plain style: Reanimated views are not NativeWind-wrapped.
       style={inset ? INSET_STYLE : undefined}
     >
       {reauth ? (

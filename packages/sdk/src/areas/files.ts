@@ -10,11 +10,6 @@ import type {
 } from "@bb/server-contract";
 import { signalRequestArgs, type CreateSdkAreaArgs } from "./common.js";
 
-/**
- * Host file primitives. `hostId` may be omitted to target the server's
- * primary (local) host. `rootPath`, when set, confines the target beneath
- * that absolute root on the host (symlink-safe).
- */
 export interface FileReadArgs {
   hostId?: string;
   path: string;
@@ -27,17 +22,9 @@ export interface FileWriteArgs {
   path: string;
   rootPath?: string;
   content: string;
-  /** Defaults to "utf8". */
   contentEncoding?: "utf8" | "base64";
-  /** Defaults to false. */
   createParents?: boolean;
-  /**
-   * Optimistic-concurrency guard: omitted → unconditional write; a hash →
-   * write only when the current content hashes to it (use `read().sha256`);
-   * null → create-only. A failed guard resolves to the `conflict` outcome.
-   */
   expectedSha256?: string | null;
-  /** POSIX permission bits used when creating a file (for example 0o600). */
   mode?: number;
 }
 

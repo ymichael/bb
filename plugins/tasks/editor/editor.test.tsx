@@ -88,6 +88,40 @@ describe("markdown round-trip", () => {
     expect(roundTrip(markdown).trimEnd()).toBe(markdown);
   });
 
+  it("preserves a pipe inside a table-cell link destination", () => {
+    const markdown =
+      "| Value |\n| --- |\n| [destination](https://example.com/a\\|b) |";
+
+    expect(roundTrip(markdown).trimEnd()).toBe(
+      "| Value |\n| --- |\n| [destination](https://example.com/a%7Cb) |",
+    );
+  });
+
+  it("preserves atom-only cells when another block is edited", async () => {
+    const value = [
+      "| Image | Task | Thread |",
+      "| --- | --- | --- |",
+      "| ![diagram](https://example.com/diagram.png) | [TSK-42](bbtask://TSK-42) | [Fix login](bbthread://thr_test) |",
+      "",
+      "Edit here",
+    ].join("\n");
+    const onChange = vi.fn();
+    let editor: Editor | null = null;
+    render(
+      <TasksEditor
+        value={value}
+        onChange={onChange}
+        onEditorReady={(ready) => (editor = ready)}
+      />,
+    );
+
+    editor!.chain().focus("end").insertContent(" elsewhere").run();
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenLastCalledWith(`${value} elsewhere`),
+    );
+  });
+
   it("renders table headers and cells", () => {
     const screen = render(
       <TasksEditor
@@ -97,7 +131,7 @@ describe("markdown round-trip", () => {
       />,
     );
 
-    expect(screen.getByRole("table")).toBeTruthy();
+    expect(screen.getByRole("table").closest(".tableWrapper")).toBeTruthy();
     expect(screen.getAllByRole("columnheader")).toHaveLength(2);
     expect(screen.getAllByRole("cell")).toHaveLength(2);
   });
@@ -124,7 +158,6 @@ describe("mention extension", () => {
       );
       expect(pill?.classList.contains("bb-tasks-mention")).toBe(true);
       expect(pill?.textContent).toBe("TSK-42");
-      // A regular link must still parse as a link mark, not a mention.
       editor.commands.setContent("[docs](https://example.com)");
       expect(findMentions()).toEqual([]);
       expect(editor.storage.markdown.getMarkdown()).toBe(
@@ -157,7 +190,9 @@ describe("mention extension", () => {
                 key: "TSK-7",
                 title: "Detail panel",
               },
-            ].filter((item) => item.key.toLowerCase().includes(query.toLowerCase())),
+            ].filter((item) =>
+              item.key.toLowerCase().includes(query.toLowerCase()),
+            ),
           )
         }
         onEditorReady={(editor) => {
@@ -169,7 +204,6 @@ describe("mention extension", () => {
     instance!.chain().focus().insertContent("@").run();
     const option = await screen.findByText("Round-trip review");
     fireEvent.click(option.closest("button")!);
-    // The command inserts the pill plus a trailing space to keep typing.
     await waitFor(() =>
       expect(onChange).toHaveBeenCalledWith("[TSK-42](bbtask://TSK-42) "),
     );
@@ -223,7 +257,6 @@ describe("mention extension", () => {
     );
     instance!.chain().focus().insertContent("@").run();
     await screen.findByText("Threads");
-    // Tasks stay first in the popover.
     expect(screen.getByText("Tasks")).toBeTruthy();
     fireEvent.click(screen.getByText("Fix login flow").closest("button")!);
     await waitFor(() =>
@@ -232,9 +265,7 @@ describe("mention extension", () => {
       ),
     );
     expect(
-      screen.container.querySelector(
-        '[data-thread-mention="thr_a82u8wp8qq"]',
-      ),
+      screen.container.querySelector('[data-thread-mention="thr_a82u8wp8qq"]'),
     ).toBeTruthy();
   });
 });
@@ -251,7 +282,6 @@ describe("thread mention extension", () => {
       );
       expect(pill?.classList.contains("bb-tasks-thread-mention")).toBe(true);
       expect(pill?.textContent).toBe("Fix login flow");
-      // The pill carries the distinguishing chat glyph.
       expect(pill?.querySelector("svg.bb-tasks-mention-icon")).toBeTruthy();
       expect(editor.storage.markdown.getMarkdown()).toBe(
         "See [Fix login flow](bbthread://thr_a82u8wp8qq).",
@@ -281,9 +311,6 @@ describe("thread mention extension", () => {
 });
 
 describe("heading toggle", () => {
-  // Heading is block-level, so the toggle converts whole blocks — but only
-  // the block(s) the selection actually touches, and toggling again returns
-  // them to paragraphs. These pin down the bubble-menu H2 action.
   function editorWith(markdown: string): Editor {
     return new Editor({
       extensions: createEditorExtensions(),
@@ -291,11 +318,14 @@ describe("heading toggle", () => {
     });
   }
 
-  /** Puts a text selection inside the (1-based) nth block, or across two. */
-  function selectBlocks(editor: Editor, fromBlock: number, toBlock = fromBlock) {
+  function selectBlocks(
+    editor: Editor,
+    fromBlock: number,
+    toBlock = fromBlock,
+  ) {
     const positions: number[] = [];
     editor.state.doc.forEach((_node, offset) => {
-      positions.push(offset + 2); // one char into the block's text
+      positions.push(offset + 2);
     });
     editor.commands.setTextSelection({
       from: positions[fromBlock - 1]!,
@@ -391,6 +421,25 @@ describe("TasksEditor component", () => {
     ).toBeTruthy();
   });
 
+  it("renders pasted Markdown as rich content", async () => {
+    const markdown = "| Task |\n| --- |\n| [TSK-42](bbtask://TSK-42) |";
+    const onChange = vi.fn();
+    const screen = render(<TasksEditor value="" onChange={onChange} />);
+
+    fireEvent.paste(getEditorSurface(screen.container), {
+      clipboardData: {
+        files: [],
+        getData: (type: string) => (type === "text/plain" ? markdown : ""),
+      },
+    });
+
+    await waitFor(() => expect(screen.getByRole("table")).toBeTruthy());
+    expect(
+      screen.container.querySelector('[data-task-mention="TSK-42"]'),
+    ).toBeTruthy();
+    expect(onChange.mock.lastCall?.[0]?.trimEnd()).toBe(markdown);
+  });
+
   it("routes pasted and dropped files to onAttachFiles instead of inline upload", () => {
     const onAttachFiles = vi.fn();
     const onUploadImage = vi.fn();
@@ -416,7 +465,6 @@ describe("TasksEditor component", () => {
     expect(onAttachFiles).toHaveBeenCalledWith([file]);
     expect(onUploadImage).not.toHaveBeenCalled();
 
-    // A files-free (text) paste falls through so ProseMirror inserts it.
     const textPaste = {
       clipboardData: { files: [] },
     } as unknown as ClipboardEvent;
@@ -449,15 +497,10 @@ describe("TasksEditor component", () => {
     );
     screen.rerender(<TasksEditor value={"replaced"} onChange={onChange} />);
     await screen.findByText("replaced");
-    // Echoing our own onChange output back must not reset the document.
     expect(onChange).not.toHaveBeenCalled();
   });
 
   it("stays editable when the description is only a single image", async () => {
-    // A lone block image gives no text caret on its own; the fix relies on a
-    // trailing gap cursor so the user can still add text. Placing the caret at
-    // the end and typing must keep the image and add a paragraph, not replace
-    // or select the image node.
     let editor: Editor | null = null;
     render(
       <TasksEditor
@@ -523,8 +566,6 @@ describe("TasksEditor submit-on-Enter", () => {
       />,
     );
     editor!.commands.focus("end");
-    // Returning false lets TipTap's default Enter keymap insert a hard break /
-    // new paragraph.
     expect(
       callHandleKeyDown(
         editor!,
@@ -560,7 +601,6 @@ describe("TasksEditor submit-on-Enter", () => {
     });
     expect(callHandleKeyDown(editor!, composing)).toBe(false);
 
-    // Legacy IME signal: some browsers still report keyCode 229 while composing.
     const keyCode229 = new KeyboardEvent("keydown", {
       key: "Enter",
       cancelable: true,
@@ -592,7 +632,6 @@ describe("TasksEditor submit-on-Enter", () => {
       const surface = getEditorSurface(screen.container);
       expect(surface.getAttribute("enterkeyhint")).toBe("enter");
 
-      // Bare Enter must remain a newline on touch devices.
       expect(
         callHandleKeyDown(
           editor!,
@@ -664,7 +703,6 @@ describe("TasksEditor submit-on-Enter", () => {
     );
     editor!.chain().focus().insertContent("@").run();
     await screen.findByText("Pick me");
-    // Enter selects the mention instead of submitting the comment.
     fireEvent.keyDown(getEditorSurface(screen.container), { key: "Enter" });
     await waitFor(() =>
       expect(

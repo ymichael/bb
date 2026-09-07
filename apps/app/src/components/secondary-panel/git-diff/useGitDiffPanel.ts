@@ -91,8 +91,6 @@ export function useGitDiffPanel({
     data: mergeBaseBranches,
     isFetching: isLoadingMergeBaseBranchOptions,
   } = useEnvironmentMergeBaseBranches(environmentId ?? "", {
-    // Branch options are only needed once the picker can open or the diff
-    // panel is visible; initial thread load can use the persisted/default base.
     enabled:
       Boolean(environmentId) &&
       (mergeBaseBranchOptionsEnabled ||

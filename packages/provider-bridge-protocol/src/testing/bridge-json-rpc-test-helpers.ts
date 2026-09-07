@@ -23,17 +23,12 @@ export interface BridgeJsonRpcOutputMessage {
 
 export interface CapturedBridgeJsonRpcOutput {
   messages: BridgeJsonRpcOutputMessage[];
-  /**
-   * Every message since the last call: the conformance transport's drain
-   * (`{ send: handleLine, takeMessages: output.takeMessages }`).
-   */
   takeMessages(): BridgeJsonRpcOutputMessage[];
   restore(): void;
 }
 
 export interface BridgeJsonRpcTestHarness {
   messages: BridgeJsonRpcOutputMessage[];
-  /** Every message since the last call: the conformance transport's drain. */
   takeMessages(): BridgeJsonRpcOutputMessage[];
   flushWork(): Promise<void>;
   hasResponse(id: BridgeJsonRpcId): boolean;
@@ -94,11 +89,6 @@ function waitForNextBridgeTick(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-/**
- * Capture everything a bridge writes to stdout as parsed JSON-RPC messages.
- * Patches `process.stdout.write` directly (no test-framework spy), so the
- * kit runs under any runner; `restore()` puts the original writer back.
- */
 export function captureBridgeJsonRpcOutput(): CapturedBridgeJsonRpcOutput {
   const messages: BridgeJsonRpcOutputMessage[] = [];
   const originalWrite = process.stdout.write;
@@ -147,9 +137,6 @@ function sendBridgeJsonRpcRequest(args: SendBridgeJsonRpcRequestArgs): void {
 async function waitForBridgeJsonRpcResponse(
   args: WaitForBridgeJsonRpcResponseArgs,
 ): Promise<BridgeJsonRpcOutputMessage> {
-  // Deadline-based, not tick-count-based: bridges that spawn a real child
-  // process (codex → fake app-server) need cold-start time on CI runners,
-  // while in-process bridges still resolve on the first tick.
   const deadline = Date.now() + 15_000;
   while (Date.now() < deadline) {
     const response = args.output.messages.find(

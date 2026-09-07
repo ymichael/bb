@@ -185,8 +185,6 @@ vi.mock("@/lib/app-command-metadata", async (importOriginal) => {
     await importOriginal<typeof import("@/lib/app-command-metadata")>();
   return {
     ...actual,
-    // Each row reads its metadata while rendering, making this a focused
-    // render probe without adding test-only props to the production component.
     getAppCommandMetadata: (command: AppCommandId) => {
       testState.metadataCalls.set(
         command,

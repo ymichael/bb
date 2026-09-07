@@ -30,11 +30,6 @@ import {
 import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-/**
- * PR pill on a thread card: a real link to GitHub when the thread's
- * environment has a pull request, a quiet muted marker when the lookup
- * failed, nothing while loading or when no PR exists.
- */
 function ThreadPullRequestPill({
   pullRequest,
   unavailable,
@@ -51,8 +46,6 @@ function ThreadPullRequestPill({
         rel="noopener noreferrer"
         title={`${pullRequest.title} (${meta.label})`}
         aria-label={`Pull request #${pullRequest.number}: ${pullRequest.title} (${meta.label})`}
-        // Mirrors the app's PullRequestStatusPill: the state icon carries the
-        // color, the text stays the normal foreground.
         className="flex shrink-0 items-center gap-1 rounded-full border border-border bg-secondary px-2 py-0.5 text-xs font-medium shadow-2xs hover:border-input"
       >
         <Icon name={meta.icon} className={cn("size-3", meta.textClassName)} />#
@@ -147,9 +140,7 @@ function loadLastPresetId(): string | null {
 function storeLastPresetId(presetId: string): void {
   try {
     window.localStorage.setItem(LAST_PRESET_STORAGE_KEY, presetId);
-  } catch {
-    // Persistence is best-effort (e.g. sandboxed iframes without storage).
-  }
+  } catch {}
 }
 
 interface DispatchControlProps {
@@ -160,17 +151,6 @@ interface DispatchControlProps {
   className?: string;
 }
 
-/**
- * The single dispatch control for a task — rendered in the properties rail
- * on wide layouts and in the inline property row when the rail is hidden.
- * GitHub-merge-style split button around the dispatch RPC: the primary
- * segment dispatches immediately with the last-used preset (persisted in
- * localStorage; first preset alphabetically as the fallback), the chevron
- * segment opens the preset menu, which also updates the remembered choice.
- * The label is just the preset name — the dropdown's "Dispatch with preset"
- * header carries the verb. With zero presets it collapses to an
- * "Add a preset…" button opening the preset dialog in create mode.
- */
 export function DispatchControl({
   taskId,
   presets,
@@ -182,7 +162,6 @@ export function DispatchControl({
   const tasksRpc = useTasksRpc();
   const [dispatching, setDispatching] = useState(false);
   const [lastPresetId, setLastPresetId] = useState(loadLastPresetId);
-  // Keyed remount resets the create dialog's draft per open.
   const [createDialogKey, setCreateDialogKey] = useState<number | null>(null);
 
   const dispatch = async (presetId: string) => {
@@ -202,9 +181,6 @@ export function DispatchControl({
     void dispatch(preset.id);
   };
 
-  // bg-primary (not the default bg-foreground): custom palettes like Nord
-  // define an accent primary the hero CTA should pick up; in the default
-  // theme both read as intended.
   const primarySegment =
     "bg-primary text-primary-foreground hover:bg-primary/90";
 
@@ -296,17 +272,12 @@ export function DispatchControl({
 
 interface ThreadsSectionProps {
   threads: TaskThread[];
-  /** Undefined while the PR lookup is in flight (cards render without pills). */
   pullRequests: TaskPullRequest[] | undefined;
   unavailableThreadIds: string[];
-  /** Removes the thread's attachment row; rejects with the server message. */
   onDetach: (thread: TaskThread) => Promise<void>;
   onError: (message: string) => void;
 }
 
-/** Attached-thread list; the caller skips it entirely when there are none.
- *  Dispatching lives in a single DispatchControl (rail on wide layouts,
- *  inline property row on narrow), not here. */
 export function ThreadsSection({
   threads,
   pullRequests,
@@ -314,8 +285,6 @@ export function ThreadsSection({
   onDetach,
   onError,
 }: ThreadsSectionProps) {
-  // Snapshot of the thread awaiting confirmation; the row may vanish from
-  // `threads` (realtime refetch) while the dialog is open.
   const [confirm, setConfirm] = useState<TaskThread | null>(null);
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
 

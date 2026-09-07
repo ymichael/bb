@@ -17,15 +17,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Real workflow run captured via the agent SDK (fixture-mini: two-phase
-// workflow with three haiku agents — see
-// packages/agent-runtime/src/__fixtures__/claude-code/sessions/workflow-mini.ndjson).
-// The snapshots below are the folded workflow_progress state at three points
-// in the run; the running/failed/interrupted variants synthesize the statuses
-// the capture's happy path never hit.
-// ---------------------------------------------------------------------------
-
 const runningSnapshot: WorkflowProgressSnapshot = {
   phases: [
     { index: 1, title: "Scan" },
@@ -159,8 +150,6 @@ const interruptedWorkflow: TimelineRow = workflowRow({
   id: "thr_fixture:workflow:task:wu7ol9ras:interrupted",
   status: "interrupted",
   taskStatus: "stopped",
-  // Agents 2 and 3 were still queued/running when the session died; the
-  // renderer derives their "stopped" display state from the settled row.
   workflow: runningSnapshot,
   usage: { totalTokens: 17773, toolUses: 0, durationMs: 1772 },
   durationMs: 3_301,
@@ -171,7 +160,6 @@ const degradedWorkflow: TimelineRow = workflowRow({
   id: "thr_fixture:workflow:task:wu7ol9ras:degraded",
   status: "completed",
   taskStatus: "completed",
-  // No workflow_progress reported (older CLI): usage-only rendering.
   workflow: null,
   usage: { totalTokens: 26674, toolUses: 0, durationMs: 3277 },
   summary: 'Dynamic workflow "Tiny fixture workflow for BB capture" completed',

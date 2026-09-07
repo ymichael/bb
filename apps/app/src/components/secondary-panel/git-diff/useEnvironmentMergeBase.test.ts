@@ -1,5 +1,6 @@
 import type { Environment, WorkspaceStatus } from "@bb/domain";
 import { makeWorkspaceStatus as makeSharedWorkspaceStatus } from "@bb/test-helpers";
+import { makeEnvironment } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
 import {
   resolveEffectiveMergeBaseBranch,
@@ -9,26 +10,20 @@ import {
 
 type EnvironmentOverrides = Partial<Environment>;
 
-function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
-  return {
+function makeMergeBaseEnvironment(
+  overrides: EnvironmentOverrides = {},
+): Environment {
+  return makeEnvironment({
     baseBranch: null,
     branchName: "bb/thread",
     createdAt: 1,
-    defaultBranch: "main",
     hostId: "host-1",
     id: "env-1",
-    name: null,
-    isGitRepo: true,
-    isWorktree: true,
-    managed: true,
-    mergeBaseBranch: null,
     path: "/tmp/workspace",
     projectId: "project-1",
-    status: "ready",
     updatedAt: 1,
-    workspaceProvisionType: "managed-worktree",
     ...overrides,
-  };
+  });
 }
 
 function makeWorkspaceStatus(
@@ -83,7 +78,7 @@ describe("resolveEffectiveMergeBaseBranch", () => {
   it("prefers the selected branch", () => {
     expect(
       resolveEffectiveMergeBaseBranch({
-        environment: makeEnvironment({
+        environment: makeMergeBaseEnvironment({
           baseBranch: "release",
           mergeBaseBranch: "develop",
         }),
@@ -96,7 +91,7 @@ describe("resolveEffectiveMergeBaseBranch", () => {
   it("uses the persisted merge-base override before the provisioned worktree base", () => {
     expect(
       resolveEffectiveMergeBaseBranch({
-        environment: makeEnvironment({
+        environment: makeMergeBaseEnvironment({
           baseBranch: "release",
           mergeBaseBranch: "develop",
         }),
@@ -108,7 +103,7 @@ describe("resolveEffectiveMergeBaseBranch", () => {
   it("uses a managed worktree's base branch before the repository default", () => {
     expect(
       resolveEffectiveMergeBaseBranch({
-        environment: makeEnvironment({ baseBranch: "release" }),
+        environment: makeMergeBaseEnvironment({ baseBranch: "release" }),
         workspaceStatus: makeWorkspaceStatus({
           branch: {
             currentBranch: "bb/thread",
@@ -122,7 +117,7 @@ describe("resolveEffectiveMergeBaseBranch", () => {
   it("falls back to the live workspace default branch", () => {
     expect(
       resolveEffectiveMergeBaseBranch({
-        environment: makeEnvironment({ defaultBranch: "master" }),
+        environment: makeMergeBaseEnvironment({ defaultBranch: "master" }),
         workspaceStatus: makeWorkspaceStatus({
           branch: {
             currentBranch: "bb/thread",
@@ -139,7 +134,7 @@ describe("resolvePersistedMergeBaseBranch", () => {
     expect(
       resolvePersistedMergeBaseBranch({
         branch: "release",
-        environment: makeEnvironment({ baseBranch: "release" }),
+        environment: makeMergeBaseEnvironment({ baseBranch: "release" }),
         workspaceStatus: makeWorkspaceStatus(),
       }),
     ).toBeNull();
@@ -149,7 +144,7 @@ describe("resolvePersistedMergeBaseBranch", () => {
     expect(
       resolvePersistedMergeBaseBranch({
         branch: "main",
-        environment: makeEnvironment({ baseBranch: "release" }),
+        environment: makeMergeBaseEnvironment({ baseBranch: "release" }),
         workspaceStatus: makeWorkspaceStatus(),
       }),
     ).toBe("main");
@@ -159,7 +154,7 @@ describe("resolvePersistedMergeBaseBranch", () => {
     expect(
       resolvePersistedMergeBaseBranch({
         branch: "main",
-        environment: makeEnvironment(),
+        environment: makeMergeBaseEnvironment(),
         workspaceStatus: makeWorkspaceStatus(),
       }),
     ).toBeNull();

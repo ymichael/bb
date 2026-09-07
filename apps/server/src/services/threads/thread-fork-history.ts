@@ -17,14 +17,6 @@ import {
 import { resolveTurnProviderCheckpointId } from "./thread-edit-message.js";
 import type { ThreadForkDescriptor } from "./thread-provisioning-context.js";
 
-/**
- * Where a fork branches off its source: the provider session to clone (and
- * the checkpoint to retain through; none for the tip) plus the last source
- * sequence whose conversation the fork inherits. `historyEndSequence` is the
- * `turn/completed` of the turn the clone ends on, so the timeline the fork
- * shows and the context its model holds describe the same conversation. Null
- * when the source has not completed a root turn yet.
- */
 export interface ThreadForkPoint {
   descriptor: ThreadForkDescriptor;
   historyEndSequence: number | null;
@@ -58,11 +50,6 @@ function readTurnCompletion(
   return { event, sequence: row.sequence };
 }
 
-/**
- * The descriptor that re-creates a completed turn's session through the
- * checkpoint its completion recorded, or null when that turn left no session
- * or checkpoint to branch from.
- */
 function resolveCheckpointForkDescriptor(args: {
   completion: StoredTurnCompletion;
   providerId: string;
@@ -85,17 +72,6 @@ function resolveCheckpointForkDescriptor(args: {
   };
 }
 
-/**
- * Resolve the branch point for `sourceSeqEnd`. The anchor is the root turn
- * that contains the sequence, or the last root turn before it when the
- * sequence sits between turns (a user message row precedes its turn, so
- * forking at one branches before that message, like editing it does). The
- * anchor must have completed: a checkpoint is recorded on `turn/completed`,
- * and a turn still running has no stable point to clone. Providers that can
- * only clone a whole session (`fork: "tip"`) accept the anchor only when it
- * is the source's latest turn; otherwise the clone would silently include
- * turns the caller asked to leave out.
- */
 function resolveAnchoredForkPoint(
   deps: Pick<AppDeps, "db" | "providerRegistry">,
   args: { sourceSeqEnd: number; sourceThread: Thread },
@@ -160,17 +136,6 @@ function resolveAnchoredForkPoint(
   };
 }
 
-/**
- * Resolve where a fork of `sourceThread` branches. Without `sourceSeqEnd` the
- * fork inherits every completed root turn and clones the session tip. When
- * the source is mid-turn, its session tip already holds the running turn's
- * prompt and partial output, which the inherited timeline stops short of; a
- * provider that can branch at a checkpoint then clones through the last
- * completed turn instead, so model context and timeline describe the same
- * conversation. Returns null when the source has no provider session to
- * clone; throws `fork_source_session_unavailable` when `sourceSeqEnd` names a
- * point the provider cannot branch from.
- */
 export function resolveThreadForkPoint(
   deps: Pick<AppDeps, "db" | "providerRegistry">,
   args: { sourceSeqEnd: number | undefined; sourceThread: Thread },
@@ -230,7 +195,7 @@ export function resolveThreadForkPoint(
  * items already fold in, or pending-interaction and goal state that belongs to
  * the source thread alone.
  */
-const INHERITED_EVENT_TYPES = [
+export const INHERITED_EVENT_TYPES = [
   "client/turn/requested",
   "turn/started",
   "turn/input/accepted",
@@ -249,16 +214,6 @@ function parseAcceptedClientRequestId(row: StoredEventRow): string {
   return event.clientRequestId;
 }
 
-/**
- * Select the rows of the source conversation through `historyEndSequence`.
- * Only turns that completed inside the window come along, so the fork never
- * shows a turn that is still running; a `client/turn/requested` comes along
- * only when the window also holds its acceptance, so a message the source had
- * merely queued does not show as pending in the fork. The rows are read into
- * memory because each copy is re-parsed to index search segments; the filter
- * here only drops the few rows of turns and requests still open at the
- * window's end.
- */
 function selectInheritedForkEventRows(
   deps: Pick<AppDeps, "db">,
   args: { historyEndSequence: number; sourceThreadId: string },
@@ -290,16 +245,6 @@ function selectInheritedForkEventRows(
   });
 }
 
-/**
- * Copy the source conversation through `historyEndSequence` into a fork
- * before the fork's own thread-start rows are appended, so inherited history
- * occupies the lowest sequences and renders first. Copied rows carry no
- * `provider_thread_id` column value: that column names the session a thread
- * owns and resumes, and the fork owns only the session its own
- * `thread/identity` will name. The event payloads keep the source session id,
- * so a later rewind or nested fork anchored on an inherited turn still finds
- * the session that recorded its checkpoint.
- */
 export function copyForkSourceHistory(
   deps: Pick<AppDeps, "db" | "hub">,
   args: {

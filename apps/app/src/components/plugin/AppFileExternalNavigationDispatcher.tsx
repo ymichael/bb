@@ -5,7 +5,6 @@ import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useResolvedLiveFileTarget } from "@/hooks/useResolvedLiveFileTarget";
 import { getExperimentalFileLocationStart } from "@/lib/live-file-navigation";
 
-/** Lazily loaded only after an external-file intent has been accepted. */
 export function AppFileExternalNavigationDispatcher({
   intent,
   onSettled,

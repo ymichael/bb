@@ -32,19 +32,20 @@ export function buildPromptInputs(args: {
   message: string;
   files?: readonly string[];
   images?: readonly string[];
-  /** Open the provider's plan action (`/plan`) instead of executing. */
   plan?: boolean;
 }): PromptInput[] {
   return [
     args.plan
       ? createBuiltinPlanCommandTextInput(args.message)
       : { type: "text", text: args.message, mentions: [] },
-    ...(args.files ?? []).map(
-      (path): PromptInput => ({ type: "localFile", path }),
-    ),
-    ...(args.images ?? []).map(
-      (path): PromptInput => ({ type: "localImage", path }),
-    ),
+    ...(args.files ?? []).map((path): PromptInput => ({
+      type: "localFile",
+      path,
+    })),
+    ...(args.images ?? []).map((path): PromptInput => ({
+      type: "localImage",
+      path,
+    })),
   ];
 }
 

@@ -1,14 +1,3 @@
-// bb-plugin-thread-chat-demo — the frontend bundle.
-//
-// Demonstrates the two chat-integration surfaces added for the sidechat
-// rebuild:
-//
-// - `ThreadChat`, the one host-owned SDK component: a nav panel that renders
-//   any thread's full chat (timeline + composer) from just a thread id, and
-//   a thread panel that renders the current thread compactly.
-// - `messageAction`, host-rendered chrome on every chat message (and the
-//   text-selection menu): "Open in demo panel" opens this plugin's own
-//   thread panel anchored on the clicked message via `openPanel`.
 import { useState } from "react";
 import {
   definePluginApp,
@@ -118,9 +107,7 @@ function DemoThreadFixedTab() {
   );
 }
 
-const demoThreadFixedTab: PluginFixedTabRegistration<
-  DemoThreadTarget
-> = {
+const demoThreadFixedTab: PluginFixedTabRegistration<DemoThreadTarget> = {
   panelId: "thread-chat-demo",
   id: "compact-thread",
   title: "Compact thread",

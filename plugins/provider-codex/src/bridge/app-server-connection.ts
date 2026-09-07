@@ -1,19 +1,3 @@
-/**
- * JSON-RPC 2.0 endpoint over a spawned `codex app-server` child's stdio.
- *
- * The codex bridge supervises one app-server child per bb thread, a reusable
- * model-list child, and short-lived thread-maintenance children. This module
- * owns the child-process exit races the runtime learned in #1402:
- *
- * - Exit is finalized on `close`, not `exit`, with a bounded grace so a
- *   descendant holding an inherited pipe cannot delay teardown forever —
- *   and once finalized, the streams are destroyed so that descendant cannot
- *   inject stale protocol traffic later.
- * - Every stdout line is dropped once the connection has finalized, so a
- *   stale child's late output can never reach a fresh session.
- * - `kill()` escalates SIGTERM → SIGKILL on a bounded timer.
- */
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface, type Interface } from "node:readline";
 import { experimental_recordProviderChildIo } from "@get-bb/plugin-sdk/provider-bridge";
@@ -32,7 +16,6 @@ export interface CodexAppServerExitInfo {
   code: number | null;
   signal: NodeJS.Signals | null;
   stderrTail: string;
-  /** True when the child could not be spawned at all (e.g. ENOENT). */
   spawnFailed: boolean;
 }
 
@@ -41,10 +24,6 @@ interface CreateCodexAppServerConnectionOptions {
   args: string[];
   cwd: string;
   env: Record<string, string | undefined>;
-  /**
-   * The bb thread this child serves, for record mode; null for process-level
-   * children (model-list probes, maintenance).
-   */
   recordThreadId: string | null;
   onNotification(method: string, params: unknown): void;
   onRequest(
@@ -52,7 +31,6 @@ interface CreateCodexAppServerConnectionOptions {
     params: unknown,
     responder: CodexAppServerRequestResponder,
   ): void;
-  /** Called exactly once, after the exit is finalized (close or grace). */
   onExit(info: CodexAppServerExitInfo): void;
 }
 
@@ -66,7 +44,7 @@ interface CodexAppServerRequestArgs<TResult> {
 export interface CodexAppServerConnection {
   request<TResult>(args: CodexAppServerRequestArgs<TResult>): Promise<TResult>;
   notify(method: string, params?: unknown): void;
-  kill(): void;
+  kill(): Promise<void>;
   readonly exited: boolean;
 }
 
@@ -134,6 +112,10 @@ export function createCodexAppServerConnection(
   } | null = null;
   let closeGraceTimer: NodeJS.Timeout | null = null;
   let stdoutLines: Interface | null = null;
+  let resolveExit!: () => void;
+  const exitPromise = new Promise<void>((resolve) => {
+    resolveExit = resolve;
+  });
 
   function writeLine(message: object): void {
     const stdin = child.stdin;
@@ -165,8 +147,6 @@ export function createCodexAppServerConnection(
       clearTimeout(closeGraceTimer);
       closeGraceTimer = null;
     }
-    // Destroy inherited pipes so a descendant holding them cannot inject
-    // stale traffic after this connection is finalized.
     stdoutLines?.close();
     child.stdout?.destroy();
     child.stderr?.destroy();
@@ -179,7 +159,11 @@ export function createCodexAppServerConnection(
         { spawnFailed },
       ),
     );
-    options.onExit({ ...status, stderrTail, spawnFailed });
+    try {
+      options.onExit({ ...status, stderrTail, spawnFailed });
+    } finally {
+      resolveExit();
+    }
   }
 
   if (child.stdout) {
@@ -270,9 +254,6 @@ export function createCodexAppServerConnection(
 
   child.on("exit", (code, signal) => {
     exitStatus = { code: code ?? null, signal: signal ?? null };
-    // Prefer `close` (stdio fully drained) so the child's final protocol
-    // output is consumed before requests are settled — but bound the wait,
-    // because a descendant can inherit and hold the pipes open (#1402).
     closeGraceTimer = setTimeout(() => {
       finalizeExit(exitStatus ?? { code: null, signal: null });
     }, CLOSE_AFTER_EXIT_GRACE_MS);
@@ -340,7 +321,7 @@ export function createCodexAppServerConnection(
 
     kill() {
       if (finalized) {
-        return;
+        return exitPromise;
       }
       const escalation = setTimeout(() => {
         if (!finalized) {
@@ -349,6 +330,7 @@ export function createCodexAppServerConnection(
       }, KILL_ESCALATION_MS);
       escalation.unref?.();
       child.kill("SIGTERM");
+      return exitPromise;
     },
   };
 }

@@ -13,8 +13,6 @@ describe("internal skill tree routes", () => {
       const rootPath = path.join(harness.config.dataDir, "tree-route-skill");
       await mkdir(rootPath, { recursive: true });
       await writeFile(path.join(rootPath, "SKILL.md"), "tree route bytes\n");
-      // The manifest reports the on-disk mode; pin it so the process umask
-      // cannot change the expected entry.
       await chmod(path.join(rootPath, "SKILL.md"), 0o644);
       const manifest = readSkillTreeManifest(rootPath);
       harness.deps.skillTreeRegistry.register(manifest.treeHash, rootPath);

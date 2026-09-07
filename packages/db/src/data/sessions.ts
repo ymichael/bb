@@ -32,10 +32,6 @@ export interface OpenSessionInput {
   leaseTimeoutMs: number;
 }
 
-/**
- * Open a new session. If an active session exists for the same hostId,
- * close it first (status="closed", closeReason="replaced").
- */
 export function openSession(
   db: DbConnection,
   input: OpenSessionInput,
@@ -82,11 +78,6 @@ export function openSession(
 
   markHostSeen(db, input.hostId, now);
 
-  // No host-connected broadcast here: host status reads "connected" only once
-  // the daemon's WebSocket registers in the hub, which happens after this
-  // session-open call. Broadcasting now would tell clients to refetch while
-  // /hosts still answers "disconnected", and they'd cache that as fresh.
-  // NotificationHub.registerDaemon emits the broadcast instead.
 
   return row;
 }
@@ -160,10 +151,6 @@ export function listLatestSessionsForHosts(
     return [];
   }
 
-  // Correlated `id = (ORDER BY ... LIMIT 1)` keeps the seek on
-  // host_daemon_sessions_host_latest_idx (host_id, updated_at, created_at, id)
-  // and only sorts the inner rows for one host. The earlier NOT EXISTS
-  // OR-chain was not sargable and degraded to row-by-row anti-join.
   return db
     .select()
     .from(hostDaemonSessions)

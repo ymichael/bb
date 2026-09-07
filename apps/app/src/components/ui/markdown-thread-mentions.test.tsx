@@ -21,7 +21,8 @@ import { threadQueryKey } from "@/hooks/queries/query-keys";
 import { sdk } from "@/lib/sdk";
 import { setPreferredTheme } from "@/hooks/useTheme";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
+import { makeThreadResponse } from "@/test/fixtures/thread-responses";
 
 vi.mock("@/lib/sdk", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/sdk")>();
@@ -61,35 +62,18 @@ function resolveUpdatedThreadLink(link: TimelineTitleLink): string | null {
 function threadResponse(
   overrides: Partial<ThreadResponse> = {},
 ): ThreadResponse {
-  return {
+  return makeThreadResponse({
     id: "thr_child",
     projectId: "proj_demo",
     environmentId: null,
-    providerId: "codex",
     title: "Rebuild comments",
     titleFallback: "Rebuild comments",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
     lastReadAt: 0,
     latestAttentionAt: 1,
     createdAt: 1,
     updatedAt: 1,
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
-    activeBackgroundAgentCount: 0,
-    canSpawnChild: true,
     ...overrides,
-  };
+  });
 }
 
 function renderMarkdown(
@@ -165,7 +149,7 @@ const ACTIVE_MESSAGE_DIRECTIVES: MarkdownMessageDirectives = {
 
 afterEach(() => {
   cleanup();
-  vi.clearAllMocks();
+  vi.resetAllMocks();
   setPreferredTheme("system");
 });
 
@@ -559,6 +543,39 @@ describe("MarkdownPreview thread mentions", () => {
     expect(sdk.threads.resolveMentions).toHaveBeenCalledTimes(1);
   });
 
+  it("retries a failed title mention batch once", async () => {
+    vi.useFakeTimers();
+    try {
+      const threadId = "thr_2222222222";
+      vi.mocked(sdk.threads.resolveMentions)
+        .mockRejectedValueOnce(new Error("temporary failure"))
+        .mockRejectedValueOnce(new Error("temporary failure"));
+      renderMarkdown(
+        <ThreadTitleMentions title={`Review @thread:${threadId}`} />,
+        [],
+      );
+
+      await act(async () => vi.advanceTimersByTimeAsync(60));
+      expect(sdk.threads.resolveMentions).toHaveBeenCalledTimes(2);
+      await act(async () => vi.advanceTimersByTimeAsync(1_000));
+      expect(sdk.threads.resolveMentions).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("marks an omitted title mention unavailable", async () => {
+    const threadId = "thr_2222222222";
+    vi.mocked(sdk.threads.resolveMentions).mockResolvedValueOnce([]);
+    renderMarkdown(
+      <ThreadTitleMentions title={`Review @thread:${threadId}`} />,
+      [],
+    );
+
+    expect(await screen.findByText("Unavailable thread")).not.toBeNull();
+    expect(sdk.threads.resolveMentions).toHaveBeenCalledTimes(1);
+  });
+
   it("shares one raw-id resolution across sibling messages and a title", async () => {
     const threadId = "thr_2222222222";
     vi.mocked(sdk.threads.resolveMentions).mockResolvedValueOnce([
@@ -714,8 +731,6 @@ describe("MarkdownPreview thread mentions", () => {
       />,
     );
 
-    // The token is not a mention here, so it stays verbatim prose — one text
-    // node, no pill and no directive mount.
     const paragraph = container.querySelector("p");
     expect(paragraph?.textContent).toBe("@thread:thr_child[label]");
     expect(paragraph?.querySelector("a")).toBeNull();
@@ -925,7 +940,6 @@ describe("MarkdownPreview thread mentions", () => {
       <MarkdownPreview content="See @thread:thr_child for the report." />,
     );
 
-    // No mentions prop → no remark plugin → token is plain text, no pill anchor.
     expect(screen.queryByText("Rebuild comments")).toBeNull();
     expect(
       screen.getByText(/@thread:thr_child/u, { exact: false }),

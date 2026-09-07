@@ -3,8 +3,6 @@ import { computeDiffWorkerPoolSize } from "./diff-worker-pool";
 
 describe("computeDiffWorkerPoolSize", () => {
   it("caps a touch device at two workers however many cores it reports", () => {
-    // Every worker compiles ~830 KB of JavaScript and holds a Shiki heap; a
-    // phone that reports 6-8 cores must not spawn 5-7 of them.
     expect(
       computeDiffWorkerPoolSize({
         hardwareConcurrency: 8,

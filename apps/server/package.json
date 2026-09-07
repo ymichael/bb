@@ -9,6 +9,7 @@
     "start:prod": "cross-env NODE_ENV=production node dist/index.js",
     "dev": "node --conditions=source --import tsx scripts/dev-supervisor.mjs",
     "clean": "rimraf dist",
+    "generate:bb-official-marketplace": "node --conditions=source --import tsx scripts/generate-bb-official-marketplace.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts",
     "test:provider-corpus": "vitest run --config vitest.config.ts test/provider-corpus"

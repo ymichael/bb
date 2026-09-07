@@ -8,7 +8,9 @@ export function pluginDataDirFromDb(db: Db): string {
     .find((entry: unknown) => (entry as { name?: unknown }).name === "main");
   const file = (row as { file?: unknown } | undefined)?.file;
   if (typeof file !== "string" || file.length === 0) {
-    throw new Error("Unable to resolve plugin data directory from SQLite handle");
+    throw new Error(
+      "Unable to resolve plugin data directory from SQLite handle",
+    );
   }
   return dirname(file);
 }

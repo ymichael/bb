@@ -26,41 +26,24 @@ import {
 
 const REUSE_THREAD_PREVIEW_LIMIT = 2;
 
-/** One row in the worktree picker dropdown. Each row represents a worktree
- * env in the project, surfaced through a representative thread so the user
- * can identify which worktree they want by recognizing thread titles. */
 export interface ReuseThreadOption {
   environmentId: string;
   branchName: string | null;
   name: string | null;
-  /** Name of the machine this worktree lives on. Only set when more than one
-   * machine exists — omitted, no hint renders. */
   hostName?: string | null;
-  /** Threads in this worktree, ordered most-recently-active first. */
   threads: ReadonlyArray<{ id: string; title: string }>;
 }
 
 interface WorktreePickerProps {
   options: readonly ReuseThreadOption[];
-  /** Currently-selected env id, or null when reuse mode is active but no
-   * worktree has been chosen yet. */
   value: string | null;
   onChange: (environmentId: string) => void;
-  /** Match the dim hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
-  /** Render as a non-interactive label while preserving the selected worktree. */
   disabled?: boolean;
-  /** Story-only escape hatch. */
   defaultOpen?: boolean;
-  /** Whether the menu blocks page interaction; defaults to Radix's true. */
   modal?: boolean;
 }
 
-/**
- * Secondary picker shown in the prompt box when env mode is `reuse`. Mirrors
- * the BranchPicker's role for host modes — once the user picks "Reuse
- * existing worktree" in the env picker, this picker picks which worktree.
- */
 export function WorktreePicker({
   options,
   value,

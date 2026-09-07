@@ -6,7 +6,6 @@ export interface ResolvedPluginExecutionRouting {
   query: SystemProvidersQuery;
 }
 
-/** Keep every plugin execution control on the same routed query identity. */
 export function resolvePluginExecutionRouting(
   routing: ExperimentalProviderModelPickerRouting | undefined,
 ): ResolvedPluginExecutionRouting {

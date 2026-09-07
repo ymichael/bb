@@ -10,11 +10,6 @@ const allowDenyOptions = [
   { kind: "reject_once" },
 ] as const;
 
-// Historical fix 79f591bea: an ACP `session/request_permission` may carry an
-// arbitrarily sparse toolCall, but the canonical payload must always end up
-// with a grantable approval subject — never an empty payload the user cannot
-// act on. A command asks as `command`; everything that is neither a command
-// nor a file change asks as `tool_use` with the timeline row's presentation.
 describe("buildAcpPermissionInteractionPayload", () => {
   it("uses the tool call command when present", () => {
     const payload = buildAcpPermissionInteractionPayload({
@@ -59,9 +54,6 @@ describe("buildAcpPermissionInteractionPayload", () => {
   });
 
   it("keeps a Cursor sub-agent's delegation reading when it asks, like its row", () => {
-    // Cursor announces a sub-agent as `kind: "other"` with `rawInput._toolName
-    // = "task"`; only the dialect can read that. Without it the ask would be
-    // a generic `other` tool while the timeline row reads as a delegation.
     const payload = buildAcpPermissionInteractionPayload({
       toolCall: {
         toolCallId: "call-sub",
@@ -78,13 +70,14 @@ describe("buildAcpPermissionInteractionPayload", () => {
         kind: "tool_use",
         itemId: "call-sub",
         presentation: {
-          label: { pending: "Running subagent", completed: "Subagent finished" },
+          label: {
+            pending: "Running subagent",
+            completed: "Subagent finished",
+          },
           title: "Task: Subagent task",
         },
       },
     });
-    // The dialect is consulted for the in-flight call too, when the ask
-    // itself has no title.
     const fromStarted = buildAcpPermissionInteractionPayload({
       toolCall: {
         toolCallId: "call-sub-2",
@@ -238,22 +231,10 @@ describe("buildAcpApprovalDecisions", () => {
   });
 
   it("never returns an empty decision list", () => {
-    // A payload without decisions is unresolvable: the runtime's auto-deny
-    // policy could not settle it. Even an empty/unrecognized option list must
-    // yield at least deny.
     expect(buildAcpApprovalDecisions([])).toEqual(["deny"]);
   });
 });
 
-// Fix for get-bb/bb#1719: an ACP `session/request_permission` for a file
-// write must surface as a file-change approval subject, not as a command
-// approval whose "command" is a bare path. Two shapes opencode sends:
-//   1. `write`/`edit` permission: kind "edit", title = file path,
-//      locations = [file], no `command`.
-//   2. `external_directory` permission (write outside the project): kind
-//      "other", title = parentDir (a bare directory), locations = [file,
-//      parentDir], no `command`. The running `edit` tool call with the same
-//      id is the write signal.
 describe("buildAcpPermissionInteractionPayload file-change subjects", () => {
   it("classifies an edit-kind permission that names a path as a file_change subject", () => {
     const payload = buildAcpPermissionInteractionPayload({
@@ -397,9 +378,6 @@ describe("buildAcpPermissionInteractionPayload file-change subjects", () => {
   });
 });
 
-// M5: a permission's `content` is the agent's reason for asking ("Not in
-// allowlist: node"), not the call's output. It rides the payload's reason and
-// the banner's detail line so the user learns why they are being asked.
 describe("permission reason", () => {
   it("carries the agent's reason on a command approval", () => {
     const payload = buildAcpPermissionInteractionPayload({
@@ -425,9 +403,6 @@ describe("permission reason", () => {
     });
   });
 
-  // Every surface reads `payload.reason` as the ask's title and
-  // `presentation.detail` as a line beneath it, so a reason in both printed
-  // the agent's sentence twice.
   it("carries the reason once, not again as the banner's detail", () => {
     const payload = buildAcpPermissionInteractionPayload({
       toolCall: {
@@ -455,8 +430,6 @@ describe("permission reason", () => {
     ).toBeUndefined();
   });
 
-  // Nothing is lost by not stamping it: every surface reads the reason from
-  // the payload, where it is the ask's title.
   it("still names the tool when the agent gives no reason", () => {
     const payload = buildAcpPermissionInteractionPayload({
       toolCall: { toolCallId: "call-2b", title: "MCP: deploy", kind: "other" },

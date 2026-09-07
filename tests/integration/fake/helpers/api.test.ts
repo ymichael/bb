@@ -1,36 +1,13 @@
-import type { Environment } from "@bb/domain";
 import { describe, expect, it } from "vitest";
 import { requireEnvironmentMergeBaseBranch } from "../../helpers/api.js";
-
-type EnvironmentOverrides = Partial<Environment>;
-
-function makeEnvironment(overrides: EnvironmentOverrides = {}): Environment {
-  return {
-    baseBranch: null,
-    branchName: "bb/thread",
-    createdAt: 1,
-    defaultBranch: "main",
-    hostId: "host-1",
-    id: "env-test",
-    name: null,
-    isGitRepo: true,
-    isWorktree: true,
-    managed: true,
-    mergeBaseBranch: null,
-    path: "/tmp/workspace",
-    projectId: "project-1",
-    status: "ready",
-    updatedAt: 1,
-    workspaceProvisionType: "managed-worktree",
-    ...overrides,
-  };
-}
+import { makeEnvironment } from "@bb/test-helpers/domain-fixtures";
 
 describe("requireEnvironmentMergeBaseBranch", () => {
   it("prefers an explicit merge-base override", () => {
     expect(
       requireEnvironmentMergeBaseBranch(
         makeEnvironment({
+          id: "env-test",
           baseBranch: "release",
           mergeBaseBranch: "develop",
         }),
@@ -42,6 +19,7 @@ describe("requireEnvironmentMergeBaseBranch", () => {
     expect(
       requireEnvironmentMergeBaseBranch(
         makeEnvironment({
+          id: "env-test",
           baseBranch: "release",
           defaultBranch: "main",
           mergeBaseBranch: null,
@@ -54,6 +32,7 @@ describe("requireEnvironmentMergeBaseBranch", () => {
     expect(() =>
       requireEnvironmentMergeBaseBranch(
         makeEnvironment({
+          id: "env-test",
           baseBranch: null,
           defaultBranch: null,
           mergeBaseBranch: null,

@@ -39,7 +39,6 @@ interface ThreadShowCommandOptions {
   diffTarget?: string;
   diffSha?: string;
   diffMergeBase?: string;
-  mergeBaseBranches?: boolean;
   json?: boolean;
 }
 
@@ -53,9 +52,7 @@ interface ThreadLogCommandOptions {
 }
 
 const THREAD_LOG_DEFAULT_EVENT_LIMIT = 100;
-/** Page size for `--json --all`; bounds each response, not the total. */
 const THREAD_LOG_ALL_EVENTS_PAGE_SIZE = 1000;
-/** Server-side `segmentLimit` maximum (THREAD_TIMELINE_SEGMENT_LIMIT_MAX). */
 const THREAD_LOG_TIMELINE_SEGMENT_LIMIT_MAX = 100;
 
 interface ThreadOutputCommandOptions {
@@ -76,7 +73,6 @@ interface ThreadShowJsonPayload extends ThreadStatusPayload {
   pendingTodos: ThreadTimelinePendingTodos | null;
   workStatus?: WorkspaceStatus | null;
   gitDiff?: ThreadGitDiffResponse | null;
-  mergeBaseBranches?: string[];
 }
 
 interface ThreadShowPullRequestPayload {
@@ -180,13 +176,11 @@ function threadShowEnvironmentJson(
   }
   return {
     ...environment,
-    pullRequest:
-      pullRequest ??
-      {
-        status: "unavailable",
-        pullRequest: null,
-        message: "Pull request lookup was not run.",
-      },
+    pullRequest: pullRequest ?? {
+      status: "unavailable",
+      pullRequest: null,
+      message: "Pull request lookup was not run.",
+    },
   };
 }
 
@@ -210,10 +204,6 @@ export function registerShowCommand(
     .option(
       "--diff-merge-base <branch>",
       "Merge base branch for --diff-target branch_committed or all",
-    )
-    .option(
-      "--merge-base-branches",
-      "Include available merge-base branches in output",
     )
     .action(
       action(async (id: string | undefined, opts: ThreadShowCommandOptions) => {
@@ -306,14 +296,6 @@ export function registerShowCommand(
           });
         }
 
-        let mergeBaseBranches: string[] | undefined;
-        if (opts.mergeBaseBranches && thread.environmentId) {
-          const branchResponse = await sdk.environments.diffBranches({
-            environmentId: thread.environmentId,
-          });
-          mergeBaseBranches = branchResponse.branches;
-        }
-
         const fetchedPullRequest = thread.environmentId
           ? await fetchPullRequest({
               environmentId: thread.environmentId,
@@ -353,18 +335,11 @@ export function registerShowCommand(
               ? fetchedGitDiff.diff
               : null;
           }
-          if (mergeBaseBranches !== undefined) {
-            jsonPayload.mergeBaseBranches = mergeBaseBranches;
-          }
           outputJson(opts, jsonPayload);
           return;
         }
 
-        printThreadStatus(
-          statusPayload,
-          environmentInfo,
-          fetchedPullRequest,
-        );
+        printThreadStatus(statusPayload, environmentInfo, fetchedPullRequest);
 
         printPendingTodos(pendingTodos);
 
@@ -416,18 +391,6 @@ export function registerShowCommand(
             }
           } else {
             console.log(`Git diff: ${fetchedGitDiff.message}`);
-          }
-        }
-
-        if (mergeBaseBranches !== undefined) {
-          console.log("");
-          if (mergeBaseBranches.length === 0) {
-            console.log("Merge-base branches: none");
-          } else {
-            console.log("Merge-base branches:");
-            for (const branch of mergeBaseBranches) {
-              console.log(`  ${branch}`);
-            }
           }
         }
       }),
@@ -545,17 +508,19 @@ export function registerShowCommand(
     .option("--self", "Target the current thread (from BB_THREAD_ID)")
     .option("--json", "Print machine-readable JSON output")
     .action(
-      action(async (id: string | undefined, opts: ThreadOutputCommandOptions) => {
-        const threadId = requireThreadIdOrSelf(id, opts);
-        const sdk = createCliBbSdk(getUrl());
-        const result = await sdk.threads.output({ threadId });
-        if (outputJson(opts, result)) return;
-        if (result.output) {
-          console.log(result.output);
-        } else {
-          console.log("(no output)");
-        }
-      }),
+      action(
+        async (id: string | undefined, opts: ThreadOutputCommandOptions) => {
+          const threadId = requireThreadIdOrSelf(id, opts);
+          const sdk = createCliBbSdk(getUrl());
+          const result = await sdk.threads.output({ threadId });
+          if (outputJson(opts, result)) return;
+          if (result.output) {
+            console.log(result.output);
+          } else {
+            console.log("(no output)");
+          }
+        },
+      ),
     );
 }
 
@@ -644,15 +609,9 @@ function parseThreadLogLimit<TDefault extends number | null>(
 
 interface ThreadLogEventsPage {
   rows: ThreadEventRow[];
-  /** True when at least one more event follows the last row. */
   hasMore: boolean;
 }
 
-/**
- * `/events` lists ascending by sequence and applies LIMIT, so a capped page is
- * the oldest events. Over-read by one row to know whether the page was cut
- * instead of guessing from a full page.
- */
 async function listThreadLogEventsPage(
   sdk: BbSdk,
   args: { threadId: string; limit: number; afterSeq: string | undefined },

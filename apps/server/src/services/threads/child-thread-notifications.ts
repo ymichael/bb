@@ -146,11 +146,6 @@ function formatChildThreadNeedsAttentionSummary(
   return trimmedSummary;
 }
 
-/**
- * A workflow keeps running after the turn that started it completes, so a
- * child thread can report an outcome while its workflow work is still in
- * flight. Say so, otherwise the parent reads the excerpt as the final result.
- */
 function formatChildThreadRunningWorkflowClause(count: number): string {
   if (count < 1) {
     return "";
@@ -230,10 +225,6 @@ function getChildThreadCompletionOutput(
   return getLastThreadOutput(deps.db, args.childThread.id);
 }
 
-/**
- * Read at queue time rather than at batch flush, so the count reflects the
- * moment the turn settled — the same instant the output excerpt is captured.
- */
 function getChildThreadActiveWorkflowCount(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueueChildThreadTurnNotificationArgs,
@@ -295,9 +286,6 @@ function childThreadSubject(
   };
 }
 
-// One child stamps its outcome kind (derived from turnStatus) and names that
-// child; a multi-child batch stamps `child-outcome-batch` and carries only the
-// count, since no single thread is the subject.
 function childThreadTurnStatusBatchTaxonomy(
   items: ChildThreadTurnNotificationBatchItem[],
 ): ParentSystemMessageTaxonomy {
@@ -413,16 +401,24 @@ function queueChildThreadTurnNotificationBatchItem(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueueChildThreadTurnNotificationArgs,
 ): void {
+  const item: ChildThreadTurnNotificationBatchItem = {
+    activeWorkflowCount: getChildThreadActiveWorkflowCount(deps, args),
+    childThread: args.childThread,
+    terminalOutput: getChildThreadCompletionOutput(deps, args),
+    turnStatus: args.turnStatus,
+  };
   const existingBatch = childThreadTurnNotificationBatches.get(
     args.parentThreadId,
   );
   if (existingBatch) {
-    existingBatch.items.push({
-      activeWorkflowCount: getChildThreadActiveWorkflowCount(deps, args),
-      childThread: args.childThread,
-      terminalOutput: getChildThreadCompletionOutput(deps, args),
-      turnStatus: args.turnStatus,
-    });
+    const existingIndex = existingBatch.items.findIndex(
+      (entry) => entry.childThread.id === args.childThread.id,
+    );
+    if (existingIndex === -1) {
+      existingBatch.items.push(item);
+    } else {
+      existingBatch.items[existingIndex] = item;
+    }
     clearTimeout(existingBatch.timer);
     existingBatch.timer = scheduleChildThreadTurnNotificationBatchFlush(
       deps,
@@ -432,14 +428,7 @@ function queueChildThreadTurnNotificationBatchItem(
   }
 
   childThreadTurnNotificationBatches.set(args.parentThreadId, {
-    items: [
-      {
-        activeWorkflowCount: getChildThreadActiveWorkflowCount(deps, args),
-        childThread: args.childThread,
-        terminalOutput: getChildThreadCompletionOutput(deps, args),
-        turnStatus: args.turnStatus,
-      },
-    ],
+    items: [item],
     timer: scheduleChildThreadTurnNotificationBatchFlush(
       deps,
       args.parentThreadId,
@@ -447,12 +436,6 @@ function queueChildThreadTurnNotificationBatchItem(
   });
 }
 
-/**
- * Queues a parent-facing notification for child thread turn outcomes.
- * Normal turn-completion event side effects pass the actual terminal status;
- * command-result failures pass `failed` because no terminal turn event exists.
- * This is best-effort post-commit notification work.
- */
 export async function queueChildThreadTurnNotificationBestEffort(
   deps: LoggedPendingInteractionWorkSessionDeps,
   args: QueueChildThreadTurnNotificationArgs,

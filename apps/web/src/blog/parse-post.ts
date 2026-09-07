@@ -1,8 +1,3 @@
-/** Parses a blog markdown file with YAML-like front matter into a typed post.
- *  The shape is the one the marketing blog actually writes: title/date/lede,
- *  then headings, paragraphs, lists, quotes, and images. Anything else stays
- *  literal text rather than becoming markup. */
-
 export type PostBlock =
   | { kind: "paragraph"; text: string }
   | { kind: "heading"; text: string }
@@ -81,7 +76,9 @@ const CAPTION_RE = /^\*(.+)\*$/;
 const TWEET_RE =
   /^tweet:(https:\/\/(?:www\.)?(?:x\.com|twitter\.com)\/[A-Za-z0-9_]+\/status\/(\d+)(?:\?.*)?)$/;
 
-function parseImage(line: string): Extract<PostBlock, { kind: "image" }> | null {
+function parseImage(
+  line: string,
+): Extract<PostBlock, { kind: "image" }> | null {
   const linked = LINKED_IMAGE_RE.exec(line);
   if (linked) {
     const src = linked[2];
@@ -227,9 +224,9 @@ export function parsePost(slug: string, source: string): Post {
     lede,
     sourceLabel: fields.sourceLabel,
     sourceHref: fields.sourceHref,
-    cover: coverFromField ?? (firstImage
-      ? { src: firstImage.src, alt: firstImage.alt }
-      : undefined),
+    cover:
+      coverFromField ??
+      (firstImage ? { src: firstImage.src, alt: firstImage.alt } : undefined),
     blocks,
   };
 }

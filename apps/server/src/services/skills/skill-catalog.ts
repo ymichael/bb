@@ -14,11 +14,6 @@ interface ResolveSkillCatalogSourcesArgs {
   sharedSkillSources?: readonly SharedInjectedSkillSource[];
 }
 
-/**
- * Resolve the server-owned skill catalog shared by runtime injection and
- * slash-command discovery. Project sources are supplied by callers that have
- * a concrete workspace; global, plugin, and built-in tiers are always present.
- */
 export function resolveSkillCatalog(
   deps: Pick<LoggedWorkSessionDeps, "config" | "logger" | "skillTreeRegistry">,
   args: ResolveSkillCatalogSourcesArgs = {},

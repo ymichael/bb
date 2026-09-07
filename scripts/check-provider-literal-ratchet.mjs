@@ -74,6 +74,9 @@ const EXCLUDED_SEGMENTS = new Set([
  */
 const EXCLUDED_PREFIXES = [
   join("plugins", "provider-"),
+  // Account Pool proxies one named provider's traffic; it is provider-side
+  // code like plugins/provider-*, not core.
+  join("plugins", "account-pool"),
   join("packages", "provider-bridge-acp"),
   // Test-only helpers: they name providers so tests can pick a model.
   join("packages", "test-helpers"),

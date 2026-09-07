@@ -21,9 +21,6 @@ const machineCodeRpcSchema = z
   })
   .strict();
 
-// The plugin route wraps a throwing handler as
-// `{ ok: false, error: { code: "handler_error", message: <thrown message> } }`,
-// and the connect plugin throws its stable code as that message.
 const rpcFailureSchema = z.object({
   ok: z.literal(false),
   error: z.object({ code: z.string(), message: z.string() }),
@@ -41,7 +38,6 @@ type EnrollDesktopMachineResult =
 
 interface EnrollDesktopMachineArgs {
   fetchImpl?: typeof fetch;
-  /** Local builtin server origin, e.g. `http://127.0.0.1:38886`. */
   localServerUrl: string;
 }
 
@@ -60,15 +56,6 @@ function redeemFailureCode(
   return "invalid_response";
 }
 
-/**
- * Give the desktop app its own connect machine credential.
- *
- * The local bb server mints a one-time machine code with its pairing secret,
- * and the app redeems that code at the connect apex for a credential of its
- * own. The app therefore never holds a copy of the server's pairing secret,
- * and the account owner can revoke the desktop app on its own from the connect
- * dashboard.
- */
 export async function enrollDesktopMachine(
   args: EnrollDesktopMachineArgs,
 ): Promise<EnrollDesktopMachineResult> {

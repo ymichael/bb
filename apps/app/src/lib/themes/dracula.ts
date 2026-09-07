@@ -1,9 +1,3 @@
-/**
- * Dracula palette (https://draculatheme.com). Dracula is dark-first; the light
- * variant ("Alucard"-style) keeps the same hues at darker lightness so it stays
- * legible on a pale canvas. See nord.ts for how the minimal override set
- * cascades to the rest of the tokens.
- */
 export const draculaThemeCss = `
 :root, .light {
   --canvas: #f8f8f2;

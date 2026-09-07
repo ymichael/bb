@@ -1,12 +1,3 @@
-/**
- * Why voice input is unavailable, and how to say so.
- *
- * `getUserMedia` only exists in a secure context, so a bb server reached over
- * plain HTTP on a LAN has no microphone at all — in a browser and inside the
- * mobile shell alike (plan section 11.6). "Not supported in this browser" is
- * wrong there and leaves the user with nothing to act on.
- */
-
 export type VoiceUnsupportedReason = "insecure-origin" | "unsupported-browser";
 
 export interface VoiceSupportEnvironment {
@@ -26,8 +17,6 @@ export function resolveVoiceSupport(
   if (environment.hasMediaDevices && environment.hasMediaRecorder) {
     return { isSupported: true, reason: null };
   }
-  // A non-secure origin removes `navigator.mediaDevices` entirely, which is
-  // the same symptom as an old browser but a different fix.
   return {
     isSupported: false,
     reason: environment.isSecureContext
@@ -44,7 +33,6 @@ export function voiceUnsupportedMessage(
     : "Voice input is not supported in this browser";
 }
 
-/** Read the current window. Returns the "no browser" answer during SSR. */
 export function readVoiceSupportEnvironment(): VoiceSupportEnvironment {
   if (typeof window === "undefined" || typeof navigator === "undefined") {
     return {

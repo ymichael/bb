@@ -45,10 +45,6 @@ export class ProcessLocalQueuedLockTimeoutError extends Error {
   }
 }
 
-/**
- * Serializes work only within the current Node.js process. This intentionally
- * does not protect against another host-daemon process mutating the same path.
- */
 export async function withProcessLocalQueuedLocks<T>(
   args: WithProcessLocalQueuedLocksArgs<T>,
 ): Promise<T> {
@@ -133,12 +129,6 @@ function runInProcessQueue<T>(
   }
 
   const previous = lockQueues.get(key) ?? Promise.resolve();
-  // Queue nodes stay in the chain even when their public promise times out.
-  // When the timed-out node reaches the head, it observes timedOut and skips
-  // work. This preserves FIFO ordering for later waiters instead of letting a
-  // timed-out caller punch a hole in the queue. Once work has started, timeout
-  // no longer cancels it; ownership has transferred to the caller's critical
-  // section, and cancellation would leave the protected git operation midway.
   let started = false;
   let aborted = false;
   let timedOut = false;
@@ -169,9 +159,6 @@ function runInProcessQueue<T>(
     () => undefined,
   );
   lockQueues.set(key, settled);
-  // Only the current tail may remove itself. A newer waiter can append while
-  // this node is still running; deleting unconditionally would erase that newer
-  // tail and allow later callers to bypass it.
   void settled.then(() => {
     if (lockQueues.get(key) === settled) {
       lockQueues.delete(key);

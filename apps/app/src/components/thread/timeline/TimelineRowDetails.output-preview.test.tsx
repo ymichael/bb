@@ -18,7 +18,8 @@ const timelineTurnSummaryDetails = vi.mocked(
 );
 
 const FULL_OUTPUT = `FULL-HEAD ${"x".repeat(5_000)} FULL-TAIL`;
-const PREVIEW_OUTPUT = "FULL-HEAD xxx\n…[4,000 characters omitted from preview]\nxxx FULL-TAIL";
+const PREVIEW_OUTPUT =
+  "FULL-HEAD xxx\n…[4,000 characters omitted from preview]\nxxx FULL-TAIL";
 
 function previewedCommandRow(
   overrides: Partial<Pick<TimelineCommandWorkRow, "status">> = {},
@@ -101,10 +102,9 @@ describe("previewed command output", () => {
     const view = renderExpandedRow(previewedCommandRow({ status: "pending" }));
 
     expect(view.container.textContent).toContain("characters omitted");
-    expect(screen.getByTestId("timeline-output-preview-note").textContent).toContain(
-      "full output loads when this finishes",
-    );
-    // Give any (wrong) fetch a chance to fire before asserting it did not.
+    expect(
+      screen.getByTestId("timeline-output-preview-note").textContent,
+    ).toContain("full output loads when this finishes");
     await new Promise((resolve) => setTimeout(resolve, 20));
     expect(timelineTurnSummaryDetails).not.toHaveBeenCalled();
   });
@@ -117,8 +117,8 @@ describe("previewed command output", () => {
       expect(screen.getByRole("button", { name: /retry/i })).toBeTruthy();
     });
     expect(view.container.textContent).toContain("characters omitted");
-    expect(screen.getByTestId("timeline-output-preview-note").textContent).toContain(
-      "Failed to load the full output",
-    );
+    expect(
+      screen.getByTestId("timeline-output-preview-note").textContent,
+    ).toContain("Failed to load the full output");
   });
 });

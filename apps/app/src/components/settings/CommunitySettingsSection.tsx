@@ -47,10 +47,6 @@ function CommunityLinkRow({
   );
 }
 
-/**
- * Settings → Community: external links to Discord and the public GitHub
- * repository (moved out of the app sidebar footer).
- */
 export function CommunitySettingsSection() {
   return (
     <SettingsSection

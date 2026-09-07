@@ -12,16 +12,6 @@ import type { BridgeJsonRpcTestHarness } from "@get-bb/plugin-sdk/provider-bridg
 
 import { handleLine } from "./bridge.js";
 
-/**
- * The bridge settles a prompt the app-server accepts and finishes without
- * opening a turn — and only that. Settlement is owned by the queued turn-start
- * correlation, so a real `turn/started` that arrives AFTER the `turn/start`
- * response (the inverted order the fake's `/late-start` prompt produces) must
- * claim the dispatch first and leave exactly one real turn behind. Fabricating
- * a turn from a late signal is the ACP bug 0c2f4cc9a: a phantom active turn
- * blocks every later send.
- */
-
 const THREAD_ID = "thr_zero_work_1";
 
 const fakeAppServerPath = fileURLToPath(
@@ -39,8 +29,6 @@ let harness: BridgeJsonRpcTestHarness;
 let workspaceDir: string;
 
 function threadEvents(): ThreadEvent[] {
-  // The bridge emits thread/delta; run the whole capture through a fresh
-  // assembler (the runtime adapter's exact translation) for canonical events.
   return assembleCapturedThreadEvents(harness.messages, "codex");
 }
 
@@ -122,9 +110,7 @@ it("settles a prompt the app-server accepts without any turn activity", async ()
     status: "completed",
     scope: { kind: "turn", turnId },
   });
-  // A synthetic turn is not a codex fork point.
   expect(completed[0]).not.toHaveProperty("providerCheckpointId");
-  // The accepted input is acknowledged against the turn that settles it.
   expect(
     events.filter((event) => event.type === "turn/input/accepted"),
   ).toEqual([
@@ -186,7 +172,6 @@ it("lets a turn/started that lands after the turn/start response win the race", 
   const events = await waitForEvents((all) =>
     all.some((event) => event.type === "turn/completed"),
   );
-  // Settle past the settlement grace window so a synthetic turn would show up.
   await new Promise((resolve) => setTimeout(resolve, 500));
   const settledEvents = threadEvents();
 
@@ -196,7 +181,6 @@ it("lets a turn/started that lands after the turn/start response win the race", 
   expect(
     settledEvents.filter((event) => event.type === "turn/completed"),
   ).toHaveLength(1);
-  // The one turn is the provider's real turn: it carries the agent message.
   expect(
     settledEvents.some((event) => event.type === "item/agentMessage/delta"),
   ).toBe(true);

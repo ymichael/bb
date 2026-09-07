@@ -17,8 +17,6 @@ const packageRoot = process.cwd();
 const packageJsonPath = resolve(packageRoot, "package.json");
 const releaseChannel = resolveDesktopReleaseChannel(process.env);
 const releaseConfig = createDesktopReleaseConfig(releaseChannel);
-// The feed describes the artifacts electron-builder just produced, so it always
-// describes the platform this build ran on.
 const buildPlatform = resolveDesktopBuildPlatform(process.platform);
 const updateMetadataFileName =
   releaseConfig.updateMetadataFileNames[buildPlatform];

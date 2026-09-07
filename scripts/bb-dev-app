@@ -4,67 +4,7 @@ set -euo pipefail
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 REPO_ROOT="${BB_DEV_REPO_ROOT:-$(dirname -- "${script_dir}")}"
 
-resolve_dev_node_bin_dir() {
-  if [[ -n "${BB_DEV_NODE_BIN_DIR:-}" ]]; then
-    printf '%s\n' "${BB_DEV_NODE_BIN_DIR}"
-    return
-  fi
-
-  local current_major
-  current_major="$(node -p "process.versions.node.split('.')[0]" 2>/dev/null || true)"
-  if [[ "${current_major}" == "22" ]]; then
-    return
-  fi
-
-  local node_versions_dir="${NVM_DIR:-${HOME}/.nvm}/versions/node"
-  [[ -d "${node_versions_dir}" ]] || return 0
-
-  node - "${node_versions_dir}" <<'NODE' || true
-const fs = require("node:fs");
-const path = require("node:path");
-
-const nodeVersionsDir = process.argv[2];
-const candidates = fs
-  .readdirSync(nodeVersionsDir, { withFileTypes: true })
-  .filter((entry) => entry.isDirectory())
-  .map((entry) => {
-    const match = /^v(\d+)\.(\d+)\.(\d+)$/.exec(entry.name);
-    if (match === null) {
-      return null;
-    }
-    return {
-      name: entry.name,
-      major: Number(match[1]),
-      minor: Number(match[2]),
-      patch: Number(match[3]),
-    };
-  })
-  .filter(
-    (version) =>
-      version !== null &&
-      version.major === 22 &&
-      (version.minor > 12 || (version.minor === 12 && version.patch >= 0)),
-  )
-  .sort((left, right) => {
-    if (left.minor !== right.minor) return left.minor - right.minor;
-    return left.patch - right.patch;
-  });
-
-const selected = candidates.at(-1);
-if (selected !== undefined) {
-  console.log(path.join(nodeVersionsDir, selected.name, "bin"));
-}
-NODE
-}
-
-dev_node_bin_dir="$(resolve_dev_node_bin_dir)"
-if [[ -n "${dev_node_bin_dir}" ]]; then
-  PATH="${dev_node_bin_dir}:${PATH}:${HOME}/.local/bin"
-else
-  # Append, never prepend: a node in ~/.local/bin must not shadow the node the
-  # caller already resolved (nvm, mise, asdf, ...).
-  PATH="${PATH}:${HOME}/.local/bin"
-fi
+PATH="${PATH}:${HOME}/.local/bin"
 
 sanitize_label() {
   printf '%s\n' "$1" \
@@ -146,7 +86,7 @@ assert_desktop_node_runtime() {
     const [major, minor] = process.versions.node.split(".").map(Number);
     process.exit(major === 22 && minor >= 19 ? 0 : 1);
   '; then
-    die "Desktop dev requires Node 22.19 because Electron's postinstall runtime is not reliable on newer Node releases. Current node is ${version} at ${exec_path}. Install/use Node 22.19 or set BB_DEV_NODE_BIN_DIR to a Node 22.19 bin directory."
+    die "Desktop dev requires Node 22.19 or newer in the Node 22 line because Electron's postinstall runtime is not reliable on newer Node releases. Current Node is ${version} at ${exec_path}. Use the repository version from .nvmrc."
   fi
 }
 
@@ -407,13 +347,17 @@ start_current() {
 
 status() {
   load_config
-  local branch head codex_version
+  local branch head codex_version node_abi node_exec node_version
   branch="$(git -C "${REPO_ROOT}" branch --show-current 2>/dev/null || true)"
   head="$(git -C "${REPO_ROOT}" rev-parse --short HEAD 2>/dev/null || true)"
   codex_version="$(codex --version 2>/dev/null || true)"
+  node_version="$(node -p "process.version")"
+  node_abi="$(node -p "process.versions.modules")"
+  node_exec="$(command -v node)"
 
   printf 'Repo: %s\n' "${REPO_ROOT}"
   printf 'Branch: %s (%s)\n' "${branch:-detached}" "${head:-unknown}"
+  printf 'Node: %s (ABI %s) at %s\n' "${node_version}" "${node_abi}" "${node_exec}"
   printf 'Codex: %s\n' "${codex_version:-not found}"
   printf 'Instance: %s\n' "${INSTANCE_ID}"
   printf 'Data dir: %s\n' "${DATA_DIR}"

@@ -6,20 +6,7 @@ import {
   loadFixture,
 } from "./delta-test-harness.js";
 
-/**
- * Token usage, context-window usage, and fixture-driven translation on the
- * delta path — the claude event-translation usage shard, ported through
- * deltas and a real assembler. Cumulative token accumulation moved to the
- * assembler; per-segment usage rides the `usage.turn` delta, so the running
- * totals asserted here now come out of central accumulation.
- *
- * The fixture cases additionally keep src/__fixtures__/*.json reachable;
- * without them those fixtures would be orphaned.
- */
-
 describe("claude usage and fixture translation (delta path)", () => {
-  // -- translate: real SDK fixtures ------------------------------------------
-
   it("fixture: assistant-text produces turn/started + item/completed agentMessage", () => {
     const harness = createClaudeDeltaHarness();
     const events = harness.translate(loadFixture("assistant-text.json"));
@@ -45,7 +32,6 @@ describe("claude usage and fixture translation (delta path)", () => {
     const harness = createClaudeDeltaHarness();
     const events = harness.translate(loadFixture("assistant-tool-use.json"));
 
-    // Should have turn/started, item/completed (text), item/started (tool)
     expect(events).toContainEqual(
       expect.objectContaining({ type: "turn/started" }),
     );
@@ -91,13 +77,10 @@ describe("claude usage and fixture translation (delta path)", () => {
 
   it("fixture: stream-text-delta produces agentMessage delta", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn first
     harness.translate(loadFixture("assistant-text.json"));
 
     const events = harness.translate(loadFixture("stream-text-delta.json"));
 
-    // The canonical grammar opens a delta-first assistant item with a
-    // synthetic item/started before its first delta.
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/started",
@@ -114,7 +97,6 @@ describe("claude usage and fixture translation (delta path)", () => {
 
   it("fixture: user-tool-result produces commandExecution completed", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn first
     harness.translate(loadFixture("assistant-text.json"));
 
     const events = harness.translate(loadFixture("user-tool-result.json"));
@@ -132,7 +114,6 @@ describe("claude usage and fixture translation (delta path)", () => {
 
   it("fixture: user-tool-result-generic produces toolCall completed", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn first
     harness.translate(loadFixture("assistant-text.json"));
 
     const events = harness.translate(
@@ -150,11 +131,8 @@ describe("claude usage and fixture translation (delta path)", () => {
     );
   });
 
-  // -- usage and context window ---------------------------------------------
-
   it("fixture: result-success produces request context usage, token usage, and turn/completed", () => {
     const harness = createClaudeDeltaHarness();
-    // Start a turn first
     harness.translate(loadFixture("assistant-text.json"));
 
     const events = harness.translate(loadFixture("result-success.json"));
@@ -374,12 +352,6 @@ describe("claude usage and fixture translation (delta path)", () => {
       firstTokenUsage?.tokenUsage.last,
     );
   });
-
-  // The cases below pin the translator's use of sdk-extraction.ts's
-  // resolveClaudeModelContextWindowHint. The canonical bridge calls
-  // setClaudeModelContextWindowHint from session construction and from the
-  // live model change; that the bridge really calls it is pinned separately
-  // in bridge/__tests__/bridge.test.ts.
 
   it("falls back to a model-based context window when Claude omits modelUsage.contextWindow", () => {
     const harness = createClaudeDeltaHarness();

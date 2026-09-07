@@ -1,8 +1,3 @@
-/**
- * Deterministic synthetic thread for the CI timeline micro-benchmark: every
- * item kind the domain schema knows, repeated until the requested event count,
- * persisted through the same parse + item-field derivation as daemon ingestion.
- */
 import {
   createConnection,
   createProject,
@@ -22,7 +17,6 @@ import {
 } from "@bb/domain";
 import type { Thread, ThreadEventScope, ThreadEventType } from "@bb/domain";
 
-/** The db package keeps the input row type private; derive it from the call. */
 type InsertEventInput = Parameters<typeof insertEvents>[2][number];
 
 const PROVIDER_THREAD_ID = "synthetic-provider-thread";
@@ -80,7 +74,6 @@ function createSyntheticEventBuilder(threadId: string): SyntheticEventBuilder {
   return builder;
 }
 
-/** A shell output that is large enough to exercise truncation and previews. */
 function commandOutput(turn: number, item: number): string {
   const line = `turn ${turn} item ${item}: lorem ipsum dolor sit amet consectetur\n`;
   return line.repeat(120);
@@ -96,11 +89,6 @@ function pushItemPair(
   builder.push({ type: "item/completed", scope, data: { item: completed } });
 }
 
-/**
- * One turn: the user message, the turn envelope, and every item kind once
- * (with their delta / progress events), then usage and completion. About 45
- * events per turn.
- */
 function pushSyntheticTurn(
   builder: SyntheticEventBuilder,
   threadId: string,
@@ -140,7 +128,6 @@ function pushSyntheticTurn(
     data: { clientRequestId },
   });
 
-  // reasoning with deltas
   builder.push({
     type: "item/started",
     scope,
@@ -173,7 +160,6 @@ function pushSyntheticTurn(
     },
   });
 
-  // agent message with deltas
   builder.push({
     type: "item/started",
     scope,
@@ -198,7 +184,6 @@ function pushSyntheticTurn(
     },
   });
 
-  // command execution with output deltas
   builder.push({
     type: "item/started",
     scope,
@@ -238,7 +223,6 @@ function pushSyntheticTurn(
     },
   });
 
-  // file change
   pushItemPair(
     builder,
     scope,
@@ -265,7 +249,6 @@ function pushSyntheticTurn(
     },
   );
 
-  // tool call with progress
   builder.push({
     type: "item/started",
     scope,
@@ -300,7 +283,6 @@ function pushSyntheticTurn(
     },
   });
 
-  // web search, web fetch, image view
   pushItemPair(
     builder,
     scope,
@@ -344,7 +326,6 @@ function pushSyntheticTurn(
     { type: "imageView", id: id("image"), path: `/tmp/screenshot-${turn}.png` },
   );
 
-  // plan with delta, context compaction
   builder.push({
     type: "item/started",
     scope,
@@ -373,7 +354,6 @@ function pushSyntheticTurn(
     { type: "contextCompaction", id: id("compaction") },
   );
 
-  // background task: started in the turn, progress and completion thread-scoped
   const task = {
     type: "backgroundTask",
     id: id("task"),
@@ -405,7 +385,6 @@ function pushSyntheticTurn(
     },
   });
 
-  // turn-level updates
   builder.push({
     type: "turn/plan/updated",
     scope,
@@ -472,7 +451,6 @@ export interface SyntheticThread {
   close(): void;
 }
 
-/** Builds whole turns until at least `minimumEvents` rows exist. */
 export function createSyntheticThread(minimumEvents: number): SyntheticThread {
   const db = createConnection(":memory:");
   migrate(db);

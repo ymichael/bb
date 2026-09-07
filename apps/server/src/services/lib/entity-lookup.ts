@@ -39,12 +39,6 @@ interface ThreadEnvironmentLookupResult {
   thread: ThreadRow;
 }
 
-/**
- * The host's data directory, or null when no daemon session is open. Callers
- * that only want to recognize bb-owned paths use this instead of
- * {@link requireConnectedHostSession}, so an offline host degrades the check
- * rather than failing the request.
- */
 export function findHostDataDir(
   deps: HostLookupDeps,
   hostId: string,

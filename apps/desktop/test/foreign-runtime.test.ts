@@ -29,7 +29,6 @@ function createProcessOps(
     isRunning: vi.fn(() => true),
     kill: vi.fn(),
     readCommand: vi.fn(async () => "node /opt/bb/bb-app.js start"),
-    // Matches STARTED_AT, so the identity check passes by default.
     readElapsedSeconds: vi.fn(async () => 30 * 60),
     waitForExit: vi.fn(async () => true),
     ...overrides,
@@ -131,7 +130,6 @@ describe("stopForeignRuntime", () => {
 
   it("recognises a launcher that was started with a relative path", async () => {
     const dataDir = await createDataDir();
-    // Node resolves argv[1] to an absolute path, but ps reports what was typed.
     await writeRuntimeFile({ dataDir });
     const processOps = createProcessOps({
       readCommand: vi.fn(
@@ -153,7 +151,6 @@ describe("stopForeignRuntime", () => {
   it("refuses a recycled pid whose start time does not match the record", async () => {
     const dataDir = await createDataDir();
     await writeRuntimeFile({ dataDir });
-    // Same command name, but this process started seconds ago, not 30 min ago.
     const processOps = createProcessOps({
       readElapsedSeconds: vi.fn(async () => 5),
     });

@@ -91,12 +91,6 @@ function workspaceWatchKindsIncludeLocalState(
   );
 }
 
-function workspaceWatchKindsIncludeSharedRefs(
-  changeKinds: readonly WorkspaceStatusWatchChangeKind[],
-): boolean {
-  return changeKinds.includes("shared-git-refs-changed");
-}
-
 function sameWorkspaceTarget(
   current: HostDaemonWatchSetWorkspaceTarget,
   next: HostDaemonWatchSetWorkspaceTarget,
@@ -271,9 +265,6 @@ export class WatchManager {
             entry,
           });
         },
-        // Parcel subscriptions are established asynchronously. Reconcile once
-        // the workspace-root subscription is live so an edit made between the
-        // initial preview fetch and watcher readiness cannot remain stale.
         onReady: () => {
           this.queueWorkspaceWatchChange({
             changeKinds: ["workspace-content-changed"],
@@ -336,9 +327,6 @@ export class WatchManager {
       return;
     }
     if (args.changeKinds.includes("workspace-content-changed")) {
-      // The filesystem event itself is sufficient evidence that live content
-      // is stale. Notify before any Git fingerprint work: large diffs can make
-      // status/numstat slow or fail, but previews must still refresh.
       this.options.onWorkspaceStatusChanged?.({
         changeKinds: ["work-status-changed"],
         environmentId: args.entry.target.environmentId,
@@ -398,7 +386,7 @@ export class WatchManager {
       }
       if (
         args.entry.workspace.isGitRepo &&
-        workspaceWatchKindsIncludeSharedRefs(pendingKinds)
+        pendingKinds.includes("shared-git-refs-changed")
       ) {
         const nextSharedRefsFingerprint =
           await args.entry.workspace.getSharedGitRefsFingerprint();

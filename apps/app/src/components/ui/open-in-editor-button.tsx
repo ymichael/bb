@@ -2,27 +2,19 @@ import { forwardRef, type ComponentPropsWithoutRef } from "react";
 import { Icon } from "@bb/shared-ui/icon";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-interface OpenInEditorButtonProps
-  extends Omit<
-    ComponentPropsWithoutRef<"button">,
-    "type" | "onClick" | "title"
-  > {
+interface OpenInEditorButtonProps extends Omit<
+  ComponentPropsWithoutRef<"button">,
+  "type" | "onClick" | "title"
+> {
   onClick: () => void;
-  /** aria-label; defaults to "Open in editor". */
   label?: string;
 }
 
-/** Muted icon button that opens the associated file in the user's editor. */
 export const OpenInEditorButton = forwardRef<
   HTMLButtonElement,
   OpenInEditorButtonProps
 >(function OpenInEditorButton(
-  {
-    className,
-    onClick,
-    label = "Open in editor",
-    ...props
-  },
+  { className, onClick, label = "Open in editor", ...props },
   ref,
 ) {
   return (

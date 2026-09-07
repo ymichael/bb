@@ -13,15 +13,10 @@ describe("buildTree", () => {
 
     expect(tree.map((node) => node.name)).toEqual(["src", "readme.md"]);
     const src = tree[0]!;
-    expect(src.children.map((node) => node.name)).toEqual([
-      "lib",
-      "index.ts",
-    ]);
+    expect(src.children.map((node) => node.name)).toEqual(["lib", "index.ts"]);
     expect(src.children[0]!.children[0]!.path).toBe("src/lib/util.ts");
   });
 
-  // A truncated listing can carry a file whose parent directory entry was cut,
-  // and dropping it would misrepresent the tree as smaller than it is.
   it("synthesises directories that the listing omitted", () => {
     const tree = buildTree([{ path: "a/b/c.ts", kind: "file" }]);
 
@@ -63,8 +58,6 @@ describe("filterTree", () => {
 
     expect(filtered.matchCount).toBe(1);
     expect(filtered.nodes.map((node) => node.name)).toEqual(["src"]);
-    // Both ancestors must expand or the match stays hidden behind a collapsed
-    // row, which is the whole point of filtering.
     expect([...filtered.expand].sort()).toEqual(["src", "src/ui"]);
   });
 

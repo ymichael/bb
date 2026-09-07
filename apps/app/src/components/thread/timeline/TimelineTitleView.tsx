@@ -13,25 +13,16 @@ import {
   type TimelineTitleTone,
 } from "@bb/thread-view";
 import { cn } from "@bb/shared-ui/lib/utils";
+import { Icon } from "@bb/shared-ui/icon";
+import { isIconName } from "./presentation-display.js";
 import { DiffStatsTally } from "@/components/ui/diff-stats-tally.js";
 import { RouteAnchor } from "@/components/ui/app-route-anchor.js";
 import { useSecondTick } from "@/hooks/useSecondTick";
 
-/**
- * Resolves a title's declared action to a click callback. Return `null` to
- * leave the content as plain (non-interactive) text — the renderer will not
- * surface the action in that case.
- */
 export type TimelineTitleActionResolver = (
   action: TimelineTitleAction,
 ) => (() => void) | null;
 
-/**
- * Resolves a segment-level link target (e.g. a parent thread) to an href the
- * renderer uses for an `<a>` element. Return `null` to render the segment as
- * plain (non-interactive) text — useful when the target is not navigable from
- * the current surface (e.g. a story without routing context).
- */
 export type TimelineTitleLinkResolver = (
   link: TimelineTitleLink,
 ) => string | null;
@@ -45,9 +36,6 @@ interface TimelineTitleViewProps {
 function emToneClass(tone: TimelineTitleTone): string {
   switch (tone) {
     case "default":
-      // Emphasized work-row targets (command/query/URL/name) sit at medium and
-      // dimmed — the non-file machinery recedes. File paths take the `file`
-      // accent instead (see accentToneClass) and stay at full strength.
       return "font-medium text-foreground opacity-70";
     case "summary":
       return "text-subtle-foreground";
@@ -66,8 +54,6 @@ function accentToneClass(
     case "subtle":
       return "text-subtle-foreground";
     case "file":
-      // File-path segments are emphasized timeline targets; keep the medium
-      // weight so they read as the row's anchor.
       return em ? "font-medium text-timeline-accent" : "text-timeline-accent";
     default:
       return assertNever(accent);
@@ -85,15 +71,10 @@ function plainToneClass(tone: TimelineTitleTone): string {
   }
 }
 
-function decorationToneClass(tone: TimelineTitleTone): string {
-  switch (tone) {
-    case "default":
-      return "text-muted-foreground";
-    case "summary":
-      return "text-subtle-foreground";
-    default:
-      return assertNever(tone);
-  }
+function badgeToneClass(tone: "neutral" | "destructive"): string {
+  return tone === "destructive"
+    ? "text-destructive-text"
+    : "text-muted-foreground";
 }
 
 const STATUS_DECORATION_TONE_CLASS = "text-subtle-foreground";
@@ -147,9 +128,6 @@ function renderSegment(
     const href = interactive.linkHref;
     return (
       <RouteAnchor
-        // Title segments live inside a row-level CollapsibleHeader button; HTML
-        // forbids nested <button> elements, so we render a stopped-propagation
-        // anchor — the click/Enter on the link must not also toggle the row.
         key={index}
         href={href}
         className={cn(
@@ -174,10 +152,6 @@ function renderSegment(
     const onClick = interactive.onClick;
     return (
       <span
-        // Title actions live inside a row-level CollapsibleHeader button; HTML
-        // forbids nested <button> elements, so the action renders as a span
-        // with role="link" and explicit keyboard handling. stopPropagation
-        // keeps a click/Enter on the segment from also toggling the row.
         key={index}
         role="link"
         tabIndex={0}
@@ -209,16 +183,6 @@ function renderSegment(
   );
 }
 
-/**
- * Ticks the displayed elapsed time while the row is still active. The truth
- * is `startedAt` (the wall-clock when the work began); the App derives
- * `now - startedAt` from the shared 1 Hz ticker — one interval for every
- * in-flight row on screen, paused while the document is hidden — until the
- * row reaches a terminal status (at which point a static
- * `completedAt - startedAt` is shown by the caller instead). Stays empty
- * until the elapsed time crosses the visible threshold (>1s) to avoid
- * sub-second flicker on row entry.
- */
 function LiveDurationText({ startedAt }: { startedAt: number }) {
   const elapsedMs = useSecondTick() - startedAt;
 
@@ -231,7 +195,7 @@ function renderDecoration(
   index: number,
   tone: TimelineTitleTone,
 ): ReactNode {
-  const baseClass = cn("shrink-0 whitespace-pre", decorationToneClass(tone));
+  const baseClass = cn("shrink-0 whitespace-pre", plainToneClass(tone));
 
   switch (decoration.kind) {
     case "duration": {
@@ -252,9 +216,6 @@ function renderDecoration(
     }
     case "status":
     case "summary-status": {
-      // Status decorations render as compact mono annotations without
-      // parentheses. `title.plain` keeps the canonical parenthesized text for
-      // tooltips and plain renderers.
       if (decoration.kind === "status") {
         const durationText =
           decoration.durationMs === null
@@ -274,12 +235,6 @@ function renderDecoration(
             ) : null}
             {renderStatusDecorationText(
               decoration.status,
-              // Only an emphasized error — one that is the row's primary signal,
-              // i.e. the error that actually fails the thread — carries a subtle
-              // semantic red. Transient work-row errors (a failed command, an
-              // errored fetch the agent recovers from) and denied/interrupted
-              // annotations stay muted. The container's opacity-75 + small mono
-              // keep even the red subtle rather than alarming.
               decoration.status === "error" && decoration.emphasis
                 ? "text-destructive-text"
                 : undefined,
@@ -331,6 +286,29 @@ function renderDecoration(
         />
       );
     }
+    case "badge": {
+      const badgeClass = badgeToneClass(decoration.tone);
+      if (!isIconName(decoration.glyph)) {
+        return (
+          <span key={index} className={cn(baseClass, badgeClass)}>
+            {decoration.label}
+          </span>
+        );
+      }
+      return (
+        <span
+          key={index}
+          className="inline-flex shrink-0 items-center"
+          title={decoration.hint}
+        >
+          <Icon
+            name={decoration.glyph}
+            className={cn("size-3.5", badgeClass)}
+            aria-label={decoration.hint}
+          />
+        </span>
+      );
+    }
     default:
       return assertNever(decoration);
   }
@@ -349,11 +327,7 @@ export function TimelineTitleView({
       className="inline-flex min-w-0 max-w-full items-baseline gap-1 overflow-hidden whitespace-nowrap text-sm leading-5"
       title={title.plain}
     >
-      {/* Literal whitespace text nodes between flex items keep the
-          accessible name well-formed: the browser concatenates text content
-          to compute the role's name, so without spaces siblings would join as
-          "Runningpnpm test". gap-1 handles visual spacing; the spaces handle
-          accessibility. */}
+      {}
       {title.segments.map((segment, index) => {
         const linkHref =
           segment.link && resolveSegmentLinkHref

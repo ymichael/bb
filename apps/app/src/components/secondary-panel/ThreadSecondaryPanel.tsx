@@ -37,12 +37,13 @@ import {
   THREAD_SECONDARY_PANEL_MIN_SIZE_PERCENT,
 } from "./secondaryPanelSizing";
 import {
-  getRightPanelToggleIconName,
+  RIGHT_PANEL_TOGGLE_ICON_NAME,
   resolveConversationCollapseControl,
 } from "./panelToggleControlState";
 import { SecondaryPanelHostLayoutContext } from "./SecondaryPanelHostLayoutContext";
 import { SecondaryPanelTabStrip } from "./SecondaryPanelTabStrip";
 import type {
+  MarketplacePluginDetailPanelTab,
   SecondaryPanelPaneRenderContext,
   SecondaryPanelRenderableTab,
   SecondaryPanelTabReorderHandler,
@@ -81,9 +82,9 @@ import {
 import { useDesktopWindowState } from "@/hooks/useDesktopWindowState";
 import { useOptionalIsSidebarShowing } from "@/components/ui/sidebar.js";
 import { IframeDragGuardOverlay } from "@/lib/iframe-drag-guard";
-import {
-  type FixedPanelViewTab,
-  type SecondaryFixedPanelTab,
+import type {
+  FixedPanelViewTab,
+  SecondaryFixedPanelTab,
 } from "@/lib/fixed-panel-tabs-state";
 import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider";
 import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
@@ -110,8 +111,6 @@ export function isSecondaryPanelLayoutTransition(
 ): boolean {
   return propertyName === "flex-grow" || propertyName === "flex-basis";
 }
-// While the conversation is collapsed the panel fills the content area, so its
-// size/max are lifted to the full width of the horizontal group.
 const PANEL_SCROLL_SLOT_CLASS =
   "min-h-0 flex-1 overflow-x-auto overflow-y-auto";
 const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
@@ -119,19 +118,8 @@ const SECONDARY_RESIZABLE_PANEL_STYLE: CSSProperties = {
 };
 const SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS = `${COARSE_POINTER_COMPACT_ICON_BUTTON_CLASS} shrink-0 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
 const SECONDARY_PANEL_HIDE_ICON_BUTTON_CLASS = `${COARSE_POINTER_HEADER_ICON_BUTTON_CLASS} shrink-0 ${CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS}`;
-// Stable empty TOC reference so the collapse-controls hook's derived atom and
-// the stats memo are not rebuilt every render while the diff is loading/absent.
 const EMPTY_DIFF_FILES: readonly DiffFileEntry[] = [];
 
-// The reserved slot occupies the exact footprint of root compose's pinned
-// right-panel toggle (which is painted on top of this slot). On macOS desktop
-// the top chrome is a window-drag region ([app-region:drag]); Electron resolves
-// draggable regions in DOM order (a later region wins), so a plain slot would
-// leave the toggle's pixels inside that drag region and Electron would swallow
-// the click as a window drag; the panel could be opened but never closed. As a
-// descendant of the drag row this slot is resolved *after* it, so marking it
-// no-drag carves the toggle's footprint back out; the OS then routes the click
-// to the web contents, where the pinned toggle receives it.
 export function getReservedInlinePanelToggleClassName(
   usesDesktopChrome: boolean,
 ): string {
@@ -141,11 +129,6 @@ export function getReservedInlinePanelToggleClassName(
   );
 }
 
-/**
- * Keeps the navigation row and optional Diff toolbar in normal document flow.
- * The stack must reserve the combined height of both rows before the flexible
- * panel body begins; only the navigation row owns the fixed chrome-row height.
- */
 export function getSecondaryPanelChromeStackClassName(
   hasGitDiffToolbar: boolean,
 ): string {
@@ -157,43 +140,12 @@ export function getSecondaryPanelChromeStackClassName(
 }
 
 interface CollapsedPanelTrafficLightReserveArgs {
-  /** The conversation is collapsed, so this panel fills the content area. */
   isConversationCollapsed: boolean;
-  /** The compact drawer layout (never the window's top-left surface). */
   renderAsDrawer: boolean;
-  /**
-   * Whether the main app sidebar is showing. `null` when the sidebar context is
-   * absent (e.g. tests) — treated as showing, so no reserve is applied. The
-   * sidebar hosts the traffic lights in its own top strip while open.
-   */
   isSidebarShowing: boolean | null;
-  /**
-   * Whether macOS traffic lights are visible (macOS desktop chrome, not
-   * fullscreen). False on the web build and in fullscreen, where the lights are
-   * hidden.
-   */
   reserveMacosTrafficLights: boolean;
 }
 
-/**
- * Left-padding class that clears the macOS traffic-light safe area for the
- * secondary panel's leading top-chrome toolbar, or `false` when no reserve is
- * needed. The reserve applies when the panel is the window's flush top-left
- * surface — the conversation is collapsed — while the main sidebar is collapsed
- * and the lights are visible: the collapsed-left / expanded-right case from
- * BB-46. It lands the leading controls on the same x = 120px as
- * AppPageHeader's own reserve. See {@link MACOS_COLLAPSED_TOP_LEFT_RESERVE_CLASS}
- * for the geometry.
- *
- * Collapsing hands the panel the top-left on BOTH thread surfaces, so this does
- * not test for the split host. Either way the conversation column collapses to
- * zero width — the split host sets its layout to [0, panel], inline thread
- * detail sizes the timeline panel to 0 — and the thread header rides inside
- * that column, so nothing is left on the title-bar row but this toolbar. The
- * split host reserved correctly because it satisfied the host gate; inline
- * thread detail, identical in layout, did not, which left its tab strip
- * sitting under the traffic lights.
- */
 export function resolveCollapsedPanelTrafficLightReserveClassName({
   isConversationCollapsed,
   renderAsDrawer,
@@ -222,7 +174,7 @@ export interface SecondaryPanelFixedTab {
 }
 
 export interface ThreadSecondaryPanelProps {
-  activeTab: SecondaryFixedPanelTab | null;
+  activeTab: SecondaryFixedPanelTab | MarketplacePluginDetailPanelTab | null;
   canUseGitUi: boolean;
   gitDiffTabStatus?: GitDiffTabStatus;
   onRetryGitDiffEligibility?: () => void;
@@ -232,41 +184,15 @@ export interface ThreadSecondaryPanelProps {
   tabs: readonly SecondaryPanelRenderableTab[];
   fixedTabs: readonly SecondaryPanelFixedTab[];
   onTabReorder: SecondaryPanelTabReorderHandler;
-  /**
-   * Builds the browser surface for the active browser tab. The unsplit
-   * fallback also calls this with `null` so its retained deck can hide native
-   * views while another tab is active.
-   */
   renderBrowserDeck?: (
     activeBrowserTabId: string | null,
     pane: SecondaryPanelPaneRenderContext,
   ) => ReactNode;
-  /** Stable thread/panel id enabling persisted tab tear-out splits. */
   splitPanelStateId?: string;
   isOpen: boolean;
   showConversationCollapseControl?: boolean;
   showNewTabButton?: boolean;
-  /**
-   * How the panel's own inline hide control (top chrome, trailing edge) renders
-   * on the wide layout:
-   * - "button": render it (the default).
-   * - "reserved": render an invisible spacer of the same footprint — used when a
-   *   toggle is pinned outside the panel (root compose's fixed overlay) and must
-   *   land over a reserved slot with the tab strip kept clear of it.
-   * - "hidden": render nothing, leaving no slot — used when a stable toggle lives
-   *   elsewhere (the thread-detail full-width header) and the trailing controls
-   *   should sit flush at the edge.
-   * The drawer layout always renders the button (it carries its own close).
-   */
   inlinePanelToggle?: "button" | "reserved" | "hidden";
-  /**
-   * Unique id for this panel's resizable Panel within its PanelGroup. The
-   * split-workspace host swaps different panes' panels through one group, and
-   * react-resizable-panels keys layout state by panel id — a shared id would
-   * make a newly focused pane's panel adopt the previous pane's layout entry
-   * and then "collapse" to its own defaultSize, misreporting a user close.
-   * Defaults to the standalone surface's stable id.
-   */
   resizablePanelId?: string;
   onPanelFocus: () => void;
   onCollapse: () => void;
@@ -279,24 +205,8 @@ export interface ThreadSecondaryPanelProps {
   onOpenFileInEditor?: (path: string) => void;
   onOpenFilePreview?: (path: string) => void;
   onSelectionAddToChat?: (text: string) => void;
-  /**
-   * When true the conversation pane is collapsed: this panel expands to fill
-   * the content area (its max size is lifted). Always false in the
-   * drawer/compact layout.
-   */
   isConversationCollapsed: boolean;
-  /**
-   * Toggles {@link isConversationCollapsed}. On a wide viewport the panel header
-   * renders the full-screen/exit-full-screen control (immediately left of the
-   * hide-panel button) in both states. Unused in the drawer/compact layout,
-   * which cannot collapse the conversation.
-   */
   onToggleConversationCollapse: () => void;
-  /**
-   * When true, render only the aside content — skip the PanelResizeHandle +
-   * Panel wrappers that are only meaningful inside a desktop PanelGroup.
-   * Caller is responsible for wrapping the content in a Drawer in that case.
-   */
   renderAsDrawer: boolean;
 }
 
@@ -338,15 +248,15 @@ export function ThreadSecondaryPanel({
   const newTabShortcut = useAppCommandShortcut("panel.newTab");
   const togglePanelShortcut = useAppCommandShortcut("panel.toggle");
   const diffShortcut = useAppCommandShortcut("diff.toggle");
-  const activeRenderableTab = tabs.find((tab) => tab.tab.id === activeTab?.id);
   const visibleTabs = useMemo(
     () => tabs.filter((tab) => tab.isHidden !== true),
     [tabs],
   );
+  const activeRenderableTab =
+    tabs.find((tab) => tab.tab.id === activeTab?.id) ??
+    (activeTab === null && fixedTabs.length === 0 ? visibleTabs[0] : undefined);
   const hasActiveRenderableTab = activeRenderableTab !== undefined;
-  const hidePanelIconName = getRightPanelToggleIconName(renderAsDrawer);
-  // The conversation-collapse toggle only exists on a wide viewport; the drawer
-  // layout fills the screen and cannot collapse the conversation.
+  const hidePanelIconName = RIGHT_PANEL_TOGGLE_ICON_NAME;
   const conversationCollapseControl =
     renderAsDrawer || !showConversationCollapseControl
       ? null
@@ -363,6 +273,7 @@ export function ThreadSecondaryPanel({
   const {
     handleSecondaryPanelDragging: handleResizeDragging,
     handleSecondaryPanelResize,
+    handleSecondaryPanelResizePointerDownCapture,
     persistedWidthPercent,
     secondaryPanelRef: panelRef,
     secondaryResizablePanelRef: resizablePanelRef,
@@ -380,17 +291,7 @@ export function ThreadSecondaryPanel({
       },
       [handleResizeDragging, handleSecondaryPanelResizeStart],
     );
-  // A Panel that registers with its group already collapsed (a closed panel
-  // mounting, or the split-workspace host swapping panes' panels) reports a
-  // collapse no user performed — and it can land after a programmatic open,
-  // silently closing it again. Only a collapse from a layout this Panel
-  // instance actually held expanded may close the persisted panel.
   const hasPanelExpandedRef = useRef(false);
-  // The panel host survives thread navigation (stable panelGroupKey on the
-  // thread-detail layout), so the guard must re-arm per thread: a collapse
-  // applied while showing the next thread must not pass on the previous
-  // thread's expansion. Child layout effects run before the parent group's
-  // setLayout effect, so this reset lands first.
   useLayoutEffect(() => {
     hasPanelExpandedRef.current = false;
   }, [splitPanelStateId]);
@@ -405,7 +306,7 @@ export function ThreadSecondaryPanel({
   );
   const hostLayout = useContext(SecondaryPanelHostLayoutContext);
   const handlePanelCollapse = useCallback(() => {
-    if (hostLayout?.isSuppressed) {
+    if (!isOpen || hostLayout?.isSuppressed) {
       return;
     }
     if (!hasPanelExpandedRef.current) {
@@ -413,7 +314,7 @@ export function ThreadSecondaryPanel({
     }
     hasPanelExpandedRef.current = false;
     onCollapse();
-  }, [hostLayout?.isSuppressed, onCollapse]);
+  }, [hostLayout?.isSuppressed, isOpen, onCollapse]);
   const handlePanelTransitionEnd = useCallback(
     (event: TransitionEvent<HTMLElement>) => {
       if (
@@ -423,18 +324,10 @@ export function ThreadSecondaryPanel({
         return;
       }
 
-      // ResizeObserver catches the panel's changing width, but the restored
-      // right-aligned panel continues translating after its final size tick.
-      // Re-measure once the flex transition settles so a native browser view
-      // cannot keep the full-screen x-position over the thread workspace.
       dispatchBrowserViewBoundsSync();
     },
     [],
   );
-  // Inside a window-level host, the Panel's mount size must follow the
-  // window's panel visibility: this pane's own persisted state can lag one
-  // commit behind the host's alignment, and the group re-applies defaultSize
-  // after mount — a stale-closed value would collapse the just-opened panel.
   const isLayoutOpen =
     (hostLayout?.isOpen ?? isOpen) && !hostLayout?.isSuppressed;
   const activeFixedTab =
@@ -448,10 +341,6 @@ export function ThreadSecondaryPanel({
     activeFixedTab?.tab.kind === "git-diff" &&
     (resolvedGitDiffTabStatus === "loading" ||
       resolvedGitDiffTabStatus === "error");
-  // Keep file content mounted across every close. The compact views defer the
-  // first full panel mount, then retain it inside their persistent drawer.
-  // Removing only this subtree would lose terminal and plugin state and move
-  // the later mount cost back into the next open action.
   const {
     gitDiffTarget,
     gitDiffSelectOptions,
@@ -465,11 +354,6 @@ export function ThreadSecondaryPanel({
     pendingGitDiffCommitSha,
     pendingGitDiffScrollPath,
   });
-  // Share the diff tab's table of contents with the body: React Query dedupes
-  // this against GitDiffTabContent's own fetch (same key), so the toolbar reads
-  // the file list, stats, and merge-base ref without a second round-trip. The
-  // toolbar's stats + collapse-all derive from this TOC, not the (removed)
-  // whole-diff blob.
   const { data: diffFilesResponse, isLoading: isDiffFilesLoading } =
     useEnvironmentDiffFiles(environmentId ?? "", {
       enabled:
@@ -515,10 +399,6 @@ export function ThreadSecondaryPanel({
   const usesDesktopChrome = shouldUseMacosDesktopChrome(desktopInfo);
   const desktopWindowState = useDesktopWindowState();
   const isSidebarShowing = useOptionalIsSidebarShowing();
-  // The panel reserves the traffic-light safe area only when it is the window's
-  // flush top-left surface (conversation collapsed) with the main sidebar
-  // collapsed and the lights visible. See
-  // resolveCollapsedPanelTrafficLightReserveClassName.
   const collapsedPanelTrafficLightReserveClassName =
     resolveCollapsedPanelTrafficLightReserveClassName({
       isConversationCollapsed,
@@ -554,16 +434,20 @@ export function ThreadSecondaryPanel({
     surfaceTabs: readonly SecondaryPanelRenderableTab[];
     fixedSurfaceTabs: readonly SecondaryPanelFixedTab[];
     isFocused: boolean;
+    isFullScreen?: boolean;
     isSurfaceDiffEligibilityPending: boolean;
     onBeginTabDrag?: (
       tabId: string,
       event: ReactPointerEvent<HTMLElement>,
     ) => void;
     onMoveActiveTabToSide?: (side: SplitSide) => void;
+    onRemoveSplit?: () => void;
+    onToggleFullScreen?: () => void;
     onFocusPane: () => void;
     onSurfaceTabReorder: SecondaryPanelTabReorderHandler;
     paneId: string | null;
     reserveLeadingChrome: boolean;
+    reserveNewTabControl: boolean;
     showNewTabControl: boolean;
     showOuterControls: boolean;
     usesPaneArrangementControl: boolean;
@@ -579,7 +463,9 @@ export function ThreadSecondaryPanel({
       tabId: string,
       event: ReactPointerEvent<HTMLElement>,
     ) => void;
+    newTabAriaLabel: string;
     onSurfaceTabReorder: SecondaryPanelTabReorderHandler;
+    reserveNewTabButton: boolean;
     showNewTabButton: boolean;
   }
 
@@ -609,27 +495,51 @@ export function ThreadSecondaryPanel({
     </Button>
   );
 
+  const renderRemoveSplitButton = (onRemoveSplit?: () => void) =>
+    onRemoveSplit ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className={cn(
+          HEADER_PANE_ACTION_ICON_BUTTON_CLASS,
+          CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+          "shrink-0",
+          usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+        )}
+        aria-label="Remove split"
+        onClick={onRemoveSplit}
+      >
+        <Icon name="CloseThreadPane" />
+      </Button>
+    ) : null;
+
   const renderConversationCollapseButton = ({
+    isFullScreen,
     onMoveActiveTabToSide,
+    onToggleFullScreen,
     usesPaneArrangementControl,
   }: {
+    isFullScreen?: boolean;
     onMoveActiveTabToSide?: (side: SplitSide) => void;
+    onToggleFullScreen?: () => void;
     usesPaneArrangementControl: boolean;
   }) => {
-    if (conversationCollapseControl === null) return null;
     if (usesPaneArrangementControl) {
+      if (onToggleFullScreen === undefined) return null;
       return (
         <PaneArrangementButton
           className={cn(
             "shrink-0",
             usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
           )}
-          isFullScreen={conversationCollapseControl.isFullScreen}
+          isFullScreen={isFullScreen ?? false}
           onMoveToSide={onMoveActiveTabToSide}
-          onToggleFullScreen={conversationCollapseControl.onClick}
+          onToggleFullScreen={onToggleFullScreen}
         />
       );
     }
+    if (conversationCollapseControl === null) return null;
     return (
       <Tooltip>
         <TooltipTrigger asChild>
@@ -660,8 +570,10 @@ export function ThreadSecondaryPanel({
     activeSurfaceTabId,
     surfaceTabs,
     fixedSurfaceTabs,
+    newTabAriaLabel,
     onBeginTabDrag,
     onSurfaceTabReorder,
+    reserveNewTabButton,
     showNewTabButton: showGroupNewTabButton,
   }: PanelTabGroupArgs) => {
     const activeSurfaceTab = surfaceTabs.find(
@@ -715,9 +627,19 @@ export function ThreadSecondaryPanel({
         ) : null}
         {showGroupNewTabButton ? (
           <NewTabButton
+            ariaLabel={newTabAriaLabel}
             onOpenNewTab={onOpenNewTab}
             shortcut={newTabShortcut}
             usesDesktopChrome={usesDesktopChrome}
+          />
+        ) : reserveNewTabButton ? (
+          <div
+            aria-hidden
+            data-new-tab-control-reserved=""
+            className={cn(
+              SECONDARY_PANEL_CHROME_ICON_BUTTON_CLASS,
+              usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
+            )}
           />
         ) : null}
       </>
@@ -730,13 +652,17 @@ export function ThreadSecondaryPanel({
     surfaceTabs,
     fixedSurfaceTabs,
     isFocused,
+    isFullScreen,
     isSurfaceDiffEligibilityPending,
     onBeginTabDrag,
     onFocusPane,
     onMoveActiveTabToSide,
+    onRemoveSplit,
+    onToggleFullScreen,
     onSurfaceTabReorder,
     paneId,
     reserveLeadingChrome,
+    reserveNewTabControl,
     showNewTabControl,
     showOuterControls,
     usesPaneArrangementControl,
@@ -807,29 +733,43 @@ export function ThreadSecondaryPanel({
                 activeSurfaceTabId,
                 surfaceTabs,
                 fixedSurfaceTabs,
+                newTabAriaLabel:
+                  onRemoveSplit === undefined
+                    ? "Open new tab"
+                    : "Open new tab in this pane",
                 onBeginTabDrag,
                 onSurfaceTabReorder,
+                reserveNewTabButton: reserveNewTabControl,
                 showNewTabButton: showNewTabControl,
               })}
             </div>
-            {showOuterControls ? (
+            {showOuterControls ||
+            onRemoveSplit ||
+            usesPaneArrangementControl ? (
               <div
                 className="flex min-w-0 shrink-0 items-center gap-1"
                 onPointerDown={(event) => event.stopPropagation()}
               >
-                {renderConversationCollapseButton({
-                  onMoveActiveTabToSide,
-                  usesPaneArrangementControl,
-                })}
-                {renderAsDrawer || inlinePanelToggle === "button" ? (
-                  renderHidePanelButton()
-                ) : inlinePanelToggle === "reserved" ? (
-                  <div
-                    aria-hidden
-                    className={getReservedInlinePanelToggleClassName(
-                      usesDesktopChrome,
-                    )}
-                  />
+                {usesPaneArrangementControl || showOuterControls
+                  ? renderConversationCollapseButton({
+                      isFullScreen,
+                      onMoveActiveTabToSide,
+                      onToggleFullScreen,
+                      usesPaneArrangementControl,
+                    })
+                  : null}
+                {renderRemoveSplitButton(onRemoveSplit)}
+                {showOuterControls ? (
+                  renderAsDrawer || inlinePanelToggle === "button" ? (
+                    renderHidePanelButton()
+                  ) : inlinePanelToggle === "reserved" ? (
+                    <div
+                      aria-hidden
+                      className={getReservedInlinePanelToggleClassName(
+                        usesDesktopChrome,
+                      )}
+                    />
+                  ) : null
                 ) : null}
               </div>
             ) : null}
@@ -967,6 +907,7 @@ export function ThreadSecondaryPanel({
     <SidebarSplitContainer
       key={splitPanelStateId}
       activeTabId={globalActiveTabId}
+      isFullScreen={isConversationCollapsed}
       onActivateTab={(tabId) => {
         const fixedTab = fixedTabs.find(
           (candidate) => candidate.tab.id === tabId,
@@ -975,10 +916,12 @@ export function ThreadSecondaryPanel({
         else tabs.find((tab) => tab.tab.id === tabId)?.onSelect();
       }}
       onGlobalTabReorder={onTabReorder}
+      onToggleFullScreen={onToggleConversationCollapse}
       panelStateId={splitPanelStateId}
       tabs={splitTabs}
       renderPane={(pane: SidebarSplitPaneRenderArgs) => {
         const activePaneTabId = pane.group.activeTabId;
+        const isSplitPane = pane.onRemoveSplit !== undefined;
         const paneTabs = resolveSplitPaneTabs(pane);
         const paneFixedTabs = fixedTabs
           .filter((fixedTab) => pane.group.tabIds.includes(fixedTab.tab.id))
@@ -995,6 +938,7 @@ export function ThreadSecondaryPanel({
           surfaceTabs: paneTabs,
           fixedSurfaceTabs: paneFixedTabs,
           isFocused: pane.isFocused,
+          isFullScreen: pane.isMaximized,
           isSurfaceDiffEligibilityPending:
             activePaneFixedTab?.tab.kind === "git-diff" &&
             (resolvedGitDiffTabStatus === "loading" ||
@@ -1002,10 +946,15 @@ export function ThreadSecondaryPanel({
           onBeginTabDrag: pane.onBeginTabDrag,
           onFocusPane: pane.onFocusPane,
           onMoveActiveTabToSide: pane.onMoveActiveTabToSide,
+          onRemoveSplit: pane.onRemoveSplit,
+          onToggleFullScreen: pane.onToggleMaximize,
           onSurfaceTabReorder: pane.onReorderTab,
           paneId: pane.paneId,
           reserveLeadingChrome: pane.isTopRow && pane.isLeftEdge,
-          showNewTabControl: pane.showOuterControls && showNewTabButton,
+          reserveNewTabControl:
+            isSplitPane && !pane.isFocused && showNewTabButton,
+          showNewTabControl:
+            (!isSplitPane || pane.isFocused) && showNewTabButton,
           showOuterControls: pane.showOuterControls,
           usesPaneArrangementControl: true,
           usesWindowChrome: pane.isTopRow,
@@ -1015,7 +964,7 @@ export function ThreadSecondaryPanel({
   ) : (
     renderPanelSurface({
       activeSurfaceFixedTab: activeFixedTab,
-      activeSurfaceTabId: activeTab?.id ?? null,
+      activeSurfaceTabId: activeRenderableTab?.tab.id ?? activeTab?.id ?? null,
       surfaceTabs: tabs,
       fixedSurfaceTabs: fixedTabs,
       isFocused: true,
@@ -1024,6 +973,7 @@ export function ThreadSecondaryPanel({
       onSurfaceTabReorder: onTabReorder,
       paneId: null,
       reserveLeadingChrome: true,
+      reserveNewTabControl: false,
       showNewTabControl: showNewTabButton,
       showOuterControls: true,
       usesPaneArrangementControl: false,
@@ -1035,53 +985,22 @@ export function ThreadSecondaryPanel({
     <aside
       ref={panelRef}
       aria-hidden={!isOpen}
-      // Swipe mode keeps the body mounted while closed, so mark the whole panel
-      // inert when hidden — otherwise focusable content (e.g. the new-tab search
-      // input's mount autofocus) could pull keyboard focus into the off-screen
-      // panel. The open control lives outside this aside on every surface.
       inert={!isOpen}
       onFocusCapture={handlePanelFocusCapture}
-      // Swipe mode: the content is held at the panel's open width and absolutely
-      // pinned to the panel's LEFT edge, while the Panel's own flex width animates
-      // and its overflow-hidden clips the content into view. Two things matter:
-      //   1. No transform/opacity on the content, so it is never promoted to a
-      //      compositor layer — a composited layer is positioned by the GPU on a
-      //      separate thread from the main-thread clip and visibly drifts out of
-      //      sync mid-slide (invisible to getBoundingClientRect, which reports the
-      //      main-thread layout value). A pure layout clip stays locked.
-      //   2. `absolute left-0`, not block flow: when the fixed-width content is
-      //      wider than the mid-animation panel, the panel's flex layout CENTERS
-      //      the overflow (so the left edge clips by a width-dependent amount and
-      //      the padding breathes). Pinning left-0 keeps the content's left edge
-      //      flush to the panel edge at every width.
-      // The left border rides the content (like the sidebar's sliding panel) so it
-      // slides out with the panel on close instead of fading on its own timeline.
-      // Hold the fixed open width only while NOT dragging the resize handle.
-      // During a drag the panel width tracks the cursor (and can briefly animate),
-      // and a fixed width would desync from it — the content's right edge would
-      // pull off the panel edge. While resizing, fill the panel (left-0 + right-0
-      // below) so the content is always exactly the panel's current width.
       style={
         !renderAsDrawer && !isSecondaryPanelResizing
           ? {
-              width: `var(--secondary-swipe-width, ${persistedWidthPercent}cqw)`,
+              width: isConversationCollapsed
+                ? "100%"
+                : `var(--secondary-swipe-width, ${persistedWidthPercent}cqw)`,
             }
           : undefined
       }
       className={cn(
         "flex h-full min-h-0 flex-col overflow-hidden bg-sidebar",
-        // Drawer: fill the drawer shell. Inline: the fixed-width, left-pinned
-        // content the panel clips into view (or fills the panel while resizing).
         renderAsDrawer && "min-w-0 flex-1",
         !renderAsDrawer && [
           "absolute inset-y-0 left-0",
-          // Inside the split-workspace host, the hairline resize handle is the
-          // visible seam; elsewhere the panel carries its own hairline border
-          // (it slides with the panel through the open/close animation).
-          // Collapsing the conversation drops the timeline and the resize
-          // handle to zero width, so this border would land directly on the app
-          // sidebar's own `border-r` and read as one thick 2px seam. The
-          // sidebar owns that boundary, so give the border up while collapsed.
           hostLayout === null &&
             !isConversationCollapsed &&
             "border-l border-border-seam",
@@ -1109,6 +1028,7 @@ export function ThreadSecondaryPanel({
         isConversationCollapsed={isConversationCollapsed}
         matchesSplitDividers={hostLayout !== null}
         onDragging={handleSecondaryPanelDragging}
+        onPointerDown={handleSecondaryPanelResizePointerDownCapture}
       />
       <Panel
         ref={resizablePanelRef}
@@ -1134,19 +1054,7 @@ export function ThreadSecondaryPanel({
         order={2}
         style={SECONDARY_RESIZABLE_PANEL_STYLE}
         className={cn(
-          // `overflow-clip`, not `overflow-hidden`: while swiping, the held-width
-          // content is wider than the animating panel, which makes an
-          // `overflow-hidden` panel a horizontal SCROLL container — and the
-          // new-tab search input's mount autofocus then scrolls it to reveal
-          // itself, shifting all the content sideways by ~50px (the "padding
-          // breathes / left edge cut off" bug). `clip` clips identically but is
-          // not scrollable, so nothing can ever offset the content.
           "min-w-0 overflow-clip",
-          // The Panel's own flex width is the animation: it grows to make room and
-          // its overflow clips the left-pinned content into view — one main-thread
-          // layout animation, so the clip and the content it reveals can never
-          // desync. `relative` anchors the absolutely left-pinned content; no
-          // opacity, since the content is revealed rather than faded.
           `relative transition-[flex-grow,flex-basis] ${PANEL_COLLAPSE_TRANSITION_CLASS}`,
         )}
       >
@@ -1157,6 +1065,7 @@ export function ThreadSecondaryPanel({
 }
 
 interface NewTabButtonProps {
+  ariaLabel: string;
   onOpenNewTab: () => void;
   shortcut: AppShortcutPresentation | null;
   usesDesktopChrome: boolean;
@@ -1215,6 +1124,7 @@ function PinnedIconTab({
 }
 
 function NewTabButton({
+  ariaLabel,
   onOpenNewTab,
   shortcut,
   usesDesktopChrome,
@@ -1229,9 +1139,7 @@ function NewTabButton({
         usesDesktopChrome && MACOS_WINDOW_NO_DRAG_CLASS,
       )}
       onClick={onOpenNewTab}
-      aria-label={
-        shortcut ? `Open new tab (${shortcut.label})` : "Open new tab"
-      }
+      aria-label={shortcut ? `${ariaLabel} (${shortcut.label})` : ariaLabel}
       aria-keyshortcuts={shortcut?.ariaKeyshortcuts}
     >
       <Icon name="Plus" />
@@ -1242,13 +1150,9 @@ function NewTabButton({
 interface SecondaryPanelResizeHandleProps {
   isOpen: boolean;
   isConversationCollapsed: boolean;
-  /**
-   * True inside the split-workspace host, where the panel sits beside split
-   * dividers: the handle renders as the same visible hairline so the grab
-   * target reads (and grabs) like its neighbors instead of an invisible seam.
-   */
   matchesSplitDividers: boolean;
   onDragging: SecondaryPanelDraggingHandler;
+  onPointerDown: (event: PointerEvent) => void;
 }
 
 function SecondaryPanelResizeHandle({
@@ -1256,16 +1160,16 @@ function SecondaryPanelResizeHandle({
   isConversationCollapsed,
   matchesSplitDividers,
   onDragging,
+  onPointerDown,
 }: SecondaryPanelResizeHandleProps) {
   const isResizing = useAtomValue(threadSecondaryPanelResizingAtom);
   return (
     <PanelResizeHandle
       id="thread-detail-secondary-panel-handle"
-      // Dragging is meaningless while collapsed (the conversation is at zero
-      // width); the panel header's restore control is the only affordance in
-      // that state.
       disabled={!isOpen || isConversationCollapsed}
       onDragging={onDragging}
+      onPointerDownCapture={(event) => onPointerDown(event.nativeEvent)}
+      data-panel-resize-snap-handle=""
       hitAreaMargins={PANEL_RESIZE_HIT_AREA_MARGINS}
       className={cn(
         "group relative shrink-0 overflow-visible transition-[width,opacity,background-color]",
@@ -1274,9 +1178,6 @@ function SecondaryPanelResizeHandle({
         isConversationCollapsed ? "cursor-default" : "cursor-col-resize",
         matchesSplitDividers
           ? [
-              // Match SplitDivider: a one-pixel vertical seam that warms on
-              // hover/drag while the overlapping child keeps it easy to grab.
-              // Collapses away with the panel.
               "bg-border-seam hover:bg-ring/40",
               isOpen && !isConversationCollapsed
                 ? "w-px opacity-100"
@@ -1284,12 +1185,6 @@ function SecondaryPanelResizeHandle({
               isResizing && "bg-ring/40",
             ]
           : [
-              // Zero-width: the visible panel border lives on the content
-              // (aside border-l), so this handle is purely the drag hit area +
-              // hover seam and sits exactly on that border instead of in a 1px
-              // slot to its left (which left the hit area and hover highlight
-              // a pixel off the border). Hidden + non-interactive when closed
-              // or while the conversation is collapsed.
               "bg-transparent",
               isOpen && !isConversationCollapsed
                 ? "w-0 opacity-100"
@@ -1305,26 +1200,12 @@ function SecondaryPanelResizeHandle({
         className={PANEL_RESIZE_HIT_TARGET_CLASS}
       />
       {matchesSplitDividers ? null : (
-        /*
-          The panel's persistent left border lives on the content (aside
-          `border-l`) so it slides with the panel on open/close. This seam is
-          only the resize affordance — transparent at rest (so it doesn't
-          double the content border), brightening on hover/drag.
-        */
         <span
-          // Sit on the handle's right edge (`left-full`), which is the panel's
-          // left edge where the content border-l lives, so the hover/drag
-          // highlight lands exactly on the border instead of a pixel to its
-          // left at the handle's center.
           className={cn(
-            // z-10 so the highlight paints over the adjacent content's
-            // border-l (the content renders after the handle) instead of being
-            // hidden behind it — otherwise the hover/drag highlight is
-            // invisible.
             "pointer-events-none absolute inset-y-0 left-full z-10 w-px transition-colors",
             isResizing
               ? "bg-accent-foreground/50"
-              : "bg-transparent group-hover:bg-accent-foreground/35",
+              : "bg-border-seam group-hover:bg-accent-foreground/35",
           )}
         />
       )}

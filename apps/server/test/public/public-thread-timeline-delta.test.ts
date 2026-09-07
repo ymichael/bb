@@ -80,7 +80,6 @@ describe("GET /threads/:id/timeline?afterSequence (row-patch delta)", () => {
 
       const before = await getTimeline(harness, thread.id);
 
-      // Append another item to the active turn.
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -143,10 +142,8 @@ describe("GET /threads/:id/timeline?afterSequence (row-patch delta)", () => {
         },
       });
 
-      // Active turn: rows are expanded.
       const before = await getTimeline(harness, thread.id);
 
-      // Complete the turn -> the projection collapses the turn's rows.
       seedEvent(harness.deps, {
         ...turn,
         sequence: 4,
@@ -161,9 +158,6 @@ describe("GET /threads/:id/timeline?afterSequence (row-patch delta)", () => {
       const fresh = await getTimeline(harness, thread.id);
       expect(merged).not.toBeNull();
       expect(merged).toEqual(fresh.rows);
-      // The collapse genuinely changed the window (different row ids/content),
-      // and a row the client held was dropped — i.e. the delta exercised removal,
-      // not just upsert. Otherwise the test proves nothing.
       expect(fresh.rows).not.toEqual(before.rows);
       const beforeIds = new Set(before.rows.map((row) => row.id));
       const freshIds = new Set(fresh.rows.map((row) => row.id));
@@ -201,13 +195,9 @@ describe("GET /threads/:id/timeline?afterSequence (row-patch delta)", () => {
       });
       appendMessage("one");
 
-      // Desktop and phone both hold revision 2.
       const desktop = await getTimeline(harness, thread.id);
       const phone = desktop;
 
-      // The desktop polls fast: it sees revisions 3 and 4 before the phone
-      // gets its next poll in. Each desktop poll advances the server's newest
-      // snapshot past the revision the phone still holds.
       appendMessage("two");
       const desktopAt3 = await getTimeline(harness, thread.id, desktop.maxSeq);
       expect(desktopAt3.delta).toBeDefined();
@@ -219,8 +209,6 @@ describe("GET /threads/:id/timeline?afterSequence (row-patch delta)", () => {
       );
       expect(desktopAt4.delta).toBeDefined();
 
-      // The phone still asks from revision 2 and must get a delta, not a full
-      // window, and merging it must reproduce the current window exactly.
       const phoneAt4 = await getTimeline(harness, thread.id, phone.maxSeq);
       expect(phoneAt4.maxSeq).toBe(4);
       expect(phoneAt4.rows).toHaveLength(0);
@@ -229,8 +217,6 @@ describe("GET /threads/:id/timeline?afterSequence (row-patch delta)", () => {
       const fresh = await getTimeline(harness, thread.id);
       expect(merged).toEqual(fresh.rows);
 
-      // A revision that fell out of the ring falls back to a full window:
-      // four more polled revisions (5..8) push revision 2 out.
       for (const text of ["four", "five", "six", "seven"]) {
         appendMessage(text);
         const polled = await getTimeline(harness, thread.id, sequence - 1);

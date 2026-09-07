@@ -7,7 +7,6 @@ import {
 import type { MobileRealtimeConnectionState } from "@/lib/realtime";
 import { useProfiles } from "./ProfilesProvider";
 
-/** Realtime socket state of the active profile (`connecting` when none). */
 export function useRealtimeConnectionState(): MobileRealtimeConnectionState {
   const { connection } = useProfiles();
   const realtime = connection?.client.realtime ?? null;
@@ -18,17 +17,10 @@ export function useRealtimeConnectionState(): MobileRealtimeConnectionState {
   );
 }
 
-/**
- * What the connection banner should show for the active profile. The
- * initial-connect grace period is timed here (the pure derivation only sees
- * elapsed time).
- */
 export function useConnectionBanner(): ConnectionBannerKind {
   const { connection } = useProfiles();
   const realtimeState = useRealtimeConnectionState();
   const clientKey = connection?.client.profileId ?? null;
-  // The profile whose initial connect has outlived the grace period. Derived
-  // (not reset) so the effect never sets state synchronously.
   const [graceElapsedFor, setGraceElapsedFor] = useState<string | null>(null);
 
   useEffect(() => {

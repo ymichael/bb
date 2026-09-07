@@ -35,7 +35,6 @@ function planStepsEvent({
   };
 }
 
-/** A tool call a legacy bridge named `TodoWrite`: its name decides nothing. */
 function legacyTodoWriteToolCallEvent(seq: number): ThreadEventWithMeta {
   return {
     event: {
@@ -57,13 +56,6 @@ function legacyTodoWriteToolCallEvent(seq: number): ThreadEventWithMeta {
   };
 }
 
-/**
- * The todo banner reads grammar v3 `planSteps` snapshots and nothing else:
- * the bridge reduces TodoWrite / the Claude Task tools / codex `update_plan`
- * / the ACP plan into one complete snapshot per update, and persisted codex
- * `turn/plan/updated` notifications decode into the same item at read time.
- * Core keeps no table of tool names that used to carry a plan.
- */
 describe("extractThreadTimelinePendingTodos", () => {
   it("reads the latest planSteps snapshot, mapping step statuses to banner statuses", () => {
     const result = extractThreadTimelinePendingTodos(ACTIVE, [
@@ -100,7 +92,10 @@ describe("extractThreadTimelinePendingTodos", () => {
     const result = extractThreadTimelinePendingTodos(ACTIVE, [
       planStepsEvent({ seq: 30, steps: [{ step: "third", status: "active" }] }),
       planStepsEvent({ seq: 10, steps: [{ step: "first", status: "active" }] }),
-      planStepsEvent({ seq: 20, steps: [{ step: "second", status: "active" }] }),
+      planStepsEvent({
+        seq: 20,
+        steps: [{ step: "second", status: "active" }],
+      }),
     ]);
     expect(result?.sourceSeq).toBe(30);
     expect(result?.items.map((item) => item.text)).toEqual(["third"]);
@@ -130,9 +125,11 @@ describe("extractThreadTimelinePendingTodos", () => {
         legacyTodoWriteToolCallEvent(41),
       ]),
     ).toBeNull();
-    // A snapshot item wins regardless of the name-carrying call beside it.
     const result = extractThreadTimelinePendingTodos(ACTIVE, [
-      planStepsEvent({ seq: 42, steps: [{ step: "planned", status: "active" }] }),
+      planStepsEvent({
+        seq: 42,
+        steps: [{ step: "planned", status: "active" }],
+      }),
       legacyTodoWriteToolCallEvent(43),
     ]);
     expect(result?.sourceSeq).toBe(42);

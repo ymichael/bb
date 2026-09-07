@@ -54,12 +54,6 @@ function parseShortcut(value: string): AppShortcut {
   });
 }
 
-/**
- * Command-line values are text, so read each one two ways: as JSON, which
- * covers booleans, numbers, null, and structured values, and as the raw text a
- * string setting wants. The setting's own schema picks between them below, so a
- * string setting can still hold `true` or `null`.
- */
 function generalSettingValueCandidates(value: string): unknown[] {
   if (value === "on") return [true, value];
   if (value === "off") return [false, value];
@@ -70,10 +64,6 @@ function generalSettingValueCandidates(value: string): unknown[] {
   }
 }
 
-/**
- * Keys and value shapes both come from `appSettingsSchema`, so a preference
- * added to `@bb/domain` is settable here with no change to this command.
- */
 function updateGeneralSetting(
   settings: AppSettings,
   key: string,
@@ -155,7 +145,9 @@ export function registerSettingsCommands(
           console.log("No plugin registers an AI service.");
           return;
         }
-        console.log("Registered services (<id>/<model> in the settings above):");
+        console.log(
+          "Registered services (<id>/<model> in the settings above):",
+        );
         for (const service of aiServices.services) {
           console.log(
             `  ${service.id}  ${service.displayName}  [${service.kinds.join(", ")}]  plugin ${service.pluginId}`,

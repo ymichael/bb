@@ -6,7 +6,6 @@ import type { InteractionPayload, InteractionResponse } from "./src/contracts";
 
 const app = await loadPluginApp(() => import("./app"));
 
-// jsdom has no matchMedia, which the shared-ui coarse-pointer hook reads.
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -87,12 +86,7 @@ describe("answering a single-select question", () => {
     const submit = vi.fn(async () => undefined);
     const slot = render(singleSelect, { submit });
 
-    // The prompt renders twice by design: the visible heading plus the
-    // fieldset's sr-only legend.
     expect(slot.getAllByText("Which database should we use?")).toHaveLength(2);
-    // This assertion is about payload plumbing, so use the visible labels and
-    // verify their native button boundary without recomputing the full
-    // accessibility tree for each click.
     fireEvent.click(getButtonByText(slot, "SQLite"));
     fireEvent.click(getButtonByText(slot, "Submit answer"));
 
@@ -119,7 +113,6 @@ describe("answering a single-select question", () => {
     fireEvent.click(getButtonByText(slot, "Postgres"));
     expect(slot.getByText(preview)).toBeTruthy();
 
-    // Switching to an option without a preview retires the block.
     fireEvent.click(getButtonByText(slot, "SQLite"));
     expect(slot.queryByText(preview)).toBeNull();
   });
@@ -160,7 +153,6 @@ describe("answering a single-select question", () => {
 
     fireEvent.keyDown(textarea, { key: "1" });
 
-    // A digit must reach the textarea as text, not pick option 1.
     expect(getButtonByText(slot, "Postgres").getAttribute("aria-pressed")).toBe(
       "false",
     );
@@ -202,7 +194,6 @@ describe("multi-select and multi-question flows", () => {
     expect(slot.getByText("1 of 2")).toBeTruthy();
     fireEvent.click(getButtonByText(slot, "Metrics"));
     fireEvent.click(getButtonByText(slot, "Tracing"));
-    // The first question is not the last, so the primary button advances.
     fireEvent.click(getButtonByText(slot, "Next"));
 
     expect(slot.getByText("2 of 2")).toBeTruthy();

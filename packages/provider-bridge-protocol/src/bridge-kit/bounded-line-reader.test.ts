@@ -30,7 +30,6 @@ describe("readBoundedLines", () => {
     expect(overflows).toEqual([]);
   });
 
-  // The whole point: `readline` would buffer this to death instead.
   it("discards a line past the cap and resumes at the next one", async () => {
     const { lines, overflows } = await readAll(
       ["ok-1\n", "x".repeat(50), "y".repeat(50), "\nok-2\n"],

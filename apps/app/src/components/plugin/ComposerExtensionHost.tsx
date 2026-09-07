@@ -10,12 +10,6 @@ import {
   type PluginComposerHost,
 } from "./plugin-composer-host";
 
-/**
- * The renderer-independent state for one mounted Composer. Page-specific
- * owners keep submission and durable draft state above this boundary; the
- * extension host keeps the active renderer bound to the same plugin API,
- * reactive view, and keyboard-command behavior.
- */
 interface ComposerExtensionController {
   host: PluginComposerHost | null;
   view: ComposerView;
@@ -27,6 +21,7 @@ interface UseComposerExtensionControllerOptions {
   view: ComposerView;
   isFocused: boolean;
   isPrimary: boolean;
+  collapseIfFocused?(): boolean;
   focusDefault(): boolean;
 }
 
@@ -35,27 +30,24 @@ export function useComposerExtensionController({
   view,
   isFocused,
   isPrimary,
+  collapseIfFocused,
   focusDefault,
 }: UseComposerExtensionControllerOptions): ComposerExtensionController {
   const focus = useCallback(() => {
     if (!isFocused || !isPrimary) return false;
+    if (collapseIfFocused?.()) return true;
     if (host !== null) {
       host.focus();
       return true;
     }
     return focusDefault();
-  }, [focusDefault, host, isFocused, isPrimary]);
+  }, [collapseIfFocused, focusDefault, host, isFocused, isPrimary]);
   useAppCommandContext("promptAvailable", true);
   useAppCommandHandler("composer.focus", focus);
 
   return useMemo(() => ({ host, view, focus }), [focus, host, view]);
 }
 
-/**
- * The single renderer-selection boundary for a Composer instance. It
- * currently mounts BB's renderer; replacement resolution can be added here
- * without moving or remounting the caller-owned controller.
- */
 export function ComposerExtensionHost({
   controller,
   defaultRenderer,

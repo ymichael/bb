@@ -1,10 +1,3 @@
-/**
- * Codex interactive requests: decoding codex's approval requests into canonical
- * pending interactions, and encoding canonical resolutions back into codex
- * approval responses — including the permission-profile mapping both
- * directions need.
- */
-
 import {
   ProviderRequestDecodeError as ProviderRequestDecodeErrorValue,
   ProviderResponseEncodeError,
@@ -210,12 +203,6 @@ export function decodeCodexInteractiveRequest(
   }
 }
 
-/**
- * Map an approval outcome back onto the Codex approval response. Codex
- * raises approvals only, so the bridge parses the wire resolution with
- * `approvalInteractionOutcomeSchema` against the payload it kept: the pair
- * arrives here checked, and a user answer cannot reach this encoder.
- */
 export function buildCodexInteractiveResponse(
   args: ApprovalInteractionOutcome,
 ): CodexInteractiveResponse {
@@ -252,13 +239,10 @@ export function buildCodexInteractiveResponse(
       };
       return response;
     }
-    // Plan review is Claude's ExitPlanMode approval; Codex never raises one.
     case "plan":
       throw new ProviderResponseEncodeError(
         "Codex plan-review interactive requests are unsupported",
       );
-    // This bridge raises no tool_use subject: every Codex approval is a
-    // command, a file change, or a permission profile.
     case "tool_use":
       throw new ProviderResponseEncodeError(
         "tool_use approval subjects are not produced by the Codex bridge",
@@ -267,10 +251,6 @@ export function buildCodexInteractiveResponse(
       return assertNever(args.payload.subject);
   }
 }
-
-// ---------------------------------------------------------------------------
-// Permission-profile and approval-decision mapping
-// ---------------------------------------------------------------------------
 
 const codexToPendingInteractionApprovalDecision = {
   accept: "allow_once",
@@ -328,13 +308,6 @@ function toPendingInteractionPermissionProfile(
   });
 }
 
-/**
- * The grantable part of a codex permission profile. A macOS profile is not
- * grantable through bb's provider-neutral permission layer; it rides the
- * timeline as a `provider-codex/macos-permission` item instead
- * (`extractCodexMacOsPermissionRequest`), so the approval it came with still
- * reaches the user.
- */
 function toPendingInteractionGrantablePermissionProfile(
   permissions: CodexAdditionalPermissions | CodexRequestedPermissionProfile,
 ): PendingInteractionGrantablePermissionProfile {
@@ -351,11 +324,6 @@ export interface CodexMacOsPermissionRequest {
   item: CodexMacOsPermissionItem;
 }
 
-/**
- * The macOS permission profile a command approval asks for, when it asks for
- * one. Decoded beside the approval (never instead of it) so the bridge can
- * put the profile on the timeline as its own row.
- */
 export function extractCodexMacOsPermissionRequest(
   request: ProviderInboundRequest,
 ): CodexMacOsPermissionRequest | null {

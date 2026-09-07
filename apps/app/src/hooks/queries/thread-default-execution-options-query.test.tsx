@@ -26,7 +26,6 @@ const RESOLVED: ResolvedThreadExecutionOptions = {
   source: "client/turn/start",
 };
 
-/** A request that never settles, so the pre-fetch render is observable. */
 const pendingForever = () => new Promise<never>(() => {});
 
 afterEach(() => {
@@ -46,7 +45,6 @@ describe("useThreadDefaultExecutionOptions", () => {
     expect(warm.result.current.isPlaceholderData).toBe(false);
     warm.unmount();
 
-    // A full page load starts with an empty query cache.
     vi.mocked(sdk.threads.defaultExecutionOptions).mockImplementation(
       pendingForever,
     );
@@ -56,7 +54,6 @@ describe("useThreadDefaultExecutionOptions", () => {
       { wrapper: reload.wrapper },
     );
     expect(result.current.data).toEqual(RESOLVED);
-    // Provisional: consumers keep submission gated on this flag.
     expect(result.current.isPlaceholderData).toBe(true);
     await waitFor(() =>
       expect(sdk.threads.defaultExecutionOptions).toHaveBeenCalledWith(

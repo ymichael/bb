@@ -1,6 +1,5 @@
 import type { PaneNode } from "@/lib/split-layout";
 
-/** Resolve previous/next pane focus in reading order, wrapping at both ends. */
 export function getAdjacentPaneId(
   panes: readonly PaneNode[],
   focusedPaneId: string,

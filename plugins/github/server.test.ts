@@ -5,6 +5,7 @@ import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import {
   fetchRepoItems,
   githubRpcContract,
+  parseExtraRepos,
   parsePaginatedGhApi,
   validateGithubCliArgs,
 } from "./server";
@@ -126,6 +127,27 @@ describe("GitHub RPC contract", () => {
     expect(() => parsePaginatedGhApi(JSON.stringify([{ id: 1 }]))).toThrow(
       "malformed page",
     );
+  });
+
+  it("separates usable extraRepos entries from ones it cannot honor", () => {
+    expect(parseExtraRepos("get-bb/bb, nonsense")).toEqual({
+      repos: ["get-bb/bb"],
+      ignored: ["nonsense"],
+    });
+    expect(parseExtraRepos("SOME-ORG/*")).toEqual({
+      repos: [],
+      ignored: ["SOME-ORG/*"],
+    });
+    expect(parseExtraRepos("")).toEqual({ repos: [], ignored: [] });
+    expect(parseExtraRepos("  ,, \n ")).toEqual({ repos: [], ignored: [] });
+    expect(parseExtraRepos(" acme/one\nacme/two , acme/one ")).toEqual({
+      repos: ["acme/one", "acme/two"],
+      ignored: [],
+    });
+    expect(parseExtraRepos("bad/repo/shape acme").ignored).toEqual([
+      "bad/repo/shape",
+      "acme",
+    ]);
   });
 
   it("rejects CLI arguments that would otherwise broaden a repository query", () => {

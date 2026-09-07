@@ -18,9 +18,6 @@ const reloadBinding: AppKeybinding = {
 
 describe("parseDesktopSystemConfig", () => {
   it("keeps known bindings and drops commands this shell does not know", () => {
-    // Simulates a newer server: the response carries a command id that is
-    // not in this shell's bundled enum (as `browser.find` is for shells
-    // built before it existed). The known binding must still come through.
     const config = parseDesktopSystemConfig({
       generalSettings: { showKeyboardHints: true },
       keybindings: [

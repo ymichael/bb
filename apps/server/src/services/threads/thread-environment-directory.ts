@@ -290,8 +290,6 @@ export async function handleUpdateEnvironmentDirectoryToolCall(
     );
   }
 
-  // The claim is project-scoped, but attaching in place to another project's
-  // bb-managed worktree is unsafe: its cleanup deletes the directory.
   const refusal = unmanagedAttachRefusal(deps.db, {
     checksOutBranch: false,
     dataDir: findHostDataDir(deps, args.currentEnvironment.hostId),

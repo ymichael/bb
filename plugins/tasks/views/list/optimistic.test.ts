@@ -11,24 +11,15 @@ import {
   settleSuccess,
   type TaskEntries,
 } from "./optimistic.js";
+import { makeTask } from "../../test-fixtures.js";
 
 function task(overrides: Partial<Task> & Pick<Task, "id">): Task {
-  return {
+  return makeTask({
     projectId: "01ARZ3NDEKTSV4RRFFQ69G5FAA",
-    number: 1,
-    key: "TSK-1",
-    title: "A task",
-    description: "",
-    status: "todo",
-    priority: "none",
-    dueDate: null,
-    parentTaskId: null,
-    position: 0,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
-    labelIds: [],
     ...overrides,
-  };
+  });
 }
 
 const empty: TaskEntries = new Map();
@@ -55,7 +46,12 @@ describe("applyEdit / editedTasks", () => {
 });
 
 describe("matchesFilters", () => {
-  const t = task({ id: "T1", status: "in_progress", priority: "high", labelIds: ["A"] });
+  const t = task({
+    id: "T1",
+    status: "in_progress",
+    priority: "high",
+    labelIds: ["A"],
+  });
 
   it("passes with no filters", () => {
     expect(matchesFilters(t, [], [], [])).toBe(true);
@@ -65,7 +61,6 @@ describe("matchesFilters", () => {
     expect(matchesFilters(t, ["in_progress"], [], [])).toBe(true);
     expect(matchesFilters(t, ["todo"], [], [])).toBe(false);
     expect(matchesFilters(t, [], ["low"], [])).toBe(false);
-    // Label filter matches when the task carries any selected label id.
     expect(matchesFilters(t, [], [], ["A"])).toBe(true);
     expect(matchesFilters(t, [], [], ["B"])).toBe(false);
     expect(matchesFilters(t, [], [], ["B", "A"])).toBe(true);
@@ -83,7 +78,13 @@ describe("begin / settle lifecycle", () => {
 
   it("keeps the optimistic value on success and clears pending", () => {
     let e = beginEdit(empty, "T1", { priority: "high" }, 1);
-    e = settleSuccess(e, "T1", { priority: "high" }, 1, task({ id: "T1", priority: "high" }));
+    e = settleSuccess(
+      e,
+      "T1",
+      { priority: "high" },
+      1,
+      task({ id: "T1", priority: "high" }),
+    );
     expect(e.get("T1")?.edit.priority).toBe("high");
     expect(pendingIds(e).size).toBe(0);
   });
@@ -113,18 +114,16 @@ describe("begin / settle lifecycle", () => {
 
 describe("concurrent / out-of-order edits to one task", () => {
   it("a stale failure never reverts a newer edit, and pending survives it", () => {
-    let e = beginEdit(empty, "T1", { status: "done" }, 1); // gen 1
-    e = beginEdit(e, "T1", { status: "canceled" }, 2); // gen 2 wins the field
+    let e = beginEdit(empty, "T1", { status: "done" }, 1);
+    e = beginEdit(e, "T1", { status: "canceled" }, 2);
     expect(e.get("T1")?.edit.status).toBe("canceled");
     expect(e.get("T1")?.inFlight).toBe(2);
 
-    // gen 1 fails out of order — must not touch gen 2's value, one write still pending
     e = settleFailure(e, "T1", { status: "done" }, 1);
     expect(e.get("T1")?.edit.status).toBe("canceled");
     expect(e.get("T1")?.inFlight).toBe(1);
     expect(pendingIds(e).has("T1")).toBe(true);
 
-    // gen 2 succeeds — value stays, position captured, pending clears
     e = settleSuccess(
       e,
       "T1",
@@ -140,8 +139,13 @@ describe("concurrent / out-of-order edits to one task", () => {
   it("a stale success does not clobber a newer pending field", () => {
     let e = beginEdit(empty, "T1", { labelIds: ["A"] }, 1);
     e = beginEdit(e, "T1", { labelIds: ["A", "B"] }, 2);
-    // gen 1 resolves late with its old value — gen 2 still owns labelIds
-    e = settleSuccess(e, "T1", { labelIds: ["A"] }, 1, task({ id: "T1", labelIds: ["A"] }));
+    e = settleSuccess(
+      e,
+      "T1",
+      { labelIds: ["A"] },
+      1,
+      task({ id: "T1", labelIds: ["A"] }),
+    );
     expect(e.get("T1")?.edit.labelIds).toEqual(["A", "B"]);
     expect(e.get("T1")?.inFlight).toBe(1);
   });
@@ -157,15 +161,17 @@ describe("reconcileEntries", () => {
       1,
       task({ id: "T1", status: "done", position: 50 }),
     );
-    // Server now agrees on status + position, but not priority.
-    const server = [task({ id: "T1", status: "done", priority: "low", position: 50 })];
-    expect(reconcileEntries(e, server).get("T1")?.edit).toEqual({ priority: "high" });
-    // A task the server no longer returns is dropped.
+    const server = [
+      task({ id: "T1", status: "done", priority: "low", position: 50 }),
+    ];
+    expect(reconcileEntries(e, server).get("T1")?.edit).toEqual({
+      priority: "high",
+    });
     expect(reconcileEntries(e, [task({ id: "T2" })]).size).toBe(0);
   });
 
   it("returns the same reference when nothing settles and keeps in-flight entries", () => {
-    const e = beginEdit(empty, "T1", { status: "done" }, 1); // inFlight 1
+    const e = beginEdit(empty, "T1", { status: "done" }, 1);
     expect(reconcileEntries(e, [task({ id: "T1", status: "todo" })])).toBe(e);
   });
 });

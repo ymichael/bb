@@ -55,9 +55,6 @@ describe("public host management", () => {
       expect(issued.joinCode).toMatch(/^bbde_/u);
       expect(issued.expiresAt).toBeGreaterThan(Date.now());
       expect(issued.expiresAt).toBeLessThanOrEqual(Date.now() + 15 * 60 * 1000);
-      // Minting must not create a host row — an unredeemed code would leave a
-      // phantom offline machine in the Machines pane. The row is born at
-      // enroll with the daemon-reported name.
       expect(getHost(harness.db, issued.hostId)).toBeNull();
 
       const enrollResponse = await harness.app.request(
@@ -200,8 +197,6 @@ describe("public host management", () => {
           method: "POST",
           headers: { "x-bb-gate-auth": "machine" },
         }),
-        // The permission ceiling is the control that stops one machine from
-        // running privileged work on another, so a machine must never set it.
         harness.app.request(`${API}/hosts/${host.id}/permission-ceiling`, {
           method: "PATCH",
           headers: {
@@ -457,9 +452,6 @@ describe("public host management", () => {
         connectMachineId: "machine-cloud-remove",
         id: "host_cloud_remove",
       });
-      // Install only the plugin this route calls. Starting the whole service
-      // builds every enabled builtin, including all provider bridges, and made
-      // this focused route test contend with unrelated plugin compilation.
       const connectPlugin = await harness.pluginService.install(
         "builtin:connect",
         { kind: "root" },

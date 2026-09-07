@@ -33,7 +33,6 @@ import { DEMO_THREADS } from "./fixtures/timelines.js";
 const ORIGIN = "https://demo.example.test";
 const THREAD_ID = DEMO_THREADS[0].id;
 
-/** A world on a manual clock, so the scripted reply lands when the test says so. */
 function createWorld() {
   let now = 1_800_000_000_000;
   const timers: { fn: () => void; at: number }[] = [];
@@ -195,8 +194,6 @@ describe("sending a message", () => {
       threadTimelineResponseSchema,
     );
     expect(texts(timeline).at(-1)).toBe("user: Yes, go ahead.");
-    // The app stamps its optimistic row with the device clock; the server's
-    // row must not sort before it.
     expect(timeline.rows.at(-1)?.startedAt).toBe(sentAt);
     expect(notices.map((notice) => notice.changes)).toEqual([
       ["events-appended", "status-changed"],
@@ -227,7 +224,6 @@ describe("sending a message", () => {
     ]);
     expect(timeline.rows.at(-2)?.kind).toBe("work");
     expect(timeline.maxSeq).toBe(timeline.rows.length);
-    // The sidebar reflects the new activity too.
     const bootstrap = await parsed(
       get("/api/v1/sidebar-bootstrap"),
       sidebarBootstrapResponseSchema,
@@ -267,7 +263,7 @@ describe("sending a message", () => {
         threadQueuedMessageListResponseSchema,
       ),
     ).toEqual([queued]);
-    await parsed(
+    const sent = await parsed(
       send(
         "POST",
         `/api/v1/threads/${THREAD_ID}/queued-messages/${queued.id}/send`,
@@ -277,6 +273,7 @@ describe("sending a message", () => {
       ),
       sendQueuedMessageResponseSchema,
     );
+    expect(sent.delivery).toBe("sent");
     expect(
       await parsed(
         get(`/api/v1/threads/${THREAD_ID}/queued-messages`),

@@ -1,17 +1,9 @@
 import { cn } from "@bb/shared-ui/lib/utils";
 import type { GithubCheckStatus } from "@/lib/pull-request-display";
 
-// These are the GitHub favicon SVGs (favicon.svg, favicon-success.svg,
-// favicon-failure.svg, favicon-pending.svg from github.githubassets.com),
-// inlined so the glyph matches the favicon geometry exactly without a
-// cross-origin image request. The light and dark favicons share the same
-// paths and differ only in fill, so one path set serves both themes: the mark
-// uses currentColor and the status glyph uses the theme status tokens.
 const GITHUB_MARK_PATH =
   "M16 0C7.16 0 0 7.16 0 16C0 23.08 4.58 29.06 10.94 31.18C11.74 31.32 12.04 30.84 12.04 30.42C12.04 30.04 12.02 28.78 12.02 27.44C8 28.18 6.96 26.46 6.64 25.56C6.46 25.1 5.68 23.68 5 23.3C4.44 23 3.64 22.26 4.98 22.24C6.24 22.22 7.14 23.4 7.44 23.88C8.88 26.3 11.18 25.62 12.1 25.2C12.24 24.16 12.66 23.46 13.12 23.06C9.56 22.66 5.84 21.28 5.84 15.16C5.84 13.42 6.46 11.98 7.48 10.86C7.32 10.46 6.76 8.82 7.64 6.62C7.64 6.62 8.98 6.2 12.04 8.26C13.32 7.9 14.68 7.72 16.04 7.72C17.4 7.72 18.76 7.9 20.04 8.26C23.1 6.18 24.44 6.62 24.44 6.62C25.32 8.82 24.76 10.46 24.6 10.86C25.62 11.98 26.24 13.4 26.24 15.16C26.24 21.3 22.5 22.66 18.94 23.06C19.52 23.56 20.02 24.52 20.02 26.02C20.02 28.16 20 29.88 20 30.42C20 30.84 20.3 31.34 21.1 31.18C27.42 29.06 32 23.06 32 16C32 7.16 24.84 0 16 0V0Z";
 
-// The status favicons cut the mark away under the glyph, so each status has
-// its own mark path.
 const GITHUB_CHECK_STATUS_PATHS: Record<
   GithubCheckStatus,
   { mark: string; glyph: string; glyphClassName: string }
@@ -30,7 +22,6 @@ const GITHUB_CHECK_STATUS_PATHS: Record<
   },
   pending: {
     mark: "M0 16C0 7.16 7.16 0 16 0C24.84 0 32 7.16 32 16C32 16.3358 31.9896 16.6693 31.9692 17H26.1121C26.1957 16.44 26.24 15.8283 26.24 15.16C26.24 13.4 25.62 11.98 24.6 10.86C24.76 10.46 25.32 8.82 24.44 6.62C24.44 6.62 23.1 6.18 20.04 8.26C18.76 7.9 17.4 7.72 16.04 7.72C14.68 7.72 13.32 7.9 12.04 8.26C8.98 6.2 7.64 6.62 7.64 6.62C6.76 8.82 7.32 10.46 7.48 10.86C6.46 11.98 5.84 13.42 5.84 15.16C5.84 20.6387 8.82119 22.3187 12 22.8976V25.2442C11.0224 25.6632 8.83035 26.2166 7.44 23.88C7.14 23.4 6.24 22.22 4.98 22.24C3.64 22.26 4.44 23 5 23.3C5.68 23.68 6.46 25.1 6.64 25.56C6.95947 26.4585 7.99655 28.1743 12 27.4437V30.6814C11.8951 31.0116 11.5751 31.2911 10.94 31.18C4.58 29.06 0 23.08 0 16Z",
-    // favicon-pending.svg draws <circle cx="26" cy="26" r="5" />.
     glyph: "M31 26A5 5 0 1 1 21 26A5 5 0 1 1 31 26Z",
     glyphClassName: "fill-attention",
   },

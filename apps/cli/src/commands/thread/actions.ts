@@ -9,7 +9,8 @@ import {
 } from "@bb/domain";
 import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
-import type { ThreadSendResult } from "@bb/sdk";
+import type { ThreadRetryResult, ThreadSendResult } from "@bb/sdk";
+import type { QueuedMessageWaitingOn } from "@bb/domain";
 import {
   confirmDestructiveAction,
   outputJson,
@@ -29,6 +30,7 @@ import {
   buildPromptInputs,
   collectOption,
 } from "./helpers.js";
+import { SEND_AT_HELP, parseSendAt } from "./send-time.js";
 
 interface ThreadUpdateCommandOptions {
   self?: boolean;
@@ -74,11 +76,20 @@ interface ThreadTellCommandOptions {
   plan?: boolean;
   file?: string[];
   image?: string[];
+  sendAt?: string;
 }
 
 interface ThreadActionOptions {
   self?: boolean;
   json?: boolean;
+}
+
+interface ThreadRetryCommandOptions {
+  self?: boolean;
+  json?: boolean;
+  turn?: string;
+  sendAt?: string;
+  reason?: string;
 }
 
 interface ThreadEditMessageCommandOptions {
@@ -103,8 +114,13 @@ interface PostThreadMessageArgs {
   plan?: boolean;
   files?: readonly string[];
   images?: readonly string[];
+  sendAt?: number;
 }
 
+// The server's own answer plus the mode we asked for. `sendAt` used to be
+// echoed back here so the outcome line could name the time; the queued arm of
+// the response now carries it, along with the reason, so the CLI no longer
+// has to reconstruct what happened from the flags it sent.
 type PostThreadMessageResult = ThreadSendResult & {
   mode: ThreadTellDeliveryMode;
 };
@@ -425,7 +441,11 @@ export function registerActionsCommands(
       "Reasoning level: low, medium, high, xhigh, max (provider-dependent)",
     )
     .option("--permission-mode <mode>", PERMISSION_MODE_HELP)
-    .option("--mode <mode>", "Message mode: steer (default), queue, or auto")
+    .option(
+      "--mode <mode>",
+      "Message mode: steer (default), queue, or auto (steer a live turn, else start one)",
+    )
+    .option("--send-at <when>", SEND_AT_HELP)
     .option("--plan", PLAN_HELP)
     .option(
       "--file <path>",
@@ -455,9 +475,45 @@ export function registerActionsCommands(
             plan: opts.plan,
             files: opts.file,
             images: opts.image,
+            ...(opts.sendAt === undefined
+              ? {}
+              : { sendAt: parseSendAt(opts.sendAt) }),
           });
           if (outputJson(opts, { threadId: id, ...response })) return;
           console.log(describeThreadTellOutcome(id, response));
+        },
+      ),
+    );
+
+  parent
+    .command("retry [id]")
+    .description("Retry the failed turn on a thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
+    .option(
+      "--turn <requestId>",
+      "Retry this turn request id specifically; fails when it is not the thread's failed turn",
+    )
+    .option("--send-at <when>", SEND_AT_HELP)
+    .option(
+      "--reason <text>",
+      "Why it is being retried, shown on the queued row",
+    )
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(
+        async (id: string | undefined, opts: ThreadRetryCommandOptions) => {
+          const threadId = requireThreadIdOrSelf(id, opts);
+          const sdk = createCliBbSdk(getUrl());
+          const response = await sdk.threads.retry({
+            threadId,
+            ...(opts.turn === undefined ? {} : { turnRequestId: opts.turn }),
+            ...(opts.sendAt === undefined
+              ? {}
+              : { sendAt: parseSendAt(opts.sendAt) }),
+            ...(opts.reason === undefined ? {} : { reason: opts.reason }),
+          });
+          if (outputJson(opts, { threadId, ...response })) return;
+          console.log(describeThreadRetryOutcome(threadId, response));
         },
       ),
     );
@@ -489,6 +545,21 @@ export function registerActionsCommands(
         await sdk.threads.compact({ threadId });
         if (outputJson(opts, { ok: true, threadId })) return;
         console.log(`Thread ${threadId} context compaction requested`);
+      }),
+    );
+
+  parent
+    .command("clear [id]")
+    .description("Clear model context for an idle or failed thread")
+    .option("--self", "Target the current thread (from BB_THREAD_ID)")
+    .option("--json", "Print machine-readable JSON output")
+    .action(
+      action(async (id: string | undefined, opts: ThreadActionOptions) => {
+        const threadId = requireThreadIdOrSelf(id, opts);
+        const sdk = createCliBbSdk(getUrl());
+        await sdk.threads.clearContext({ threadId });
+        if (outputJson(opts, { ok: true, threadId })) return;
+        console.log(`Thread ${threadId} context cleared`);
       }),
     );
 
@@ -546,27 +617,65 @@ async function postThreadMessage(
     ...(args.reasoningLevel ? { reasoningLevel: args.reasoningLevel } : {}),
     ...(args.serviceTier ? { serviceTier: args.serviceTier } : {}),
     ...(args.senderThreadId ? { senderThreadId: args.senderThreadId } : {}),
+    ...(args.sendAt === undefined ? {} : { sendAt: args.sendAt }),
   });
-  return {
-    ...response,
-    mode: args.mode,
-  };
+  return { ...response, mode: args.mode };
 }
 
 function describeThreadTellOutcome(
   threadId: string,
   response: PostThreadMessageResult,
 ): string {
-  if (response.delivery === "deferred") {
-    return `Thread ${threadId} is awaiting user interaction; message held and delivers once the interaction settles`;
-  }
   if (response.delivery === "queued") {
-    return `Thread ${threadId} message queued`;
+    // The server says WHY it is waiting, so the CLI does not have to guess
+    // from the flags it happened to send. `bb thread queue list` shows the
+    // same reason for the row afterwards.
+    return `Thread ${threadId} message queued (${describeQueueWait(response.queuedMessage)}); it dispatches when that clears`;
   }
-  // `sent`, or an older server that reports only `ok`.
   return response.mode === "steer"
     ? `Thread ${threadId} steered`
     : `Thread ${threadId} updated`;
+}
+
+/**
+ * What the retry did. A retry is a dispatch like any other, so it either went
+ * or is waiting — and when it is waiting the server says why, exactly as `tell`
+ * reports a queued send.
+ */
+function describeThreadRetryOutcome(
+  threadId: string,
+  response: ThreadRetryResult,
+): string {
+  const turn = `turn ${response.turnRequestId} (attempt ${response.attempt})`;
+  return response.delivery === "queued"
+    ? `Thread ${threadId} retry of ${turn} queued (${describeQueueWait(response)}); it dispatches when that clears`
+    : `Thread ${threadId} retrying ${turn}`;
+}
+
+/** One short phrase for a queued row's wait, shared by `tell` and `queue`. */
+export function describeQueueWait(row: {
+  sendAt: number | null;
+  waitingOn: QueuedMessageWaitingOn | null;
+}): string {
+  const waitingOn = row.waitingOn ?? { kind: "thread-busy" as const };
+  switch (waitingOn.kind) {
+    case "time":
+      return row.sendAt === null
+        ? "scheduled"
+        : `scheduled for ${new Date(row.sendAt).toLocaleString()}`;
+    case "thread-busy":
+      return "waiting for the current turn to finish";
+    case "turn-starting":
+      return "waiting for the current turn to start";
+    case "provisioning":
+      return "waiting for the workspace";
+    case "host-offline":
+      return `waiting for ${waitingOn.hostName} to reconnect`;
+    case "interaction":
+      return "waiting for a pending interaction";
+    case "plugin":
+      return `${waitingOn.pluginId}: ${waitingOn.reason}`;
+  }
 }
 
 function resolveSenderThreadId(targetThreadId: string): string | undefined {

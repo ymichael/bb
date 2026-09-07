@@ -16,12 +16,6 @@ import {
   ensureClaudeSkillPlugin,
 } from "../skill-plugins.js";
 
-/**
- * The generic skills/configure root is a skills directory; Claude wants a
- * local plugin. The bridge assembles one: a plugin-relative manifest (the
- * schema rejects absolute paths and `..`) and `skills` as a symlink to the
- * root, which a Claude session follows.
- */
 describe("claude skill plugins", () => {
   let baseDir: string;
 
@@ -55,14 +49,10 @@ describe("claude skill plugins", () => {
     const manifest = JSON.parse(
       readFileSync(join(pluginPath, ".claude-plugin", "plugin.json"), "utf8"),
     ) as { name: string; skills: string };
-    // Plugin-relative: the only form Claude's manifest schema accepts.
     expect(manifest.skills).toBe("./skills");
-    // The stable name: it prefixes every skill Claude exposes and must not
-    // change when the catalog (and its hash in the root id) does.
     expect(manifest.name).toBe(CLAUDE_SKILL_PLUGIN_NAME);
     expect(lstatSync(join(pluginPath, "skills")).isSymbolicLink()).toBe(true);
     expect(readlinkSync(join(pluginPath, "skills"))).toBe(skillsPath);
-    // The skill is reachable through the plugin the way Claude reads it.
     expect(
       readFileSync(join(pluginPath, "skills", "demo", "SKILL.md"), "utf8"),
     ).toContain("name: demo");
@@ -81,8 +71,6 @@ describe("claude skill plugins", () => {
     ).toBe(pluginPath);
     expect(readlinkSync(join(pluginPath, "skills"))).toBe(first);
 
-    // Same id, new path (a re-staged catalog): a different plugin directory,
-    // so a session constructed with the old one keeps what it loaded.
     const movedPluginPath = ensureClaudeSkillPlugin({
       pluginsRoot,
       root: { id: "r", path: second },
@@ -98,12 +86,13 @@ describe("claude skill plugins", () => {
     const nameOf = (pluginPath: string): string =>
       (
         JSON.parse(
-          readFileSync(join(pluginPath, ".claude-plugin", "plugin.json"), "utf8"),
+          readFileSync(
+            join(pluginPath, ".claude-plugin", "plugin.json"),
+            "utf8",
+          ),
         ) as { name: string }
       ).name;
 
-    // One root per process at a time (a re-staged catalog replaces the
-    // previous one): the same stable name, whatever the catalog hash.
     expect(
       nameOf(
         ensureClaudeSkillPlugin({
@@ -121,7 +110,6 @@ describe("claude skill plugins", () => {
       ),
     ).toBe(CLAUDE_SKILL_PLUGIN_NAME);
 
-    // Two roots in one configure call: the second gets a suffix.
     const takenNames = new Map<string, string>();
     const a = ensureClaudeSkillPlugin({
       pluginsRoot,

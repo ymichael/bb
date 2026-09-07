@@ -20,49 +20,20 @@ import {
   resolveDiffFileCardInitialState,
 } from "./diffFilesStore";
 
-/** Overscan rows kept mounted on each side of the viewport. */
 const DIFF_FILES_OVERSCAN = 4;
 const DIFF_FILES_GAP_PX = 8;
 
 interface DiffFilesPanelProps {
   environmentId: string;
   target: WorkspaceDiffTarget;
-  /** Single identity for the active (environment, target) diff slice. */
   diffIdentity: string;
   files: DiffFileEntry[];
-  /**
-   * Patches the TOC shipped inline for the first screen of `auto` files. Seeded
-   * into the patch cache on load so initial content renders in one round-trip,
-   * without a separate `/diff/patch` fetch.
-   */
   initialPatches: DiffPatchEntry[];
-  /**
-   * The TOC query's `dataUpdatedAt`. Bumps whenever the diff's table of contents
-   * refetches — including a content-only file edit that leaves the file
-   * membership (and therefore the visible/overscan paths) unchanged. The panel
-   * re-requests visible patches on this change so the evicted (stale) patches
-   * are re-fetched even when the path set is identical.
-   */
   filesUpdatedAt: number;
   presentation: DiffPresentation;
   filePathRoot?: string | null;
-  /**
-   * Whether the secondary panel is open. While closed the list stays mounted
-   * (and virtualized rows still resolve), but visible-row patch requests pause;
-   * they resume for the current visible set when the panel reopens.
-   */
   isPanelOpen: boolean;
-  /**
-   * True while the TOC query is serving cross-target placeholder data (the
-   * previous diff target's slice). The scroll-to-file effect waits for the real
-   * slice so it never lands on a stale index.
-   */
   isPlaceholderData?: boolean;
-  /**
-   * A changed-file path requested from the info tab / prompt banner. Once it
-   * appears in the current slice, the panel scrolls that file's card to the top
-   * and calls {@link onScrolledToPath} so the pending request is cleared.
-   */
   scrollToPath?: string | null;
   onScrolledToPath?: () => void;
   onOpenFileInEditor?: (path: string) => void;
@@ -71,13 +42,6 @@ interface DiffFilesPanelProps {
   onSelectionAddToChat?: (text: string) => void;
 }
 
-/**
- * Virtualized diff-tab file list. Renders the table of contents
- * ({@link DiffFileEntry}[]) with `@tanstack/react-virtual` so only on-screen
- * cards (plus a small overscan) are mounted. Visible + overscan `auto`-tier
- * paths drive {@link useEnvironmentDiffPatches} so patches page in as the user
- * scrolls; each loaded patch is parsed per-file and handed to its card.
- */
 export function DiffFilesPanel({
   environmentId,
   target,
@@ -100,9 +64,6 @@ export function DiffFilesPanel({
   const { requestPaths, getPatchState, retry, loadPath, seedInitialPatches } =
     useEnvironmentDiffPatches(environmentId, { target });
 
-  // Prime the cache with the TOC's inline first-screen patches before the
-  // scroll-driven fetch runs, so those cards render immediately and aren't
-  // re-requested. Re-seeds whenever the TOC refetches (`filesUpdatedAt`).
   useEffect(() => {
     if (initialPatches.length > 0) {
       seedInitialPatches(initialPatches);
@@ -117,21 +78,12 @@ export function DiffFilesPanel({
       if (!entry) {
         return 0;
       }
-      // Seed the estimate from the card's resolved initial collapsed state so a
-      // many-file diff (which opens every card collapsed) estimates header-row
-      // floors, not full expanded bodies — otherwise the total size overshoots
-      // ~50-100x and the scrollbar jumps. `measureElement` corrects the exact
-      // height once the card mounts (or the user toggles it open).
       const collapsed = resolveDiffFileCardInitialState({
         entry,
         fileCount: files.length,
       }).collapsed;
       return estimateCardHeight({ entry, collapsed }) + DIFF_FILES_GAP_PX;
     },
-    // Key the measurement cache by the stable per-row path (the same identity
-    // used as the React key) rather than by index, so measured heights don't
-    // bleed across diff-target switches where the same index holds a different
-    // file.
     getItemKey: (index) => files[index]?.path ?? index,
     overscan: DIFF_FILES_OVERSCAN,
   });
@@ -142,9 +94,6 @@ export function DiffFilesPanel({
     endIndex: -1,
   };
 
-  // Visible rows are those inside the virtualizer's (non-overscan) range; the
-  // remaining mounted rows are overscan. Only `auto`-tier paths are requested —
-  // `on_demand` loads on click and `too_large` is never fetched.
   const { visiblePaths, overscanPaths } = useMemo(() => {
     const visible: string[] = [];
     const overscan: string[] = [];
@@ -162,34 +111,16 @@ export function DiffFilesPanel({
     return { visiblePaths: visible, overscanPaths: overscan };
   }, [virtualItems, files, startIndex, endIndex]);
 
-  // A stable join so the effect only re-requests when the membership actually
-  // changes, not on every scroll frame that returns the same rows.
   const visibleKey = visiblePaths.join("\n");
   const overscanKey = overscanPaths.join("\n");
   useEffect(() => {
-    // A closed panel requests nothing: realtime workspace events evict the
-    // patch cache while it is hidden, and refetching those patches off-screen is
-    // wasted work. Reopening re-runs this effect (`isPanelOpen` flips) and
-    // re-requests the current visible set, which dedupes against the cache.
     if (!isPanelOpen) {
       return;
     }
     requestPaths({ visible: visiblePaths, overscan: overscanPaths });
-    // visiblePaths/overscanPaths are derived from the keys; depend on the keys
-    // so we skip re-requesting identical membership. Also re-fire when the TOC
-    // refetches (`filesUpdatedAt` bumps): a content-only edit produces the same
-    // paths but evicts the patch cache, so the same visible set must be
-    // re-requested to fetch the fresh patch.
     // oxlint-disable-next-line react/exhaustive-deps
   }, [isPanelOpen, requestPaths, visibleKey, overscanKey, filesUpdatedAt]);
 
-  // Scroll a file requested from the info tab / prompt banner to the top of the
-  // panel. The request persists until the path is in the *real* slice: opening a
-  // file first resets the selection to all-changes, and during that refetch the
-  // panel renders the previous target's files as placeholder — scrolling against
-  // that stale slice would land on the wrong index, so we wait for
-  // `!isPlaceholderData`. We scroll + clear only once the path appears (a path
-  // never in the diff is left for the env-change reset / next request to clear).
   useEffect(() => {
     if (!scrollToPath || isPlaceholderData) {
       return;
@@ -218,11 +149,6 @@ export function DiffFilesPanel({
               key={entry.path}
               data-index={item.index}
               ref={virtualizer.measureElement}
-              // Position with `top` rather than `transform: translateY` so the
-              // card's `position: sticky` file header can pin to the scroll
-              // container — a transformed ancestor becomes the header's
-              // containing block and breaks sticky (the header would scroll away
-              // with the card instead of staying put through the file's diff).
               className="absolute left-0 w-full"
               style={{
                 top: item.start,

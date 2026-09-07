@@ -22,10 +22,6 @@ describe("internal session protocol version", () => {
       const daemonClient = createHostDaemonClient(server.baseUrl, hostKey);
       const staleProtocolVersion = HOST_DAEMON_PROTOCOL_VERSION - 1;
 
-      // Keep this request shaped like a daemon from before protocol 140 added
-      // localApiPort. It must reach the version check instead of failing full
-      // payload validation, because only protocol_version_mismatch activates
-      // the daemon's self-updater.
       const preLocalApiPortProtocolVersion = 139;
       const oldDaemonResponse = await fetch(
         `${server.baseUrl}/internal/session/open`,

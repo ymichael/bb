@@ -187,10 +187,8 @@ describe("settleDanglingBackgroundTasks", () => {
       };
       expect(data.item.status).toBe("interrupted");
       expect(data.item.taskStatus).toBe("stopped");
-      // The rest of the latest snapshot is preserved.
       expect(data.item.workflowName).toBe("fixture-mini");
 
-      // Idempotent: the item is now settled, nothing further appends.
       settleDanglingBackgroundTasks(harness.deps, { hostId: host.id });
       expect(
         listEvents(harness.deps.db, { threadId: thread.id }).filter(
@@ -253,7 +251,6 @@ describe("settleDanglingBackgroundTasks", () => {
         }),
       });
 
-      // Settling the OTHER host must not touch this host's threads either.
       settleDanglingBackgroundTasks(harness.deps, { hostId: otherHost.id });
       settleDanglingBackgroundTasks(harness.deps, { hostId: host.id });
 
@@ -270,9 +267,6 @@ describe("settleDanglingBackgroundTasks", () => {
 
   it("preserves an already-finished task status instead of stomping it to interrupted", async () => {
     await withTestHarness(async (harness) => {
-      // The task_updated "completed" patch was flushed as a progress snapshot,
-      // but the daemon died before the terminal notification arrived: the item
-      // is open, yet its outcome is known.
       const { host, thread } = seedOpenBackgroundTaskThread(harness, {
         status: "completed",
         taskStatus: "completed",
@@ -296,8 +290,6 @@ describe("background-task lifecycle reconciliation triggers", () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedOpenBackgroundTaskThread(harness);
 
-      // An ordinary daemon crash closes the session the moment the socket
-      // drops — long before the restarted daemon re-registers.
       closeSession(
         harness.deps.db,
         harness.deps.hub,
@@ -351,8 +343,6 @@ describe("background-task lifecycle reconciliation triggers", () => {
         }),
         body: JSON.stringify({
           hostId: host.id,
-          // seedSession registers instance-1; the same process reconnecting
-          // still owns its CLI sessions, so nothing should settle.
           instanceId: "instance-1",
           hostName: host.name,
           hostType: host.type,
@@ -451,7 +441,6 @@ describe("background-task lifecycle reconciliation triggers", () => {
       vi.useFakeTimers();
       handleDaemonSocketClosed(harness.deps, { sessionId: session.id });
 
-      // Within the grace window nothing settles yet.
       expect(listSettledBackgroundTaskItems(harness, thread.id)).toEqual([]);
 
       vi.advanceTimersByTime(DAEMON_DISCONNECT_GRACE_MS + 1);
@@ -503,7 +492,7 @@ describe("active thread disconnect reconciliation triggers", () => {
     });
   });
 
-  it("interrupts active turns when a different daemon instance registers", async () => {
+  it("records a confirmed daemon restart when a different daemon instance registers", async () => {
     await withTestHarness(async (harness) => {
       const { host, session, thread } = seedActiveTurnThread(harness);
 
@@ -553,7 +542,7 @@ describe("active thread disconnect reconciliation triggers", () => {
     });
   });
 
-  it("interrupts active turns after the live event window elapses without a reconnect", async () => {
+  it("records a lost host connection after the live event window elapses without a reconnect", async () => {
     await withTestHarness(async (harness) => {
       const { session, thread } = seedActiveTurnThread(harness);
 
@@ -586,13 +575,17 @@ describe("active thread disconnect reconciliation triggers", () => {
         expect.objectContaining({
           data: expect.objectContaining({
             code: "thread_command_failed",
-            message: "Thread interrupted because the host daemon disconnected",
+            message:
+              "Thread interrupted because the connection to the host was lost",
             detail: "Please retry the thread to continue.",
           }),
           type: "system/error",
         }),
         expect.objectContaining({
-          data: { reason: "host-daemon-restarted" },
+          data: {
+            reason: "host-daemon-restarted",
+            cause: "host-connection-lost",
+          },
           type: "system/thread/interrupted",
         }),
       ]);

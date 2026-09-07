@@ -6,8 +6,6 @@ const LAST = SURFACE_GROUPS.length - 1;
 
 describe("panCarets", () => {
   it("disables the caret that has nowhere to go", () => {
-    // Both carets always render; the end of the range just disables its
-    // caret, so the row's geometry never changes.
     expect(panCarets(0, SURFACE_GROUPS.length)).toEqual({
       previous: false,
       next: true,

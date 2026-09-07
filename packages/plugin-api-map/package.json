@@ -20,7 +20,6 @@
   "scripts": {
     "clean": "rimraf tsconfig.tsbuildinfo",
     "scaffold:surface-entry": "node scripts/scaffold-surface-entry.mjs",
-    "update:sdk-inventory": "node scripts/sdk-api-inventory.mjs --write",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --config vitest.config.ts"
   },

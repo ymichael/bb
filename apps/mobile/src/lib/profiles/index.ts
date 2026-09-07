@@ -1,4 +1,3 @@
-// Pure profile layer. Native adapters live in ../native (expo-secure-store).
 export {
   PROFILE_LABEL_MAX_LENGTH,
   type NewServerProfile,

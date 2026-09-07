@@ -4,18 +4,11 @@ import type {
   ExperimentalAiVoiceTranscribeInput,
   ExperimentalAiVoiceTranscribeOutput,
 } from "@get-bb/plugin-sdk/ai-services";
-import type { PluginAiServiceDeclaration, PluginAiServiceKind } from "@get-bb/plugin-sdk";
+import type {
+  PluginAiServiceDeclaration,
+  PluginAiServiceKind,
+} from "@get-bb/plugin-sdk";
 import { aiServiceAlreadyRegisteredMessage } from "@get-bb/plugin-sdk/internal/host-policy";
-
-/**
- * The AI services plugins serve (helper inference, voice transcription),
- * keyed by the service id the user names in `BB_INFERENCE` /
- * `BB_TRANSCRIPTION` (`<serviceId>/<model>`). Core owns the policy — which
- * service answers, retries, fallbacks — and a plugin owns the implementation
- * behind its host entry; the registry is the seam between them. Nothing here
- * names a plugin: a first-party service registers exactly like a marketplace
- * one.
- */
 
 export interface AiServiceCallOptions {
   hostId: string;
@@ -40,13 +33,9 @@ export interface AiServiceInfo extends PluginAiServiceDeclaration {
 }
 
 export interface AiServiceRegistry {
-  /** Throws when a live registration already serves `id`. */
   register(registration: AiServiceRegistration): { dispose(): void };
-  /** The live service for `id`, or null. */
   get(id: string): AiServiceRegistration | null;
-  /** Whether `id` is live and serves `kind`. */
   serves(id: string, kind: PluginAiServiceKind): boolean;
-  /** Every live service, in registration order. */
   list(): AiServiceInfo[];
 }
 

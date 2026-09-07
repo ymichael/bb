@@ -262,8 +262,6 @@ describe("user message parsing", () => {
       initiator: "agent",
       senderThreadId: SENDER_THREAD_ID,
       turnRequest: { isGrouped: false, kind: "message", status: "pending" },
-      // Text passes through unchanged — the renderer mutes the `[bb …]`
-      // prefix at display time; the projection never slices.
       text: agentText,
     });
   });
@@ -378,8 +376,6 @@ describe("user message parsing", () => {
       ).toMatchObject({
         kind: "user",
         turnRequest: { isGrouped: false, kind: "steer", status: "pending" },
-        // Pending steers anchor at the request's own meta — there is no
-        // accept event yet to route to.
         text: expectedText,
         sourceSeqStart: meta.seq,
       });
@@ -393,12 +389,9 @@ describe("user message parsing", () => {
       ).toMatchObject({
         kind: "user",
         turnRequest: { isGrouped: false, kind: "steer", status: "accepted" },
-        // Accepted steers anchor at the accept event's seq, not the request's,
-        // so they land at the right point in the timeline once accepted.
         text: expectedText,
         sourceSeqStart: accepted.meta.seq,
       });
-      // Steers flow through the steer-specific parsers — parseUser short-circuits.
       expect(
         parseUsersFromClientRequest({
           decoded: event,

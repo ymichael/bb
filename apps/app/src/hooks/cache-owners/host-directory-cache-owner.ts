@@ -7,7 +7,6 @@ interface InvalidateHostDirectoryListingArgs {
   directory: string;
 }
 
-/** Mark a host directory listing stale without reloading an inactive picker. */
 export function invalidateHostDirectoryListing({
   queryClient,
   hostId,

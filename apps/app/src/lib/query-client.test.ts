@@ -167,7 +167,6 @@ describe("createAppQueryClient", () => {
     const observer = new QueryObserver(queryClient, {
       queryKey: ["focus-gated"],
       queryFn,
-      // Instantly stale so a permitted focus refetch always fires.
       staleTime: 0,
     });
     const unsubscribe = observer.subscribe(() => {});
@@ -177,12 +176,10 @@ describe("createAppQueryClient", () => {
     });
     expect(queryFn).toHaveBeenCalledTimes(1);
 
-    // Connected: realtime owns freshness, focus must not refetch.
     window.dispatchEvent(new Event("pageshow"));
     await Promise.resolve();
     expect(queryFn).toHaveBeenCalledTimes(1);
 
-    // Coverage lost: focus refetch is the fallback again.
     realtimeConnected = false;
     window.dispatchEvent(new Event("pageshow"));
     await vi.waitFor(() => {
@@ -245,7 +242,6 @@ describe("createAppQueryClient", () => {
     const observer = new QueryObserver(queryClient, {
       queryKey: ["reconnect-gated"],
       queryFn,
-      // Instantly stale so a permitted reconnect refetch always fires.
       staleTime: 0,
     });
     const unsubscribe = observer.subscribe(() => {});
@@ -255,14 +251,11 @@ describe("createAppQueryClient", () => {
     });
     expect(queryFn).toHaveBeenCalledTimes(1);
 
-    // Connected: realtime owns freshness, so the browser `online` blip that
-    // mobile Safari fires around suspensions must not refetch.
     window.dispatchEvent(new Event("offline"));
     window.dispatchEvent(new Event("online"));
     await Promise.resolve();
     expect(queryFn).toHaveBeenCalledTimes(1);
 
-    // Coverage lost: the reconnect refetch is the freshness fallback again.
     realtimeConnected = false;
     window.dispatchEvent(new Event("offline"));
     window.dispatchEvent(new Event("online"));
@@ -301,8 +294,6 @@ describe("createAppQueryClient", () => {
           );
         }),
     );
-    // Realtime-owned policy: nothing but the realtime layer refetches it, and
-    // a healthy socket delivers no change for a first load that never landed.
     const observer = new QueryObserver(queryClient, {
       queryKey: ["realtime-owned-first-load"],
       queryFn,
@@ -310,7 +301,6 @@ describe("createAppQueryClient", () => {
       staleTime: 60_000,
     });
     const unsubscribe = observer.subscribe(() => {});
-    // A settled query is untouched by the resume.
     const settledFn = vi.fn(() => Promise.resolve("settled"));
     const settledObserver = new QueryObserver(queryClient, {
       queryKey: ["settled"],
@@ -349,7 +339,6 @@ describe("createAppQueryClient", () => {
     await vi.waitFor(() => {
       expect(observer.getCurrentResult().data).toBe("loaded");
     });
-    // A second resume (focus after visible) has nothing left to replay.
     window.dispatchEvent(new Event("focus"));
     await Promise.resolve();
     expect(queryFn).toHaveBeenCalledTimes(2);

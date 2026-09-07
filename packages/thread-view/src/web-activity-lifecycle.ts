@@ -9,19 +9,10 @@ import type {
 } from "@bb/domain";
 import { getEventParentToolCallId } from "./event-decode.js";
 
-/**
- * The begin/end item family: items with no streamed output whose whole row
- * comes from the opened item plus its settled counterpart. Historically the
- * web kinds (webSearch, webFetch, imageView); grammar v3 adds the
- * exploration kinds (fileRead, search), plan snapshots (planSteps) and
- * plugin extension items. Commands, tool calls and delegations stream
- * output and take the exec-lifecycle path instead.
- */
 interface ItemActivityLifecycleBase {
   kind: "begin" | "end";
   callId: string;
   parentToolCallId?: string;
-  /** The bridge's declarative presentation; absent on pre-v3 events. */
   presentation?: ThreadEventItemPresentation;
 }
 
@@ -42,10 +33,6 @@ interface ImageViewLifecycleEvent extends ItemActivityLifecycleBase {
   path: string;
 }
 
-/**
- * The v3 kinds carry an explicit item status, so a failed or interrupted
- * read/search/extension settles with that status instead of `completed`.
- */
 interface StatusedItemActivityLifecycleBase extends ItemActivityLifecycleBase {
   status: ThreadEventItemStatus;
 }

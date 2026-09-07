@@ -1,33 +1,8 @@
-/**
- * Presentation building blocks every bb-authored bridge shares (grammar v3,
- * docs/provider-plugin-api.md §3): the headline and detail truncators, the
- * two core-kind rows whose wording is the same for every provider
- * (compaction, reasoning), the builders for the core shapes whose label and
- * glyph do not depend on the provider (file read, search, web search, web
- * fetch, plan steps), and the generic "Running <tool>" fallback.
- *
- * A bridge keeps its own vocabulary beside these: which native tool is a
- * shell command or a file edit, how a command headline is unwrapped, and
- * the per-tool tables. Only what reads identically across providers lives
- * here, so that a persisted row built by one bridge looks like the same row
- * built by another.
- *
- * Icons are names: host glyphs from the shared icon registry
- * (`@bb/shared-ui/icon`), or a plugin's own declared icon as
- * `"<pluginId>/<name>"` (`bb.branding.experimental_icons`); the persisted
- * form is a name, never bytes or a path.
- */
 import { THREAD_EVENT_ITEM_PRESENTATION_DETAIL_MAX_LENGTH } from "@bb/domain";
 import type { DeltaPresentation } from "../thread-delta.js";
 
-/** Row headlines stay one line and short; the item carries the full text. */
 export const PRESENTATION_TITLE_MAX_LENGTH = 160;
 
-/**
- * The first non-empty line of `text`, capped at
- * {@link PRESENTATION_TITLE_MAX_LENGTH} with an ellipsis; undefined when
- * there is nothing to headline, so the row carries no `title` at all.
- */
 export function presentationTitle(text: string): string | undefined {
   const firstLine = text.trim().split("\n", 1)[0]?.trim() ?? "";
   if (firstLine.length === 0) {
@@ -38,14 +13,12 @@ export function presentationTitle(text: string): string | undefined {
     : firstLine;
 }
 
-/** Row details are capped by the persisted presentation schema. */
 export function presentationDetail(text: string): string {
   return text.length > THREAD_EVENT_ITEM_PRESENTATION_DETAIL_MAX_LENGTH
     ? `${text.slice(0, THREAD_EVENT_ITEM_PRESENTATION_DETAIL_MAX_LENGTH - 1)}…`
     : text;
 }
 
-/** `presentation` with `title` stamped on it, or untouched when there is none. */
 export function withTitle(
   presentation: DeltaPresentation,
   title: string | undefined,
@@ -53,15 +26,10 @@ export function withTitle(
   return title === undefined ? presentation : { ...presentation, title };
 }
 
-/** The last path segment — a headline names the file, not its directory. */
 export function presentationFileName(path: string): string {
   const segments = path.split("/").filter((segment) => segment.length > 0);
   return segments[segments.length - 1] ?? path;
 }
-
-// ---------------------------------------------------------------------------
-// Core-kind rows with provider-independent wording
-// ---------------------------------------------------------------------------
 
 export const COMPACTION_PRESENTATION: DeltaPresentation = {
   label: { pending: "Compacting context", completed: "Compacted context" },
@@ -83,7 +51,6 @@ export function fileReadPresentation(path: string): DeltaPresentation {
   );
 }
 
-/** `content` searches inside files; `path` matches file names. */
 export function searchPresentation(args: {
   mode: "content" | "path";
   query: string;
@@ -102,7 +69,6 @@ export function searchPresentation(args: {
   );
 }
 
-/** A web search; `query` is the headline, or undefined when the agent sent none. */
 export function webSearchPresentation(
   query: string | undefined,
 ): DeltaPresentation {
@@ -125,11 +91,6 @@ export function webFetchPresentation(url: string): DeltaPresentation {
   );
 }
 
-/**
- * A plan-steps snapshot. The headline is the step in progress — what the
- * agent is doing now. Collapsed by default: the todo banner reads the
- * snapshot; the row is bookkeeping.
- */
 export function planStepsPresentation(
   steps: readonly { step: string; status?: string }[],
 ): DeltaPresentation {
@@ -144,11 +105,6 @@ export function planStepsPresentation(
   );
 }
 
-/**
- * A tool with no core kind and no presentation of its own — a provider's
- * own dynamic tool, an unknown built-in, or a bb-injected tool whose
- * definition predates the field: a generic label under bb's own glyph.
- */
 export function toolPresentation(tool: string): DeltaPresentation {
   return {
     label: { pending: `Running ${tool}`, completed: `Ran ${tool}` },

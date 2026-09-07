@@ -18,6 +18,7 @@ import {
   resetFixedPanelTabsStorageMaintenanceForTest,
   useFixedPanelTabsState,
   useFixedPanelTabsStorageMaintenance,
+  useSetFixedSecondaryPanelTab,
   useUpdateFixedPanelTabsState,
 } from "./fixed-panel-tabs";
 import { BbHttpError } from "./sdk";
@@ -62,6 +63,7 @@ afterEach(() => {
   cleanup();
   apiMocks.getThreadTabs.mockReset();
   apiMocks.updateThreadTabs.mockReset();
+  vi.restoreAllMocks();
   window.localStorage.clear();
 });
 
@@ -371,6 +373,35 @@ describe("fixed panel tab server sync", () => {
 });
 
 describe("fixed panel tab storage churn", () => {
+  it("keeps panel selection in memory when localStorage rejects the write", () => {
+    const threadId = "storage-write-failure";
+    const storageKey = getFixedPanelTabsStateStorageKey({ threadId });
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(
+      () => ({
+        selectPanel: useSetFixedSecondaryPanelTab(threadId, null),
+        state: useFixedPanelTabsState(threadId, null),
+      }),
+      { wrapper: createQueryWrapper(queryClient) },
+    );
+    const setItem = vi
+      .spyOn(Storage.prototype, "setItem")
+      .mockImplementation((key) => {
+        if (key === storageKey) {
+          throw new DOMException("quota", "QuotaExceededError");
+        }
+      });
+
+    act(() => result.current.selectPanel("thread-info"));
+
+    expect(result.current.state.secondary).toMatchObject({
+      activeTabId: createThreadInfoFixedPanelTab().id,
+      isOpen: true,
+    });
+    expect(window.localStorage.getItem(storageKey)).toBeNull();
+    expect(setItem).toHaveBeenCalledWith(storageKey, expect.any(String));
+  });
+
   it("does not rewrite localStorage when hydration and reconciliation leave the state unchanged", async () => {
     resetFixedPanelTabsStateForTest();
     const threadId = "sync-no-rewrite";
@@ -413,11 +444,8 @@ describe("fixed panel tab storage churn", () => {
       await waitFor(() => {
         expect(result.current.state.secondary.tabs).toEqual([remoteTab]);
       });
-      // Server tabs match the persisted tabs: reconciliation must not touch
-      // storage on mount.
       expect(setItem).not.toHaveBeenCalledWith(storageKey, expect.anything());
 
-      // A no-op updater must not reach the storage atom either.
       act(() => {
         result.current.update((current) => current);
       });
@@ -441,7 +469,6 @@ describe("fixed panel tab storage churn", () => {
       window.localStorage.setItem(firstKey, expiredBlob);
 
       const first = renderHook(() => useFixedPanelTabsStorageMaintenance());
-      // Never in the same task as the route change that mounted the view.
       expect(window.localStorage.getItem(firstKey)).not.toBeNull();
       act(() => {
         vi.runAllTimers();
@@ -449,7 +476,6 @@ describe("fixed panel tab storage churn", () => {
       expect(window.localStorage.getItem(firstKey)).toBeNull();
       first.unmount();
 
-      // A later thread navigation mounts the hook again: no second scan.
       const secondKey = getFixedPanelTabsStateStorageKey({ threadId: "two" });
       window.localStorage.setItem(secondKey, expiredBlob);
       renderHook(() => useFixedPanelTabsStorageMaintenance());

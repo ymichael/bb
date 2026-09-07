@@ -1,4 +1,5 @@
 import { PERSONAL_PROJECT_ID, type Thread } from "@bb/domain";
+import { makeThread as makeThreadFixture } from "@bb/test-helpers/domain-fixtures";
 import { describe, expect, it } from "vitest";
 import { buildThreadMentionSuggestions } from "./threadMentionSuggestions";
 
@@ -20,28 +21,20 @@ interface BuildSuggestionFixtureArgs {
 }
 
 function makeThread(options: ThreadFixtureOptions): Thread {
-  return {
+  return makeThreadFixture({
     id: options.id,
     projectId: options.projectId ?? "proj-1",
     environmentId: "env-1",
     providerId: "openai",
     title: options.title,
     titleFallback: options.titleFallback ?? null,
-    sectionId: null,
-    status: "idle",
     parentThreadId: options.parentThreadId ?? null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
     visibility: options.visibility ?? "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
     lastReadAt: null,
     latestAttentionAt: 1,
     createdAt: 1,
     updatedAt: 1,
-  };
+  });
 }
 
 function getSuggestionThreadIds(

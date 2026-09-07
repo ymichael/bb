@@ -53,9 +53,6 @@ describe("real Claude background process integration", () => {
         });
         expect(await pathExists(markerPath)).toBe(false);
 
-        // Cross the host daemon's 10-second shell-environment refresh TTL so
-        // the follow-up exercises the same idle-gap maintenance path as the
-        // report, while the background command remains live.
         await new Promise((resolve) => setTimeout(resolve, 12_000));
         expect(await pathExists(markerPath)).toBe(false);
 

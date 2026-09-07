@@ -5,21 +5,13 @@ import { getSupportedReasoningLevelsForProvider } from "../../src/services/threa
 const registry = await createTestProviderRegistry();
 
 describe("getSupportedReasoningLevelsForProvider", () => {
-  // Each ACP agent declares its own ladder now: grok's is three levels, and
-  // an id no plugin registered has none at all.
   it("returns each registered ACP agent's declared reasoning levels", () => {
-    expect(getSupportedReasoningLevelsForProvider(registry, "acp-cursor")).toEqual([
-      "low",
-      "medium",
-      "high",
-      "xhigh",
-      "max",
-    ]);
-    expect(getSupportedReasoningLevelsForProvider(registry, "acp-grok")).toEqual([
-      "low",
-      "medium",
-      "high",
-    ]);
+    expect(
+      getSupportedReasoningLevelsForProvider(registry, "acp-cursor"),
+    ).toEqual(["low", "medium", "high", "xhigh", "max"]);
+    expect(
+      getSupportedReasoningLevelsForProvider(registry, "acp-grok"),
+    ).toEqual(["low", "medium", "high"]);
     expect(
       getSupportedReasoningLevelsForProvider(registry, "acp-my-agent"),
     ).toEqual([]);

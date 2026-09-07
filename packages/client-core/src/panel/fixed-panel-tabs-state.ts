@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   BB_DESKTOP_BROWSER_MAX_TITLE_LENGTH,
   BB_DESKTOP_BROWSER_MAX_URL_LENGTH,
+  bbDesktopBrowserTargetSchema,
+  type BbDesktopBrowserTarget,
 } from "@bb/desktop-contract";
 import {
   terminalCreateTargetSchema,
@@ -117,6 +119,7 @@ const browserFixedPanelTabSchema = z
     environmentId: z.string().min(1).nullable().default(null),
     id: z.string().min(1),
     kind: z.literal("browser"),
+    desktopTarget: bbDesktopBrowserTargetSchema.optional(),
     title: z
       .string()
       .min(1)
@@ -136,8 +139,6 @@ const terminalFixedPanelTabSchema = z
     id: z.string().min(1),
     kind: z.literal("terminal"),
     terminalId: z.string().min(1),
-    // Nav-panel right panels can host terminals from an explicit target. The
-    // field is absent on thread/root-compose tabs, whose surface owns it.
     target: terminalCreateTargetSchema.optional(),
   })
   .strict();
@@ -164,11 +165,6 @@ const secondaryFixedPanelTabSchema = z.union([
   newTabFixedPanelTabSchema,
   terminalFixedPanelTabSchema,
 ]);
-/**
- * The native side chat is gone, but persisted panel state can still hold its
- * tabs. Drop them at the parse boundary so old state loads and the removed
- * tabs simply disappear from the strip.
- */
 const secondaryFixedPanelTabsSchema = z.preprocess(
   (value) =>
     Array.isArray(value)
@@ -221,18 +217,8 @@ export type FixedPanelViewTab =
   | GitDiffFixedPanelTab
   | PluginPageFixedPanelTab;
 
-/**
- * A panel tab opened by a plugin `threadPanelAction` (plugin design §5.2) —
- * a closable file-strip tab like a terminal, not a fixed view.
- * `paramsJson` is the JSON-serialized `openPanel` params (null = none); it
- * is part of the tab identity, so the same action can hold several tabs
- * with different params while identical re-opens focus the existing one.
- * If the plugin/action is gone on restore the content degrades to a
- * placeholder.
- */
 export interface PluginPanelFixedPanelTab {
   actionId: string;
-  /** Present only when this plugin panel diverted a native file preview. */
   fileOpenerOwner?: ThreadTabFileOpenerOwner;
   id: string;
   kind: "plugin-panel";
@@ -272,15 +258,8 @@ export interface ThreadStorageFilePreviewFixedPanelTab {
   threadId: string | null;
 }
 
-/**
- * A web browser tab hosted by a native Electron `WebContentsView` (desktop
- * only). `url` is the last-loaded page (empty string = the new-tab screen) and
- * `title` is the last title pushed from the view, so the tab pill keeps its
- * label while inactive and across reloads. Favicons are intentionally not
- * persisted/rendered (untrusted remote URL); the pill shows a generic globe.
- * Live loading state is not persisted — it is held by the active tab's chrome.
- */
 export interface BrowserFixedPanelTab {
+  desktopTarget?: BbDesktopBrowserTarget;
   environmentId: string | null;
   id: string;
   kind: "browser";
@@ -312,11 +291,6 @@ export type SecondaryFixedPanelTab =
   | NewTabFixedPanelTab
   | TerminalFixedPanelTab;
 
-/**
- * The subset of secondary-panel tabs rendered as closable file tabs in the tab
- * strip. Excludes thread-info and git-diff, which are fixed views toggled
- * separately rather than ordered alongside opened files.
- */
 export type SecondaryFileFixedPanelTab =
   | WorkspaceFilePreviewFixedPanelTab
   | HostFilePreviewFixedPanelTab
@@ -567,9 +541,6 @@ export function createPluginPanelFixedPanelTab({
 }: CreatePluginPanelFixedPanelTabArgs): PluginPanelFixedPanelTab {
   return {
     actionId,
-    // Params are part of the identity (title is not): re-opening the same
-    // action with the same params focuses the existing tab, different
-    // params open a sibling tab.
     id: buildFixedPanelTabId({
       environmentId: null,
       kind: "plugin-panel",
@@ -652,12 +623,6 @@ export function createNewTabFixedPanelTab(): NewTabFixedPanelTab {
   };
 }
 
-/**
- * Runtime invariant shared by every fixed secondary-panel host: an open panel
- * always has an active tab. Keep a persisted active tab when it still exists,
- * fall back to the first surviving tab when it does not, and close the panel
- * when hydration leaves no tabs to show.
- */
 export function ensureOpenFixedPanelHasActiveTab(
   state: FixedPanelTabsState,
 ): FixedPanelTabsState {
@@ -758,6 +723,7 @@ function normalizeFixedPanelTabId(tab: FixedPanelTab): FixedPanelTab {
       return tab.id === id ? tab : { ...tab, id };
     }
     case "browser": {
+      if (tab.desktopTarget !== undefined) return tab;
       const idSegments = tab.id.split(":");
       const browserPath =
         idSegments.length === 3 && idSegments[0] === "browser"
@@ -960,11 +926,6 @@ export function parseFixedPanelTabsState({
   }).state;
 }
 
-/**
- * Parses persisted panel state and says whether the stored entry is worth
- * keeping. Storage owners (web localStorage pruning) call this directly;
- * everything else goes through {@link parseFixedPanelTabsState}.
- */
 function parseFixedPanelTabsStateForStorage({
   initialValue,
   now,
@@ -1013,13 +974,6 @@ function parseFixedPanelTabsStateForStorage({
   };
 }
 
-/**
- * Prune decision for one stored blob. The idle-expiry check reads only
- * `lastUsedAt` from the parsed JSON, so an expired blob (the common case in a
- * long-lived browser profile) is dropped without a full schema parse; only
- * blobs that are still fresh, or that carry no usable timestamp, go through
- * the schema.
- */
 export function shouldPruneStoredFixedPanelTabsState(
   storedValue: string | null,
   now: number,
@@ -1120,6 +1074,9 @@ export function areFixedPanelTabsEquivalent(
     case "browser":
       return (
         b.kind === "browser" &&
+        a.desktopTarget?.hostId === b.desktopTarget?.hostId &&
+        a.desktopTarget?.instanceId === b.desktopTarget?.instanceId &&
+        a.desktopTarget?.generation === b.desktopTarget?.generation &&
         a.environmentId === b.environmentId &&
         a.url === b.url &&
         a.title === b.title

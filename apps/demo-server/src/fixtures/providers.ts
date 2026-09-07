@@ -1,9 +1,3 @@
-// Providers and models the demo offers in its pickers. Typed against
-// @bb/domain, the same types the real server fills at its boundary.
-//
-// The three built-in providers and a short Codex model list are enough for
-// the composer and the settings screens to render; nothing here runs.
-
 import type { AvailableModel, ProviderInfo } from "@bb/domain";
 import type { SystemExecutionOptionsResponse } from "@bb/server-contract";
 
@@ -15,7 +9,6 @@ function provider(
 ): ProviderInfo {
   return {
     ...info,
-    // Demo fixtures: the first-party plugin ids follow `provider-<id>`.
     pluginId: `provider-${info.id}`,
     available: true,
     logoUrl: `/api/v1/system/providers/${info.id}/logo`,

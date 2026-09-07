@@ -106,7 +106,9 @@ corrective retries after their initial invalid attempt.
 
 Workflow workers use BB's generic hidden-thread visibility. They remain
 out of sidebar organization without contributing unread/pending favicon
-attention. Ordinary search, prompt history,
+attention. Retention archives them when it deletes their run, because a
+stopped worker keeps its thread row and no server cascade reaches a root
+hidden thread. Ordinary search, prompt history,
 lifecycle, and direct operations remain available. Workers are root threads,
 so no parent notification applies; a hidden thread that does have a parent
 still reports its turns and blockers to it. Workflows does not create a
@@ -130,7 +132,9 @@ Workflows declares six plugin settings:
 - `maxAgentCalls` bounds the shared parent/child call count.
 - `totalRunTimeoutMs` fails a run independently of explicit cancellation.
 - `retentionDays` controls terminal-run cleanup while preserving active runs
-  and retained resume ancestors.
+  and retained resume ancestors. The sweep archives each expired run's worker
+  threads before it deletes the run, and keeps the run for a later sweep when a
+  worker does not archive.
 - `maxNotificationBytes` bounds completion messages by UTF-8 byte length.
 
 `maxActiveRuns` is live plugin-global dispatch policy: changing it immediately

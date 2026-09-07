@@ -17,8 +17,6 @@ const PROMPT_DRAFT_PERSIST_DEBOUNCE_MS = 250;
 export type PromptDraftScope =
   | { kind: "automation-edit"; automationId: string }
   | { kind: "new-thread" }
-  // A plugin-rendered new-thread composer. `key` keeps its draft out of the
-  // root composer's, and lets one plugin run several independent composers.
   | { kind: "plugin-new-thread"; key: string }
   | { kind: "thread"; projectId: string; threadId: string };
 
@@ -96,9 +94,6 @@ function persistPromptDraftCache(storageKey: string): void {
     return;
   }
 
-  // Serialization happens here, at persist time, not on every write: a write
-  // per keystroke with a large draft (e.g. a pasted 1 MB minified bundle)
-  // would otherwise JSON.stringify the full text on each character typed.
   const serialized = serializePromptDraftStorage(cachedEntry.draft);
   cachedEntry.rawValue = serialized;
   if (serialized === null) {
@@ -109,10 +104,6 @@ function persistPromptDraftCache(storageKey: string): void {
   try {
     window.localStorage.setItem(storageKey, serialized);
   } catch (error) {
-    // Quota exceeded (a multi-megabyte paste) or storage disabled. Keep the
-    // in-memory draft authoritative: point rawValue at what storage actually
-    // holds so readPromptDraft keeps returning the cached draft instead of
-    // re-parsing the stale stored value and silently reverting the composer.
     cachedEntry.rawValue = readStoredPromptDraftValue(storageKey);
     console.warn(
       `[prompt-draft] could not persist draft for ${storageKey}; keeping it in memory only`,
@@ -154,7 +145,6 @@ function ensurePromptDraftStorageObserver(): void {
   promptDraftStorageObserverInitialized = true;
   window.addEventListener("storage", (event) => {
     if (!event.key) return;
-    // While a local deferred write is pending, ignore stale cross-tab storage for this key so it cannot clobber the in-progress draft.
     if (pendingPromptDraftStorageKeys.has(event.key)) return;
     promptDraftCache.delete(event.key);
     emitPromptDraftChange(event.key);
@@ -202,11 +192,6 @@ function writePromptDraft(
 ): void {
   if (!storageKey || typeof window === "undefined") return;
 
-  // Keep all prompt composer mounts in sync, including late async completions from
-  // a previously unmounted thread view. `rawValue` stays unset until
-  // persistPromptDraftCache serializes the draft; while a write is pending the
-  // cached draft object is authoritative (readPromptDraft short-circuits on
-  // pendingPromptDraftStorageKeys), so no reader observes the placeholder.
   promptDraftCache.set(storageKey, {
     rawValue: null,
     draft: isPromptDraftEmpty(value) ? EMPTY_PROMPT_DRAFT : value,
@@ -250,8 +235,6 @@ function addQuoteToPromptDraft(
     text,
     attachments,
   );
-  // Whitespace-only text with no new attachments is a no-op; skip the write
-  // so an empty selection can't mark an otherwise-empty draft dirty.
   if (nextDraft === currentDraft) {
     return;
   }
@@ -276,16 +259,6 @@ function getPromptDraftStorageKey(scope: PromptDraftScope): string {
   return `${PROMPT_DRAFT_STORAGE_PREFIX}-${normalizedProjectId}-${normalizedThreadId}-${PROMPT_DRAFT_STORAGE_VERSION}`;
 }
 
-/**
- * Imperative access to a scope's stored draft without subscribing to it.
- *
- * For components that only need to read or replace the draft at event time
- * (e.g. the browse hero seeding the composer, or a thread view's "Add to
- * chat" quote action): `usePromptDraftStorage` is a `useSyncExternalStore`
- * subscription, so it re-renders its caller on every keystroke a mounted
- * composer writes — pure waste when the caller never renders the draft, and
- * actively harmful when the caller is a large tree like the thread timeline.
- */
 export function getPromptDraftAccessor(scope: PromptDraftScope): {
   storageKey: string;
   getCurrent: () => PromptDraftState;
@@ -329,8 +302,6 @@ export function usePromptDraftStorage(scope: PromptDraftScope) {
     return readPromptDraft(storageKey);
   }, [storageKey]);
 
-  // Stable per storage key, so a plugin composer host built over this draft
-  // can expose the store subscription without re-creating the host per write.
   const subscribe = useCallback(
     (listener: () => void) => subscribePromptDraft(storageKey, listener),
     [storageKey],
@@ -499,14 +470,6 @@ function readPromptDraftPresenceBit(storageKey: string): "0" | "1" {
   return isPromptDraftEmpty(readPromptDraft(storageKey)) ? "0" : "1";
 }
 
-/**
- * Presence bit-string store for one subscription set. `getSnapshot` runs on
- * every render of the subscribing component (the sidebar), and a change to
- * one draft notifies once per keystroke; reading localStorage for every
- * sidebar thread on each of those was N `getItem` calls per keystroke and per
- * sidebar render. The store caches the joined bits, re-reads only the key
- * that changed, and stays silent when that key's presence did not flip.
- */
 function createPromptDraftPresenceStore(
   subscriptions: readonly PromptDraftThreadSubscription[],
 ): {
@@ -525,9 +488,6 @@ function createPromptDraftPresenceStore(
   return {
     getSnapshot: () => snapshot ?? refresh(),
     subscribe: (listener) => {
-      // A draft may have flipped between the render that computed `snapshot`
-      // and this subscription; drop the cache so the post-subscribe
-      // `getSnapshot` re-reads instead of returning the stale string.
       snapshot = null;
       bits = null;
       const unsubscribe = subscriptions.map(({ storageKey }, index) =>
@@ -552,12 +512,6 @@ function createPromptDraftPresenceStore(
   };
 }
 
-/**
- * Subscribes to draft presence for a collection of threads without mounting a
- * hook per row. The primitive bit-string snapshot stays referentially stable
- * for `useSyncExternalStore`; the returned set changes only when draft presence
- * changes or the supplied thread collection changes.
- */
 export function usePromptDraftInputThreadIds(
   threads: readonly PromptDraftThreadRef[],
 ): ReadonlySet<string> {

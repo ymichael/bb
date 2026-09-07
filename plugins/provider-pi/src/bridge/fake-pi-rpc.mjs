@@ -228,9 +228,15 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const extensionTools = new Map();
 const extensionHandlers = new Map();
 let activeTools = ["read", "bash", "edit", "write"];
+const scopedModel =
+  process.env.FAKE_PI_SCOPE_BY_SPAWN === "1"
+    ? MODELS[spawnIndex === 1 ? 0 : 1]
+    : undefined;
 const extensionContext = {
   cwd: process.cwd(),
   sessionManager: { getLeafId: () => leafId },
+  model: scopedModel,
+  scopedModels: scopedModel ? [{ model: scopedModel }] : [],
 };
 
 async function emitExtensionEvent(type, payload = {}) {
@@ -432,6 +438,12 @@ async function handle(command) {
       return;
     case "get_available_models":
       respond(id, "get_available_models", { models: MODELS });
+      if (
+        process.env.FAKE_PI_EXIT_AFTER_FIRST_AVAILABLE === "1" &&
+        spawnIndex === 1
+      ) {
+        setTimeout(exit, 25);
+      }
       return;
     case "set_model": {
       const found = MODELS.find(

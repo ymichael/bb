@@ -16,7 +16,6 @@ export interface PluginSettingRow {
   updatedAt: number;
 }
 
-// --- plugin_kv: namespaced JSON-text values (`bb.storage.kv`) ---
 
 export function getPluginKvValue(
   db: DbConnection,
@@ -65,7 +64,6 @@ export function listPluginKvKeys(
 ): string[] {
   const conditions = [eq(pluginKv.pluginId, pluginId)];
   if (prefix !== undefined && prefix.length > 0) {
-    // Escape LIKE wildcards so the prefix matches literally.
     const escaped = prefix.replace(/[\\%_]/g, (match) => `\\${match}`);
     conditions.push(sql`${pluginKv.key} LIKE ${`${escaped}%`} ESCAPE '\\'`);
   }
@@ -78,7 +76,6 @@ export function listPluginKvKeys(
     .map((row) => row.key);
 }
 
-// --- plugin_settings: non-secret settings values (`bb.settings`) ---
 
 export function getPluginSettingsValues(
   db: DbConnection,
@@ -92,7 +89,6 @@ export function getPluginSettingsValues(
   return Object.fromEntries(rows.map((row) => [row.key, row.value]));
 }
 
-/** Upserts each string value; a `null` value deletes the stored row. */
 export function setPluginSettingsValues(
   db: DbConnection,
   pluginId: string,

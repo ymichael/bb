@@ -12,9 +12,6 @@ export default {
   title: "thread/timeline/rows/Turn",
 };
 
-// PageShell caps content at 760px and provides @container/page so any markdown
-// tables in the wrapped assistant message (when expanded) resolve their
-// container queries against the 760px content area.
 function TimelineStage({ children }: { children: React.ReactNode }) {
   return (
     <div className="@container/page mx-auto w-full max-w-[760px]">
@@ -27,24 +24,6 @@ const baseProps = {
   threadRuntimeDisplayStatus: "idle" as const,
   workspaceRootPath: undefined,
 };
-
-// ---------------------------------------------------------------------------
-// Turn rows are emitted by `buildCompletedTurnSummaryRows` in
-// `packages/thread-view/src/build-thread-timeline.ts` and rendered by the
-// projection as expandable wrappers around the turn's source rows. We feed a
-// real `TimelineTurnRow` whose `children` reproduce the actual turn from
-// thr_zeb7z9afmw / 019dd185-ef12-7d50-aa48-47882e9c8aaf:
-//
-//   user message ("please address them")
-//   assistant text (sequence 35343)
-//   command bundle  (35347..35353 — exploration sed runs, kept brief)
-//   assistant text (sequence 35381)
-//   file-change bundle (35564, 35573, 35595, 35611, 35671)
-//   assistant text (sequence 35460 — closing summary)
-//
-// The variants below reuse this same children list and only flip `status` /
-// `completedAt` to demonstrate running, error, and interrupted turn states.
-// ---------------------------------------------------------------------------
 
 const assistantOpener: TimelineRow = conversationRow({
   id: "thr_zeb7z9afmw:assistant-text:35343",
@@ -324,12 +303,6 @@ const fileChangeToViewMessages: TimelineRow = fileChangeRow({
   approvalStatus: null,
 });
 
-// Children that live INSIDE the turn body. Per the projection, completed
-// turns strip user messages (ungroupable) and the terminal assistant message
-// (rendered as the turn's outer reply) — see
-// `packages/thread-view/src/timeline-message-helpers.ts:14`. So neither the
-// user prompt that opened the turn nor the closing assistant text appears in
-// `children`; only the in-turn work + intermediate assistant texts.
 const turnChildren: TimelineRow[] = [
   assistantOpener,
   commandSedAssistantStream,

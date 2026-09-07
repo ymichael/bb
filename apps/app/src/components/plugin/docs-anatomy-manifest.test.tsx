@@ -1,13 +1,4 @@
 // @vitest-environment jsdom
-/**
- * Guards the Plugin Guide UI-anatomy manifest against the real app.
- *
- * The Plugin Guide surface fixtures (packages/plugin-api-map) render the
- * sidebar sections, the sidebar footer, and the message action bar in the
- * order declared by anatomy-manifest.json. This test renders the real
- * components and asserts the same DOM order, so reordering the app fails here
- * until the manifest — and therefore the guide — is updated.
- */
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -31,6 +22,7 @@ import {
   setPluginSlotRegistrations,
 } from "@/lib/plugin-slots";
 import { sidebarNavigationQueryKey } from "@/hooks/queries/query-keys";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 const REPO_ROOT = resolve(import.meta.dirname, "../../../../..");
 
@@ -55,7 +47,6 @@ const manifest = JSON.parse(
 const TEST_PLUGIN_ID = "docs-anatomy-test";
 
 beforeAll(() => {
-  // jsdom gaps the sidebar/tooltip stack expects.
   window.matchMedia ??= ((query: string) => ({
     matches: false,
     media: query,
@@ -79,7 +70,6 @@ afterEach(() => {
   cleanup();
 });
 
-/** Asserts the elements appear in the given document order. */
 function expectDocumentOrder(labeled: Array<[string, Element]>): void {
   for (let index = 0; index < labeled.length - 1; index += 1) {
     const [beforeName, before] = labeled[index];
@@ -93,30 +83,29 @@ function expectDocumentOrder(labeled: Array<[string, Element]>): void {
 }
 
 function registerTestPlugin() {
-  setPluginSlotRegistrations(TEST_PLUGIN_ID, {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [
-      {
-        id: "anatomy-panel",
-        title: "Anatomy test panel",
-        icon: "Zap",
-        path: "anatomy",
-        component: () => null,
-      },
-    ],
-    threadPanelActions: [],
-    sidebarFooterActions: [
-      {
-        id: "anatomy-footer",
-        title: "Anatomy footer action",
-        icon: "Zap",
-        run: () => {},
-      },
-    ],
-    fileOpeners: [],
-    messageDirectives: [],
-  });
+  setPluginSlotRegistrations(
+    TEST_PLUGIN_ID,
+    makePluginRegistrationSet({
+      navPanels: [
+        {
+          id: "anatomy-panel",
+          title: "Anatomy test panel",
+          icon: "Zap",
+          path: "anatomy",
+          component: () => null,
+        },
+      ],
+      threadPanelActions: [],
+      sidebarFooterActions: [
+        {
+          id: "anatomy-footer",
+          title: "Anatomy footer action",
+          icon: "Zap",
+          run: () => {},
+        },
+      ],
+    }),
+  );
 }
 
 function renderAppSidebar() {
@@ -192,8 +181,7 @@ describe("docs anatomy manifest", () => {
 
     const sectionSelectors: Record<string, string> = {
       "top-reserve": '[data-testid="app-sidebar-top-reserve-row"]',
-      "primary-actions": '[data-testid="app-sidebar-primary-actions"]',
-      "plugin-nav": '[data-testid="plugin-nav-sidebar-items"]',
+      "sidebar-navigation": '[data-testid="sidebar-navigation-region"]',
       "thread-list": '[data-sidebar="content"]',
       footer: '[data-sidebar="footer"]',
     };
@@ -217,7 +205,7 @@ describe("docs anatomy manifest", () => {
 
     const footerSelectors: Record<string, () => Element | null> = {
       settings: () => footer!.querySelector('a[aria-label^="Settings"]'),
-      "plugin-footer-actions": () =>
+      "plugin-footer-items": () =>
         footer!.querySelector('button[aria-label="Anatomy footer action"]'),
       "bug-report": () => footer!.querySelector('[aria-label^="Report a bug"]'),
     };

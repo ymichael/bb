@@ -435,8 +435,6 @@ describe("runDevSupervisor", () => {
     runtime.runNextTimer(1_000);
     await runtime.waitForActiveTimerDelay(2_000);
     runtime.runNextTimer(2_000);
-    // A child that runs long enough to be considered stable starts a fresh
-    // crash sequence, so its next restart uses the initial backoff.
     await runtime.waitForActiveTimerDelay(1_000);
 
     expect(runtime.stderr).toContain(

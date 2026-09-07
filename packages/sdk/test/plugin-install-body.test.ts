@@ -1,30 +1,13 @@
-/**
- * Repro for get-bb/bb#1662.
- *
- * `bb plugin install <path>` builds its request through
- * `sdk.plugins.install`. Servers released before bb-app 0.38.0 validate the
- * install body with a strict schema that only knows `source`, so an extra
- * `selection` key the caller never asked for is rejected with HTTP 422
- * `expected { "source": string }`. The SDK must not send defaulted keys.
- *
- * The same servers answer with the 0.37.x installed-plugin shape, which has
- * no `publisherLabel`. The SDK must accept that response: the server has
- * already installed the plugin, so a parse failure would report a failure
- * after a successful change.
- */
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createBbSdk } from "../src/core.js";
 import type { FetchImplementation } from "../src/response.js";
 import { createHttpTransport } from "../src/transport-http.js";
 
-// packages/server-contract/src/api/plugins.ts before fc3454809 (bb-app 0.37.x):
 const legacyPluginInstallRequestSchema = z
   .object({ source: z.string().min(1) })
   .strict();
 
-// The installed-plugin shape a bb-app 0.37.x server returns: every field of
-// its `installedPluginSchema`, and nothing added later (no `publisherLabel`).
 const legacyInstalledPlugin = {
   id: "my-plugin",
   source: "path:/tmp/my-plugin",
@@ -60,8 +43,6 @@ function createLegacyServerSdk(): {
   const fetch: FetchImplementation = async (_input, init) => {
     const body: unknown = JSON.parse(String(init?.body));
     bodies.push(body);
-    // Mimic a bb-app 0.37.x server: strict `{ source }` request, 0.37.x plugin
-    // shape in the response.
     const ok = legacyPluginInstallRequestSchema.safeParse(body).success;
     return new Response(
       JSON.stringify(
@@ -93,8 +74,8 @@ describe("issue #1662: plugin install against a pre-0.38.0 server", () => {
     ).resolves.toEqual({
       ...legacyInstalledPlugin,
       publisherLabel: null,
-      // Absent from a pre-0.39 response: tolerated on the SDK's response
-      // schema only, so the request body above stays `{ source }`.
+      screenshots: [],
+      collections: [],
       providerIds: [],
       // Likewise for the declared-icon map, added later still.
       icons: {},

@@ -16,20 +16,6 @@ const baseProps = {
   workspaceRootPath: "/Users/michael/.bb-dev/worktrees/env_story/bb",
 };
 
-// ---------------------------------------------------------------------------
-// Real file-change rows pulled from live threads in ~/.bb-dev/bb.db.
-//
-// fileChange items have three real `kind` values in the projection: "add",
-// "update", and "delete". For "update" the `diff` is unified-diff text; for
-// "add" and "delete" it's the raw file contents (counted as plain lines for
-// diffStats — see packages/thread-view/src/file-change-summary.ts).
-//
-// diffStats counts here are computed by getFileChangeDiffStats against the
-// real diff strings, so they match what the server would project.
-// ---------------------------------------------------------------------------
-
-// thr_uphts6irka, sequence 436 — adds pagination cursor + page metadata
-// schemas to api-types.ts. Small unified diff, single hunk + small tail.
 const updateApiTypes: TimelineRow = fileChangeRow({
   id: "thr_uphts6irka:file-change:call_tzoOVFps3qEslIAKn7T2Q3Vx:0",
   threadId: "thr_uphts6irka",
@@ -52,9 +38,6 @@ const updateApiTypes: TimelineRow = fileChangeRow({
   approvalStatus: null,
 });
 
-// thr_jb5xwguekp, sequence 33995 — agent created
-// packages/thread-view/test/format-helpers.test.ts. Real new-file content; no
-// `+`/`-` prefixes, so diffStats counts plain non-empty content lines.
 const addFormatHelpersTest: TimelineRow = fileChangeRow({
   id: "thr_jb5xwguekp:file-change:call_7OKBsczb0xrotVbyKMY39CRj:0",
   threadId: "thr_jb5xwguekp",
@@ -77,10 +60,6 @@ const addFormatHelpersTest: TimelineRow = fileChangeRow({
   approvalStatus: null,
 });
 
-// thr_zeb7z9afmw, sequence 7834 — agent deleted
-// packages/core-ui/src/active-thinking.ts. The projection stores the deleted
-// file's full prior contents (no `-` prefixes), so diffStats falls back to
-// counting plain lines as `removed`.
 const deleteActiveThinking: TimelineRow = fileChangeRow({
   id: "thr_zeb7z9afmw:file-change:call_gV1Y8zJp5ADwT0Rq9j4TGiqj:0",
   threadId: "thr_zeb7z9afmw",
@@ -103,9 +82,6 @@ const deleteActiveThinking: TimelineRow = fileChangeRow({
   approvalStatus: null,
 });
 
-// thr_4gfmxbsa64, sequence 1910 — large refactor of ThreadFollowUpComposer.tsx
-// (extract QueuedMessageItem into a memoized component). Real unified diff
-// across multiple hunks with substantial added + removed line counts.
 const largeRefactorComposer: TimelineRow = fileChangeRow({
   id: "thr_4gfmxbsa64:file-change:call_xFKgOuQKzQxP1vthvrxyx9PS:0",
   threadId: "thr_4gfmxbsa64",
@@ -127,12 +103,6 @@ const largeRefactorComposer: TimelineRow = fileChangeRow({
   stderr: null,
   approvalStatus: null,
 });
-
-// Lifecycle variants reuse the real updateApiTypes change. status=pending /
-// error / interrupted and the approval-gate states aren't available as
-// terminal events in the DB (errors clear the row, approval pre-completion
-// state isn't persisted on completed events) — so we synthesize them from a
-// real fixture rather than fabricate diffs.
 
 const runningFileChange: TimelineRow = {
   ...updateApiTypes,
@@ -237,7 +207,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="collapsed — waiting for approval"
-        hint="approvalStatus=waiting_for_approval, parked before applying the edit"
+        hint="approvalStatus=waiting_for_approval, queued before applying the edit"
       >
         <TimelineStage>
           <ThreadTimelineRows

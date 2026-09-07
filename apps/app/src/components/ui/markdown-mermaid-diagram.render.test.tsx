@@ -26,8 +26,6 @@ vi.mock("./markdown-mermaid-loader.js", () => ({
   }),
 }));
 
-// One controllable IntersectionObserver for the whole file: tests decide when
-// an observed element "enters" the viewport.
 type ObserverCallback = (
   entries: { isIntersecting: boolean; target: Element }[],
 ) => void;
@@ -153,7 +151,6 @@ describe("MarkdownMermaidDiagram render gating", () => {
     await act(async () => {
       vi.advanceTimersByTime(MERMAID_SOURCE_RENDER_DEBOUNCE_MS - 50);
     });
-    // Neither intermediate source rendered; the first diagram is still shown.
     expect(mermaidRender).toHaveBeenCalledTimes(1);
     expect(
       view.container.querySelector('svg[data-source="graph TD; A"]'),
@@ -184,15 +181,12 @@ describe("MarkdownMermaidDiagram render gating", () => {
     const remounted = render(
       <MarkdownMermaidDiagram preferredTheme="dark" source="graph TD; X-->Y" />,
     );
-    // Cached diagrams paint on the first frame, without waiting for the
-    // viewport gate or Mermaid.
     expect(
       remounted.container.querySelector('svg[data-source="graph TD; X-->Y"]'),
     ).not.toBeNull();
     await flushRenders();
     expect(mermaidRender).toHaveBeenCalledTimes(1);
 
-    // A different theme is a different cache entry.
     remounted.rerender(
       <MarkdownMermaidDiagram
         preferredTheme="light"
@@ -216,7 +210,6 @@ describe("mermaid render cache", () => {
     for (let index = 0; index < MERMAID_RENDER_CACHE_LIMIT; index += 1) {
       storeMermaidRenderCache(keyFor(index), diagram);
     }
-    // Touch the oldest entry so it becomes most recent.
     expect(readMermaidRenderCache(keyFor(0))).toBe(diagram);
     storeMermaidRenderCache(keyFor(MERMAID_RENDER_CACHE_LIMIT), diagram);
     expect(getMermaidRenderCacheSize()).toBe(MERMAID_RENDER_CACHE_LIMIT);

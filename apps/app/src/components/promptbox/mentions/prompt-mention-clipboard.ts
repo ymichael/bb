@@ -51,11 +51,6 @@ export function promptMentionClipboardDataAttributes(
   };
 }
 
-/**
- * The exact rich clipboard representation the composer already emits for an
- * inline pill. A trailing space keeps sequentially pasted references
- * independently editable without becoming one run of text.
- */
 export function promptMentionClipboardContent(
   resource: PromptMentionResource,
 ): { text: string; html: string } {

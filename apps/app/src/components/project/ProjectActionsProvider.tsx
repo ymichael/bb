@@ -64,10 +64,6 @@ export function ProjectActionsProvider({
   const updateProject = useUpdateProject();
   const deleteProject = useDeleteProject();
   const addLocalSource = useAddLocalProjectSource();
-  // Destructure `.mutate` so useCallback deps see a stable reference across
-  // renders. Depending on the full mutation object would churn the callback
-  // identity on every isPending flip and force every useProjectActions()
-  // consumer to re-render.
   const { mutate: updateProjectMutate } = updateProject;
   const { mutate: deleteProjectMutate } = deleteProject;
   const { mutate: addLocalSourceMutate } = addLocalSource;
@@ -122,8 +118,6 @@ export function ProjectActionsProvider({
       deleteProjectMutate(projectId, {
         onSuccess: () => {
           closeDeleteDialog();
-          // Drop the deleted project from the collapsed-state set so stale
-          // ids don't accumulate in localStorage.
           setCollapsedProjectIdList((current) =>
             current.filter((id) => id !== projectId),
           );

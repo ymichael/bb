@@ -22,7 +22,6 @@ function isIpv4LoopbackHostname(hostname: string): boolean {
   });
 }
 
-/** Whether a browser-normalized hostname is reserved for local loopback. */
 export function isLoopbackHostname(hostname: string): boolean {
   const normalizedHostname = normalizeHostname(hostname);
   return (
@@ -33,19 +32,12 @@ export function isLoopbackHostname(hostname: string): boolean {
   );
 }
 
-/**
- * Whether a hostname is loopback or unspecified (`0.0.0.0`, `::`,
- * `::ffff:127.x.x.x`). Such an address never routes to a remote machine: a
- * client that dials it reaches itself.
- */
 function isLocalOnlyHostname(hostname: string): boolean {
   const normalizedHostname = normalizeHostname(hostname);
   if (isLoopbackHostname(normalizedHostname)) return true;
   if (normalizedHostname === "0.0.0.0" || normalizedHostname === "::") {
     return true;
   }
-  // IPv4-mapped IPv6, dotted (`::ffff:127.0.0.1`) or hex (`::ffff:7f00:1`,
-  // the form the URL parser emits).
   const dotted = normalizedHostname.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/u);
   if (dotted !== null) return isLoopbackHostname(dotted[1] ?? "");
   const hex = normalizedHostname.match(
@@ -56,7 +48,6 @@ function isLocalOnlyHostname(hostname: string): boolean {
   return high >> 8 === 127;
 }
 
-/** Whether a URL's hostname is loopback or unspecified. Invalid URLs are not. */
 export function isLocalOnlyUrl(url: string): boolean {
   try {
     return isLocalOnlyHostname(new URL(url).hostname);

@@ -40,9 +40,15 @@ export function Overview() {
                 key={size}
                 variant={variant}
                 size={size}
-                aria-label={size === "icon" ? VARIANT_LABEL[variant] : undefined}
+                aria-label={
+                  size === "icon" ? VARIANT_LABEL[variant] : undefined
+                }
               >
-                {size === "icon" ? <Icon name="Plus" /> : VARIANT_LABEL[variant]}
+                {size === "icon" ? (
+                  <Icon name="Plus" />
+                ) : (
+                  VARIANT_LABEL[variant]
+                )}
               </Button>
             ))}
           </StoryRow>

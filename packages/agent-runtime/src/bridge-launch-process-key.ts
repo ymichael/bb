@@ -39,25 +39,11 @@ function fingerprintStableJson(value: unknown): string {
     .slice(0, 16);
 }
 
-/**
- * The launch facts the process key reads. Structural rather than the resolved
- * runtime launch so the host daemon can key from the wire launch before it
- * has fetched and hash-verified the artifact; the wire and runtime shapes
- * carry these three fields verbatim.
- */
 type BridgeLaunchProcessKeyInput = Pick<
   AgentRuntimeBridgeLaunch,
   "capabilities" | "providerOptions"
 > & { source: Pick<AgentRuntimeBridgeLaunch["source"], "digest"> };
 
-/**
- * Process-key part for a bridge launch: which binary the adapter spawns, plus
- * the declaration facts it is built from and then keeps for the life of that
- * process (the capabilities it enforces). The capabilities come from the
- * plugin's declaration, not from its bundle, so editing a declaration changes
- * them while the artifact hash stays put — without them in the key the next
- * thread reuses an adapter built from the superseded declaration.
- */
 export function bridgeLaunchProcessKey(
   bridgeLaunch: BridgeLaunchProcessKeyInput,
 ): string {

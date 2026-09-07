@@ -4,10 +4,6 @@ type ConnectListErrorCode =
   | "network"
   | "invalid_response";
 
-/**
- * Typed gate-call failure. `code` is stable for RPC/CLI mapping; `message`
- * carries detail for logs/stderr.
- */
 export class ConnectListError extends Error {
   constructor(
     readonly code: ConnectListErrorCode,

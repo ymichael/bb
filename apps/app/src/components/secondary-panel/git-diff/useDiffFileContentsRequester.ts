@@ -13,12 +13,6 @@ import type {
 interface UseDiffFileContentsRequesterArgs {
   environmentId?: string;
   target?: WorkspaceDiffTarget;
-  /**
-   * Resolved merge-base SHA from the diff TOC response. Required to lift a
-   * branch-shaped `WorkspaceDiffTarget` into the SHA-shaped `DiffFileTarget`
-   * the `/diff/file` content read uses; `null` when the target has no merge
-   * base (the diff is empty and context expansion has nothing to reach).
-   */
   mergeBaseRef: string | null;
 }
 
@@ -28,15 +22,6 @@ type DiffFileTarget =
   | { type: "all"; mergeBaseRef: string }
   | { type: "commit"; sha: string };
 
-/**
- * Builds the `onRequestFileContents` callback the diff cards use to lazily fetch
- * an `old`/`new` file side for @pierre/diffs' expand-context buttons. Threads
- * the TOC's resolved `mergeBaseRef` into the existing `/diff/file` content read
- * so context stays aligned with the exact ref the diff was computed against.
- *
- * Returns `undefined` until both the environment and a content-readable target
- * are available, which leaves expand-context disabled on the cards.
- */
 export function useDiffFileContentsRequester({
   environmentId,
   target,
@@ -127,13 +112,6 @@ function fileTargetKey(target: DiffFileTarget): string | null {
   }
 }
 
-/**
- * Lift a `WorkspaceDiffTarget` (branch-name-shaped) into a `DiffFileTarget`
- * (SHA-shaped) once the diff TOC has surfaced the resolved merge base. Returns
- * `undefined` when we don't yet have a SHA for the merge-base side — either the
- * TOC hasn't loaded, or the branch has no merge base with HEAD (the diff is
- * empty and context expansion has nothing to reach).
- */
 function buildDiffFileTarget(
   target: WorkspaceDiffTarget | undefined,
   mergeBaseRef: string | null,
@@ -157,9 +135,6 @@ function buildDiffFileTarget(
   }
 }
 
-// Browser-renderable raster image MIME types. Mirrors the extension allowlist
-// in `isPreviewableImagePath`. SVG remains a text result; the card converts that
-// text into a preview data URL while keeping the raw diff toggle available.
 const PREVIEWABLE_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   "image/avif",
   "image/bmp",
@@ -171,14 +146,6 @@ const PREVIEWABLE_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   "image/x-icon",
 ]);
 
-/**
- * Map a `/diff/file` response into the card's `DiffFileContentsResult`. UTF-8
- * content becomes a `text` side @pierre/diffs can expand context from and, for
- * SVG files, preview inline. A base64 blob with a browser-renderable image MIME
- * type becomes an `image` side the card previews inline (with its byte size for
- * the header `+/-` delta). Anything else (binary, non-image) yields `null` so
- * the card leaves that side blank.
- */
 function toDiffFileContentsResult(
   path: string,
   response: EnvironmentDiffFileResponse,

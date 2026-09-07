@@ -25,32 +25,12 @@ import {
 } from "./schemas.js";
 import { backgroundTaskPresentation } from "./presentation.js";
 
-/**
- * Claude background-task dialect state → narrow-grammar deltas.
- *
- * The per-index workflow snapshot fold across delta batches, opaque-task
- * tracking, and generation counting are claude dialect knowledge and stay
- * bridge-side; the emitted deltas carry the full re-embedded snapshot per
- * event. Progress-event throttling is NOT here anymore — it is the runtime
- * delta assembler's central policy (500ms per item key, status transitions
- * ride `flush: true`).
- */
-
-/**
- * Thread-lifetime state for one provider background task. Lives outside any
- * turn state (tasks outlive turns by design); the assembler's eviction guard
- * pins the thread while the materialized item is open.
- */
 interface ClaudeTrackedTask {
   taskId: string;
-  /**
-   * Provider item key for the assembler's id maps. A restarted settled task is
-   * a NEW provider item key (`task:<taskId>#<generation>`; generation is a
-   * bridge counter), so it mints a fresh timeline item.
-   */
   providerItemKey: string;
   toolUseId: string | undefined;
   taskType: string;
+  materialized: boolean;
   generation: number;
   workflowName: string | undefined;
   description: string;
@@ -70,40 +50,10 @@ export type ClaudeTaskMap = Map<string, ClaudeTrackedTask>;
 interface TranslateClaudeTaskMessageArgs {
   event: unknown;
   tasks: ClaudeTaskMap;
-  /**
-   * The caller's late-drain suppression (#1623): while true, a `task_started`
-   * may not materialize a new task, because its `turn.open` would manufacture
-   * an unaccepted provider-only turn. Updates for already-tracked tasks still
-   * translate — they ride the thread-attached item, not a turn.
-   */
   turnStartSuppressed: boolean;
-  /**
-   * Whether the bridge saw the `tool_use` block with this id open in the
-   * forwarded stream. The CLI emits `task_started` for every task in the
-   * session, including tasks a workflow agent started, but it forwards
-   * `tool_use` blocks only from the main loop and from `Agent` sub-agents
-   * (under `parent_tool_use_id`). A task whose spawning call never streamed
-   * belongs to an unforwarded child, and bb does not materialize it.
-   */
   hasForwardedToolUse: (toolUseId: string) => boolean;
 }
 
-/**
- * Whether Claude still has bounded agent work that will reinvoke the parent
- * model when it settles. A successful SDK result while one of these tasks is
- * open ends only the current SDK loop segment, not the logical bb turn.
- *
- * Backgrounded shell commands are deliberately excluded: they are detached
- * work and may be long-lived (for example, a dev server). Ambient tasks are
- * excluded for the same reason.
- *
- * Workflows are excluded too, even though they do reinvoke the parent model.
- * They routinely run for many minutes, and holding the turn open kept the
- * thread `active` for their whole duration, which made the composer queue
- * follow-ups instead of sending them. A workflow therefore lets the turn
- * complete and the thread go idle; its progress stays visible through the
- * thread's background-task activity rather than through turn status.
- */
 export function hasCompletionBlockingClaudeTasks(
   tasks: ClaudeTaskMap,
 ): boolean {
@@ -113,6 +63,15 @@ export function hasCompletionBlockingClaudeTasks(
       !task.skipTranscript &&
       isBackgroundAgentTaskType(task.taskType)
     ) {
+      return true;
+    }
+  }
+  return false;
+}
+
+export function hasPendingClaudeTasks(tasks: ClaudeTaskMap): boolean {
+  for (const task of tasks.values()) {
+    if (!task.terminal) {
       return true;
     }
   }
@@ -131,11 +90,6 @@ function toBackgroundTaskUsage(usage: ClaudeTaskUsage): BackgroundTaskUsage {
   };
 }
 
-/**
- * Raw record state machine: "start" (queued or running), "progress", "done",
- * "error" (+ skipped flag). Unknown future states degrade to running/queued by
- * slot acquisition rather than failing translation.
- */
 function deriveWorkflowAgentState(
   record: ClaudeWorkflowAgentRecord,
 ): WorkflowAgentState {
@@ -199,12 +153,6 @@ function normalizeWorkflowAgentRecord(
   };
 }
 
-/**
- * Folds one workflow_progress delta batch into the task's per-index maps. The
- * wire carries only records produced since the last CLI flush; the latest
- * record for a (record type, index) key supersedes earlier ones across
- * events, so a snapshot must never be rebuilt from a single batch.
- */
 function foldWorkflowProgressRecords(
   task: ClaudeTrackedTask,
   records: unknown[],
@@ -230,7 +178,6 @@ function foldWorkflowProgressRecords(
           : {}),
       });
     }
-    // Unknown record kinds (e.g. future additions) are ignored by design.
   }
 }
 
@@ -248,7 +195,6 @@ function buildWorkflowSnapshot(
   };
 }
 
-/** The full snapshot re-embedded on every task delta. */
 function buildClaudeTaskShape(
   task: ClaudeTrackedTask,
 ): DeltaBackgroundTaskShape {
@@ -294,7 +240,6 @@ function buildClaudeTaskProgressDelta(
   };
 }
 
-/** The row presentation of a task; the description can change by patch. */
 function claudeTaskPresentation(task: ClaudeTrackedTask) {
   return backgroundTaskPresentation({
     taskType: task.taskType,
@@ -314,12 +259,6 @@ function buildClaudeTaskCloseDelta(task: ClaudeTrackedTask): ThreadDelta {
   };
 }
 
-/**
- * Task types bb materializes as background-task timeline rows: dynamic
- * workflows, backgrounded shell commands, and backgrounded agents. Other task
- * types such as monitors share the event family but stay on their own render
- * paths.
- */
 function isMaterializedTaskType(taskType: string): boolean {
   return (
     taskType === LOCAL_WORKFLOW_TASK_TYPE ||
@@ -328,17 +267,6 @@ function isMaterializedTaskType(taskType: string): boolean {
   );
 }
 
-/**
- * Translates the SDK task event family (task_started / task_progress /
- * task_updated / task_notification) into deltas. Returns null when the
- * message is not a task message; returns [] for task messages that are
- * intentionally not materialized (monitor/unknown task types, tasks an
- * unforwarded child spawned, and events for unknown/settled tasks).
- *
- * A `task_started` for a materialized type opens the item in the spawning
- * turn: the returned deltas begin with `turn.open` exactly where the old
- * translator called ensureTurnStarted.
- */
 export function translateClaudeTaskMessage(
   args: TranslateClaudeTaskMessageArgs,
 ): ThreadDelta[] | null {
@@ -346,30 +274,24 @@ export function translateClaudeTaskMessage(
   if (started.success) {
     const message = started.data;
     const taskType = message.task_type ?? "unknown";
-    if (!isMaterializedTaskType(taskType)) {
+    const materialized = isMaterializedTaskType(taskType);
+    if (!materialized && taskType !== "monitor") {
       return [];
     }
     const existing = args.tasks.get(message.task_id);
     if (existing && !existing.terminal) {
-      // Duplicate started for an open task — nothing new to materialize.
       return [];
     }
     if (
+      materialized &&
       existing === undefined &&
       message.tool_use_id !== undefined &&
       !args.hasForwardedToolUse(message.tool_use_id)
     ) {
-      // A workflow agent's backgrounded command or sub-agent. Its spawning
-      // call never streamed, so no row in this thread can own the task. If
-      // it materialized, the prompt-box card would list it as the parent's
-      // own command and the `turn.open` would open a provider-only turn that
-      // stays open until the CLI's next result. The workflow card already
-      // shows the agent's last tool. Later progress/notification events for
-      // the untracked task id fall through to the unknown-task branches.
       return [];
     }
     const generation = existing ? existing.generation + 1 : 1;
-    if (args.turnStartSuppressed) {
+    if (materialized && args.turnStartSuppressed) {
       return [];
     }
     const task: ClaudeTrackedTask = {
@@ -377,6 +299,7 @@ export function translateClaudeTaskMessage(
       providerItemKey: buildClaudeTaskItemKey(message.task_id, generation),
       toolUseId: message.tool_use_id,
       taskType,
+      materialized,
       generation,
       workflowName: message.workflow_name,
       description: message.description,
@@ -391,6 +314,9 @@ export function translateClaudeTaskMessage(
       terminal: false,
     };
     args.tasks.set(message.task_id, task);
+    if (!materialized) {
+      return [];
+    }
     return [
       { kind: "turn.open" },
       {
@@ -413,6 +339,9 @@ export function translateClaudeTaskMessage(
       foldWorkflowProgressRecords(task, message.workflow_progress);
     }
     task.usage = toBackgroundTaskUsage(message.usage);
+    if (!task.materialized) {
+      return [];
+    }
     return [buildClaudeTaskProgressDelta(task, false)];
   }
 
@@ -435,11 +364,9 @@ export function translateClaudeTaskMessage(
     if (patch.error !== undefined) {
       task.error = patch.error;
     }
-    // end_time / total_paused_ms / is_backgrounded are ignored by design for
-    // workflow tasks: duration comes from usage.duration_ms and workflows are
-    // always backgrounded. Revisit when non-workflow tasks materialize.
-    // Status transitions must land immediately: flush bypasses the assembler's
-    // central progress throttle.
+    if (!task.materialized) {
+      return [];
+    }
     return [buildClaudeTaskProgressDelta(task, statusChanged)];
   }
 
@@ -461,23 +388,15 @@ export function translateClaudeTaskMessage(
       task.usage = toBackgroundTaskUsage(message.usage);
     }
     task.terminal = true;
+    if (!task.materialized) {
+      return [];
+    }
     return [buildClaudeTaskCloseDelta(task)];
   }
 
   return null;
 }
 
-/**
- * Settles every open task as explicit `item.close` deltas. Used when the CLI
- * session backing the tasks is gone: thread/resume restarts the session
- * (settings change, reconnect re-resume), thread/stop interrupts it, and
- * provider process exit kills it outright. Tasks whose latest patch already
- * reported a finished status (completed/failed/killed) keep it — only the
- * terminal task_notification is lost, not the outcome — while genuinely open
- * tasks settle as interrupted ("stopped"). The daemon-crash case — where this
- * in-memory state is lost entirely — is reconciled server-side on daemon
- * session re-registration.
- */
 export function buildInterruptedClaudeTaskDeltas(args: {
   tasks: ClaudeTaskMap;
 }): ThreadDelta[] {
@@ -490,7 +409,9 @@ export function buildInterruptedClaudeTaskDeltas(args: {
       task.taskStatus = "stopped";
     }
     task.terminal = true;
-    deltas.push(buildClaudeTaskCloseDelta(task));
+    if (task.materialized) {
+      deltas.push(buildClaudeTaskCloseDelta(task));
+    }
   }
   return deltas;
 }

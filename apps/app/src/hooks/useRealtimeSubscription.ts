@@ -6,12 +6,18 @@ interface RealtimeSubscriptionOptions {
   enabled?: boolean;
 }
 
-const THREAD_LIST_TARGET = { kind: "thread-list" } satisfies RealtimeSubscriptionTarget;
-const PROJECT_LIST_TARGET = { kind: "project-list" } satisfies RealtimeSubscriptionTarget;
+const THREAD_LIST_TARGET = {
+  kind: "thread-list",
+} satisfies RealtimeSubscriptionTarget;
+const PROJECT_LIST_TARGET = {
+  kind: "project-list",
+} satisfies RealtimeSubscriptionTarget;
 const ENVIRONMENT_LIST_TARGET = {
   kind: "environment-list",
 } satisfies RealtimeSubscriptionTarget;
-const HOST_LIST_TARGET = { kind: "host-list" } satisfies RealtimeSubscriptionTarget;
+const HOST_LIST_TARGET = {
+  kind: "host-list",
+} satisfies RealtimeSubscriptionTarget;
 const SYSTEM_TARGET = { kind: "system" } satisfies RealtimeSubscriptionTarget;
 
 function useRealtimeSubscription(

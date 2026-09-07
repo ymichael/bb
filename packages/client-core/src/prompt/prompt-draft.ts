@@ -72,18 +72,10 @@ function normalizeQuotedSelectionText(text: string): string {
   return normalizedLines.join("\n").trim();
 }
 
-/**
- * Append a quoted selection to the draft text as a `> `-prefixed blockquote
- * block. The editor parses these blocks into real blockquote nodes; the user
- * types their reply in the paragraph below. Appending to the END of the text
- * keeps every existing mention offset unchanged.
- */
 export function appendQuoteToDraftText(
   state: PromptDraftState,
   quotedText: string,
 ): PromptDraftState {
-  // Guard the boundary: an empty/whitespace-only selection would otherwise
-  // emit a bare "> " block and make an empty draft look dirty.
   const trimmed = normalizeQuotedSelectionText(quotedText);
   if (trimmed === "") return state;
 
@@ -92,7 +84,6 @@ export function appendQuoteToDraftText(
     .map((line) => (line.length > 0 ? `> ${line}` : ">"))
     .join("\n");
 
-  // Trailing newline so the reply paragraph sits below the quote.
   const text = state.text === "" ? `${block}\n` : `${state.text}\n${block}\n`;
 
   return { ...state, text };
@@ -185,7 +176,7 @@ function getFileNameFromPath(path: string): string {
   return lastSegment && lastSegment.length > 0 ? lastSegment : trimmedPath;
 }
 
-function normalizePromptTextMentions(
+export function normalizePromptTextMentions(
   mentions: readonly PromptTextMention[],
   textLength: number,
 ): PromptTextMention[] {

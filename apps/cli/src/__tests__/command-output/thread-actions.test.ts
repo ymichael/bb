@@ -11,6 +11,11 @@ import type { CommandRegistrar } from "../helpers/command-output-harness.js";
 import * as fixtures from "../helpers/command-output-fixtures.js";
 import { registerThreadCommands } from "../../commands/thread/index.js";
 
+interface RetryRequest {
+  param: { id: string };
+  json: { turnRequestId: string | null; sendAt: number | null; reason: string };
+}
+
 describe("bb thread action command output", () => {
   setupCommandOutputTestEnvironment();
 
@@ -470,6 +475,18 @@ describe("bb thread action command output", () => {
     );
   });
 
+  it("bb thread clear invokes the context clear action", async () => {
+    const post = vi.fn(async () => ({ ok: true }));
+    stubServerApi({ "v1.threads.:id.context.clear.$post": post });
+
+    await runCommand(["thread", "clear", "thread-clear"], register);
+
+    expect(post).toHaveBeenCalledWith({ param: { id: "thread-clear" } });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-clear context cleared",
+    );
+  });
+
   it.each([
     ["cancel-plan", "plan.cancel", "exited Plan mode"],
     ["clear-goal", "goal.clear", "cleared its Goal"],
@@ -487,4 +504,64 @@ describe("bb thread action command output", () => {
       );
     },
   );
+  it("bb thread retry defaults the turn and the reason at the boundary", async () => {
+    const retryPost = vi.fn(async () => ({
+      ok: true,
+      delivery: "sent",
+      turnRequestId: "creq_2222222222",
+      attempt: 2,
+    }));
+    stubServerApi({ "v1.threads.:id.retry.$post": retryPost });
+
+    await runCommand(["thread", "retry", "thread-retry-1"], register);
+
+    // No `--turn` means "whichever turn failed", which the server resolves;
+    // the reason is filled rather than sent as an absent field.
+    expect(retryPost).toHaveBeenCalledWith({
+      param: { id: "thread-retry-1" },
+      json: { turnRequestId: null, sendAt: null, reason: "Retry" },
+    });
+    expect(collectLogLines(vi.mocked(console.log))).toContain(
+      "Thread thread-retry-1 retrying turn creq_2222222222 (attempt 2)",
+    );
+  });
+
+  it("bb thread retry names the turn, the instant and the reason when asked", async () => {
+    const retryPost = vi.fn(async (_request: RetryRequest) => ({
+      ok: true,
+      delivery: "queued",
+      turnRequestId: "creq_3333333333",
+      attempt: 3,
+      queuedMessageId: "queued_1",
+      waitingOn: { kind: "time" },
+      sendAt: 1,
+    }));
+    stubServerApi({ "v1.threads.:id.retry.$post": retryPost });
+
+    await runCommand(
+      [
+        "thread",
+        "retry",
+        "thread-retry-2",
+        "--turn",
+        "creq_3333333333",
+        "--send-at",
+        "10m",
+        "--reason",
+        "Rate limited",
+      ],
+      register,
+    );
+
+    const call = retryPost.mock.calls[0]?.[0];
+    expect(call?.param).toEqual({ id: "thread-retry-2" });
+    expect(call?.json.turnRequestId).toBe("creq_3333333333");
+    expect(call?.json.reason).toBe("Rate limited");
+    // `--send-at` is the same grammar `bb thread tell` uses: a duration from
+    // now becomes an absolute instant at the boundary.
+    expect(call?.json.sendAt).toBeGreaterThan(Date.now());
+    expect(collectLogLines(vi.mocked(console.log)).join("\n")).toContain(
+      "retry of turn creq_3333333333 (attempt 3) queued",
+    );
+  });
 });

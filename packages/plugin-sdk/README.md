@@ -65,6 +65,16 @@ action id, or a surface with no side panel). A decline is a return value, never
 a thrown error, so a plugin registering several kinds of action can share one
 open routine and branch on the result.
 
+Use `app.slots.experimental_appOverlay({ id, component })` for additive,
+app-wide floating React UI. BB mounts the component once per app window through
+the normal plugin slot boundary, so SDK hooks and plugin CSS work and React
+context survives portals. This app-level boundary includes the sidebar thread
+data and action hooks. Hooks whose contract requires a particular surface,
+including `useComposer` and `useComposerView`, remain limited to that surface.
+The plugin owns the overlay's chrome, positioning, visibility, focus, and
+responsive behavior; a crashing overlay is hidden without affecting siblings.
+Use a content script for app-wide DOM behavior that does not need React context.
+
 See the
 [`composer-customization` reference plugin](../../examples/plugins/composer-customization/README.md)
 for every region in one small app. The deprecated pre-1.0
@@ -107,16 +117,31 @@ npm install --save-dev react react-dom @testing-library/react jsdom # frontend t
 Backend example:
 
 ```ts
-import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import {
+  createFakePluginHost,
+  makePluginAgentConfigurationContext,
+} from "@get-bb/plugin-sdk/testing";
 import plugin from "./server.js";
 
 const host = createFakePluginHost({ pluginId: "notes" });
 await plugin(host.bb);
 
+await host.harness.behavior.resolveAgentConfiguration(
+  makePluginAgentConfigurationContext({
+    provider: { id: "codex" },
+  }),
+);
 await host.harness.behavior.callRpc("list", { query: "today" });
 expect(host.harness.inspection.registrations.rpcMethods).toContain("list");
 await host.harness.lifecycle.dispose();
 ```
+
+`makePluginAgentConfigurationContext`, `makeMessageDispatchHookContext`,
+`makeThreadResponse`, `makeQueueEntry`, and `makeTurnFailedEvent` return
+complete deterministic SDK objects. Pass partial overrides so a behavioral
+test shows only the values relevant to its scenario. Nested context
+members merge partial overrides against complete defaults, so required contract
+additions remain localized to the shared fixtures.
 
 `harness.behavior` contains deterministic host inputs (RPC/HTTP/CLI calls,
 events, settings, tools, interactions, and schedules), `harness.inspection`

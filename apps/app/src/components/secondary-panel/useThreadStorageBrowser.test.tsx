@@ -4,10 +4,6 @@ import type { WorkspaceFile } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { useThreadStorageBrowser } from "./useThreadStorageBrowser";
 
-// Records when the tree library is first evaluated. A static import anywhere
-// on the hook's path would fire this while the test file loads, before any
-// thread has files to show; the route budget forbids exactly that. Hoisted so
-// it exists even when such a static import runs before this module body.
 const { treesModuleEvaluated } = vi.hoisted(() => ({
   treesModuleEvaluated: vi.fn<(specifier: string) => void>(),
 }));
@@ -70,16 +66,12 @@ describe("useThreadStorageBrowser", () => {
     });
     const model = result.current.model;
     if (model === null) throw new Error("model should be loaded");
-    // The files and the selection that arrived before the chunk did are
-    // applied to the model as soon as it exists, not only on the next change.
     expect(model.getItem("src/main.ts")).not.toBeNull();
     expect(model.getItem("docs/notes.md")).not.toBeNull();
     expect(model.getSelectedPaths()).toEqual(["src/main.ts"]);
 
     rerender({ selectedPath: "docs/notes.md" });
     expect(model.getSelectedPaths()).toEqual(["docs/notes.md"]);
-    // Reconciling React state into the tree must not echo back as a user
-    // selection.
     expect(onSelectPath).not.toHaveBeenCalled();
 
     const cleanUp = vi.spyOn(model, "cleanUp");

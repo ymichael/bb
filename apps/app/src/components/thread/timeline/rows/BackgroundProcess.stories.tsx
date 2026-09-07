@@ -16,14 +16,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// A backgrounded shell command (Claude Code Bash run_in_background). It reuses
-// the workflow work row with taskType "local_bash": no agent/phase tree, just
-// description + lifecycle status + the provider's terminal summary (which
-// embeds the exit code). The actual command line renders in the separate
-// command-execution row that launched it.
-// ---------------------------------------------------------------------------
-
 const baseArgs = {
   threadId: "thr_fixture",
   turnId: "turn-1",
@@ -74,9 +66,6 @@ const interrupted: TimelineRow = backgroundCommandRow({
   durationMs: 30_000,
 });
 
-// Several background commands at once: each backgroundTask item folds into its
-// own row (keyed by item id), so concurrent commands simply stack — two still
-// running plus one already finished.
 const concurrent: TimelineRow[] = [
   backgroundCommandRow({
     id: "thr_fixture:bg:dev-server:running",
@@ -142,10 +131,7 @@ export function Overview() {
         hint="session ended while the command was still running"
       >
         <TimelineStage>
-          <ThreadTimelineRows
-            {...baseProps}
-            timelineRows={[interrupted]}
-          />
+          <ThreadTimelineRows {...baseProps} timelineRows={[interrupted]} />
         </TimelineStage>
       </StoryRow>
       <StoryRow

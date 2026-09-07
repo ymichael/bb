@@ -30,7 +30,6 @@ function pluginModule(): Record<string, unknown> {
   return { default: definePluginApp(() => {}) };
 }
 
-/** Deferred import per URL so a test controls when each bundle "arrives". */
 function makeDeferredImports() {
   const started: string[] = [];
   const resolvers = new Map<string, () => void>();
@@ -47,8 +46,6 @@ function makeDeferredImports() {
       const [url, resolve] = [...resolvers][0]!;
       resolvers.delete(url);
       resolve();
-      // Let the reconcile worker observe the settled import and pick the
-      // next candidate.
       for (let i = 0; i < 10; i += 1) await Promise.resolve();
     },
   };
@@ -117,8 +114,6 @@ describe("reconcilePluginFrontends load scheduling", () => {
     const done = reconcilePluginFrontends(state, deps);
     for (let i = 0; i < 10; i += 1) await Promise.resolve();
 
-    // Route-owning plugin first, then smallest first; a fourth import must
-    // wait for a lane to free up (five candidates, three lanes).
     expect(PLUGIN_FRONTEND_LOAD_CONCURRENCY).toBe(3);
     expect(imports.started).toEqual([
       "/api/v1/plugins/panel/assets/app.js?h=h",

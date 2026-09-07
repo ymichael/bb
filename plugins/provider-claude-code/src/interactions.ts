@@ -1,14 +1,3 @@
-/**
- * Claude Code interactive-request ↔ canonical pending-interaction mapping.
- *
- * Maps the claude-code bridge's provider-filtered interactive requests
- * (permission approvals, AskUserQuestion, plan-mode exit) onto the canonical
- * `PendingInteractionPayload`/`PendingInteractionResolution` shapes from
- * `@bb/domain`, and canonical resolutions back onto the Claude interactive
- * response contract — one module for both directions of the bridge's
- * `interaction/request` path.
- */
-
 import {
   type ApprovalPendingInteractionPayload,
   type PendingInteractionApprovalDecision,
@@ -26,11 +15,6 @@ import {
 } from "@get-bb/plugin-sdk/provider-bridge";
 import { z } from "zod";
 
-/**
- * The outcomes this bridge can encode: it raises approvals and user
- * questions only, so the wire resolution is parsed against exactly those
- * two pairs. A plugin-defined request never originates here.
- */
 export const claudeInteractionOutcomeSchema = z.union([
   approvalInteractionOutcomeSchema,
   userQuestionInteractionOutcomeSchema,
@@ -70,7 +54,6 @@ function hasClaudeSessionPermissionUpdate(
 function buildClaudeApprovalAvailableDecisions(
   args: ClaudePermissionRequestApprovalParams,
 ): PendingInteractionApprovalDecision[] {
-  // A plan verdict is not a grant, so "allow for session" has nothing to mean.
   if (args.toolName === CLAUDE_EXIT_PLAN_MODE_TOOL_NAME) {
     return ["allow_once", "deny"];
   }
@@ -133,7 +116,6 @@ function buildClaudeApprovalSubject(
   };
 }
 
-/** The canonical approval payload for a Claude permission-approval request. */
 export function buildClaudeApprovalInteractionPayload(
   args: ClaudePermissionRequestApprovalParams,
 ): ApprovalPendingInteractionPayload {
@@ -307,12 +289,8 @@ function getClaudePermissionUpdateToolName(
       return null;
     case "permission_grant":
       return payload.subject.toolName;
-    // A plan verdict grants nothing, so it never reaches a session update.
     case "plan":
       return null;
-    // This bridge raises generic tools as `permission_grant` (the subject
-    // carries the session grant Claude can apply), never as `tool_use`, so a
-    // resolution for one can only be a wiring bug upstream.
     case "tool_use":
       throw new ProviderResponseEncodeError(
         "tool_use approval subjects are not produced by the Claude bridge",
@@ -320,15 +298,6 @@ function getClaudePermissionUpdateToolName(
   }
 }
 
-/**
- * Map a canonical resolution back onto the Claude interactive response the
- * request payload calls for. The outcome pairs the resolution with the
- * payload it answers (`providerInteractionOutcomeSchema` parsed it at the
- * wire), so a user answer never meets an approval subject here. Throws
- * `ProviderResponseEncodeError` only for an encodable-but-invalid answer
- * (a session grant with no permissions), which the bridge settles as a
- * denied request.
- */
 export function buildClaudeInteractiveResponse(
   args: ClaudeInteractionOutcome,
 ): ClaudeInteractiveResponse {
@@ -356,9 +325,6 @@ export function buildClaudeInteractiveResponse(
   }
 
   if (args.resolution.decision === "allow_once") {
-    // Claude canUseTool approvals without updatedPermissions apply only
-    // to the current tool request. Session grants are the only scope
-    // that should mutate Claude's permission state.
     return {
       kind: "permission_request",
       behavior: "allow",

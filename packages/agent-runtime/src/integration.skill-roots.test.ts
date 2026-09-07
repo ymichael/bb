@@ -1,5 +1,3 @@
-/** Provider integration tests for runtime-injected skill roots. */
-
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -47,11 +45,6 @@ function createSkillMarkdown(token: string): string {
   ].join("\n");
 }
 
-/**
- * One generic root for every provider — a skills directory with one
- * subdirectory per skill — exactly what the daemon stages. Each bridge maps
- * it to its provider's layout (claude assembles a local plugin around it).
- */
 function createSkillRoot(args: CreateSkillRootArgs): AgentRuntimeSkillRoot {
   const rootPath = join(args.workspacePath, "skill-roots");
   mkdirSync(join(rootPath, skillName), { recursive: true });

@@ -146,8 +146,6 @@ describe("normalized plugin persistence", () => {
       sourceGitRefKind: null,
     });
 
-    // Reinstalling the same id against a ref must clear the range trio, or a
-    // later resolution would still range over tags.
     upsertInstalledPlugin(db, {
       ...common,
       id: "ranged",

@@ -261,7 +261,6 @@ export const LAUNCH_ADAPTERS: LaunchAdapter[] = [
     macos: {
       openMode: "application",
       appName: "Cursor",
-      // ToDesktop bundle IDs are generated; keep app-name path fallback below.
       bundleIds: ["com.todesktop.230313mzl4w4u92"],
       builtIn: false,
       lineOpenCommand: {

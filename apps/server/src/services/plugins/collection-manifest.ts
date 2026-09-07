@@ -8,18 +8,12 @@ import {
 } from "./install-sources.js";
 import { readPluginManifest } from "./manifest.js";
 
-/** Repository-relative location of the plugin collection manifest. */
 const COLLECTION_MANIFEST_PATH = ".bb/plugins.json";
 export const COLLECTION_SCHEMA_URL =
   "https://getbb.app/schemas/plugins.schema.json";
 
 const COLLECTION_NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
-/**
- * A collection source is a repository-relative directory written with an
- * explicit "./" prefix, so it never reads as an absolute path, a package
- * name, or a URL.
- */
 function subdirectoryFromCollectionSource(source: string): string {
   if (!source.startsWith("./")) {
     throw new Error(`source "${source}" must start with "./"`);
@@ -45,11 +39,6 @@ const collectionEntrySchema = z
     }
   });
 
-/**
- * `.bb/plugins.json` — a bare index of the plugins a repository contains.
- * It selects directories and nothing else: identity, branding, entry points,
- * and compatibility stay with each plugin's own package manifest.
- */
 const pluginCollectionManifestSchema = z
   .object({
     $schema: z.literal(COLLECTION_SCHEMA_URL).optional(),
@@ -72,9 +61,7 @@ const pluginCollectionManifestSchema = z
     });
   });
 
-type PluginCollectionManifest = z.infer<
-  typeof pluginCollectionManifestSchema
->;
+type PluginCollectionManifest = z.infer<typeof pluginCollectionManifestSchema>;
 
 export function formatIssues(error: z.ZodError): string {
   return error.issues
@@ -85,7 +72,6 @@ export function formatIssues(error: z.ZodError): string {
     .join("; ");
 }
 
-/** Parse a collection manifest. An invalid file is rejected whole. */
 export function parsePluginCollectionManifest(
   raw: string,
   location: string,
@@ -105,11 +91,6 @@ export function parsePluginCollectionManifest(
   return parsed.data;
 }
 
-/**
- * Read `.bb/plugins.json` from a checkout, or null when the repository has
- * none. The manifest must itself live inside the checkout: a symlinked
- * manifest never reads a file from the host.
- */
 export async function readPluginCollectionManifest(
   checkoutDir: string,
 ): Promise<PluginCollectionManifest | null> {
@@ -136,7 +117,6 @@ export async function readPluginCollectionManifest(
   );
 }
 
-/** Resolve a collection entry name to its repository-relative directory. */
 export function subdirectoryForCollectionEntry(
   manifest: PluginCollectionManifest,
   name: string,
@@ -152,14 +132,6 @@ export function subdirectoryForCollectionEntry(
   return subdirectoryFromCollectionSource(entry.source);
 }
 
-/**
- * Resolve which directory of a checkout an install selects: null for the
- * checkout root, otherwise a repository-relative path.
- *
- * A repository that indexes nested plugins and is not a plugin itself has no
- * default, so an unselected install fails with the entry names instead of
- * reporting a missing package manifest.
- */
 export async function resolveSelectedSubdirectory(args: {
   checkoutDir: string;
   selection: PluginSourceSelection;

@@ -20,28 +20,12 @@ interface RootSubscriptionArgs {
   subscribeOptions?: ParcelWatcherSubscribeOptions;
   retryDelayMs: number;
   maxRetryDelayMs: number;
-  /** Non-error event batch delivered by the live subscription. */
   onEvents: (events: ParcelWatcherEventBatch) => void;
-  /** Invoked after the underlying filesystem subscription is established. */
   onReady?: () => void;
-  /**
-   * Dropped FSEvents detected. Invoked once when the drop is observed and again
-   * after the subscription is re-established, so callers can rescan both the
-   * gap that was missed and anything that changed during re-subscription.
-   */
   onDroppedEvents: () => void;
-  /** Genuine, non-recoverable watch failure. Reported at most once until the
-   * subscription successfully (re-)establishes. */
   onWatchError: (message: string) => void;
 }
 
-/**
- * Owns the full lifecycle of a single Parcel subscription on one root path:
- * existence gating before subscribe, startup retry, warn-once error reporting,
- * dropped-events recovery, and disposal that drains in-flight start/stop work.
- * Callers compose one (single-root watchers) or many (keyed by root path) and
- * layer their own change aggregation on top.
- */
 export class RootSubscription {
   private disposed = false;
   private subscription: ParcelAsyncSubscription | null = null;
@@ -85,9 +69,7 @@ export class RootSubscription {
   private stopSubscription(subscription: ParcelAsyncSubscription): void {
     const pendingStop = subscription
       .unsubscribe()
-      .catch(() => {
-        // Ignore unsubscribe failures during watcher teardown.
-      })
+      .catch(() => {})
       .finally(() => {
         this.pendingStops.delete(pendingStop);
       });
@@ -169,11 +151,6 @@ export class RootSubscription {
             }
             terminalFailureObserved = true;
             this.reportWatchError(message);
-            // Parcel has already cleared the callback for runtime backend
-            // errors. On Linux, retrying after an inotify backend poll/read
-            // error creates a fresh native backend while the failed one may
-            // still hold its fd/thread state. Leave the subscription unavailable
-            // until the owner recreates it or the process restarts.
             this.subscription = null;
             return;
           }

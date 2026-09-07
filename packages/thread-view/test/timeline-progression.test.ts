@@ -18,18 +18,6 @@ import {
   type TimelineStepSummaryRow,
 } from "../src/timeline-view.js";
 
-/**
- * Frame-by-frame progression test. The frames mirror Michael's
- * `plans/timeline-rows.md` example: a turn that starts with a user message,
- * accumulates exploration work, has the exploration bundle displaced when a
- * file edit lands, and finally collapses into a step-summary at the next
- * assistant-message boundary.
- *
- * Each frame asserts the structural output of `buildTimelineViewRows` and the
- * positional `findActiveLatestBundleId` lookup that list-level renderers use
- * to decide which bundle gets the present-tense / shimmer treatment.
- */
-
 let nextSeq = 1;
 
 function nextSequence(): number {
@@ -248,10 +236,7 @@ describe("timeline progression frames", () => {
     expect(rows[3]?.kind).toBe("work");
     expect(rows[3]).toMatchObject({ workKind: "file-change" });
 
-    // The trailing work row is a single edit leaf, so the exploration bundle
-    // is displaced (no active-latest bundle in this frame).
     expect(findActiveLatestBundleId(rows)).toBeNull();
-    // The displaced bundle's label renders past tense by default.
     expect(buildTimelineWorkSummaryLabel(explorationBundle)).toBe(
       "Explored 2 files, 1 list",
     );
@@ -280,9 +265,6 @@ describe("timeline progression frames", () => {
   });
 
   it("turn-completion lazy detail collapses trailing work into a step-summary", () => {
-    // Lazy turn detail signals that the turn is closed; trailing work in the
-    // children list collapses into a step-summary even without an explicit
-    // assistant message after it.
     nextSeq = 1;
     const lazyTurnRows = buildTimelineViewRows(
       [
@@ -309,16 +291,12 @@ describe("findTimelineFrontierRow", () => {
   });
 
   it("returns null when every row is a user-role conversation row", () => {
-    // User-role conversation rows are skipped because they're inputs to
-    // the agent rather than events the agent produced.
     nextSeq = 1;
     const rows = buildTimelineViewRows([userRow("Initial request.")]);
     expect(findTimelineFrontierRow(rows)).toBeNull();
   });
 
   it("looks past a trailing user-role conversation row to the prior agent row", () => {
-    // A pending steer at the tail does not displace the previous frontier
-    // of agent-produced activity.
     nextSeq = 1;
     const rows = buildTimelineViewRows([
       userRow("Initial request."),
@@ -345,8 +323,6 @@ describe("findTimelineFrontierRow", () => {
   });
 
   it("treats a trailing assistant-role conversation row as the frontier", () => {
-    // Assistant-role conversation rows count as agent-produced events,
-    // so they become the frontier when they trail the timeline.
     nextSeq = 1;
     const rows = buildTimelineViewRows([
       userRow("Initial request."),

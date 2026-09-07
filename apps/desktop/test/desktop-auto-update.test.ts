@@ -386,12 +386,9 @@ describe("desktop auto-update service", () => {
 
     updater.emitUpdateDownloaded(createDownloadedEvent("0.0.2"));
     await service.checkForUpdates();
-    // Advance past the active-check throttle so this reaches checkForUpdates.
     currentTime += 16 * 60 * 1000;
     await service.checkAfterActive();
 
-    // The staged ShipIt install stays untouched: no further checks run and
-    // the info keeps reporting the downloaded update.
     expect(updater.checkForUpdatesCalls).toBe(1);
     expect(service.getInfo()).toEqual({
       downloadState: "downloaded",

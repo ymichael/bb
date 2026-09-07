@@ -15,7 +15,6 @@ import {
 
 type ComposerScopeKind = PluginComposerScope["kind"] | null;
 
-/** The only Composer-layer hook that knows registrations live in the store. */
 function useComposerCustomizationRegistrations() {
   return useSyncExternalStore(
     subscribePluginSlots,

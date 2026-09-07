@@ -69,11 +69,9 @@ const USER_SKILLS = {
 interface ResolverStub {
   calls: HostDaemonOnlineRpcRequestMessage[];
   answer: ExperimentalNativeRootsResolveAnswer | Error | { raw: JsonValue };
-  /** When set, the host answers only after this settles (a slow plugin). */
   holdUntil: Promise<void> | null;
 }
 
-/** A host whose only duty is to answer the plugin's `resolveNativeRoots`. */
 function registerResolverHost(
   harness: TestAppHarness,
   hostId: string,
@@ -87,8 +85,6 @@ function registerResolverHost(
   const answer = (): HostRpcHandlerResult => {
     if (stub.answer instanceof Error) throw stub.answer;
     if ("raw" in stub.answer) {
-      // A malformed answer must still be a JSON value on the wire; the
-      // contract validation on the server side rejects it.
       return { ok: true, result: { output: stub.answer.raw } };
     }
     return { ok: true, result: { output: stub.answer } };
@@ -110,7 +106,10 @@ function registerResolverHost(
   return stub;
 }
 
-function registration(harness: TestAppHarness, id: string): ProviderRegistration {
+function registration(
+  harness: TestAppHarness,
+  id: string,
+): ProviderRegistration {
   const found = harness.deps.providerRegistry.get(id);
   if (found === null) throw new Error(`provider ${id} not registered`);
   return found;
@@ -122,7 +121,10 @@ describe("resolveProviderNativeRootSet", () => {
     await withTestHarness(
       { extraProviders: [RESOLVING], nativeRootsClock: () => clock },
       async (harness) => {
-        harness.deps.pluginHostArtifacts.set(PLUGIN_ID, stubHostArtifact(PLUGIN_ID));
+        harness.deps.pluginHostArtifacts.set(
+          PLUGIN_ID,
+          stubHostArtifact(PLUGIN_ID),
+        );
         const stubA = registerResolverHost(harness, "host-a");
         const stubB = registerResolverHost(harness, "host-b");
         const reg = registration(harness, "resolving");
@@ -157,7 +159,6 @@ describe("resolveProviderNativeRootSet", () => {
           }),
         ]);
 
-        // Same key inside the window: served from the cache.
         clock += PROVIDER_NATIVE_ROOTS_CACHE_TTL_MS - 1;
         await resolveProviderNativeRootSet(harness.deps, {
           registration: reg,
@@ -167,7 +168,6 @@ describe("resolveProviderNativeRootSet", () => {
         });
         expect(stubA.calls).toHaveLength(1);
 
-        // Another cwd, another host, and no cwd are separate keys.
         await resolveProviderNativeRootSet(harness.deps, {
           registration: reg,
           hostId: "host-a",
@@ -187,13 +187,18 @@ describe("resolveProviderNativeRootSet", () => {
           timeoutMs: COMMAND_TIMEOUT_MS,
         });
         expect(stubA.calls.map((call) => call.command)).toEqual([
-          expect.objectContaining({ input: { providerId: "resolving", cwd: "/work/one" } }),
-          expect.objectContaining({ input: { providerId: "resolving", cwd: "/work/two" } }),
-          expect.objectContaining({ input: { providerId: "resolving", cwd: null } }),
+          expect.objectContaining({
+            input: { providerId: "resolving", cwd: "/work/one" },
+          }),
+          expect.objectContaining({
+            input: { providerId: "resolving", cwd: "/work/two" },
+          }),
+          expect.objectContaining({
+            input: { providerId: "resolving", cwd: null },
+          }),
         ]);
         expect(stubB.calls).toHaveLength(1);
 
-        // Past the window the plugin is asked again.
         clock += 2;
         await resolveProviderNativeRootSet(harness.deps, {
           registration: reg,
@@ -211,7 +216,10 @@ describe("resolveProviderNativeRootSet", () => {
     await withTestHarness(
       { extraProviders: [RESOLVING], nativeRootsClock: () => clock },
       async (harness) => {
-        harness.deps.pluginHostArtifacts.set(PLUGIN_ID, stubHostArtifact(PLUGIN_ID));
+        harness.deps.pluginHostArtifacts.set(
+          PLUGIN_ID,
+          stubHostArtifact(PLUGIN_ID),
+        );
         const stub = registerResolverHost(harness, "host-a");
         const reg = registration(harness, "resolving");
         const resolve = () =>
@@ -226,7 +234,6 @@ describe("resolveProviderNativeRootSet", () => {
           land = settle;
         });
 
-        // The cold call takes longer than the TTL to answer.
         const slow = resolve();
         clock += PROVIDER_NATIVE_ROOTS_CACHE_TTL_MS + 2_000;
         land();
@@ -236,7 +243,6 @@ describe("resolveProviderNativeRootSet", () => {
         expect(stub.calls).toHaveLength(1);
         const landedAt = clock;
 
-        // A listing one second after the answer landed reuses it.
         stub.holdUntil = null;
         clock = landedAt + 1_000;
         await expect(resolve()).resolves.toMatchObject({
@@ -244,7 +250,6 @@ describe("resolveProviderNativeRootSet", () => {
         });
         expect(stub.calls).toHaveLength(1);
 
-        // The window runs from the landing, not from the start of the call.
         clock = landedAt + PROVIDER_NATIVE_ROOTS_CACHE_TTL_MS - 1;
         await resolve();
         expect(stub.calls).toHaveLength(1);
@@ -257,7 +262,10 @@ describe("resolveProviderNativeRootSet", () => {
 
   it("shares one in-flight call between concurrent listings", async () => {
     await withTestHarness({ extraProviders: [RESOLVING] }, async (harness) => {
-      harness.deps.pluginHostArtifacts.set(PLUGIN_ID, stubHostArtifact(PLUGIN_ID));
+      harness.deps.pluginHostArtifacts.set(
+        PLUGIN_ID,
+        stubHostArtifact(PLUGIN_ID),
+      );
       const stub = registerResolverHost(harness, "host-a");
       const reg = registration(harness, "resolving");
 
@@ -281,7 +289,10 @@ describe("resolveProviderNativeRootSet", () => {
 
   it("re-asks after the plugin's settings change and after the registration set changes", async () => {
     await withTestHarness({ extraProviders: [RESOLVING] }, async (harness) => {
-      harness.deps.pluginHostArtifacts.set(PLUGIN_ID, stubHostArtifact(PLUGIN_ID));
+      harness.deps.pluginHostArtifacts.set(
+        PLUGIN_ID,
+        stubHostArtifact(PLUGIN_ID),
+      );
       const stub = registerResolverHost(harness, "host-a");
       const reg = registration(harness, "resolving");
       const resolve = () =>
@@ -295,18 +306,14 @@ describe("resolveProviderNativeRootSet", () => {
       await resolve();
       expect(stub.calls).toHaveLength(1);
 
-      // Another plugin's settings are not this plugin's roots.
       harness.deps.providerNativeRoots.invalidate("some-other-plugin");
       await resolve();
       expect(stub.calls).toHaveLength(1);
 
-      // This plugin's settings changed (what the plugin service reports).
       harness.deps.providerNativeRoots.invalidate(PLUGIN_ID);
       await resolve();
       expect(stub.calls).toHaveLength(2);
 
-      // A provider (re)registration or removal changes the registry
-      // revision: a reloaded plugin resolves from its new code and settings.
       const other = harness.deps.providerRegistry.register({
         ...reg,
         info: { ...reg.info, id: "resolving-twin" },
@@ -327,7 +334,10 @@ describe("resolveProviderNativeRootSet", () => {
     await withTestHarness(
       { extraProviders: [RESOLVING], nativeRootsClock: () => clock },
       async (harness) => {
-        harness.deps.pluginHostArtifacts.set(PLUGIN_ID, stubHostArtifact(PLUGIN_ID));
+        harness.deps.pluginHostArtifacts.set(
+          PLUGIN_ID,
+          stubHostArtifact(PLUGIN_ID),
+        );
         const stub = registerResolverHost(harness, "host-a");
         const reg = registration(harness, "resolving");
         const warn = vi.fn();
@@ -340,7 +350,6 @@ describe("resolveProviderNativeRootSet", () => {
             timeoutMs: COMMAND_TIMEOUT_MS,
           });
 
-        // The handler throws (a vendor file the plugin could not parse).
         stub.answer = new Error("plugin.json is not valid JSON");
         const failed = await resolve("/work/throws");
         expect(failed.resolved).toEqual({ skills: [], commands: [] });
@@ -355,7 +364,6 @@ describe("resolveProviderNativeRootSet", () => {
         expect(warn.mock.calls[0]?.[1]).toContain(PLUGIN_ID);
         expect(warn.mock.calls[0]?.[1]).toContain("resolving");
 
-        // The failure is cached for the window: no second call, no second warning.
         await resolve("/work/throws");
         expect(stub.calls).toHaveLength(1);
         expect(warn).toHaveBeenCalledTimes(1);
@@ -364,11 +372,11 @@ describe("resolveProviderNativeRootSet", () => {
         expect(stub.calls).toHaveLength(2);
         expect(warn).toHaveBeenCalledTimes(2);
 
-        // A malformed answer (relative path, ancestors on a user root) is
-        // rejected by the contract and treated the same way.
         stub.answer = {
           raw: {
-            skills: [{ path: "relative/skills", origin: "user", ancestors: true }],
+            skills: [
+              { path: "relative/skills", origin: "user", ancestors: true },
+            ],
           },
         };
         const malformed = await resolve("/work/malformed");
@@ -392,7 +400,6 @@ describe("resolveProviderNativeRootSet", () => {
         const warn = vi.fn();
         const deps = { ...harness.deps, logger: { ...testLogger, warn } };
 
-        // Resolves, but its plugin's bb.host artifact is not recorded yet.
         const withoutArtifact = await resolveProviderNativeRootSet(deps, {
           registration: registration(harness, "resolving"),
           hostId: "host-a",
@@ -403,7 +410,6 @@ describe("resolveProviderNativeRootSet", () => {
         expect(warn).toHaveBeenCalledTimes(1);
         expect(warn.mock.calls[0]?.[1]).toContain("no live bb.host artifact");
 
-        // Declares roots only: nothing to ask.
         const declaredOnly = await resolveProviderNativeRootSet(deps, {
           registration: registration(harness, "declared"),
           hostId: "host-a",
@@ -441,12 +447,9 @@ describe("createProviderListingBudget", () => {
     });
     expect(budget.remainingMs()).toBe(30_000);
 
-    // A resolver that took 25 s leaves the daemon scan 5 s.
     clock += 25_000;
     expect(budget.remainingMs()).toBe(5_000);
 
-    // Exactly the floor is still attempted; less than it is the same
-    // 504 a daemon timeout raises, without a roundtrip.
     clock = 5_000 + 30_000 - PROVIDER_LISTING_BUDGET_FLOOR_MS;
     expect(budget.remainingMs()).toBe(PROVIDER_LISTING_BUDGET_FLOOR_MS);
     clock += 1;

@@ -20,11 +20,6 @@ export interface ChildThreadPendingAttention {
   interaction: PendingInteraction;
 }
 
-/**
- * Shared "nothing pending" result. `ThreadDetailView` feeds the hook's return
- * value into the prompt-area props (`promptStack`), which are memoized on it;
- * a fresh empty array per render would invalidate them on every view render.
- */
 export const EMPTY_CHILD_THREAD_PENDING_ATTENTION: readonly ChildThreadPendingAttention[] =
   Object.freeze([]);
 
@@ -61,12 +56,6 @@ const EMPTY_INTERACTION_LISTS: readonly (
   | undefined
 )[] = Object.freeze([]);
 
-/**
- * Module-level so its identity is stable: TanStack only structurally shares
- * a `useQueries` result across renders when `combine` keeps its reference,
- * and it re-runs an inline one every render. Without it the hook returned a
- * new array per render.
- */
 function combinePendingInteractionLists(
   results: UseQueryResult<readonly PendingInteraction[]>[],
 ): readonly (readonly PendingInteraction[] | undefined)[] {
@@ -78,9 +67,6 @@ function combinePendingInteractionLists(
 export function useChildThreadPendingAttention(
   children: readonly ChildThreadPendingAttentionSource[],
 ): readonly ChildThreadPendingAttention[] {
-  // Thread-list realtime already flips `hasPendingInteraction`. Resolving
-  // from the parent invalidates the interaction query. Do not subscribe to
-  // each child detail stream.
   const pendingChildIds = useMemo(
     () =>
       children

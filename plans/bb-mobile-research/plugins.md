@@ -18,7 +18,7 @@
 - workflows: server `agents.registerTool`×2, `agents.configure`, rpc, cli, background; app `composer.customize` banner `active-runs`, `messageDirective` `workflow-preview`, `threadPanelAction` (`plugins/workflows/src/app.tsx:971`).
 - connect: server rpc (status/pair/expose/unexpose/disconnect), cli, background tunnel, `contributeInstructions`; app `settingsSection` `remote-access` (QR pairing, `navigator.clipboard`) + `sidebarFooterAction` (`plugins/connect/app.tsx:1177-1192`).
 - custom-instructions / memory / keep-awake: server rpc + cli (+ `hosts.experimental_client` for keep-awake); app `settingsSection` only.
-- provider-retry: server events/background/rpc/settings; app `composer.customize` thread banner (`plugins/provider-retry/app.tsx:94`).
+- provider-retry: server events/background/settings/cli only; no app entry — the queued row narrates the wait (its composer banner and the RPC pair behind it were removed).
 - provider-acp/claude-code/codex/pi: server `experimental_registerProvider`; app only `experimental_providerIcon` inline SVG (`plugins/provider-codex/app.tsx:23-28`); server also serves branding SVG at `/assets/icon`.
 - No first-party plugin uses homepageSection, threadList, threadHeaderAction, newThreadPanelAction, contentScripts (only `examples/plugins/*` do).
 
@@ -72,7 +72,6 @@
 - plugins/github/app.tsx
 - plugins/workflows/src/app.tsx
 - plugins/connect/app.tsx
-- plugins/provider-retry/app.tsx
 - plugins/provider-codex/app.tsx
 - docs/api_to_audit.md
 - docs/plugin-marketplace-plan.md

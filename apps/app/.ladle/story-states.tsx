@@ -1,14 +1,5 @@
 import type { CSSProperties, ReactNode } from "react";
 
-/**
- * The two-column state-catalogue shell: what a state is on the left, the real
- * component on the right, every state stacked down one scrollable page.
- *
- * Extracted from the Extensions detail stories so a second catalogue does not
- * have to reimplement the shell — and so the two cannot drift into looking
- * like different kinds of document. Keep layout here and fixtures in the
- * story file; this module knows nothing about any particular component.
- */
 export function StoryStates({
   title,
   description,
@@ -58,18 +49,12 @@ export function StoryStates({
   );
 }
 
-/**
- * One state: what it is on the left, the real page on the right. The caption
- * sticks while a tall page scrolls past it, so you never lose track of which
- * state you are looking at.
- */
 export function StoryState({
   name,
   note,
   children,
 }: {
   name: string;
-  /** A sentence, or a list when the state has several ways in. */
   note: ReactNode;
   children: ReactNode;
 }) {
@@ -88,10 +73,6 @@ export function StoryState({
   );
 }
 
-/**
- * A band across both columns that names the group of states beneath it, so a
- * long catalogue reads as sections rather than one undifferentiated list.
- */
 export function StoryStateGroup({
   title,
   note,

@@ -1,22 +1,13 @@
 import type { Host, ThreadListEntry } from "@bb/domain";
 
-// Group key for threads whose environment has no host (plain chats). Host ids
-// are prefixed (e.g. "host_…"), so the sentinel cannot collide with one.
 export const NO_MACHINE_GROUP_KEY = "no-machine";
 
 interface MachineThreadGroup {
-  /** Host id, or {@link NO_MACHINE_GROUP_KEY}. */
   key: string;
   label: string;
   threads: ThreadListEntry[];
 }
 
-/**
- * Buckets threads by the host their environment runs on, for the sidebar's
- * "By machine" view. Groups follow server host order; hosts the server no
- * longer lists keep a stable id-ordered section; machineless threads land in
- * a trailing "No machine" group. Machines without threads get no group.
- */
 export function buildMachineThreadGroups(
   threads: readonly ThreadListEntry[],
   hosts: readonly Host[],

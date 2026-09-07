@@ -85,12 +85,6 @@ async function writeInjectedSkillSource(
   };
 }
 
-/**
- * Builds the thread-brick scenario the catalog-deferral fix targets: an
- * environment whose runtime was created with an injected skill catalog, made
- * busy by an active thread, after which the skill source content changes so
- * the next staged catalog hash no longer matches the loaded runtime's.
- */
 async function setupBusySkillCatalogEnvironment(args: {
   activeThreadId: string;
 }): Promise<BusySkillCatalogFixture> {
@@ -148,13 +142,11 @@ function createWorkspace(workspacePath = WORKSPACE_PATH): HostWorkspace {
     listFiles: unexpectedWorkspaceCall,
     commit: unexpectedWorkspaceCall,
     reset: unexpectedWorkspaceCall,
-    squashMerge: unexpectedWorkspaceCall,
     destroy: vi.fn(async () => undefined),
   };
 }
 
 interface FakeDispatchRuntime extends AgentRuntime {
-  /** Test-only mutator for the runtime-owned per-thread turn state. */
   setActiveTurn: (threadId: string, turnId: string) => void;
   setIdle: (threadId: string) => void;
 }
@@ -255,6 +247,7 @@ function createTurnSubmitCommand(
       providerThreadId: "provider-thread-1",
       instructions: "Be concise.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [],
       instructionMode: "append",
     },
@@ -320,8 +313,6 @@ function supportedCodexInstallationStatus(): ProviderCliStatus {
   };
 }
 
-/** A thread start whose bridge declares installation management, so the
- * provider-CLI version gate runs before the runtime sees the thread. */
 function createInstallationGatedThreadStart(
   threadId: string,
   environmentId = "env-1",
@@ -357,6 +348,7 @@ function createInstallationGatedThreadStart(
     },
     instructions: "Be concise.",
     dynamicTools: [],
+    contributedEnv: [],
     injectedSkillSources: [],
     instructionMode: "append",
   };
@@ -794,6 +786,7 @@ describe("dispatchCommand", () => {
         providerThreadId: "provider-thread-1",
         instructions: "Be concise.",
         dynamicTools: [],
+        contributedEnv: [],
         injectedSkillSources: [],
         instructionMode: "append",
       },
@@ -872,6 +865,7 @@ describe("dispatchCommand", () => {
         providerThreadId: "provider-thread-1",
         instructions: "Be concise.",
         dynamicTools: [],
+        contributedEnv: [],
         injectedSkillSources: [],
         instructionMode: "append",
       },
@@ -932,8 +926,6 @@ describe("dispatchCommand", () => {
       providerCheckpointId: "pi-entry-at-stop",
     });
 
-    // The thread already points at its new environment, which the daemon has
-    // never loaded. The stop must still reach the turn in the old runtime.
     const command: CommandOf<"thread.stop"> = {
       type: "thread.stop",
       intent: "interrupt",
@@ -987,8 +979,6 @@ describe("dispatchCommand", () => {
       threadStorageRootPath: "/tmp/bb-thread-storage",
     };
 
-    // The server already settled this thread as idle. Waiting for an active
-    // turn would burn the full stop timeout on every runtime released.
     await dispatchCommand(
       {
         type: "thread.stop",
@@ -1001,8 +991,6 @@ describe("dispatchCommand", () => {
     expect(runtime.waitForActiveTurn).not.toHaveBeenCalled();
     expect(runtime.stopThread).toHaveBeenCalledWith({ threadId: "thread-1" });
 
-    // An interrupt keeps the wait: the stop can race a start whose
-    // turn/started event the runtime has not observed yet.
     runtime.setIdle("thread-1");
     await dispatchCommand(
       {
@@ -1028,8 +1016,6 @@ describe("dispatchCommand", () => {
       environmentId: "env-release-race",
       workspacePath: "/tmp/bb-release-race",
     });
-    // The server chose a release from an idle read. A send won the race and
-    // started a turn before this command reached the daemon.
     runtime.setActiveTurn("thread-1", "turn-new");
 
     const result = await dispatchCommand(
@@ -1053,8 +1039,6 @@ describe("dispatchCommand", () => {
       },
     );
 
-    // Stopping here would end accepted work and leave the server holding an
-    // active thread with no runtime.
     expect(runtime.stopThread).not.toHaveBeenCalled();
     expect(runtime.getActiveTurnId("thread-1")).toBe("turn-new");
     expect(result).toEqual({ providerCheckpointId: null });
@@ -1182,8 +1166,6 @@ describe("dispatchCommand", () => {
       environmentId: "env-new",
       workspacePath: "/tmp/bb-rename-new",
     });
-    // The switch moves the thread mid-turn, so the old runtime still runs it
-    // while the thread already points at the new environment.
     oldRuntime.setActiveTurn("thread-1", "turn-old");
 
     const command: CommandOf<"thread.rename"> = {
@@ -1259,6 +1241,7 @@ describe("dispatchCommand", () => {
         providerThreadId: "provider-thread-1",
         instructions: "Be concise.",
         dynamicTools: [],
+        contributedEnv: [],
         injectedSkillSources: [],
         instructionMode: "append",
       },
@@ -1352,6 +1335,7 @@ describe("dispatchCommand", () => {
       },
       instructions: "Be concise.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [],
       instructionMode: "append",
     };
@@ -1431,6 +1415,7 @@ describe("dispatchCommand", () => {
       },
       instructions: "Be concise.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [],
       instructionMode: "append",
     };
@@ -1498,6 +1483,7 @@ describe("dispatchCommand", () => {
       },
       instructions: "Be concise.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [],
       instructionMode: "append",
     };
@@ -1547,9 +1533,6 @@ describe("dispatchCommand", () => {
         threadId: "thread-1",
       }),
     );
-    // The gate remembers the supported answer above; a bb-run install or
-    // update invalidates it, which is what lets the downgraded status below
-    // reach the rewind.
     await manager.invalidateProviderMaintenanceRuntime();
     await expect(
       dispatchCommand(
@@ -1760,6 +1743,7 @@ describe("dispatchCommand", () => {
       options: start.options,
       instructions: start.instructions,
       dynamicTools: start.dynamicTools,
+      contributedEnv: [],
       injectedSkillSources: start.injectedSkillSources,
       instructionMode: start.instructionMode,
     };
@@ -1788,8 +1772,6 @@ describe("dispatchCommand", () => {
       provisionWorkspace: async () => createWorkspace(),
       shellEnv: { PATH: oldPath },
     });
-    // The daemon only learns about a PATH change through this refresh, which
-    // re-reads the login shell and hands the result to the manager (app.ts).
     let loginShellPath = oldPath;
     const refreshShellEnv = vi.fn(async () => {
       await manager.replaceBaseShellEnv({ PATH: loginShellPath });
@@ -1813,8 +1795,6 @@ describe("dispatchCommand", () => {
     );
     expect(providerInstallationStatus).toHaveBeenCalledOnce();
 
-    // A vendor installer drops the binary in a new directory and adds it to
-    // the shell rc; the next start must see it even though the memo is warm.
     loginShellPath = newPath;
     await dispatchCommand(
       createInstallationGatedThreadStart("thread-3", "env-2"),
@@ -1824,8 +1804,6 @@ describe("dispatchCommand", () => {
     expect(providerInstallationStatus).toHaveBeenCalledTimes(2);
     expect(manager.getShellEnv().PATH).toBe(newPath);
     expect(createdRuntimeShellPaths).toEqual([oldPath, newPath]);
-    // Every gated start re-reads the shell, as it did before the memo
-    // existed; the refresh's own TTL is what keeps that cheap.
     expect(refreshShellEnv).toHaveBeenCalledTimes(3);
   });
 
@@ -1839,9 +1817,6 @@ describe("dispatchCommand", () => {
     const refreshShellEnv = async () => {
       await manager.replaceBaseShellEnv({ PATH: "/new/bin" });
     };
-    // The production probe refreshes the shell env itself before asking the
-    // bridge (app.ts). Since the gate has already refreshed, that inner call
-    // finds nothing changed and must not clear the gate under its own probe.
     const providerInstallationStatus = vi.fn(async () => {
       await refreshShellEnv();
       return supportedCodexInstallationStatus();
@@ -1873,8 +1848,6 @@ describe("dispatchCommand", () => {
     });
     const providerInstallationStatus = vi
       .fn<() => Promise<ProviderCliStatus>>()
-      // Bridges report a missing CLI with versionUnsupported: false; codex
-      // reports a minimum version, so the next probe can still reject.
       .mockResolvedValueOnce({
         ...supportedCodexInstallationStatus(),
         installed: false,
@@ -1887,8 +1860,6 @@ describe("dispatchCommand", () => {
           command: "npm i -g @openai/codex",
         },
       })
-      // An out-of-band install of a too-old CLI into a directory already on
-      // PATH changes no shell env, so only a fresh probe can catch it.
       .mockResolvedValueOnce({
         ...supportedCodexInstallationStatus(),
         currentVersion: "0.135.0",
@@ -2310,11 +2281,6 @@ describe("dispatchCommand", () => {
     ]);
   });
 
-  // Regression: a thread.start whose freshly staged skill catalog differed
-  // from the busy runtime's catalog used to fail the command (and brick the
-  // thread) instead of reusing the runtime. This drives the real plumbing —
-  // the handler's targetThreadId carried through workspace resolution into
-  // RuntimeManager.ensureEnvironment.
   it("reuses a busy runtime when thread.start carries a changed skill catalog", async () => {
     const fixture = await setupBusySkillCatalogEnvironment({
       activeThreadId: "sibling-thread",
@@ -2344,6 +2310,7 @@ describe("dispatchCommand", () => {
       },
       instructions: "Be concise.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [fixture.source],
       instructionMode: "append",
     };
@@ -2370,16 +2337,11 @@ describe("dispatchCommand", () => {
     expect(fixture.runtime.startThread).toHaveBeenCalledTimes(1);
     expect(fixture.createRuntimeSpy).toHaveBeenCalledTimes(1);
     expect(fixture.runtime.shutdown).not.toHaveBeenCalled();
-    // The stale catalog stays bound; the refresh is deferred until idle.
     expect(fixture.manager.get("env-1")?.skillCatalogHash).toBe(
       fixture.originalCatalogHash,
     );
   });
 
-  // Regression: the self-brick case — an agent installs a skill mid-turn, so
-  // the next turn.submit for its own (active) thread stages a different
-  // catalog hash. The command must reuse the busy runtime instead of failing
-  // and dropping the message.
   it("reuses a busy runtime when turn.submit carries a changed skill catalog", async () => {
     const fixture = await setupBusySkillCatalogEnvironment({
       activeThreadId: "thread-1",
@@ -2412,6 +2374,7 @@ describe("dispatchCommand", () => {
         providerThreadId: "provider-thread-1",
         instructions: "Be concise.",
         dynamicTools: [],
+        contributedEnv: [],
         injectedSkillSources: [fixture.source],
         instructionMode: "append",
       },
@@ -2436,11 +2399,9 @@ describe("dispatchCommand", () => {
 
     expect(result).toEqual({ appliedAs: "new-turn" });
     expect(fixture.runtime.runTurn).toHaveBeenCalledTimes(1);
-    // The runtime already hosts the thread, so no resume round-trip happens.
     expect(fixture.runtime.resumeThread).not.toHaveBeenCalled();
     expect(fixture.createRuntimeSpy).toHaveBeenCalledTimes(1);
     expect(fixture.runtime.shutdown).not.toHaveBeenCalled();
-    // The stale catalog stays bound; the refresh is deferred until idle.
     expect(fixture.manager.get("env-1")?.skillCatalogHash).toBe(
       fixture.originalCatalogHash,
     );

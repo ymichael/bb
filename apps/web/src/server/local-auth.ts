@@ -1,6 +1,5 @@
 import type { Env } from "./env.js";
 
-/** Enable credential auth only for the launcher's local HTTP origin. */
 export function resolveDevEmailPasswordEnabled(
   env: Pick<Env, "APP_URL" | "BASE_DOMAIN" | "DEV_EMAIL_PASSWORD_AUTH">,
 ): boolean {

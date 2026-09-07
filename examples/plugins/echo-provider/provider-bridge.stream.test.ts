@@ -1,33 +1,3 @@
-/**
- * The echo bridge's grammar v3 stream, assembled by the REAL runtime delta
- * assembler the public testing kit ships. Conformance proves the protocol
- * shape; this test proves every capability the bridge claims: what each
- * delta becomes once the runtime has minted ids and built canonical events.
- *
- * It drives the bridge in-process through the published JSON-RPC harness,
- * plays the runtime's part for the one request the bridge makes
- * (`item/tool/call` for the plugin's bb tool), and asserts over the
- * assembled events:
- *
- * - presentation on EVERY item (open and close), for every shape;
- * - the core v3 kinds: command, fileRead, search, delegation, planSteps;
- * - the delegation's child turn linked through `parentToolCallId`;
- * - a generic tool whose presentation suppresses the row;
- * - the bb tool call stamped `server: "bb"` with its definition's
- *   presentation, call id mapped through the provider-native id space;
- * - the extension item and the extension state;
- * - the providerOptions the plugin derived (the `shout` setting) and the
- *   passed-through daemon env var, echoed into the message;
- * - the usage dialect and the turn boundary.
- *
- * A second block drives the sessionless maintenance wire the declaration
- * turns on (`maintenance.health`): the `provider/health` request exactly as
- * the runtime builds it, and the answer parsed through the same protocol
- * schema the runtime enforces.
- *
- * Nothing here imports a private bb package: the assembler, the harness and
- * the types all come from `@get-bb/plugin-sdk/provider-bridge/testing`.
- */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   BRIDGE_JSON_RPC_ERRORS,
@@ -56,7 +26,6 @@ import {
   ECHO_STAMP_TOOL_PRESENTATION,
 } from "./src/vocabulary.js";
 
-/** An item lifecycle event: what the assembler builds from `item.open`/`item.close`. */
 type ItemEvent = Extract<
   ThreadEvent,
   { type: "item/started" | "item/completed" }
@@ -66,7 +35,6 @@ const THREAD_ID = "thr_echo_stream";
 const CWD = "/workspace/echo";
 const PROMPT = "hello world";
 
-/** The tool definition the server would inject (presentation resolved). */
 const STAMP_TOOL_DEFINITION = {
   name: ECHO_STAMP_TOOL_NAME,
   description: "Stamp a piece of text with the echo provider's seal.",
@@ -149,7 +117,6 @@ function textInput(text: string): BridgeJsonRpcObject[] {
   return [{ type: "text", text, mentions: [] }];
 }
 
-/** Play the runtime: answer the bridge's pending `item/tool/call`. */
 function answerToolCall(
   answer: (params: Record<string, unknown>) => BridgeJsonRpcObject,
 ): Record<string, unknown> {
@@ -211,7 +178,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       },
     });
 
-    // The turn pauses on the bb tool until the runtime answers.
     const callParams = answerToolCall(() => ({
       success: true,
       contentItems: [{ type: "inputText", text: `stamped: ${PROMPT}` }],
@@ -228,13 +194,10 @@ describe("the echo bridge's grammar v3 stream", () => {
     const events = assembledEvents();
     const types = events.map((event) => event.type);
 
-    // Turn lifecycle: identity (its own notification, not a delta), the
-    // acceptance, the main turn and, inside it, the delegation's child turn.
     expect(
       harness.messages.find((message) => message.method === "thread/identity")
         ?.params,
     ).toEqual({ threadId: THREAD_ID, providerThreadId });
-    // The assembler opens the turn, then emits the queued acceptance.
     expect(types.slice(0, 2)).toEqual(["turn/started", "turn/input/accepted"]);
     expect(types.filter((type) => type === "turn/input/accepted")).toHaveLength(
       1,
@@ -243,7 +206,6 @@ describe("the echo bridge's grammar v3 stream", () => {
     expect(types.filter((type) => type === "turn/completed")).toHaveLength(2);
     expect(types.at(-1)).toBe("turn/completed");
 
-    // Every item, opened and closed, carries a presentation.
     const items = itemEvents(events);
     expect(items.length).toBeGreaterThanOrEqual(18);
     for (const event of items) {
@@ -262,16 +224,15 @@ describe("the echo bridge's grammar v3 stream", () => {
       "commandExecution",
       "fileRead",
       "search",
-      "agentMessage", // the child turn's message
+      "agentMessage",
       "delegation",
       "planSteps",
-      "toolCall", // echo_noop (suppressed)
-      "toolCall", // echo_stamp (server: "bb")
+      "toolCall",
+      "toolCall",
       "extension",
       "agentMessage",
     ]);
 
-    // command: streamed output then the terminal shape.
     const command = completedItem(events, "commandExecution");
     expect(command).toMatchObject({
       command: `echo "${PROMPT}"`,
@@ -291,7 +252,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       ),
     ).toBe(true);
 
-    // fileRead and search.
     expect(completedItem(events, "fileRead")).toMatchObject({
       path: `${CWD}/README.md`,
       status: "completed",
@@ -305,7 +265,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       presentation: { icon: { glyph: "Search" }, title: PROMPT },
     });
 
-    // delegation: the child turn and its message link back to the row.
     const delegation = completedItem(events, "delegation");
     expect(delegation).toMatchObject({
       background: false,
@@ -339,7 +298,6 @@ describe("the echo bridge's grammar v3 stream", () => {
     });
     expect(childMessage?.scope).toEqual(childTurn?.scope);
 
-    // planSteps: the full list, settled.
     expect(completedItem(events, "planSteps")).toMatchObject({
       steps: [
         { step: "Hear the prompt", status: "completed" },
@@ -350,8 +308,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       presentation: { icon: { glyph: "ListTodo" }, title: "Write the receipt" },
     });
 
-    // tools: the suppressed bookkeeping row, then the bb tool with the
-    // presentation the definition carried and the runtime's answer.
     const tools = items
       .filter(
         (event) =>
@@ -372,20 +328,16 @@ describe("the echo bridge's grammar v3 stream", () => {
       status: "completed",
       presentation: ECHO_STAMP_TOOL_PRESENTATION,
     });
-    // The call id the bridge sent is its provider item id; the runtime maps
-    // it to this bb id through the assembler.
     expect(
       collector.assembler.getBbItemId(THREAD_ID, String(callParams.callId)),
     ).toBe(tools[1]?.id);
 
-    // The extension item and the extension state.
     expect(completedItem(events, "extension")).toMatchObject({
       kind: ECHO_RECEIPT_KIND,
       payload: { prompt: PROMPT, itemCount: 7, shouted: true },
       status: "completed",
       presentation: {
         label: { pending: "Writing receipt", completed: "Wrote receipt" },
-        // The plugin's own declared icon, by its namespaced glyph.
         icon: { glyph: ECHO_RECEIPT_ICON_GLYPH },
         title: PROMPT,
         detail: "Echoed 7 items, shouting.",
@@ -400,8 +352,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       payload: { mood: "cheerful", turnsEchoed: 1 },
     });
 
-    // The echoed message proves the round trips: the derived providerOptions
-    // (shout from the plugin's setting) and the passed-through env var.
     const message = items
       .filter(
         (event) =>
@@ -421,7 +371,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       presentation: { label: { pending: "Echoing", completed: "Echoed" } },
     });
 
-    // Usage and the context window ride the one usage dialect.
     expect(
       events.find((event) => event.type === "thread/tokenUsage/updated"),
     ).toMatchObject({
@@ -445,8 +394,6 @@ describe("the echo bridge's grammar v3 stream", () => {
     });
     await startSession({ input: textInput("malformed-receipt please") });
     const receipt = completedItem(assembledEvents(), "extension");
-    // The wire carries it (the payload is opaque at this layer); ingest is
-    // where the plugin's declared schema rejects it — see the server test.
     expect(receipt).toMatchObject({
       kind: ECHO_RECEIPT_KIND,
       payload: { prompt: 42, itemCount: "many" },
@@ -483,7 +430,6 @@ describe("the echo bridge's grammar v3 stream", () => {
       options: FULL_OPTIONS,
     });
     const events = assembledEvents();
-    // No bb tool was injected, so no tool call and no stamp row.
     expect(
       harness.messages.some((message) => message.method === "item/tool/call"),
     ).toBe(false);
@@ -518,13 +464,10 @@ describe("the echo bridge's provider maintenance", () => {
       client: { name: "echo-stream-test", version: "0.0.0" },
       grammarVersions: [3, 3],
     });
-    // The request exactly as the runtime's adapter builds it for a declared
-    // `maintenance.health`: sessionless, providerId plus the optional cwd.
     const response = await request("provider/health", {
       providerId: ECHO_PROVIDER_ID,
       cwd: CWD,
     });
-    // Parsed through the protocol schema the runtime enforces on the reply.
     const result = providerHealthResultSchema.parse(response.result);
     expect(result).toEqual({
       supported: true,
@@ -550,13 +493,7 @@ describe("the echo bridge's provider maintenance", () => {
       code: BRIDGE_JSON_RPC_ERRORS.INVALID_PARAMS,
     });
 
-    // `maintenance.usage` and `.installation` are declared false, so the
-    // runtime never sends these; a bridge that declares them off must not
-    // quietly answer them either.
-    for (const method of [
-      "provider/usage",
-      "provider/installation/status",
-    ]) {
+    for (const method of ["provider/usage", "provider/installation/status"]) {
       harness.sendRequest(`undeclared:${method}`, method, {
         providerId: ECHO_PROVIDER_ID,
       });

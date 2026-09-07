@@ -64,8 +64,6 @@ describe("sidebar thread shortcuts", () => {
       { threadId: "thr_d", projectId: null, mounted: true },
     ]);
 
-    // The numbered jump shortcuts render badges on rows, so they must skip
-    // placeholder threads and use mounted anchors only.
     expect(
       getSidebarThreadShortcutTargets(root).map((target) => target.threadId),
     ).toEqual(["thr_a", "thr_d"]);

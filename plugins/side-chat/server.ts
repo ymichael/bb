@@ -1,36 +1,15 @@
-// bb-plugin-side-chat — the plugin-owned side chat (BB-70 phase 5). Side chats
-// are plain hidden thread forks
-// (`originKind: "fork"`, `originPluginId: "side-chat"`, `visibility:
-// "hidden"`) created idle at panel-open time; the frontend renders them with
-// the host-owned `ThreadChat` component.
-//
-// Server-owned policy lives here: the reply-anchor seed rule and the
-// empty-fork cleanup sweep. The archive cascade is BB's own: a hidden fork
-// retires with its source thread whether or not this plugin is enabled.
 import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 
 export const REPLY_SEED_PREFIX =
   "Replying to this earlier message in the conversation:\n\n";
 
-/** Archive-eligible age for an empty (never-replied-to) hidden fork. */
 export const EMPTY_FORK_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-/** Rows the cleanup sweep reads per query, so its memory stays flat. */
 export const EMPTY_FORK_SWEEP_PAGE_SIZE = 100;
 
-/**
- * KV prefix marking a fork the sweep already found user work in. Messages never
- * disappear, so that verdict is permanent — without it every hour re-reads the
- * full timeline of every side chat anyone has actually used.
- */
 const KEPT_FORK_KEY_PREFIX = "kept-fork:";
 
-/**
- * Structural view of the timeline rows the cleanup sweep walks. Conversation
- * rows carry `text`/`role`, turn rows nest `children`. The SDK's `TimelineRow`
- * union satisfies this shape.
- */
 export interface SideChatTimelineRowLike {
   kind: string;
   text?: string;
@@ -38,13 +17,11 @@ export interface SideChatTimelineRowLike {
   children?: readonly SideChatTimelineRowLike[] | null;
 }
 
-/** Every explicit non-empty reply anchor becomes agent-only fork context. */
 export function resolveReplySeedText(anchorText: string): string | null {
   const anchor = anchorText.trim();
   return anchor.length > 0 ? anchor : null;
 }
 
-/** Whether the fork's timeline contains a real user message. */
 export function timelineRowsContainUserMessage(
   rows: readonly SideChatTimelineRowLike[],
 ): boolean {
@@ -59,7 +36,6 @@ export function timelineRowsContainUserMessage(
   return rows.some(visit);
 }
 
-/** The thread fields the cascade / sweep predicates read. */
 interface SideChatForkCandidate {
   originKind: string | null;
   originPluginId: string | null;
@@ -68,13 +44,6 @@ interface SideChatForkCandidate {
   createdAt: number;
 }
 
-/**
- * Whether a fork failure is the server's machine-readable
- * `fork_source_session_unavailable` (no provider session snapshot at or
- * before the requested fork point) — the only failure the tip-fork fallback
- * may swallow. Narrows on the structured `code` the SDK's HTTP error
- * carries, never on message text.
- */
 function isSessionUnavailableError(error: unknown): boolean {
   return (
     typeof error === "object" &&
@@ -84,7 +53,6 @@ function isSessionUnavailableError(error: unknown): boolean {
   );
 }
 
-/** Whether a thread is one of this plugin's live hidden side-chat forks. */
 function isOwnLiveHiddenFork(
   thread: SideChatForkCandidate,
   pluginId: string,
@@ -98,12 +66,6 @@ function isOwnLiveHiddenFork(
 }
 
 export const sideChatRpcContract = defineRpcContract({
-  /**
-   * Create the idle hidden fork a side-chat panel renders. `anchorText` is
-   * the message (or selection) the side chat replies to — empty for tip
-   * forks started from the panel launcher. Every non-empty anchor becomes
-   * agent-only context on the fork.
-   */
   createSideChat: {
     input: z
       .object({
@@ -114,7 +76,6 @@ export const sideChatRpcContract = defineRpcContract({
       .strict(),
     output: z.object({ threadId: z.string() }).strict(),
   },
-  /** Queue an assistant message's text on the source thread ("send to main"). */
   sendToMain: {
     input: z
       .object({
@@ -134,12 +95,6 @@ export default async function plugin(bb: BbPluginApi) {
       const forkArgs = {
         sourceThreadId,
         visibility: "hidden" as const,
-        // A side chat is an aside about the work the source thread is doing,
-        // so it runs in that thread's environment rather than provisioning a
-        // worktree of its own. "isolated" would branch a fresh checkout per
-        // side chat, where the files under discussion are a copy that never
-        // reflects what the source thread has since changed.
-        workspace: "reuse" as const,
         ...(seedText !== null
           ? {
               agentContextSeed: [
@@ -160,10 +115,6 @@ export default async function plugin(bb: BbPluginApi) {
         });
         return { threadId: fork.id };
       } catch (error) {
-        // Messages earlier than the source's first provider session (e.g. the
-        // opening user message) have no point-in-time session to clone. The
-        // legacy side chat always forked from the tip; fall back to that so
-        // those anchors keep working — the reply seed still marks the anchor.
         if (sourceSeqEnd === undefined || !isSessionUnavailableError(error)) {
           throw error;
         }
@@ -181,11 +132,6 @@ export default async function plugin(bb: BbPluginApi) {
     },
   });
 
-  // Empty-fork cleanup: hourly sweep archiving this plugin's hidden forks
-  // that never received a user message and are older than 24h. Queued-but-
-  // unsent input is user work too and never appears in timeline rows, so a
-  // fork with pending queued messages is not empty. Both reads fail closed:
-  // when either fails the fork is skipped rather than risked.
   bb.background.schedule("empty-fork-cleanup", "13 * * * *", async () => {
     const now = Date.now();
     const keptKeys = new Set(await bb.storage.kv.list(KEPT_FORK_KEY_PREFIX));
@@ -201,9 +147,6 @@ export default async function plugin(bb: BbPluginApi) {
         offset,
       });
       if (page.length === 0) break;
-      // Archiving removes a row from this `archived: false` result set, so the
-      // next page starts after the rows this one left behind — advancing by a
-      // full page instead would skip that many unswept forks.
       let retained = 0;
       for (const thread of page) {
         if (!isOwnLiveHiddenFork(thread, bb.pluginId)) {
@@ -216,7 +159,6 @@ export default async function plugin(bb: BbPluginApi) {
         }
         const keptKey = `${KEPT_FORK_KEY_PREFIX}${thread.id}`;
         if (keptKeys.has(keptKey)) {
-          // Already known to hold user work: never archivable, never re-read.
           stillLive.add(keptKey);
           retained += 1;
           continue;
@@ -227,27 +169,16 @@ export default async function plugin(bb: BbPluginApi) {
           await bb.storage.kv.set(keptKey, true);
           stillLive.add(keptKey);
         }
-        // A skipped fork (a read failed) records nothing, so the next sweep
-        // retries it.
         retained += 1;
       }
       if (page.length < EMPTY_FORK_SWEEP_PAGE_SIZE) break;
       offset += retained;
     }
-    // Every live fork of this plugin passes through the pages above, so a kept
-    // key nothing matched belongs to a thread that has since been archived or
-    // deleted. Drop it rather than grow the store forever.
     for (const key of keptKeys) {
       if (!stillLive.has(key)) await bb.storage.kv.delete(key);
     }
   });
 
-  /**
-   * Archive one candidate fork when it holds no user work. `kept` means the
-   * fork holds work and can never become empty; `skipped` means a read failed,
-   * so the caller must not remember the verdict. Both reads fail closed: a
-   * failure keeps the fork rather than risking it.
-   */
   async function sweepEmptyFork(
     threadId: string,
     createdAt: number,

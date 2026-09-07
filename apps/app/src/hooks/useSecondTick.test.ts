@@ -28,8 +28,6 @@ describe("useSecondTick", () => {
     });
     expect(result.current).toBe(initial + 1_000);
 
-    // Hidden: the interval stops entirely — no timer wakes a suspended phone
-    // to re-render durations nothing can see.
     act(() => {
       setDocumentVisibility("hidden");
     });
@@ -38,8 +36,6 @@ describe("useSecondTick", () => {
     });
     expect(result.current).toBe(initial + 1_000);
 
-    // Visible again: one immediate tick jumps durations to current truth
-    // instead of waiting out the next second, then the cadence resumes.
     act(() => {
       setDocumentVisibility("visible");
     });
@@ -61,7 +57,6 @@ describe("useSecondTick", () => {
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
-    // One shared tick value, not two phase-shifted timers.
     expect(first.result.current).toBe(second.result.current);
 
     first.unmount();

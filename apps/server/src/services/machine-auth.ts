@@ -353,8 +353,6 @@ export async function createMachineAuthService(
         hostType: verified.metadata.hostType,
       };
 
-      // Create the replacement key before revoking prior daemon-host keys so
-      // reenrollment does not strand the host if key creation fails mid-flow.
       const hostKey = await createDaemonHostKey(hostMetadata);
       await disableOtherActiveDaemonHostKeysForHost(
         hostMetadata,

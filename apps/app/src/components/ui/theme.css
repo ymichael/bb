@@ -955,6 +955,18 @@ body.sidebar-resizing [data-sidebar="panel"] {
 }
 
 @layer utilities {
+  /* Let the title's outer ellipsis clip through rich pills in reading order
+   * instead of treating each inline-flex pill as one replaceable box. */
+  .bb-sidebar-thread-title .prompt-mention-pill {
+    display: inline;
+  }
+
+  .bb-sidebar-thread-title .prompt-mention-pill > :first-child {
+    display: inline-block;
+    margin-inline-end: 0.125rem;
+    vertical-align: -0.2em;
+  }
+
   /*
    * The sweep animates `background-position` / `mask-position`, which the
    * compositor cannot run: every frame is a main-thread repaint. `will-change:
@@ -1029,20 +1041,20 @@ body.sidebar-resizing [data-sidebar="panel"] {
   }
 
   /*
-   * Indeterminate progress sweep. Used while a plugin installs: the server does
-   * the work behind one blocking request, so the client can say that work is
-   * happening but not how far along it is. A first install on a machine also
-   * downloads the build toolchain, which is why this window can run ~17s.
+   * Indeterminate progress sweep, for work whose duration the client cannot
+   * predict: a plugin install (one blocking server request that can run ~17s on
+   * a machine's first install, because it also downloads the build toolchain),
+   * and route navigation that React has deprioritized behind a transition.
    */
-  .animate-plugin-install-progress {
-    animation: plugin-install-progress 1.5s ease-in-out infinite;
+  .animate-indeterminate-progress {
+    animation: indeterminate-progress 1.5s ease-in-out infinite;
   }
 
   /* Reduced motion: drop the shimmer sweep and render the active cue as plain
      full-strength foreground text/glyph instead of a frozen gradient/mask. */
   @media (prefers-reduced-motion: reduce) {
     /* A static half-width fill still reads as "busy" without the sweep. */
-    .animate-plugin-install-progress {
+    .animate-indeterminate-progress {
       animation: none;
       width: 50%;
     }
@@ -1072,7 +1084,7 @@ body.sidebar-resizing [data-sidebar="panel"] {
   }
 }
 
-@keyframes plugin-install-progress {
+@keyframes indeterminate-progress {
   0% {
     margin-inline-start: -35%;
   }

@@ -1,27 +1,3 @@
-/**
- * Guardrail G10 — docs/provider-plugin-api.md stays true to the types.
- *
- * The target-state doc describes the surface every provider workstream keeps
- * true. Its ```ts blocks are target-state pseudo-code (the registration block
- * uses the stabilized names the `experimental_` fields will take;
- * `TimelineRow { kind, payload, presentation }` is a sketch), so they cannot
- * be compiled as-is. This test does the next best thing and does it
- * mechanically:
- *
- *  1. every ```ts block is extracted and its field names parsed;
- *  2. each block is mapped, field by field, onto the real contract — a zod
- *     schema key, a TypeScript interface key (checked at the type level with
- *     `satisfies`), or an explicit `gap` naming the workstream that lands it;
- *  3. a gap that has quietly landed fails (the schema now has the key), so the
- *     map can only move toward "no gaps";
- *  4. a doc edit that adds, removes, or renames a block or a field fails until
- *     this map is updated, which is the review hook.
- *
- * TODO(WS-final, stabilization): once the doc's blocks are real code (the
- * registration API, the timeline renderer slot, `TimelineRow.presentation`),
- * replace the field maps with an actual compile of the blocks through the
- * TypeScript compiler API against the published `bundled-types/` bundle.
- */
 import { readFile } from "node:fs/promises";
 import {
   bridgeCapabilitiesSchema,
@@ -54,11 +30,6 @@ const DOC_URL = new URL(
   import.meta.url,
 );
 
-// ---------------------------------------------------------------------------
-// Field maps. A value is where the field lives today, or `{ gap }` naming the
-// workstream that lands it.
-// ---------------------------------------------------------------------------
-
 type Gap = { gap: `WS${string}` };
 
 type DeclarationPath =
@@ -66,7 +37,6 @@ type DeclarationPath =
   | `capabilities.${keyof PluginProviderCapabilities}`
   | `strings.${keyof PluginProviderStrings}`;
 
-/** §1 `bb.providers.register({...})` → `PluginProviderDeclaration`. */
 const REGISTRATION_FIELDS = {
   id: "id",
   displayName: "displayName",
@@ -98,16 +68,15 @@ const REGISTRATION_FIELDS = {
 } as const satisfies Record<string, DeclarationPath | Gap>;
 
 type DeclarationGapKeys = {
-  [K in keyof typeof REGISTRATION_FIELDS]: (typeof REGISTRATION_FIELDS)[K] extends Gap
-    ? K
-    : never;
+  [
+    K in keyof typeof REGISTRATION_FIELDS
+  ]: (typeof REGISTRATION_FIELDS)[K] extends Gap ? K : never;
 }[keyof typeof REGISTRATION_FIELDS];
 type DeclarationGapsNotLanded = Extract<
   DeclarationGapKeys,
   keyof PluginProviderDeclaration | keyof PluginProviderCapabilities
 >;
 
-/** §2 handshake block → `bridgeCapabilitiesSchema`. */
 const HANDSHAKE_FIELDS = {
   grammarVersions: "grammarVersions",
   sessionRestore: "sessionRestore",
@@ -123,7 +92,6 @@ const HANDSHAKE_FIELDS = {
   keyof z.infer<typeof bridgeCapabilitiesSchema> | Gap
 >;
 
-/** §2 execution options block → `bridgeExecutionOptionsSchema`. */
 const EXECUTION_OPTION_FIELDS = {
   model: "model",
   serviceTier: "serviceTier",
@@ -136,7 +104,6 @@ const EXECUTION_OPTION_FIELDS = {
   keyof z.infer<typeof bridgeExecutionOptionsSchema> | Gap
 >;
 
-/** §2 `provider/recovery` block → `providerRecoveryNotificationSchema`. */
 const RECOVERY_FIELDS = {
   kind: "kind",
   message: "message",
@@ -146,7 +113,6 @@ const RECOVERY_FIELDS = {
   keyof z.infer<typeof providerRecoveryNotificationSchema> | Gap
 >;
 
-/** §3 delegation block → `threadEventDelegationItemSchema`. */
 const DELEGATION_FIELDS = {
   childRef: "childRef",
   label: "label",
@@ -158,7 +124,6 @@ const DELEGATION_FIELDS = {
   keyof z.infer<typeof threadEventDelegationItemSchema> | Gap
 >;
 
-/** §3 presentation block → `threadEventItemPresentationSchema`. */
 type PresentationPath =
   | "presentation"
   | keyof ThreadEventItemPresentation
@@ -172,8 +137,6 @@ const PRESENTATION_FIELDS = {
   pending: "label.pending",
   completed: "label.completed",
   icon: "icon",
-  // A host glyph or a plugin-declared icon by its namespaced glyph
-  // ("<pluginId>/<name>"); the one persisted field serves both.
   glyph: "icon.glyph",
   title: "title",
   detail: "detail",
@@ -183,28 +146,19 @@ const PRESENTATION_FIELDS = {
   dark: "tint.dark",
 } as const satisfies Record<string, PresentationPath | Gap>;
 
-/**
- * §5 `TimelineRow { kind, payload, presentation }` → a representative work
- * row (type level and its schema at runtime).
- */
 const TIMELINE_ROW_FIELDS = {
   kind: "kind",
-  // Rows keep typed per-kind fields (a `file-read` row has `path`, a
-  // `search` row `mode`/`query`); only the `extension` row carries an opaque
-  // `payload`. The fold of every kind's body into one field is not landed.
   payload: {
     gap: "WS3 (projection): one folded `payload` for every kind; rows stay typed per kind and only extension rows carry `payload`",
   },
   presentation: "presentation",
 } as const satisfies Record<string, keyof TimelineCommandWorkRow | Gap>;
-type TimelineRowGapsNotLanded = Extract<"payload", keyof TimelineCommandWorkRow>;
+type TimelineRowGapsNotLanded = Extract<
+  "payload",
+  keyof TimelineCommandWorkRow
+>;
 
-/** §5 `app.slots.timelineRenderer` → `PluginAppSlots` (experimental_ until audited). */
 type TimelineRendererSlot = PluginAppSlots["experimental_timelineRenderer"];
-
-// ---------------------------------------------------------------------------
-// Doc parsing
-// ---------------------------------------------------------------------------
 
 function extractTsBlocks(markdown: string): string[] {
   return [...markdown.matchAll(/```ts\n([\s\S]*?)```/gu)].map(
@@ -212,11 +166,6 @@ function extractTsBlocks(markdown: string): string[] {
   );
 }
 
-/**
- * `  foo?: string,` / `foo: {` / `foo(ctx) {` / `{ foo: string` → "foo".
- * One field per line after the caller splits one-line object types on commas;
- * comments are ignored.
- */
 function fieldNames(block: string): string[] {
   const names = new Set<string>();
   for (const rawLine of block.split("\n")) {
@@ -227,7 +176,6 @@ function fieldNames(block: string): string[] {
   return [...names].sort();
 }
 
-/** `{ model, serviceTier?, providerOptions: JsonValue } & P` → the bare names. */
 function bareFieldNames(block: string): string[] {
   const body = block.replace(/\/\/.*$/gmu, "").split("&")[0] ?? "";
   return [
@@ -299,8 +247,6 @@ function expectLandedPresent(
   ).toEqual([]);
 }
 
-// ---------------------------------------------------------------------------
-
 describe("guardrail G10: docs/provider-plugin-api.md matches the contract", () => {
   it("has exactly the code blocks this test maps, in order", async () => {
     const blocks = extractTsBlocks(await readFile(DOC_URL, "utf8"));
@@ -323,22 +269,16 @@ describe("guardrail G10: docs/provider-plugin-api.md matches the contract", () =
     expect(fieldNames(registration ?? "")).toEqual(
       Object.keys(REGISTRATION_FIELDS).sort(),
     );
-    // Type-level: a gap that landed on the declaration turns this into a
-    // non-never union and fails `tsc`.
     expectTypeOf<DeclarationGapsNotLanded>().toBeNever();
   });
 
   it("§2 the bridge entry point is exported from @get-bb/plugin-sdk/provider-bridge", () => {
-    // The doc names it with the prefix it still carries; the export keeps the
-    // experimental_ prefix until the stabilization audit drops it.
     expect(typeof providerBridgeSdk.experimental_defineProviderBridge).toBe(
       "function",
     );
   });
 
   it("§2 the assembler ships with the conformance kit and JSON-RPC harness as provider-bridge/testing", () => {
-    // The doc names the entry `@get-bb/plugin-sdk/provider-bridge/testing`;
-    // the value exports carry the experimental_ prefix until stabilization.
     expect(
       typeof providerBridgeTestingSdk.experimental_createDeltaAssembler,
     ).toBe("function");
@@ -364,7 +304,6 @@ describe("guardrail G10: docs/provider-plugin-api.md matches the contract", () =
     expectLandedPresent(HANDSHAKE_FIELDS, capabilityKeys, "handshake");
     expectGapsNotLanded(HANDSHAKE_FIELDS, capabilityKeys, "handshake");
 
-    // The doc writes the options as a one-line type with bare names.
     expect(
       bareFieldNames(executionOptions ?? "").filter(
         (name) => name !== "JsonValue",
@@ -409,7 +348,6 @@ describe("guardrail G10: docs/provider-plugin-api.md matches the contract", () =
 
     expect(
       fieldNames(
-        // `label: { pending: string, completed: string }` sits on one line.
         (presentation ?? "").replaceAll(",", ",\n").replaceAll("{", "{\n"),
       ),
     ).toEqual(Object.keys(PRESENTATION_FIELDS).sort());

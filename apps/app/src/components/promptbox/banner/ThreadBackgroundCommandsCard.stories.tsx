@@ -20,9 +20,7 @@ function Stage({
   return (
     <div
       data-promptbox-shell=""
-      className={
-        size === "desktop" ? "min-w-0 flex-1" : "w-[20rem] shrink-0"
-      }
+      className={size === "desktop" ? "min-w-0 flex-1" : "w-[20rem] shrink-0"}
     >
       {children}
     </div>

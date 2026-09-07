@@ -1,8 +1,8 @@
 ---
 kind: instruction
 title: bb Guide — Customization
-summary: Command reference for customizing the bb app color palette and keyboard shortcuts.
-intent: Explain the CLI theme surface and server-backed app customization.
+summary: Command reference for customizing the bb app color palette, keyboard shortcuts, and mobile push notifications.
+intent: Explain the CLI theme surface, server-backed app customization, and push-notification device registration.
 editingNotes: Keep flags accurate against the CLI implementation. Theme details live in the bb-cli skill's references/theming.md.
 ---
 Customization commands
@@ -72,6 +72,12 @@ keep-awake hosts all`, or name individual host ids after `bb keep-awake hosts`.
 On macOS it prevents system idle sleep while bb is running; closing the lid or
 choosing Sleep still sleeps the Mac.
 
+Concurrency limit is also owned by its builtin plugin. Its autosaving page
+under Extensions → Plugins leaves the overall limit unlimited by default and
+uses an automatic per-host limit of one thread per available processor. Use
+`bb concurrency-limit global [unlimited|<limit>]` and `bb
+concurrency-limit host <host-id> [auto|<limit>]`; 0 pauses new work.
+
 Settings → Keyboard also includes `showKeyboardHints`, which defaults to true.
 Turn it off to hide the delayed shortcut badges shown while holding Command or
 Control on macOS, or Control on Windows/Linux. Shortcut commands continue to
@@ -82,6 +88,7 @@ false in packaged builds. Turn it on to show raw provider events bb does not yet
 understand; development builds always show these diagnostic rows.
 
 Settings → General also includes `steerActiveThreadOnEnter`, which defaults to
+true for a new install. An earlier install with saved settings or work keeps
 false. Outside an open typeahead menu, enabling it makes Enter steer a running
 thread and Command+Enter queue a follow-up; when disabled, those actions are
 reversed. Shift+Enter inserts a newline. On coarse-pointer touch devices, the
@@ -92,6 +99,13 @@ Settings → General also includes `streamerMode`, which defaults to false. Turn
 it on to hide every `customModels` entry from `~/.bb/config.json` in all model
 lists (pickers, `bb provider models`, and the SDK) during a screen share. The
 entries stay in the config file.
+
+Settings → General also includes `managedBranchPrefix`, which defaults to
+`bb/`. bb puts it in front of every branch name it creates for a worktree, so
+the default gives `bb/fix-login-flow-thr_ab12cd34ef`. Set `sawyer/wt-` to get
+`sawyer/wt-fix-login-flow-thr_ab12cd34ef`, or clear it for no prefix. bb rejects
+a prefix that cannot start a valid git branch name. The new prefix applies to
+branches bb creates after the change.
 
   bb settings show
   bb settings ai-services
@@ -119,11 +133,16 @@ client-local; submitting stops and settles a running thread, then replaces the
 selected turn and all later conversation history while retaining workspace side
 effects. Grouped multi-message requests are not yet editable.
 
-The default-off `providerSessionReaping` experiment extends idle release to
-every restorable provider. BB releases those sessions after 30 idle minutes.
-The daemon applies a changed value within five minutes. Active turns, commands,
-agents, workflows, and monitors keep their sessions loaded. BB releases idle
-Codex sessions with the experiment off as well.
+BB releases restorable provider sessions after 30 idle minutes. The daemon
+checks for these sessions every five minutes. Active turns, commands, agents,
+workflows, and monitors keep their sessions loaded.
+
+The default-off `sidebarProgressiveDisclosure` experiment shows the first five
+groups in the current sort order in **By project** and **By machine**, keeps
+attention groups visible, and reveals ten more per **Show more** click. Revealed
+groups stay visible through activity and sort-order changes.
+**Manually** is unchanged. Enable it with `bb settings experiment
+sidebarProgressiveDisclosure true`.
 
 The default-off `timelineWindowing` experiment mounts only nearby rows in long
 timelines and large expanded timeline details. Enable it with
@@ -151,6 +170,30 @@ same resolved bindings. The complete default table is in docs/configuration.md.
   bb settings keyboard hints <true|false>
   bb settings keyboard set <command> <shortcut|disabled>
   bb settings keyboard reset [command]
+
+Push notifications
+
+The built-in Push notifications plugin sends mobile updates through Expo and
+system notifications to connected web and desktop clients. Web tabs or desktop
+windows must stay open; browser permission is requested in the plugin settings.
+
+  bb push-notifications list
+  bb push-notifications add --token <expo-push-token>
+      --platform <ios|android> --label <device-name>
+  bb push-notifications remove <id>
+  bb push-notifications status
+  bb push-notifications test <web|desktop>
+  bb plugin config push-notifications set <mobileEnabled|webEnabled|desktopEnabled> <true|false>
+
+`add` is an upsert by token: a known token refreshes its label and last-seen
+time and keeps its id. Expo tokens that are no longer registered are removed
+automatically after a failed delivery. Use `bb plugin disable
+push-notifications` to stop delivery. Change the relay URL with `bb plugin
+config push-notifications set expoPushUrl <url>`. Add `--json` to `list` or
+`status` for machine-readable output. The list returns token suffixes only.
+The three channel switches default to true and apply immediately across this
+server. `test` broadcasts to all connected clients of the selected type with
+permission; OS notification settings still control whether a banner appears.
 
 Host files and voice transcription
 

@@ -1,17 +1,3 @@
-/**
- * Renders a lifecycle transition table as a Mermaid flowchart so the state
- * machine is reviewable visually. GitHub renders Mermaid in Markdown, so the
- * committed output shows the full machine in the repo and in PR diffs whenever
- * a transition changes.
- *
- * The generated document lives at docs/lifecycle-diagrams.md and is kept in
- * sync by a file-snapshot test (packages/domain/test/lifecycle-diagram.test.ts).
- */
-/**
- * A table cell: either a plain target status, or a path-dependent branch
- * (the shape of EnvironmentLifecyclePathDependentTarget, accepted
- * structurally) rendered as two annotated edges.
- */
 interface LifecycleDiagramPathDependentTarget {
   withWorkspacePath: string;
   withoutWorkspacePath: string;
@@ -44,13 +30,7 @@ interface LifecycleDiagramTransition {
 }
 
 interface RenderLifecycleMermaidArgs {
-  /** Status assigned at row creation; rendered from the synthetic start node. */
   initial: string;
-  /**
-   * Supersession predicate names per event, shown in the edge label as
-   * `event ⟨notArchived, notDeleted⟩`. Events without predicates render
-   * as the bare event name.
-   */
   predicateNames: LifecycleDiagramPredicateNames;
   table: LifecycleDiagramTable;
 }
@@ -145,11 +125,6 @@ function appendLifecycleDiagramTransitionGroup({
   });
 }
 
-/**
- * Extracts predicate names from a per-event predicate record (the shape of
- * THREAD_LIFECYCLE_EVENT_PREDICATES / ENVIRONMENT_LIFECYCLE_EVENT_PREDICATES)
- * for use as RenderLifecycleMermaidArgs.predicateNames.
- */
 export function lifecyclePredicateNames(
   predicates: LifecyclePredicateRecord,
 ): LifecycleDiagramPredicateNames {

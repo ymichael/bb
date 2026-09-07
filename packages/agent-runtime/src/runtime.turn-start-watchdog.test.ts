@@ -50,8 +50,6 @@ describe("turn-start watchdog", () => {
         onEvent: (event) => events.push(event),
         turnStartWatchdog: { thresholdMs: 120, intervalMs: 25 },
       },
-      // The provider ACKs the dispatch but never opens the turn — the
-      // #1156/#1234 stall shape the watchdog exists for.
       launch: { scripted: { swallowTurnStart: true } },
     });
 
@@ -79,7 +77,6 @@ describe("turn-start watchdog", () => {
     expect(watchdogEvent.threadId).toBe("t1");
     expect(events.some((event) => event.type === "turn/started")).toBe(false);
 
-    // One visible failure per stalled dispatch, not one per sweep.
     await wait(120);
     expect(
       events.filter(

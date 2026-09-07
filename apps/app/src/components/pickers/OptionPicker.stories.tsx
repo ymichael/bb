@@ -1,14 +1,10 @@
-import {
-  OptionPicker,
-  type PickerOption,
-} from "./OptionPicker";
+import { OptionPicker, type PickerOption } from "./OptionPicker";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 
 export default {
   title: "pickers/Option Picker",
 };
 
-// Mirrors REASONING_LABELS from useThreadCreationOptions.ts
 const reasoningOptions: readonly PickerOption<string>[] = [
   { value: "low", label: "Low" },
   { value: "medium", label: "Medium" },

@@ -3,7 +3,6 @@ import { usePrefersReducedMotion } from "@bb/shared-ui/hooks/use-media-query";
 import bbLogoUrl from "../../../../assets/bb-logo.svg";
 
 interface RootComposeEmptyWelcomeProps {
-  /** Reveal the composer, optionally prefilled with a starter prompt. */
   onCompose: (prompt?: string) => void;
   onAddProject: () => void;
   addProjectDisabled?: boolean;
@@ -50,11 +49,6 @@ function WelcomeAction({
   );
 }
 
-/**
- * Centered branded landing shown on the root compose page when the user has no
- * projects yet. Mirrors a logo-over-actions welcome layout: a dimensional bb
- * mark sits above the primary "get started" actions.
- */
 export function RootComposeEmptyWelcome({
   onCompose,
   onAddProject,

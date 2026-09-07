@@ -1,3 +1,8 @@
+import {
+  rollbackArchiveThreadsTransaction,
+  settleArchiveThreadsTransaction,
+  type ArchiveThreadsTransaction,
+} from "../cache-owners/thread-state-cache-owner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { Environment } from "@bb/domain";
 import type {
@@ -9,12 +14,7 @@ import { sdk } from "@/lib/sdk";
 import type { RequestEnvironmentActionMutationRequest } from "./mutation-request-types";
 import { invalidateEnvironmentActionQueries } from "../cache-owners/environment-cache-effects";
 import { applyEnvironmentUpdateResult } from "../cache-owners/environment-workspace-cache-owner";
-import {
-  beginArchiveEnvironmentThreadsTransaction,
-  rollbackArchiveEnvironmentThreadsTransaction,
-  settleArchiveEnvironmentThreadsTransaction,
-  type ArchiveEnvironmentThreadsTransaction,
-} from "../cache-owners/thread-list-cache-owner";
+import { beginArchiveEnvironmentThreadsTransaction } from "../cache-owners/thread-list-cache-owner";
 type UpdateEnvironmentMutationRequest = {
   id: string;
 } & UpdateEnvironmentRequest;
@@ -38,11 +38,6 @@ export function useRequestEnvironmentAction() {
       switch (request.action) {
         case "commit":
           return sdk.environments.commit({ environmentId: id });
-        case "squash_merge":
-          return sdk.environments.squashMerge({
-            environmentId: id,
-            mergeBaseBranch: request.options.mergeBaseBranch,
-          });
         case "pull_request_ready":
           return sdk.environments.markPullRequestReady({ environmentId: id });
         case "pull_request_merge":
@@ -74,13 +69,13 @@ export function useArchiveEnvironmentThreads() {
       id,
     }: ArchiveEnvironmentThreadsMutationRequest): Promise<EnvironmentArchiveThreadsResponse> =>
       sdk.environments.archiveThreads({ environmentId: id }),
-    onMutate: async ({ id }): Promise<ArchiveEnvironmentThreadsTransaction> =>
+    onMutate: async ({ id }): Promise<ArchiveThreadsTransaction> =>
       beginArchiveEnvironmentThreadsTransaction({
         environmentId: id,
         queryClient,
       }),
     onError: (_error, _variables, context) => {
-      rollbackArchiveEnvironmentThreadsTransaction({
+      rollbackArchiveThreadsTransaction({
         queryClient,
         transaction: context,
       });
@@ -90,7 +85,7 @@ export function useArchiveEnvironmentThreads() {
         environmentId: variables.id,
         queryClient,
       });
-      settleArchiveEnvironmentThreadsTransaction({
+      settleArchiveThreadsTransaction({
         queryClient,
         response: data,
         transaction: context,

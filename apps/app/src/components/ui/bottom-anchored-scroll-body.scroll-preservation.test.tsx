@@ -9,13 +9,6 @@ import {
 } from "@/components/ui/bottom-anchored-scroll-body";
 import { threadTimelineScrollAnchorAtomFamily } from "@/lib/thread-timeline-scroll-anchor";
 
-// Real externals only: the ResizeObserver/rAF used by the scroll body are
-// browser primitives jsdom omits, so they are stubbed; nothing in our own code
-// is mocked. The ResizeObserver stub delivers what a browser delivers — an
-// entry per observed target carrying its box sizes — so the resize path under
-// test is the one production runs. The atom is read back from the real default
-// jotai store the component writes to.
-
 interface ScrollMetrics {
   scrollHeight: number;
   clientHeight: number;
@@ -49,10 +42,6 @@ class ResizeObserverMock implements ResizeObserver {
   }
 }
 
-// The scroll port's content box is its client height and the content wrapper's
-// border box is the port's scroll height: the pair the component derives its
-// cached max offset from. The other box of each entry differs by 8px so a
-// refresh that reads the wrong one shows up as a skewed max offset.
 function makeResizeEntry(target: Element): ResizeObserverEntry {
   const isScrollPort = target.classList.contains(SCROLL_AREA_CLASS);
   const scrollPort = isScrollPort ? target : target.parentElement;
@@ -83,9 +72,6 @@ function getLatestResizeObserver(): ResizeObserverMock {
 }
 
 function installAnimationFrameMocks() {
-  // rAF is only used by the bottom-restore settle tail; run callbacks
-  // synchronously so it never leaks across tests, but it is irrelevant to the
-  // row-anchored restore paths under test.
   vi.stubGlobal(
     "requestAnimationFrame",
     vi.fn(() => 1),
@@ -112,8 +98,6 @@ function mockScrollAreaRect(scrollArea: HTMLElement) {
 }
 
 function mockRowRect(row: HTMLElement, rect: RowRect) {
-  // A row the timeline has since unmounted reports an empty rect, as a
-  // browser's disconnected element does.
   vi.spyOn(row, "getBoundingClientRect").mockImplementation(() =>
     row.isConnected
       ? new DOMRect(0, rect.top, 100, rect.bottom - rect.top)
@@ -207,7 +191,6 @@ function renderTimeline({
     getByRole: view.getByRole,
     scrollArea,
     rowElements,
-    // Rows mounted by a later rerender are not in `rowElements`.
     getRow: (rowId: string) =>
       requireHTMLElement(
         view.container.querySelector(`[data-timeline-row-id="${rowId}"]`),
@@ -230,7 +213,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
-  // Reset the in-memory anchors so tests don't leak captured state.
   const store = getDefaultStore();
   for (const threadId of ["thread-a", "thread-b"]) {
     store.set(threadTimelineScrollAnchorAtomFamily(threadId), null);
@@ -265,8 +247,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       rowIds: ["row-a", "row-b", "row-c"],
     });
     mockScrollAreaRect(scrollArea);
-    // row-a fully above the viewport; row-b is the first still visible, scrolled
-    // 20px past its own top; row-c below it.
     mockRowRect(requireHTMLElement(rowElements.get("row-a")!), {
       top: -120,
       bottom: -20,
@@ -279,9 +259,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       top: 80,
       bottom: 180,
     });
-    // Content lays out settled at the bottom; the ResizeObserver delivery
-    // refreshes the component's cached max scroll offset, exactly as a real
-    // browser does whenever the scroll port or content wrapper resizes.
     setScrollMetrics(scrollArea, {
       scrollHeight: 400,
       clientHeight: 100,
@@ -289,7 +266,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     getLatestResizeObserver().trigger();
 
-    // User-intent scroll away from bottom, then a scroll event triggers capture.
     scrollArea.scrollTop = 150;
     fireEvent.wheel(scrollArea);
     fireEvent.scroll(scrollArea);
@@ -342,8 +318,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "performance"] });
     const { scrollArea, getRow, rerenderRows, unmount } = renderTimeline({
       threadId: "thread-a",
-      // row-z is the timeline's last row, which the windowed list keeps
-      // mounted whatever the window holds.
       rowIds: ["row-a", "row-b", "row-c", "row-z"],
       virtualized: true,
     });
@@ -359,7 +333,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     getLatestResizeObserver().trigger();
 
-    // Past the throttle window, so each capture below writes immediately.
     vi.advanceTimersByTime(1_000);
     scrollArea.scrollTop = 1_000;
     fireEvent.wheel(scrollArea);
@@ -370,10 +343,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // A flick shorter than the overscan slides the window inside the
-    // fixed-height spacer: row-b and row-c unmount, row-x and row-y mount
-    // above row-a, and row-a and row-z stay connected. No observed box
-    // changed size, so the ResizeObserver never fires.
     rerenderRows(["row-x", "row-y", "row-a", "row-z"]);
     mockRowRect(getRow("row-x"), { top: -130, bottom: -30 });
     mockRowRect(getRow("row-y"), { top: -30, bottom: 70 });
@@ -388,7 +357,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // Leaving the thread flushes a final capture from the same row set.
     unmount();
     expect(readAnchor("thread-a")).toEqual({
       rowId: "row-y",
@@ -454,8 +422,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     fireEvent.scroll(scrollArea);
     fireEvent.click(getByRole("button", { name: "Capture prepend anchor" }));
 
-    // Chromium's native scroll anchoring can move the scrollport to its
-    // temporary maximum before the explicit prepend compensation runs.
     setScrollMetrics(scrollArea, {
       scrollHeight: 400,
       clientHeight: 100,
@@ -463,8 +429,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     fireEvent.scroll(scrollArea);
 
-    // More of the prepended content settles. Sticky-bottom must still be off,
-    // or this resize moves scrollTop from 300 to the new maximum (400).
     setScrollMetrics(scrollArea, {
       scrollHeight: 500,
       clientHeight: 100,
@@ -474,8 +438,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
 
     expect(scrollArea.scrollTop).toBe(300);
 
-    // The browser-induced scroll event must not replace the explicit anchor
-    // captured at 150; the 100px prepend therefore restores to 250.
     rerenderRows(["older-row", "row-a", "row-b", "row-c"]);
     expect(scrollArea.scrollTop).toBe(250);
   });
@@ -498,13 +460,10 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     fireEvent.scroll(scrollArea);
     fireEvent.click(getByRole("button", { name: "Capture prepend anchor" }));
 
-    // The request remains in flight while the user keeps scrolling upward.
     scrollArea.scrollTop = 100;
     fireEvent.wheel(scrollArea, { deltaY: -50 });
     fireEvent.scroll(scrollArea);
 
-    // One 100px row is prepended. Preserve the user's newer 100px position,
-    // not the stale 150px position captured when loading began.
     setScrollMetrics(scrollArea, {
       scrollHeight: 500,
       clientHeight: 100,
@@ -527,8 +486,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       rowIds: ["row-a", "row-b", "row-c"],
     });
     mockScrollAreaRect(scrollArea);
-    // On remount row-b's top sits 200px down from the scroll area's top, so
-    // revealing it requires scrollTop 200; the within-row offset adds 20.
     mockRowRect(requireHTMLElement(rowElements.get("row-b")!), {
       top: 200,
       bottom: 300,
@@ -539,8 +496,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       scrollTop: 0,
     });
 
-    // The mount layout effect already ran during render; re-driving the
-    // ResizeObserver settle path applies the restore against the mocked rects.
     getLatestResizeObserver().trigger();
 
     expect(scrollArea.scrollTop).toBe(220);
@@ -561,7 +516,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
 
     fireEvent.scroll(scrollArea);
 
-    // Capture records at-bottom, not a row.
     expect(readAnchor("thread-a")).toEqual({
       rowId: "",
       offsetWithinRow: 0,
@@ -591,7 +545,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
 
     getLatestResizeObserver().trigger();
 
-    // A bottom anchor must not pull the view to a row; scrollTop stays at bottom.
     expect(scrollArea.scrollTop).toBe(300);
     expect(rowBScrollSpy).not.toHaveBeenCalled();
   });
@@ -603,8 +556,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // The saved row id isn't among the rendered rows (it was deleted/never
-    // hydrated), so restore can never anchor to it.
     const { scrollArea } = renderTimeline({
       threadId: "thread-a",
       rowIds: ["row-a", "row-b"],
@@ -616,12 +567,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       scrollTop: 0,
     });
 
-    // Exhaust the settle attempts. The mount layout effect consumed the first of
-    // the 8 attempts, so 7 ResizeObserver passes drive the remainder to zero; the
-    // final pass re-enables stick-to-bottom and scrolls to the bottom inline.
-    // (No surplus trigger here: an extra pass after the fallback would scroll to
-    // bottom via `handleScrollAreaResize`'s own `queueBottomRestore`, masking a
-    // fallback that forgot to scroll.)
     const observer = getLatestResizeObserver();
     for (let attempt = 0; attempt < 7; attempt += 1) {
       observer.trigger();
@@ -724,8 +669,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     setScrollMetrics(scrollArea, {
       scrollHeight: 400,
       clientHeight: 100,
-      // Layout/streaming has temporarily left us visibly off the physical bottom,
-      // but no user scroll intent disabled sticky-bottom.
       scrollTop: 250,
     });
 
@@ -778,7 +721,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
   });
 
   it("restores thread A's own anchor after a fast A -> B -> A switch", () => {
-    // Leave A mid-timeline at row-b.
     const a1 = renderTimeline({
       threadId: "thread-a",
       rowIds: ["a-row-1", "a-row-2", "a-row-3"],
@@ -807,7 +749,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     fireEvent.scroll(a1.scrollArea);
     a1.unmount();
 
-    // Switch to B and leave it mid-timeline at a different row.
     const b = renderTimeline({
       threadId: "thread-b",
       rowIds: ["b-row-1", "b-row-2"],
@@ -832,7 +773,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     fireEvent.scroll(b.scrollArea);
     b.unmount();
 
-    // Each thread's atom holds its own row, keyed independently.
     expect(readAnchor("thread-a")).toEqual({
       rowId: "a-row-2",
       offsetWithinRow: 20,
@@ -844,7 +784,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // Return to A: it must restore A's row (a-row-2), not B's.
     const a2 = renderTimeline({
       threadId: "thread-a",
       rowIds: ["a-row-1", "a-row-2", "a-row-3"],
@@ -890,9 +829,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     getLatestResizeObserver().trigger();
 
-    // From here on, every scrollHeight/clientHeight read is observable. On an
-    // unvirtualized timeline those getters force a full synchronous layout
-    // pass, so scroll/wheel handlers must run on the cached max offset alone.
     const readScrollHeight = vi.fn(() => 400);
     const readClientHeight = vi.fn(() => 100);
     Object.defineProperty(scrollArea, "scrollHeight", {
@@ -904,8 +840,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       get: readClientHeight,
     });
 
-    // The attach -> detach edge is allowed exactly one verification read (the
-    // content-shrink guard re-testing the cached off-bottom classification).
     scrollArea.scrollTop = 150;
     fireEvent.wheel(scrollArea);
     fireEvent.scroll(scrollArea);
@@ -914,8 +848,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     readScrollHeight.mockClear();
     readClientHeight.mockClear();
 
-    // Steady state — a mid-timeline scroll burst, a wheel-down, and a return
-    // to the bottom — must be entirely read-free.
     for (let scrollTop = 140; scrollTop >= 50; scrollTop -= 10) {
       scrollArea.scrollTop = scrollTop;
       fireEvent.scroll(scrollArea);
@@ -926,15 +858,11 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
 
     expect(readScrollHeight).not.toHaveBeenCalled();
     expect(readClientHeight).not.toHaveBeenCalled();
-    // The cached geometry still classified the burst correctly: the detach
-    // captured the top-most visible row mid-timeline...
     expect(readAnchor("thread-a")).toEqual({
       rowId: "row-b",
       offsetWithinRow: 20,
       atBottom: false,
     });
-    // ...and the final scroll re-attached to the bottom, so the next growth
-    // (a legitimate fresh read in the resize path) restores to the new max.
     setScrollMetrics(scrollArea, {
       scrollHeight: 500,
       clientHeight: 100,
@@ -958,7 +886,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       top: -20,
       bottom: 80,
     });
-    // Pinned at the bottom of settled content; the cached max offset is 300.
     setScrollMetrics(scrollArea, {
       scrollHeight: 400,
       clientHeight: 100,
@@ -966,10 +893,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     getLatestResizeObserver().trigger();
 
-    // iOS tap-collapsing a long tool output while pinned: the touch marks
-    // user intent, the content shrinks (new max offset 100), and the browser
-    // clamps scrollTop and delivers the scroll event BEFORE the
-    // ResizeObserver refresh — the cache still says 300.
     fireEvent.touchStart(scrollArea);
     setScrollMetrics(scrollArea, {
       scrollHeight: 200,
@@ -978,18 +901,12 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     fireEvent.scroll(scrollArea);
 
-    // The stale-high cache reads 200px off-bottom with recent intent, which
-    // would detach for good (the bottom-restore is suppressed once
-    // stick-to-bottom is off) and persist a mid-timeline row anchor. The
-    // detach-edge verification must keep us pinned instead.
     expect(readAnchor("thread-a")).toEqual({
       rowId: "",
       offsetWithinRow: 0,
       atBottom: true,
     });
 
-    // The late resize delivery finds stick-to-bottom intact, so further
-    // content growth keeps following the bottom.
     getLatestResizeObserver().trigger();
     setScrollMetrics(scrollArea, {
       scrollHeight: 250,
@@ -1021,7 +938,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     getLatestResizeObserver().trigger();
 
-    // Detach: against the cached max offset (300), 100 is far off the bottom.
     scrollArea.scrollTop = 100;
     fireEvent.wheel(scrollArea);
     fireEvent.scroll(scrollArea);
@@ -1031,8 +947,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // Content doubles while detached: the resize refreshes the cache (max
-    // offset 700) without yanking the detached viewport.
     setScrollMetrics(scrollArea, {
       scrollHeight: 800,
       clientHeight: 100,
@@ -1041,9 +955,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     getLatestResizeObserver().trigger();
     expect(scrollArea.scrollTop).toBe(100);
 
-    // 694 is 6px shy of the refreshed bottom (700), outside the 4px threshold:
-    // still detached. The stale pre-resize max (300) would misclassify it as
-    // at-bottom and the growth below would yank to the new maximum.
     fireEvent.wheel(scrollArea, { deltaY: 400 });
     scrollArea.scrollTop = 694;
     fireEvent.scroll(scrollArea);
@@ -1056,12 +967,10 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     getLatestResizeObserver().trigger();
     expect(scrollArea.scrollTop).toBe(694);
 
-    // 797 is 3px shy of the again-refreshed bottom (800): re-attaches...
     fireEvent.wheel(scrollArea, { deltaY: 200 });
     scrollArea.scrollTop = 797;
     fireEvent.scroll(scrollArea);
 
-    // ...so the next content growth follows the bottom again.
     setScrollMetrics(scrollArea, {
       scrollHeight: 1_000,
       clientHeight: 100,
@@ -1092,7 +1001,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     getLatestResizeObserver().trigger();
 
-    // The user scrolls up to read: detached mid-timeline.
     scrollArea.scrollTop = 150;
     fireEvent.wheel(scrollArea);
     fireEvent.scroll(scrollArea);
@@ -1102,11 +1010,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // Tap-collapsing a long tool output below the viewport shrinks the content
-    // past the viewport's position: the browser clamps scrollTop onto the new
-    // maximum (100) and delivers that scroll event BEFORE the ResizeObserver
-    // refresh, so the scroll handler still classifies against the stale cache
-    // (300) and cannot see that the viewport now sits on the bottom.
     fireEvent.touchStart(scrollArea);
     setScrollMetrics(scrollArea, {
       scrollHeight: 200,
@@ -1115,9 +1018,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
     });
     fireEvent.scroll(scrollArea);
 
-    // The late resize delivery finds a detached viewport on the fresh bottom
-    // after a shrink and re-attaches it, exactly as the live read did before
-    // the cache: the anchor records at-bottom...
     getLatestResizeObserver().trigger();
     expect(readAnchor("thread-a")).toEqual({
       rowId: "",
@@ -1125,7 +1025,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: true,
     });
 
-    // ...and further content growth follows the bottom again.
     setScrollMetrics(scrollArea, {
       scrollHeight: 250,
       clientHeight: 100,
@@ -1165,8 +1064,6 @@ describe("BottomAnchoredScrollBody scroll preservation", () => {
       atBottom: false,
     });
 
-    // A collapse far below the viewport: no clamp, no scroll event, and the
-    // viewport (200 of a new max 500) is still well off the bottom.
     setScrollMetrics(scrollArea, {
       scrollHeight: 600,
       clientHeight: 100,

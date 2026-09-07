@@ -19,48 +19,20 @@ import {
   SectionThreadProjectionGate,
   useSectionThreadDnd,
 } from "./useSectionThreadDnd";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 
 function createThread(overrides: Partial<ThreadListEntry>): ThreadListEntry {
-  return {
+  return makeThreadListEntry({
     id: "thread",
     projectId: "project",
-    environmentId: null,
-    providerId: "codex",
     title: "Thread",
     titleFallback: "Thread",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
     lastReadAt: 0,
     latestAttentionAt: 2,
     createdAt: 1,
     updatedAt: 2,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: {
-      displayStatus: "idle",
-      hostReconnectGraceExpiresAt: null,
-    },
     ...overrides,
-  };
+  });
 }
 
 const SECTIONS = [
@@ -133,20 +105,14 @@ describe("useSectionThreadDnd projection feedback loop (#1830)", () => {
     expect(result.current?.dragOverParentKey).toBe(SECTION_B_PARENT_KEY);
     expect(result.current?.projectedSectionId).toBe("b");
 
-    // The projection re-rendered the row into section B and dnd-kit resolved
-    // `over` against the source section again with the pointer unmoved. That
-    // is our own render feeding back, so the projection must hold; reverting
-    // here is what looped until React error #185.
     act(() => props().onDragOver?.(dragOver("dragged", "peer-a")));
     expect(result.current?.dragOverParentKey).toBe(SECTION_B_PARENT_KEY);
     expect(result.current?.projectedSectionId).toBe("b");
 
-    // A target the pointer has not visited yet is still allowed.
     act(() => props().onDragOver?.(dragOver("dragged", "loose")));
     expect(result.current?.dragOverParentKey).toBe(CHRONOLOGICAL_CONTAINER_ID);
     expect(result.current?.projectedSectionId).toBeNull();
 
-    // Real input re-opens every target, including the source section.
     act(() => notePointerMove());
     act(() => props().onDragOver?.(dragOver("dragged", "peer-a")));
     expect(result.current?.dragOverParentKey).toBeNull();

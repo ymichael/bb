@@ -74,9 +74,6 @@ describe("protocol id schemas", () => {
   });
 
   it("does not broaden raw-thread matching to legacy unprefixed NanoIDs", () => {
-    // Historical rows used bare nanoid() values. The raw-text feature is
-    // intentionally limited to the user-visible `thr_` contract so ordinary
-    // ten-character words cannot trigger lookups.
     expect(isRawThreadId("dcwivn5n8w")).toBe(false);
     expect(rawThreadIdSchema.safeParse("dcwivn5n8w").success).toBe(false);
   });

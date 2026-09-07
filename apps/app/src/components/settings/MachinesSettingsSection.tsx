@@ -231,10 +231,6 @@ function MachineRow({
   );
 }
 
-/**
- * Settings → Machines (multi-machine plan §4.3, Mockup C): the live host
- * list with rename/remove management and the add-a-machine pairing flow.
- */
 export function MachinesSettingsSection() {
   const systemConfig = useSystemConfig();
   const hostsQuery = useHosts();

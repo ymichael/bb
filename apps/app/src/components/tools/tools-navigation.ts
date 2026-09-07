@@ -1,6 +1,7 @@
 import type { IconName } from "@bb/shared-ui/icon";
 import { matchPath } from "react-router-dom";
 import {
+  SETTINGS_PLUGINS_ROUTE_PATH,
   getPluginsRoutePath,
   getRegistrySkillsRoutePath,
   getSkillsRoutePath,
@@ -19,11 +20,6 @@ import {
 
 export type ToolsSectionId = "skills" | "plugins";
 
-/**
- * Centers one band of a full-bleed Extensions page onto the shared content
- * column. Collection pages let their scroller span the whole pane (so the
- * wheel works from the gutters) and re-center every band with this class.
- */
 export const TOOLS_PAGE_BAND_CLASSES = "mx-auto w-full max-w-5xl px-4 md:px-5";
 
 interface ToolsSectionDefinition {
@@ -48,11 +44,6 @@ const TOOLS_SECTIONS = {
   },
 } satisfies Record<ToolsSectionId, ToolsSectionDefinition>;
 
-/**
- * What each section calls the collection the user already owns. Skills call it
- * the Library; plugins call it Installed. Breadcrumbs and the collection tab
- * both read this, so renaming happens in one place.
- */
 const TOOLS_OWNED_COLLECTION_LABEL = {
   skills: "My skills",
   plugins: "Installed",
@@ -64,6 +55,7 @@ const TOOLS_OWNED_COLLECTION_VIEW = {
 } as const satisfies Record<ToolsSectionId, string>;
 
 export function getToolsOwnedCollectionRoutePath(id: ToolsSectionId): string {
+  if (id === "plugins") return SETTINGS_PLUGINS_ROUTE_PATH;
   return `${TOOLS_SECTIONS[id].to}?view=${TOOLS_OWNED_COLLECTION_VIEW[id]}`;
 }
 
@@ -134,9 +126,7 @@ function routeResourceLabel(value: string | undefined, fallback: string) {
   let decoded = value;
   try {
     decoded = decodeURIComponent(value);
-  } catch {
-    // React Router may already have decoded the segment; use it as-is.
-  }
+  } catch {}
   const segments = decoded.split("/").filter(Boolean);
   return segments.at(-1) ?? fallback;
 }
@@ -174,8 +164,6 @@ const DETAIL_ROUTES = [
     fallback: "Skill",
   },
   {
-    // The pre-Library route still resolves so a deep link keeps its header and
-    // document title for the redirect window instead of flashing an empty one.
     pattern: LEGACY_TOOLS_SKILL_DETAIL_ROUTE_PATH,
     section: "skills",
     collection: collectionCrumb("skills"),
@@ -196,9 +184,6 @@ const BROWSE_ROUTES = [
   ["plugins", TOOLS_PLUGIN_BROWSE_ROUTE_PATH],
 ] as const;
 
-// Legacy roots that resolve to a section for the redirect frame. "/tools"
-// itself is absent on purpose: it forwards to the plugins Browse landing,
-// which the alias table's owned-collection labels would misname.
 const ROOT_ROUTE_ALIASES: Record<ToolsSectionId, readonly string[]> = {
   skills: ["/skills"],
   plugins: [],
@@ -217,10 +202,6 @@ export function resolveToolsBreadcrumbs(
   if (pluginCreateBreadcrumbs !== null) {
     return pluginCreateBreadcrumbs;
   }
-  // Browse is matched before detail on purpose. A single-param detail pattern
-  // such as /extensions/plugins/:pluginId also matches /extensions/plugins/browse, so
-  // testing detail first resolves the reserved "browse" segment as a resource
-  // id and yields "Plugins / Installed / browse".
   for (const [section, browseRoute] of BROWSE_ROUTES) {
     if (
       pathname === browseRoute ||
@@ -270,7 +251,6 @@ export function resolveToolsBreadcrumbs(
   return null;
 }
 
-/** One Extensions page the sidebar lists: identity, label, icon, route. */
 interface ToolsPageDefinition {
   id:
     | "plugins-browse"
@@ -283,10 +263,6 @@ interface ToolsPageDefinition {
   to: string;
 }
 
-/**
- * Every Extensions page, in sidebar order. Labels compose from the canonical
- * section and collection names so a rename still happens in one place.
- */
 export const TOOLS_PAGES: readonly ToolsPageDefinition[] = [
   {
     id: "plugins-browse",
@@ -298,9 +274,9 @@ export const TOOLS_PAGES: readonly ToolsPageDefinition[] = [
   {
     id: "plugins-installed",
     section: "plugins",
-    label: `${TOOLS_OWNED_COLLECTION_LABEL.plugins} ${TOOLS_SECTIONS.plugins.label.toLowerCase()}`,
+    label: "Installed plugins",
     icon: "PackageReceive",
-    to: getToolsOwnedCollectionRoutePath("plugins"),
+    to: `${TOOLS_SECTIONS.plugins.to}?view=installed`,
   },
   {
     id: "skills-browse",
@@ -318,14 +294,6 @@ export const TOOLS_PAGES: readonly ToolsPageDefinition[] = [
   },
 ];
 
-/**
- * Which Extensions page owns the current location — the same ownership the
- * breadcrumb resolver's DETAIL_ROUTES table encodes, so the sidebar highlight
- * and document title agree. Plugin details preserve their originating
- * collection in `view`: catalog details default to Browse, while installed
- * rows carry `view=installed`. The legacy installed-skill path belongs to the
- * library.
- */
 export function resolveToolsActivePage(
   pathname: string,
   search = "",
@@ -334,9 +302,7 @@ export function resolveToolsActivePage(
   for (const detail of DETAIL_ROUTES) {
     if (matchPath(detail.pattern, pathname) === null) continue;
     if (detail.section === "plugins") {
-      return view === TOOLS_OWNED_COLLECTION_VIEW.plugins
-        ? "plugins-installed"
-        : "plugins-browse";
+      return "plugins-browse";
     }
     return detail.collection.label === TOOLS_OWNED_COLLECTION_LABEL.skills
       ? "skills-library"
@@ -353,17 +319,6 @@ export function resolveToolsActivePage(
     : "skills-browse";
 }
 
-/**
- * What the app header shows for a route in the Tools/Automations chrome area:
- * Extensions collection pages get the static area title (their sidebar names
- * every page, so a crumb trail would repeat the active row), plugin creation
- * gets the same ancestor/current breadcrumb treatment as other app depth,
- * automation routes keep their breadcrumb trail, and anything else is not
- * this resolver's business.
- *
- * Pure on purpose: the precedence used to live in AppLayout's meta ternary
- * with no coverage; here the three cases are testable directly.
- */
 export function resolveToolsAreaHeaderMeta(
   pathname: string,
   resourceLabel?: string | null,

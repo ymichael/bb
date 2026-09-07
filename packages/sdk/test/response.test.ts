@@ -126,7 +126,9 @@ function getBytesReader(response: Response): () => Promise<Uint8Array> {
 
 function createAbortedTimeoutSignal(): AbortSignal {
   const controller = new AbortController();
-  controller.abort(new DOMException("The operation timed out.", "TimeoutError"));
+  controller.abort(
+    new DOMException("The operation timed out.", "TimeoutError"),
+  );
   return controller.signal;
 }
 
@@ -190,9 +192,9 @@ describe("readJsonResponse()", () => {
       statusText: "Internal Server Error",
     });
 
-    await expect(
-      readVoidResponse(Promise.resolve(response)),
-    ).rejects.toThrow("HTTP 500: Internal Server Error");
+    await expect(readVoidResponse(Promise.resolve(response))).rejects.toThrow(
+      "HTTP 500: Internal Server Error",
+    );
   });
 
   it("throws BbHttpError carrying status and server code for non-ok response", async () => {
@@ -310,9 +312,7 @@ describe("readJsonResponse()", () => {
       cause: { code: "ECONNREFUSED" },
     });
 
-    await expect(
-      readJsonResponse(Promise.reject(connError)),
-    ).rejects.toThrow(
+    await expect(readJsonResponse(Promise.reject(connError))).rejects.toThrow(
       "Cannot connect to BB server. Ensure it is running and BB_SERVER_URL is correct.",
     );
   });
@@ -320,17 +320,17 @@ describe("readJsonResponse()", () => {
   it("rethrows other errors as-is", async () => {
     const otherError = new Error("Network timeout");
 
-    await expect(
-      readJsonResponse(Promise.reject(otherError)),
-    ).rejects.toThrow("Network timeout");
+    await expect(readJsonResponse(Promise.reject(otherError))).rejects.toThrow(
+      "Network timeout",
+    );
   });
 
   it("rethrows non-TypeError connection errors", async () => {
     const error = new RangeError("something wrong");
 
-    await expect(
-      readJsonResponse(Promise.reject(error)),
-    ).rejects.toThrow("something wrong");
+    await expect(readJsonResponse(Promise.reject(error))).rejects.toThrow(
+      "something wrong",
+    );
     await expect(
       readJsonResponse(Promise.reject(error)),
     ).rejects.toBeInstanceOf(RangeError);
@@ -496,7 +496,9 @@ describe("createRequestTimeoutFetch()", () => {
     );
 
     const blobResponse = await timeoutFetch("http://server/api/v1/blob");
-    await expect(blobResponse.blob()).rejects.toThrow(IMMEDIATE_TIMEOUT_MESSAGE);
+    await expect(blobResponse.blob()).rejects.toThrow(
+      IMMEDIATE_TIMEOUT_MESSAGE,
+    );
 
     const formDataResponse = await timeoutFetch(
       "http://server/api/v1/form-data",
@@ -598,7 +600,9 @@ describe("createRequestTimeoutFetch()", () => {
         init?.signal?.addEventListener(
           "abort",
           () => {
-            reject(new DOMException("The operation was aborted.", "AbortError"));
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            );
           },
           { once: true },
         );

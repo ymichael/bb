@@ -16,8 +16,6 @@ import {
 } from "./splitThreadNavigation";
 
 function twoPaneLayout(): SplitLayout {
-  // pane-2 (thread-2) is focused (splitPane focuses the new pane); pane-1 holds
-  // thread-1.
   return splitPane(
     createSinglePaneLayout({ projectId: "p1", threadId: "thread-1" }),
     "pane-1",

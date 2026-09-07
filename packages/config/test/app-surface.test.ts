@@ -3,8 +3,6 @@ import { parseAppSurface, parseRequestAppSurface } from "../src/app-surface.js";
 
 describe("app surface parsing", () => {
   it("accepts mobile and api only as request surfaces", () => {
-    // `mobile` and `api` are client declarations (x-bb-app-surface); a bb
-    // server can never run as either surface (BB_APP_SURFACE).
     expect(parseRequestAppSurface("mobile")).toBe("mobile");
     expect(parseRequestAppSurface("api")).toBe("api");
     expect(parseRequestAppSurface(" web ")).toBe("web");

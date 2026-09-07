@@ -5,10 +5,6 @@ import type {
 } from "@tanstack/react-query";
 import type { ThreadListEntry } from "@bb/domain";
 
-// Some thread list queries store a flat array (`useThreads`); the paginated
-// archived view stores `InfiniteData<ThreadListEntry[]>`. These helpers let
-// cache mutations and iteration treat both shapes uniformly.
-
 export type ThreadListCacheData =
   | ThreadListEntry[]
   | InfiniteData<ThreadListEntry[]>;

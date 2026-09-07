@@ -7,6 +7,7 @@ import { ThreadTableOfContents } from "@/components/thread/toc/ThreadTableOfCont
 
 interface ThreadTimelinePaneProps extends ThreadTimelineSurfaceProps {
   canSpawnChild: boolean;
+  contextBoundarySeq: number | null;
   footer: ReactNode;
   hasOlderTimelineRows: boolean;
   isLoadingOlderTimelineRows: boolean;
@@ -30,6 +31,7 @@ export function ThreadTimelinePane({
       footer={footer}
       scrollOverlay={
         <ThreadTableOfContents
+          contextBoundarySeq={surface.contextBoundarySeq}
           threadId={surface.threadId}
           timelineRows={surface.timelineRows}
           hasOlderTimelineRows={surface.hasOlderTimelineRows}

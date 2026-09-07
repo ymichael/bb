@@ -12,9 +12,13 @@ import {
   SIDEBAR_BOOTSTRAP_CACHE_KEY,
   resetSidebarBootstrapCacheForTest,
 } from "@/lib/sidebar-bootstrap-cache";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { useSidebarNavigation } from "./sidebar-navigation-query";
+import {
+  makeProjectWithThreadsResponse,
+  makeSidebarBootstrapResponse,
+} from "@/test/fixtures/projects";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -32,32 +36,28 @@ vi.mock("@/hooks/useRealtimeSubscription", () => ({
   useThreadListRealtimeSubscription: vi.fn(),
 }));
 
-const PERSONAL_PROJECT: SidebarBootstrapResponse["personalProject"] = {
-  id: "proj_personal",
-  kind: "personal",
-  name: "Personal",
-  gitRemoteUrl: null,
-  createdAt: 1,
-  updatedAt: 1,
-  sources: [],
-  threads: [],
-  defaultExecutionOptions: null,
-};
+const PERSONAL_PROJECT: SidebarBootstrapResponse["personalProject"] =
+  makeProjectWithThreadsResponse({
+    id: "proj_personal",
+    kind: "personal",
+    name: "Personal",
+    createdAt: 1,
+    updatedAt: 1,
+  });
 
-const BOOTSTRAP: SidebarBootstrapResponse = {
-  sections: [],
+const BOOTSTRAP: SidebarBootstrapResponse = makeSidebarBootstrapResponse({
   projects: [
-    {
-      ...PERSONAL_PROJECT,
+    makeProjectWithThreadsResponse({
       id: "proj_felt",
       kind: "standard",
       name: "Felt walk",
-    },
+      createdAt: 1,
+      updatedAt: 1,
+    }),
   ],
   personalProject: PERSONAL_PROJECT,
-};
+});
 
-/** A request that never settles, so the pre-fetch render is observable. */
 const pendingForever = () => new Promise<never>(() => {});
 
 afterEach(() => {
@@ -69,8 +69,6 @@ afterEach(() => {
 
 describe("useSidebarNavigation", () => {
   it("replays the last bootstrap while the live one loads", async () => {
-    // The cache validates reads against the wire schema, so the fixture must
-    // be a real response shape; fail here, not silently in the replay.
     sidebarBootstrapResponseSchema.parse(BOOTSTRAP);
 
     vi.mocked(request).mockResolvedValue(BOOTSTRAP);
@@ -81,8 +79,6 @@ describe("useSidebarNavigation", () => {
     await waitFor(() => expect(warm.result.current.data).toEqual(BOOTSTRAP));
     warm.unmount();
 
-    // A full page load starts from an empty query cache; only the profile's
-    // last-known bootstrap can fill the rail before the network answers.
     vi.mocked(request).mockImplementation(pendingForever);
     const reloadHarness = createQueryClientTestHarness();
     const { result } = renderHook(() => useSidebarNavigation(), {
@@ -125,8 +121,6 @@ describe("useSidebarNavigation", () => {
         wrapper: warmHarness.wrapper,
       });
       await waitFor(() => expect(warm.result.current.data).toEqual(large));
-      // The live query holds the full response; the store is not written
-      // synchronously with it.
       expect(
         window.localStorage.getItem(SIDEBAR_BOOTSTRAP_CACHE_KEY),
       ).toBeNull();
@@ -178,7 +172,6 @@ describe("useSidebarNavigation", () => {
         await vi.advanceTimersByTimeAsync(5_000);
       });
       expect(setItem).toHaveBeenCalled();
-      // The fetch stayed successful and nothing was stored.
       expect(result.current.isError).toBe(false);
       expect(
         window.localStorage.getItem(SIDEBAR_BOOTSTRAP_CACHE_KEY),

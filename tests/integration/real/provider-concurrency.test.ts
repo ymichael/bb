@@ -1,4 +1,3 @@
-// Real provider cross-provider concurrency coverage.
 import { describe, expect, it } from "vitest";
 import {
   getThreadEvents,

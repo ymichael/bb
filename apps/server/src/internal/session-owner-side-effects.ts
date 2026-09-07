@@ -52,12 +52,6 @@ interface HandleHostSessionOpenedArgs {
   activeThreads: HostDaemonActiveThread[];
   hostId: string;
   openedSession: HostDaemonSessionRow;
-  /**
-   * The host's most recent session before this open, regardless of status —
-   * a daemon crash closes its session immediately on socket close, so the
-   * restarted-daemon reconciliation below must not require the previous
-   * session to still be active.
-   */
   previousSession: HostDaemonSessionRow | null;
 }
 
@@ -101,9 +95,6 @@ export async function handleHostSessionOpened(
 
     if (args.previousSession.status === "active") {
       if (sameDaemonInstance) {
-        // A reconnect opens the replacement session before its new WebSocket.
-        // Close only the superseded socket: sending session-close would make
-        // this same daemon shut down every resident provider runtime.
         deps.hub.closeDaemonSessionSocket(args.previousSession.id, "replaced");
       } else {
         deps.hub.closeDaemonSession(args.previousSession.id, "replaced");
@@ -113,22 +104,15 @@ export async function handleHostSessionOpened(
       });
     }
 
-    interruptPendingInteractionsForHostThreads(deps, {
-      hostId: args.hostId,
-      reason: sameDaemonInstance
-        ? DAEMON_DISCONNECTED_PENDING_INTERACTION_REASON
-        : DAEMON_RESTARTED_PENDING_INTERACTION_REASON,
-    });
-
     if (!sameDaemonInstance) {
+      interruptPendingInteractionsForHostThreads(deps, {
+        hostId: args.hostId,
+        reason: DAEMON_RESTARTED_PENDING_INTERACTION_REASON,
+      });
       interruptActiveThreadsForHost(deps, {
         hostId: args.hostId,
         reason: "host-daemon-restarted",
       });
-      // The restarted daemon lost its in-memory background-task state and the
-      // CLI processes died with it — settle the persisted open items. This
-      // also covers restarts inside the disconnect grace window, where the
-      // grace callback sees the new active session and skips its settle.
       settleDanglingBackgroundTasks(deps, { hostId: args.hostId });
     }
   }
@@ -159,9 +143,6 @@ export function handleDaemonSocketClosed(
     sessionId: args.sessionId,
   });
 
-  // Close the session immediately so host availability reflects the disconnect.
-  // Active turns are reconciled only after a same-process reconnect has had the
-  // live event window to drain, or when a different daemon instance registers.
   closeSession(deps.db, deps.hub, args.sessionId, "daemon-disconnect");
 
   notifyHostThreadRuntimeStatusChanged(deps, session.hostId);
@@ -183,12 +164,6 @@ export function handleDaemonSocketClosed(
   );
 }
 
-/**
- * Host removal is an immediate, terminal disconnect: it cannot use the normal
- * reconnect grace because the host is tombstoned in the same request. Closing
- * the DB session first makes the later WebSocket close callback a no-op for
- * owner side-effects, so this explicit path performs them exactly once.
- */
 export function handleHostRemoved(
   deps: DaemonSocketClosedDeps,
   args: HandleHostRemovedArgs,
@@ -235,10 +210,6 @@ function completeDaemonDisconnectGrace(
     hostId: args.hostId,
     reason: DAEMON_DISCONNECTED_PENDING_INTERACTION_REASON,
   });
-  // Same policy as pending interactions: after the grace window the daemon is
-  // treated as gone, so its background tasks are settled. If the daemon was
-  // alive-but-partitioned, its later real progress/completed events supersede
-  // the settle row (latest state row per item wins).
   settleDanglingBackgroundTasks(deps, { hostId: args.hostId });
   notifyHostThreadRuntimeStatusChanged(deps, args.hostId);
 }
@@ -257,19 +228,10 @@ function completeDaemonActiveWorkDisconnectGrace(
   interruptActiveThreadsForHost(deps, {
     hostId: args.hostId,
     reason: "host-daemon-restarted",
+    cause: "host-connection-lost",
   });
 }
 
-/**
- * Host connectivity is part of an `active` thread row's displayed runtime, so
- * those rows' notifications carry the post-change `statusChange` snapshot
- * clients patch in place instead of refetching every active thread list.
- * Every other row renders the same whether or not the host is connected; it
- * keeps the bare notification it always received, which clients coalesce into
- * one throttled list refetch. The snapshots come from one batched pass: this
- * runs synchronously in the daemon socket's close handler and again when the
- * grace elapses, and a host can carry hundreds of threads.
- */
 function notifyHostThreadRuntimeStatusChanged(
   deps: Pick<AppDeps, "db" | "hub" | "providerRegistry">,
   hostId: string,

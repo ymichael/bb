@@ -10,13 +10,11 @@ import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 import { useResolvedLiveFileTarget } from "@/hooks/useResolvedLiveFileTarget";
 import { useAppNavigationHost } from "@/lib/app-navigation-host";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
-import { getExperimentalFileLocationStart } from "@/lib/live-file-navigation";
+import {
+  getFileBasename,
+  getExperimentalFileLocationStart,
+} from "@/lib/live-file-navigation";
 import { usePluginSlots } from "@/lib/plugin-slots";
-
-function getFileBasename(path: string): string {
-  const normalizedPath = path.replace(/[\\/]+$/u, "");
-  return normalizedPath.split(/[\\/]/u).at(-1) ?? path;
-}
 
 function getFileExtension(path: string): string | null {
   const name = getFileBasename(path);
@@ -26,7 +24,6 @@ function getFileExtension(path: string): string | null {
     : null;
 }
 
-/** Lazily mounted destination discovery for `experimental_FileLink`. */
 export function ExperimentalFileLinkMenu({
   intent,
 }: {

@@ -9,13 +9,6 @@ import {
 import type { ThreadEventWithMeta } from "./build-event-projection.js";
 import { parsePromptInput } from "./user-message-parsing.js";
 
-/**
- * The provider's declared `plan` composer action, or null when it declares
- * none. Eligibility and command syntax both come from the declaration — this
- * used to be a gate on two first-party provider ids plus a hardcoded
- * `{ trigger: "/", name: "plan" }` selector, which no plugin provider could
- * ever join.
- */
 export type PlanCommand = Pick<ProviderComposerCommand, "trigger" | "name">;
 
 interface ActiveTurnInput {
@@ -116,9 +109,7 @@ export function extractThreadTimelineActivePlanTurn({
 
   let latestPlanTurn: ActiveTurnInput | null = null;
   for (const activeTurn of extractActiveTurnInputs(events)) {
-    if (
-      !promptInputHasCommandMention(activeTurn.request.input, planCommand)
-    ) {
+    if (!promptInputHasCommandMention(activeTurn.request.input, planCommand)) {
       continue;
     }
     if (!latestPlanTurn || activeTurn.seq > latestPlanTurn.seq) {

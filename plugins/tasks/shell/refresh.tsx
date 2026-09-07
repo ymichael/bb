@@ -11,16 +11,9 @@ import { useRealtimeConnectionState } from "@get-bb/plugin-sdk/app";
 
 interface TasksRefreshState {
   generation: number;
-  /**
-   * True while any mounted query still has a generation-driven fetch in
-   * flight (manual refresh or reconnect). Used by the header control for
-   * single-flight + loading UI without a second refresh channel.
-   */
   isRefreshing: boolean;
   refresh: () => void;
-  /** Called by queries when a generation-driven fetch starts. */
   beginGenerationWork: () => void;
-  /** Called by queries when a generation-driven fetch settles or unmounts. */
   endGenerationWork: () => void;
 }
 
@@ -117,11 +110,6 @@ function removeConnectionState(registrationId: symbol) {
   }
 }
 
-/**
- * Owns the plugin's single realtime connection listener. Every mounted query
- * observes the same generation, so reconnect and manual refresh each cause at
- * most one request per query without creating per-query connection listeners.
- */
 export function TasksRefreshProvider({ children }: { children: ReactNode }) {
   const connectionState = useRealtimeConnectionState();
   const registrationId = useMemo(() => Symbol("tasks-refresh-provider"), []);

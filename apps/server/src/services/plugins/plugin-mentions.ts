@@ -7,7 +7,6 @@ type PluginMentionResource = Extract<
   { kind: "plugin" }
 >;
 
-/** Unique plugin mentions in `input`, in first-appearance order. */
 function collectPluginMentionResources(
   input: readonly PromptInput[],
 ): PluginMentionResource[] {
@@ -27,14 +26,6 @@ function collectPluginMentionResources(
   return resources;
 }
 
-/**
- * Resolve every plugin mention in a submitted message once (design §4.9
- * resolve-at-send) and return the agent-visible context inputs to append.
- * Duplicate mentions of the same (pluginId, itemId) resolve once. A resolve
- * failure throws a 422 ApiError so the composer surfaces it and the send is
- * blocked — silently dropping the context the user attached would be worse
- * than failing loudly.
- */
 export async function resolvePluginMentionContextInputs(
   input: readonly PromptInput[],
 ): Promise<PromptInput[]> {

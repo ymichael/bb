@@ -7,26 +7,14 @@ import {
   utilityPrompt,
 } from "./browse-hero-archetypes";
 
-/**
- * The examples shown while the composer is open: the same two tiers, one card
- * shape, one source. Use-case ideas keep their accent chips; the capability
- * tier goes neutral under its own label so the two audiences stay legible
- * without a second layout.
- *
- * Every card seeds the inline composer through `onCreate`; nothing here
- * navigates away from the page.
- */
 export function BrowseArchetypeCards({
   onCreate,
   className,
 }: {
-  /** Receives the full composer prompt for the chosen example. */
   onCreate: (prompt: string) => void;
   className?: string;
 }) {
   return (
-    // Tooltip context is provided per-surface in this app (see PluginDetail);
-    // the utility tier's cards carry their full seeded prompt as tooltips.
     <TooltipProvider delayDuration={250}>
       <section className={className}>
         <h3 className="text-xs font-medium text-subtle-foreground">

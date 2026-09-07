@@ -1,8 +1,5 @@
 import { Command } from "commander";
-import type {
-  CommitActionResponse,
-  SquashMergeActionResponse,
-} from "@bb/server-contract";
+import type { CommitActionResponse } from "@bb/server-contract";
 import type {
   EnvironmentDiffArgs,
   EnvironmentDiffFileArgs,
@@ -70,11 +67,6 @@ interface EnvironmentUpdateCommandOptions {
   json?: boolean;
   mergeBaseBranch?: string;
   name?: string;
-}
-
-interface EnvironmentSquashMergeCommandOptions {
-  mergeBaseBranch: string;
-  json?: boolean;
 }
 
 interface EnvironmentPullRequestCommandOptions {
@@ -661,24 +653,6 @@ export function registerEnvironmentCommands(
             err,
           );
         }
-        if (outputJson(opts, result)) return;
-        printEnvironmentGitOperationResult(result);
-      }),
-    );
-
-  environment
-    .command("squash-merge <id>")
-    .description("Squash-merge changes in an environment")
-    .requiredOption("--merge-base-branch <branch>", "Merge-base branch")
-    .option("--json", "Print machine-readable JSON output")
-    .action(
-      action(async (id: string, opts: EnvironmentSquashMergeCommandOptions) => {
-        const sdk = createCliBbSdk(getUrl());
-        const result: SquashMergeActionResponse =
-          await sdk.environments.squashMerge({
-            environmentId: id,
-            mergeBaseBranch: opts.mergeBaseBranch,
-          });
         if (outputJson(opts, result)) return;
         printEnvironmentGitOperationResult(result);
       }),

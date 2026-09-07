@@ -1,24 +1,26 @@
-/**
- * The ACP bridge's own vocabulary: the canonical requests it accepts, and the
- * `acp/*` envelopes it feeds its session translator. The envelopes never reach
- * the wire — the translator turns them into `thread/delta` semantic deltas —
- * but they are a real contract between the bridge and its translator, which is
- * why they are schemas rather than ad-hoc objects.
- */
-
-import { acpNativeReasoningSchema as acpBridgeNativeReasoningSchema, acpPermissionCliSchema as acpBridgePermissionCliSchema, acpReasoningCliSchema as acpBridgeReasoningCliSchema } from "@bb/domain";
-import { initializeParamsSchema, providerInstallationRunParamsSchema, providerInstallationStatusParamsSchema, providerMaintenanceParamsSchema, modelListParamsSchema as canonicalModelListParamsSchema, skillsConfigureParamsSchema, threadDiscardParamsSchema as canonicalThreadDiscardParamsSchema, threadForkParamsSchema as canonicalThreadForkParamsSchema, threadResumeParamsSchema as canonicalThreadResumeParamsSchema, threadStartParamsSchema as canonicalThreadStartParamsSchema, threadStopParamsSchema as canonicalThreadStopParamsSchema, turnStartParamsSchema as canonicalTurnStartParamsSchema, turnSteerParamsSchema as canonicalTurnSteerParamsSchema } from "@bb/provider-bridge-protocol";
+import {
+  acpNativeReasoningSchema as acpBridgeNativeReasoningSchema,
+  acpPermissionCliSchema as acpBridgePermissionCliSchema,
+  acpReasoningCliSchema as acpBridgeReasoningCliSchema,
+} from "@bb/domain";
+import {
+  initializeParamsSchema,
+  providerInstallationRunParamsSchema,
+  providerInstallationStatusParamsSchema,
+  providerMaintenanceParamsSchema,
+  modelListParamsSchema as canonicalModelListParamsSchema,
+  skillsConfigureParamsSchema,
+  threadDiscardParamsSchema as canonicalThreadDiscardParamsSchema,
+  threadForkParamsSchema as canonicalThreadForkParamsSchema,
+  threadResumeParamsSchema as canonicalThreadResumeParamsSchema,
+  threadStartParamsSchema as canonicalThreadStartParamsSchema,
+  threadStopParamsSchema as canonicalThreadStopParamsSchema,
+  turnStartParamsSchema as canonicalTurnStartParamsSchema,
+  turnSteerParamsSchema as canonicalTurnSteerParamsSchema,
+} from "@bb/provider-bridge-protocol";
 import { z } from "zod";
 import { acpSessionUpdateSchema, acpStopReasonSchema } from "./wire.js";
 
-// ---------------------------------------------------------------------------
-// Runtime → bridge commands
-// ---------------------------------------------------------------------------
-
-/**
- * Id of the synthetic "Agent default" model the bridge serves when the agent's
- * model list cannot be read. Never forwarded to the agent.
- */
 export const ACP_DEFAULT_MODEL_ID = "acp-default";
 
 export type AcpBridgeReasoningCli = z.infer<typeof acpBridgeReasoningCliSchema>;
@@ -31,16 +33,10 @@ export type AcpBridgePermissionCli = z.infer<
   typeof acpBridgePermissionCliSchema
 >;
 
-/**
- * `model/list` as sent by the generic bridge-protocol adapter: the base
- * canonical shape plus the provider-scoped options bag the acp bridge reads
- * its launch spec from.
- */
 const acpModelListParamsSchema = canonicalModelListParamsSchema.extend({
   providerOptions: z.record(z.string(), z.unknown()).optional(),
 });
 
-/** The canonical Provider Bridge Protocol params, per method. */
 export const acpBridgeCommandSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("initialize"),
@@ -100,36 +96,19 @@ export const acpBridgeCommandSchema = z.discriminatedUnion("method", [
   }),
 ]);
 
-/**
- * The known-method set, derived from the schema union so it cannot drift
- * (#853): the bridge answers unknown methods with METHOD_NOT_FOUND and
- * schema-invalid params with INVALID_PARAMS instead of dropping them.
- */
 export const acpBridgeCommandMethodValues = acpBridgeCommandSchema.options.map(
   (option) => option.shape.method.value,
 );
 export type AcpBridgeCommand = z.infer<typeof acpBridgeCommandSchema>;
 
-// ---------------------------------------------------------------------------
-// Bridge → runtime notifications
-// ---------------------------------------------------------------------------
-
 export const ACP_TURN_STARTED_METHOD = "acp/turn/started";
 export const ACP_TURN_COMPLETED_METHOD = "acp/turn/completed";
-/**
- * Manual compaction's own turn envelope. bb requests compaction as a
- * standalone builtin `/compact` mention on the turn path; the bridge runs it
- * as a provider-local maintenance prompt and reports it with these two
- * envelopes so the translator can emit a `contextCompaction` turn instead of
- * an ordinary agent turn.
- */
 export const ACP_COMPACTION_STARTED_METHOD = "acp/compaction/started";
 export const ACP_COMPACTION_COMPLETED_METHOD = "acp/compaction/completed";
 export const ACP_UPDATE_METHOD = "acp/update";
 export const ACP_FS_WRITE_METHOD = "acp/fs/write";
 export const ACP_WARNING_METHOD = "acp/warning";
 
-/** The bridge has a session, but its agent prompt has already ended. */
 export const ACP_BRIDGE_NO_ACTIVE_TURN_ERROR_CODE = -32001;
 
 export const acpTurnStartedNotificationParamsSchema = z
@@ -162,6 +141,13 @@ export const acpCompactionCompletedNotificationParamsSchema =
     z
       .object({
         threadId: z.string().min(1),
+        status: z.literal("skipped"),
+        detail: z.string().min(1),
+      })
+      .passthrough(),
+    z
+      .object({
+        threadId: z.string().min(1),
         status: z.literal("failed"),
         error: z.string().min(1),
       })
@@ -180,9 +166,7 @@ export const acpFsWriteNotificationParamsSchema = z
     threadId: z.string().min(1),
     path: z.string().min(1),
     kind: z.enum(["add", "update"]),
-    /** Absent on `add`: the file did not exist before the write. */
     oldText: z.string().optional(),
-    /** The written file content; the assembler builds the diff from it. */
     content: z.string(),
   })
   .passthrough();

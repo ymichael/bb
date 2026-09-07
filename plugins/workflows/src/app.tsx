@@ -132,8 +132,6 @@ function settledAgentCount(agents: readonly WorkflowProgressAgent[]): number {
   ).length;
 }
 
-// A running workflow shows no pill: the shimmering header, phase strip, and
-// per-agent spinners already say it is live.
 function runPillState(
   status: WorkflowRunView["status"],
 ): WorkflowStatusPillState | null {
@@ -182,7 +180,6 @@ function formatDuration(startedAt: number | null, finishedAt: number | null) {
     .join(" ");
 }
 
-/** Matches the native workflow card's one-second-delayed live duration. */
 function WorkflowDuration({ startedAt }: { startedAt: number }) {
   const [elapsed, setElapsed] = useState(() => Date.now() - startedAt);
   useEffect(() => {
@@ -398,12 +395,6 @@ function useDocumentVisible(): boolean {
   );
 }
 
-/**
- * Poll `refresh` every second, but only while `active` and the document is
- * visible. A hidden tab (phone in a pocket, app switcher) never polls; when
- * it comes back, and when the realtime connection comes back, one immediate
- * refresh catches up on whatever the pause or the outage hid.
- */
 function useVisibleActivePolling(
   refresh: () => Promise<void>,
   active: boolean,
@@ -483,9 +474,6 @@ function useActiveWorkflowRuns(threadId: string): {
     };
   }, [refresh]);
 
-  // The service publishes when this thread's run set changes (start, claim,
-  // settle, cancel), so an idle thread needs no standing poll to learn about
-  // a new run; polling below covers progress while a run is active.
   useRealtime(WORKFLOW_RUNS_REALTIME_CHANNEL, (payload) => {
     if (workflowRunsSignalThreadId(payload) === threadId) void refresh();
   });
@@ -509,28 +497,26 @@ function useActiveWorkflowRuns(threadId: string): {
   return { state, setRuns };
 }
 
-function EmptyOrError({ children }: { children: ReactNode }) {
+export function EmptyOrError({ children }: { children: ReactNode }) {
   return (
-    <div
-      role="alert"
-      className="my-2 rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground"
-    >
+    <div role="alert" className="text-sm text-muted-foreground">
       {children}
     </div>
   );
 }
 
-function LoadingPreview() {
+export function LoadingPreview() {
   return (
-    <div
-      className="my-2 space-y-2 rounded-lg border border-border p-3"
-      aria-busy="true"
-    >
+    <div className="space-y-2" aria-busy="true">
       <Skeleton className="h-3.5 w-44 rounded-sm" />
       <Skeleton className="h-3 w-2/3 rounded-sm" />
       <Skeleton className="h-3 w-1/2 rounded-sm" />
     </div>
   );
+}
+
+export function WorkflowRunPanelState({ children }: { children: ReactNode }) {
+  return <div className="p-4">{children}</div>;
 }
 
 function RefreshWarning({ message }: { message: string }) {
@@ -863,11 +849,11 @@ function WorkflowRunPanel({ threadId, params }: PluginThreadPanelProps) {
   return (
     <div className="h-full min-h-0 flex-1 bg-border">
       {runId === undefined ? (
-        <div className="p-4">
+        <WorkflowRunPanelState>
           <EmptyOrError>
             This workflow panel has invalid run parameters.
           </EmptyOrError>
-        </div>
+        </WorkflowRunPanelState>
       ) : (
         <WorkflowRunPanelLoaded threadId={threadId} runId={runId} />
       )}
@@ -892,13 +878,27 @@ function WorkflowRunPanelLoaded({
     () => (run === null ? null : buildSharedWorkflowView(run)),
     [run],
   );
-  if (state.status === "loading") return <LoadingPreview />;
+  if (state.status === "loading") {
+    return (
+      <WorkflowRunPanelState>
+        <LoadingPreview />
+      </WorkflowRunPanelState>
+    );
+  }
   if (state.status === "error") {
-    return <EmptyOrError>{state.message}</EmptyOrError>;
+    return (
+      <WorkflowRunPanelState>
+        <EmptyOrError>{state.message}</EmptyOrError>
+      </WorkflowRunPanelState>
+    );
   }
   if (run === null || shared === null) {
     return (
-      <EmptyOrError>No workflow runs were found for this thread.</EmptyOrError>
+      <WorkflowRunPanelState>
+        <EmptyOrError>
+          No workflow runs were found for this thread.
+        </EmptyOrError>
+      </WorkflowRunPanelState>
     );
   }
   const pillState = runPillState(run.status);

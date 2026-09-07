@@ -18,6 +18,7 @@ const base = {
 function response(rows: TimelineRow[]): ThreadTimelineResponse {
   return {
     rows,
+    contextBoundarySeq: null,
     activePromptMode: null,
     activeThinking: null,
     activeWorkflows: [],

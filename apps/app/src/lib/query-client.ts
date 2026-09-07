@@ -17,18 +17,6 @@ import {
 interface CreateAppQueryClientOptions {
   defaultOptions?: QueryClientConfig["defaultOptions"];
   showMutationErrorToasts?: boolean;
-  /**
-   * Gate for the default focus and reconnect refetches. Both are the
-   * freshness fallback for when realtime coverage is lost; while the socket
-   * is connected, change events keep the cache correct and the reconnect
-   * watermark repairs any gap, so neither a focus event (every phone unlock
-   * and app switch) nor a browser `online` event (mobile Safari re-fires it
-   * around the same suspensions) must refetch every active query on top of
-   * that wave. Defaults to always refetching. A
-   * `defaultOptions.queries.refetchOnWindowFocus`/`refetchOnReconnect`
-   * passed alongside this gate wins over it (caller defaults are spread
-   * last), so pass one or the other.
-   */
   shouldRefetchOnWindowFocus?: () => boolean;
 }
 
@@ -60,16 +48,6 @@ function installAppFocusEvents(): void {
   });
 }
 
-/**
- * Suspend cancels in-flight fetches; resume restarts only those. Catch-up
- * after a resume is otherwise owned by the realtime layer: `WebSocketManager`
- * probes or reconnects the socket when the document becomes visible or the
- * network returns, the reconnect wave refetches every realtime query whose
- * data predates the disconnect watermark, and change events merged while
- * hidden flush as one wave on visible. A separate resume invalidation of the
- * active thread bundle used to run here as well; it duplicated that wave on
- * every phone app switch and is gone.
- */
 export function installAppQueryClientBrowserEvents(
   queryClient: QueryClient,
 ): AppQueryClientBrowserEventCleanup {
@@ -130,7 +108,6 @@ export function createAppQueryClient(
           return;
         }
 
-        // Set `showErrorToast: false` when the call site handles mutation errors itself.
         const meta = getMutationErrorMeta(mutation.meta);
         if (meta.showErrorToast === false) {
           return;

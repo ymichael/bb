@@ -7,14 +7,11 @@ const readlineState = vi.hoisted(() => ({
   close: vi.fn(),
 }));
 
-// Tests stub the server at the hono-client level while preserving the real
-// SDK transport readers so response parsing and error mapping stay production-like.
 const serverClientState = vi.hoisted(() => ({
   createClient: vi.fn(),
 }));
 
 vi.mock("../../client.js", async () => {
-  // cliFetch stays real — it delegates to global fetch, which tests stub.
   const { cliFetch } =
     await vi.importActual<typeof import("../../client.js")>("../../client.js");
   const { createBbSdk } =
@@ -128,12 +125,6 @@ interface ApiStubNode {
   [segment: string]: ApiStubNode | ApiStubHandler;
 }
 
-/**
- * Stubs the server at the hono-client level from a flat map of dot-separated
- * endpoint paths (e.g. `"v1.threads.:id.interactions.$get"`) to handlers,
- * expanding each path into the nested `api` object `asServerClient` expects.
- * Sibling paths sharing a prefix merge into the same branch.
- */
 export function stubServerApi(handlers: Record<string, ApiStubHandler>): void {
   const api: ApiStubNode = {};
   for (const [path, handler] of Object.entries(handlers)) {

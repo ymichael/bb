@@ -7,7 +7,6 @@ import {
   stopProcessGroupLeaderFirst,
   supportsProcessGroups,
 } from "../packages/process-utils/src/index.ts";
-import { ensureNativeModules } from "./ensure-native-modules.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, "..");
@@ -111,6 +110,31 @@ async function buildBundledPlugins() {
   );
 }
 
+export async function runNativeModulePreflight({
+  cwd = repoRoot,
+  env = process.env,
+  nodePath = process.execPath,
+  scriptPath = resolve(repoRoot, "scripts/ensure-native-modules.mjs"),
+} = {}) {
+  // Each check needs a fresh module cache. The process group also lets the
+  // launcher stop a blocked download or source build during shutdown.
+  const result = await runBuildProcess({
+    args: [scriptPath],
+    command: nodePath,
+    cwd,
+    env,
+  });
+  if (result.code === 0) {
+    return;
+  }
+  if (result.signal !== null) {
+    throw new Error(`Native module preflight stopped by ${result.signal}`);
+  }
+  throw new Error(
+    `Native module preflight failed with exit code ${result.code ?? 1}`,
+  );
+}
+
 export function parseStartBbArgs(args) {
   if (args[0] !== WORKTREE_RUNTIME_POLICY_ARG) {
     return { cliArgs: args, useWorktreeRuntimePolicy: false };
@@ -125,11 +149,10 @@ export async function main(args = process.argv.slice(2)) {
   const parsedArgs = parseStartBbArgs(args);
   await buildRuntimeArtifacts();
   await buildBundledPlugins();
-  ensureNativeModules({ repoRoot });
-
   const { resolveWorktreeRuntimePolicy, runBbApp } =
     await import("../packages/bb-app/src/launcher.ts");
   await runBbApp(parsedArgs.cliArgs, {
+    beforeServerStart: runNativeModulePreflight,
     worktreePolicy: parsedArgs.useWorktreeRuntimePolicy
       ? resolveWorktreeRuntimePolicy({
           env: process.env,

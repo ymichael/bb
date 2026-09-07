@@ -5,20 +5,8 @@ import {
   type ResolvedReplacement,
 } from "@/lib/plugin-slot-resolvers";
 
-/**
- * The per-client pin shared by every exclusive replacement surface that offers
- * one (the sidebar thread list, the source and diff renderers).
- *
- * All three answer the same question — automatic, BB's own, or one named
- * provider — so they answer it the same way, and a stored selection for an
- * unavailable provider degrades to BB without being erased: a temporarily
- * disabled plugin gets its surface back when it returns.
- */
-
-/** Follow deterministic slot order and activate the first provider. */
 export const AUTOMATIC_REPLACEMENT_PROVIDER = "__automatic__";
 
-/** Always use BB's own implementation. */
 export const BUILT_IN_REPLACEMENT_PROVIDER = "__builtin__";
 
 interface ReplacementProviderIdentity {

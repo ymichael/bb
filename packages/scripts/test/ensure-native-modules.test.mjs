@@ -136,7 +136,7 @@ describe("ensure-native-modules", () => {
     expect(fake.state.constructorCalls).toBe(2);
   });
 
-  it("detaches a hardlinked native binary before prebuilt repair", () => {
+  it("detaches a hardlinked native binary before verification", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "bb-native-repair-"));
     try {
       const packageJsonPath = join(tempRoot, "better-sqlite3", "package.json");
@@ -180,7 +180,50 @@ describe("ensure-native-modules", () => {
         statSync(otherCheckoutBinaryPath).ino,
       );
       expect(options.log).toHaveBeenCalledWith(
-        "[ensure-native-modules] Detached hardlinked better-sqlite3 binary before repair",
+        "[ensure-native-modules] Detached hardlinked better-sqlite3 binary before verification",
+      );
+    } finally {
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("detaches a matching native binary without a repair", () => {
+    const tempRoot = mkdtempSync(join(tmpdir(), "bb-native-verify-"));
+    try {
+      const packageJsonPath = join(tempRoot, "better-sqlite3", "package.json");
+      const binaryPath = join(
+        dirname(packageJsonPath),
+        "build",
+        "Release",
+        "better_sqlite3.node",
+      );
+      const otherCheckoutBinaryPath = join(tempRoot, "other-checkout.node");
+      mkdirSync(dirname(binaryPath), { recursive: true });
+      writeFileSync(packageJsonPath, "{}");
+      writeFileSync(otherCheckoutBinaryPath, "abi-137");
+      linkSync(otherCheckoutBinaryPath, binaryPath);
+
+      const fake = createBetterSqliteRequire(null, packageJsonPath);
+      const execFileSync = vi.fn();
+      const options = createEnsureOptions(fake.requireModule, execFileSync);
+      options.modules = [
+        {
+          name: "better-sqlite3",
+          resolveFrom: "packages/db/package.json",
+          binaryPath: "build/Release/better_sqlite3.node",
+        },
+      ];
+
+      expect(() => ensureNativeModules(options)).not.toThrow();
+
+      expect(statSync(binaryPath).ino).not.toBe(
+        statSync(otherCheckoutBinaryPath).ino,
+      );
+      expect(readFileSync(binaryPath, "utf8")).toBe("abi-137");
+      expect(readFileSync(otherCheckoutBinaryPath, "utf8")).toBe("abi-137");
+      expect(execFileSync).not.toHaveBeenCalled();
+      expect(options.log).toHaveBeenCalledWith(
+        "[ensure-native-modules] Detached hardlinked better-sqlite3 binary before verification",
       );
     } finally {
       rmSync(tempRoot, { recursive: true, force: true });

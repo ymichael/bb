@@ -184,8 +184,6 @@ describe("ConnectTunnelClient", () => {
     expect(identities).toEqual([
       { label: "sawyer-air", baseDomain: "getbb.app" },
     ]);
-    // The share declaration supplied only a port. The credential destination
-    // is derived exclusively from the daemon's enrollment server.
     expect(requestedUrls).toEqual(["wss://sawyer-air.getbb.app/__tunnel?v=1"]);
     expect(credentials).toEqual(["Bearer bbcm_machine-secret"]);
     await waitFor(() => client.status().state === "connected", "connected");
@@ -351,11 +349,6 @@ describe("ConnectTunnelClient", () => {
     });
     client.replaceShareSet({ generation: 1, ports: [3000] });
 
-    // Wait on the client's own connected state, not the gate accepting the
-    // socket: the server's "connection" event (sockets.length === 1) fires just
-    // before the client WebSocket "open" handler flips status to "connected",
-    // so asserting status right after the server-side wait raced with that
-    // transition and intermittently observed "reconnecting".
     await waitFor(
       () => client.status().state === "connected",
       "client connected after retried handshakes",

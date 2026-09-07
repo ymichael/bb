@@ -83,7 +83,6 @@ describe("grammar v3 item variants", () => {
     expect(parsed.type === "toolCall" && parsed.presentation?.suppress).toBe(
       true,
     );
-    // A row persisted before the field existed still parses.
     expect(
       threadEventItemSchema.safeParse({
         type: "toolCall",
@@ -143,17 +142,12 @@ describe("grammar v3 item variants", () => {
         tint: { light: "#112233", dark: "#ddeeff" },
       }).success,
     ).toBe(true);
-    // Persisted icons are names, never paths: a plugin-relative asset path
-    // cannot survive the plugin's removal (see item-presentation.ts).
     expect(
       threadEventItemPresentationSchema.safeParse({
         ...presentation,
         icon: { asset: "./icons/tool.svg" },
       }).success,
     ).toBe(false);
-    // A plugin-declared icon is referenced by its namespaced glyph; the
-    // schema keeps accepting any non-blank name so persisted rows parse
-    // forever, whatever the plugin's map looks like later.
     const namespaced = threadEventItemPresentationSchema.safeParse({
       ...presentation,
       icon: { glyph: "echo-provider/receipt" },
@@ -201,7 +195,6 @@ describe("grammar v3 item variants", () => {
         }).success,
       ).toBe(false);
     }
-    // Foreground delegations settle through the turn-scoped item/completed.
     expect(
       threadEventSchema.safeParse({
         type: "item/completed",

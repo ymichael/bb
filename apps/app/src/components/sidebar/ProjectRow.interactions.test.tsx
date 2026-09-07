@@ -8,7 +8,6 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ThreadListEntry } from "@bb/domain";
-import type { ProjectResponse } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
@@ -20,6 +19,8 @@ import {
   type ProjectThreadListState,
 } from "./ProjectRow";
 import { buildSidebarEntitySectionId } from "@bb/client-core";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
+import { makeProjectResponse } from "@/test/fixtures/projects";
 
 const mockUpdateEnvironment = vi.hoisted(() => ({
   mutate: vi.fn(),
@@ -77,56 +78,13 @@ vi.mock("@/components/thread/ThreadActionsProvider", () => ({
   }),
 }));
 
-function makeProject(): ProjectResponse {
-  return {
-    id: "proj_test",
-    kind: "standard",
-    name: "Test project",
-    gitRemoteUrl: null,
-    sources: [],
-    createdAt: 0,
-    updatedAt: 0,
-  };
-}
-
 function makeThread(overrides: Partial<ThreadListEntry> = {}): ThreadListEntry {
-  return {
+  return makeThreadListEntry({
     id: "thr_test",
-    projectId: "proj_test",
-    environmentId: null,
-    providerId: "codex",
     title: "Test thread",
     titleFallback: "Test thread",
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    pinSortKey: null,
-    deletedAt: null,
-    lastReadAt: 100,
-    latestAttentionAt: 100,
-    createdAt: 0,
-    updatedAt: 100,
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    hasPendingInteraction: false,
-    environmentHostId: null,
-    environmentName: null,
-    environmentBranchName: null,
-    environmentWorkspaceDisplayKind: "other",
-    runtime: { displayStatus: "idle", hostReconnectGraceExpiresAt: null },
     ...overrides,
-  };
+  });
 }
 
 function renderProjectRow(
@@ -141,11 +99,12 @@ function renderProjectRow(
     <TooltipProvider>
       <MemoryRouter>
         <ProjectRow
-          project={makeProject()}
+          project={makeProjectResponse()}
           threadListState={threadListState}
           isActive={isActive}
           isCollapsed={isCollapsed}
           compareThreads={() => 0}
+          progressiveDisclosureEnabled
           collapsedThreadIds={new Set()}
           collapsedEnvironmentIds={collapsedEnvironmentIds}
           isLocalPathInvalid={false}
@@ -219,6 +178,7 @@ describe("ProjectRow interactions", () => {
             environmentId: "env_test",
             environmentName: "Feature workspace",
             environmentBranchName: "feat/menu-close",
+            queuedWork: "none",
             environmentWorkspaceDisplayKind: "managed-worktree",
             activity: {
               activeWorkflowCount: 1,
@@ -237,6 +197,7 @@ describe("ProjectRow interactions", () => {
             environmentId: "env_test",
             environmentName: "Feature workspace",
             environmentBranchName: "feat/menu-close",
+            queuedWork: "none",
             environmentWorkspaceDisplayKind: "managed-worktree",
           }),
         ],
@@ -265,6 +226,7 @@ describe("ProjectRow interactions", () => {
             id: "thr_worktree_plan",
             environmentId: "env_draft",
             environmentName: "Draft workspace",
+            queuedWork: "none",
             environmentWorkspaceDisplayKind: "managed-worktree",
             activity: {
               activeWorkflowCount: 0,
@@ -278,6 +240,7 @@ describe("ProjectRow interactions", () => {
             id: "thr_worktree_draft",
             environmentId: "env_draft",
             environmentName: "Draft workspace",
+            queuedWork: "none",
             environmentWorkspaceDisplayKind: "managed-worktree",
           }),
         ],
@@ -502,6 +465,7 @@ describe("ProjectRow interactions", () => {
           environmentId: "env_test",
           environmentName: "Feature workspace",
           environmentBranchName: "feat/menu-close",
+          queuedWork: "none",
           environmentWorkspaceDisplayKind: "managed-worktree",
         }),
         makeThread({
@@ -509,6 +473,7 @@ describe("ProjectRow interactions", () => {
           environmentId: "env_test",
           environmentName: "Feature workspace",
           environmentBranchName: "feat/menu-close",
+          queuedWork: "none",
           environmentWorkspaceDisplayKind: "managed-worktree",
         }),
       ],
@@ -518,13 +483,18 @@ describe("ProjectRow interactions", () => {
       screen.getByRole("button", { name: "Worktree actions" }),
       { button: 0 },
     );
-    fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
+    fireEvent.click(
+      await screen.findByRole("menuitem", { name: "Rename worktree" }),
+    );
 
     expect(
-      await screen.findByRole("dialog", { name: "Rename environment" }),
+      await screen.findByRole("dialog", { name: "Rename worktree" }),
     ).not.toBeNull();
+    expect(screen.getByText("feat/menu-close")).not.toBeNull();
     await waitFor(() => {
-      expect(screen.queryByRole("menuitem", { name: "Rename" })).toBeNull();
+      expect(
+        screen.queryByRole("menuitem", { name: "Rename worktree" }),
+      ).toBeNull();
     });
   });
 });

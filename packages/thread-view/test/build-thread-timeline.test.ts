@@ -202,7 +202,6 @@ const ownershipOperationCases: OwnershipOperationCase[] = [
   {
     action: "assign",
     parentChangeAction: "assign",
-    // Unnamed thread (no threadName option) → bare capitalized verb + parent name.
     message: "Assigned to Parent",
     nextParentThreadId: "thr-parent",
     nextParentThreadTitle: "Parent",
@@ -976,12 +975,6 @@ describe("buildThreadTimelineFromEvents", () => {
   it.each(["read", "grep", "glob", "Read", "Grep", "Glob"])(
     "renders a %s tool call as a generic tool row: no tool-name table derives an intent",
     (tool) => {
-      // The provider's bridge emits fileRead/search items for its reads and
-      // searches (Claude's translation maps Read/Grep/Glob). A bare tool
-      // call persisted before that, or from a bridge that has not migrated
-      // (pi's read/grep/find/ls rows carry no presentation), is reshaped by
-      // the legacy adapter when the stored row is parsed, never here: fed
-      // straight to the projection it is a tool row titled by its name.
       const toolArgs = { path: "src/app.ts", pattern: "TODO" };
       const rows = buildTimelineRows([
         turnStartedEvent({ seq: 1 }),
@@ -1009,9 +1002,6 @@ describe("buildThreadTimelineFromEvents", () => {
   );
 
   it("drops a statusLabels key a row persisted before the field was deleted", () => {
-    // Rows enriched by the old server keep decoding; the key is stripped and
-    // the row titles from its name (the bridge's presentation is the only
-    // label source now).
     const rows = buildTimelineRows([
       turnStartedEvent({ seq: 1 }),
       toolCallItemEvent({
@@ -1064,9 +1054,6 @@ describe("buildThreadTimelineFromEvents", () => {
     });
   });
 
-  // Eligibility comes from the provider's declared plan composer action, not
-  // from an id list, so a plugin provider gets plan mode and a provider that
-  // declares no plan command gets none even with a matching pill.
   it("gates plan mode on the declared plan command, not the provider id", () => {
     const event = createTimelineEventFactory({ threadId: "thread-1" });
     const requestId = "creq_3456789abc";
@@ -1273,8 +1260,6 @@ describe("buildThreadTimelineFromEvents", () => {
 
     const [delegation] = collectDelegationRows(rows);
     expect(delegation).toMatchObject({
-      // The row id is minted under the delegation kind, as a bridge-declared
-      // delegation would be, so persisted threads keep stable row ids.
       id: "thread-1:delegation:call-helper-1",
       toolName: "spawn_helper",
       description: "Audit the docs",
@@ -1290,7 +1275,6 @@ describe("buildThreadTimelineFromEvents", () => {
         text: "Read 3 files",
       }),
     ]);
-    // A call nothing refers to stays a plain tool row.
     expect(
       buildTimelineRows(
         fromRows([
@@ -1306,14 +1290,6 @@ describe("buildThreadTimelineFromEvents", () => {
   });
 
   it("keeps a persisted, presentation-less Agent call a delegation when no row names it as parent", () => {
-    // A Claude `Agent` call the SDK rejected at input validation: the tool
-    // result is the validation error and no subagent ever started, so no
-    // persisted row carries this call id as its parentToolCallId. Before the
-    // tool-name tables were deleted, the Agent/Task/spawnAgent/resumeAgent
-    // name rule made this a delegation row; the legacy adapter keeps that
-    // rule for presentation-less rows so the row, its id and its title are
-    // what they were. A childless call that completed (an old thread whose
-    // subagent events were never persisted) reads the same way.
     const event = createTimelineEventFactory({
       threadId: "thread-1",
       turnId: "turn-1",
@@ -1365,8 +1341,6 @@ describe("buildThreadTimelineFromEvents", () => {
       );
       const [delegation] = collectDelegationRows(rows);
       expect(delegation, status).toMatchObject({
-        // Same id prefix as a delegation the bridge declared, so persisted
-        // threads keep stable row ids.
         id: "thread-1:delegation:toolu_agent_1",
         toolName: "Agent",
         description: "Review the diff",
@@ -1382,12 +1356,9 @@ describe("buildThreadTimelineFromEvents", () => {
           workStyle: "default",
         }).segments.map((segment) => segment.text),
       ).toEqual([verb, "Review the diff", "(reviewer)"]);
-      // Nothing is left behind as a plain tool row.
       expect(collectToolRows(rows)).toEqual([]);
     }
 
-    // A childful call reads exactly as before: the child nests under it and
-    // its label metadata still comes from the arguments.
     const childful = collectDelegationRows(
       buildTimelineRows(
         fromRows([
@@ -1429,9 +1400,6 @@ describe("buildThreadTimelineFromEvents", () => {
       expect.objectContaining({ kind: "conversation", text: "Read 3 files" }),
     ]);
 
-    // The rule is keyed on the absence of a presentation, never on the name
-    // alone: a bridge that presents a tool it happens to call `Agent` gets
-    // the generic tool row it asked for, and a plain legacy tool stays one.
     const presented = buildTimelineRows(
       fromRows([
         event.turnStarted({ seq: 1 }),
@@ -2092,8 +2060,6 @@ describe("buildThreadTimelineFromEvents", () => {
       }),
     ]);
 
-    // No category to summarize, so the message becomes the title and the
-    // duplicate detail is dropped — the row renders as a single line.
     expect(collectSystemRows(rows)).toEqual([
       expect.objectContaining({
         systemKind: "error",
@@ -2115,8 +2081,6 @@ describe("buildThreadTimelineFromEvents", () => {
       }),
     ]);
 
-    // Reconnect rows are informational markers, not in-progress work, so they
-    // carry no lifecycle status.
     expect(collectSystemRows(rows)).toEqual([
       expect.objectContaining({
         systemKind: "reconnect",
@@ -2625,9 +2589,6 @@ describe("buildThreadTimelineFromEvents", () => {
   it.each(["ToolSearch", "TaskCreate", "TaskUpdate", "AskUserQuestion"])(
     "keeps a bare %s tool row: suppression comes from the bridge's presentation, not a name table",
     (tool) => {
-      // The bridges mark these low-value calls `suppress` in their
-      // presentation (see plugins/provider-claude-code/src/presentation.ts);
-      // a row persisted without one renders like any other tool call.
       const rows = buildTimelineRows([
         turnStartedEvent({ seq: 0 }),
         toolCallItemEvent({

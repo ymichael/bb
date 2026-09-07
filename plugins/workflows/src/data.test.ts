@@ -5,11 +5,12 @@ import {
   cancelRun,
   countCallsForRun,
   createRun,
-  deleteExpiredTerminalRuns,
+  deleteTerminalRuns,
   getCall,
   getRunRequired,
   incrementRepairAttempts,
   listCallsForRunPage,
+  listExpiredTerminalRuns,
   migrations,
   queueCallProviderRetry,
   recoverInterruptedRuns,
@@ -29,6 +30,13 @@ describe("workflow durable data", () => {
   });
 
   afterEach(() => db.close());
+
+  function sweepExpired(now: number, limit: number): number {
+    return deleteTerminalRuns(
+      db,
+      listExpiredTerminalRuns(db, now, limit).runIds,
+    );
+  }
 
   function newRun() {
     return createRun(db, {
@@ -555,7 +563,7 @@ describe("workflow durable data", () => {
        WHERE id = ?`,
     ).run(Date.now() - 3 * 86_400_000, expired.id);
 
-    expect(deleteExpiredTerminalRuns(db, Date.now(), 100)).toBe(1);
+    expect(sweepExpired(Date.now(), 100)).toBe(1);
     expect(getRunRequired(db, parent.id).id).toBe(parent.id);
     expect(getRunRequired(db, parent.id).replayBarrierIndex).toBeNull();
     expect(getRunRequired(db, retainedChild.id).status).toBe("queued");
@@ -588,7 +596,7 @@ describe("workflow durable data", () => {
        WHERE id IN (?, ?)`,
     ).run(Date.now() - 3 * 86_400_000, parent.id, child.id);
 
-    expect(deleteExpiredTerminalRuns(db, Date.now(), 100)).toBe(2);
+    expect(sweepExpired(Date.now(), 100)).toBe(2);
     expect(() => getRunRequired(db, parent.id)).toThrow("Unknown workflow run");
     expect(() => getRunRequired(db, child.id)).toThrow("Unknown workflow run");
   });

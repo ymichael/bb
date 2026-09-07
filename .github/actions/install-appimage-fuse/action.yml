@@ -1,0 +1,22 @@
+name: Install AppImage FUSE runtime
+description: Install FUSE from Ubuntu mirrors over HTTPS with bounded network waits.
+inputs:
+  package:
+    description: FUSE package for the runner's Ubuntu version.
+    default: libfuse2
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        FUSE_PACKAGE: ${{ inputs.package }}
+      run: |
+        set -euo pipefail
+        for source in /etc/apt/sources.list /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources /etc/apt/blacksmith-ubuntu-mirrors.txt; do
+          if [ -f "$source" ]; then
+            sudo sed -E -i 's#http://((([a-z0-9-]+\.)?archive|security)\.ubuntu\.com/ubuntu|mirrors\.sonic\.net/ubuntu)#https://\1#g' "$source"
+          fi
+        done
+        apt_options=(-o Acquire::http::Timeout=10 -o Acquire::https::Timeout=10 -o Acquire::Retries=1)
+        sudo apt-get "${apt_options[@]}" update
+        sudo apt-get "${apt_options[@]}" install --yes "$FUSE_PACKAGE"

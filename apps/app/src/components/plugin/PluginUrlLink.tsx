@@ -29,7 +29,6 @@ function isCurrentAppRoute(href: string): boolean {
   );
 }
 
-/** Host-rendered URL link shared by plugins and first-party app surfaces. */
 export function PluginUrlLink({
   href,
   onClick,

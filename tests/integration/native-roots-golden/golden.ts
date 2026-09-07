@@ -1,13 +1,3 @@
-/**
- * Golden capture and projection shared by the capture script and the test.
- * A golden holds stable projections only: temp paths are replaced by
- * `<home>` / `<root>` and both lists are sorted, so two runs on different
- * temp roots compare equal. What it proves: every root, name, description
- * and path the discovery pipeline lists. What it does not prove: a skill's
- * `id` — the identity seed hashes the resolved root path, which for the
- * plugin and config-file roots is the temp root itself, so two captures
- * never agree on it.
- */
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,11 +35,6 @@ export interface GoldenFile {
   userOnly: GoldenSection;
 }
 
-/**
- * Apply the variant env for the duration of a capture. Every key the daemon
- * reads is set or cleared, so the host's own env never leaks in. Returns the
- * restore function.
- */
 export type ApplyEnv = (
   env: Readonly<Record<string, string | undefined>>,
 ) => () => void;
@@ -60,7 +45,6 @@ export function fullFixtureEnv(
   return Object.fromEntries(NATIVE_ROOT_ENV_KEYS.map((key) => [key, env[key]]));
 }
 
-/** `applyEnv` for plain Node: mutate `process.env` and restore afterwards. */
 export const applyProcessEnv: ApplyEnv = (env) => {
   const previous = new Map<string, string | undefined>();
   for (const [key, value] of Object.entries(env)) {
@@ -151,13 +135,6 @@ function assertExpectedNames(
   }
 }
 
-/**
- * Build the variant's fixture in a fresh temp root, run `pipeline` with the
- * workspace cwd and with `cwd: null`, and project both results. Fixture
- * expectations (one name per populated root, the negatives absent) are
- * checked so a fixture that populates a root the code never scans fails here
- * instead of producing a thin golden.
- */
 export async function captureVariant(
   variant: FixtureVariant,
   pipeline: Pipeline,
@@ -211,8 +188,6 @@ export function goldenFilePath(variant: FixtureVariant): string {
 
 export async function readGolden(variant: FixtureVariant): Promise<GoldenFile> {
   const content = await fs.readFile(goldenFilePath(variant), "utf8");
-  // The golden is our own serialized `GoldenFile`; the test compares it
-  // structurally, so a malformed file fails the comparison.
   return JSON.parse(content) as GoldenFile;
 }
 

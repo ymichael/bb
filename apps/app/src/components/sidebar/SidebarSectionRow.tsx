@@ -55,16 +55,13 @@ function stopActionsClick(event: MouseEvent<HTMLElement>) {
 }
 
 interface SidebarSectionRowProps {
-  // Leaf segment shown on the header ("Q3").
   name: string;
   label: string;
-  // Render depth (section nesting + section offset); drives indentation.
   depth: number;
   activity: CollapsedChildActivity;
   collapsedThreads?: readonly ThreadSplitIndicatorTarget[];
   isCollapsed: boolean;
   onToggleCollapsed: () => void;
-  // Pin depth among parent rows when sticky; absent = not pinned (past the cap).
   stickyLevel?: number;
   consumeClickSuppression?: ConsumeDragClickSuppression;
   dragBindings?: SidebarSortableDragBindings;
@@ -74,9 +71,6 @@ interface SidebarSectionRowProps {
   onRemove?: () => void;
 }
 
-// The "Work › Q3" disclosure header for a section. Not a thread: clicking
-// toggles collapse, there is no navigation. It stays visually quieter than a
-// project row while still mirroring parent-thread disclosure behavior.
 function SidebarSectionRowComponent({
   name,
   label,
@@ -101,9 +95,6 @@ function SidebarSectionRowComponent({
   const pluginStatus = usePluginThreadRowStatusForThreads(collapsedThreads);
   const hasMenuActions = Boolean(onRename || onRemove);
   const hasActions = Boolean(onCreateThread || hasMenuActions);
-  // Collapsed: the header speaks for its hidden descendants through one
-  // trailing indicator. Split membership takes the slot when present, matching
-  // the individual thread row; otherwise activity keeps its normal priority.
   const showRollupIndicator =
     isCollapsed &&
     (collapsedSplitIndicator.miniMap !== null ||
@@ -128,8 +119,6 @@ function SidebarSectionRowComponent({
     );
   const className = cn(
     SIDEBAR_HOVER_ACTIONS_ROW_CLASS,
-    // Only the non-sticky header needs `relative`; a sticky tier is already a
-    // positioned box. Mirrors ThreadRow / EnvironmentThreadGroupHeader.
     stickyLevel === undefined && "relative",
     SIDEBAR_ROW_BASE_CLASS,
     LIST_HOVER_TRANSITION,
@@ -153,8 +142,7 @@ function SidebarSectionRowComponent({
   );
   const content = (
     <>
-      {/* Full-bleed toggle target for pointer users; the chevron owns keyboard
-          focus (mirrors the project row's hidden focus button). */}
+      {}
       <button
         type="button"
         aria-hidden="true"

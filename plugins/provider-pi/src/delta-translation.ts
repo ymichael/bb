@@ -1,17 +1,3 @@
-/**
- * Pi dialect parsing → narrow-grammar deltas.
- *
- * Translates pi bridge notifications (the `sdk/message` envelope around raw
- * Pi SDK `AgentSessionEvent`s plus the bridge's own runtime notifications)
- * into `thread/delta` semantic deltas. Everything timeline-shaped — turn/item
- * ids, accepted-input correlation, pairing, settlement, accumulation — is the
- * runtime delta assembler's job; this module only knows the pi dialect:
- * schema narrowing, tool classification (bash → command, edit/write →
- * fileChange), output-placeholder stripping, the ignored-event set,
- * visibility classification for unhandled events, and a resolver for the model context window the
- * bridge supplies from the pi child's catalog.
- */
-
 import { z } from "zod";
 import {
   ZERO_TOKEN_USAGE,
@@ -38,19 +24,12 @@ import {
 import { toCanonicalPiModelId } from "./model-list.js";
 import { piVisibilityMetadata } from "./visibility.js";
 
-// ---------------------------------------------------------------------------
-// Pi event schemas
-// ---------------------------------------------------------------------------
-
 export interface PiContextWindowModel {
   contextWindow?: number;
   id: string;
   provider: string;
 }
 
-// Keep Pi's SDK-level turn_start/turn_end outside the translated delta union
-// until replay proves they represent bb turn boundaries rather than internal
-// provider subturns.
 const piEventTypeSchema = z
   .object({
     type: z.enum([
@@ -78,14 +57,6 @@ const piPromptSettledEnvelopeSchema = z.object({
   }),
 });
 
-// Pi events we deliberately drop rather than translate. Without this the
-// fallback treats them as unknown and emits an `unhandled` delta, which
-// renders as "Unhandled Pi event" in the transcript.
-//
-// `agent_settled` fires after every agent run completes (Pi's
-// AgentSession._emitAgentSettled). BB already derives turn completion from
-// `agent_end` plus its `willRetry` flag, so the settle signal carries nothing
-// extra for us.
 const PI_IGNORED_EVENT_TYPES = new Set(["agent_settled"]);
 
 const piIgnoredEventSchema = z
@@ -135,13 +106,6 @@ const piConversationMessageSchema = z
   })
   .passthrough();
 
-/**
- * Pi's `message_start`/`message_end` for an extension-injected message
- * (`pi.sendMessage`, Pi's `CustomMessage`). Only this role is parsed: bb
- * already owns the user, assistant, and tool-result boundaries through its own
- * input lifecycle and the streamed/terminal assistant payloads. `display`
- * is the extension's own statement of whether the message is meant to be seen.
- */
 const piCustomMessageBoundaryEventSchema = z
   .object({
     type: z.enum(["message_end", "message_start"]),
@@ -180,12 +144,6 @@ const piCompactionEndEventSchema = z
   })
   .passthrough();
 
-/**
- * Pi refuses a manual compaction before it calls the model when the session
- * has nothing to summarize. Pi reports the refusal through the same
- * `compaction_end.errorMessage` field as a real failure, so bb must tell them
- * apart: a refusal is a no-op, not a failed turn.
- */
 const piCompactionNoopMessages = new Set([
   "Compaction failed: Nothing to compact (session too small)",
   "Compaction failed: Already compacted",
@@ -262,25 +220,10 @@ const PI_FILE_CHANGE_TOOL_NAMES = new Set(["edit", "write"]);
 
 const ASSISTANT_STREAM_KEY = "assistant";
 
-/**
- * One anonymous stream per thinking block, keyed by its content index and
- * prefixed so it can never share a key with the assistant stream or another
- * channel-keyed family (compaction).
- */
 function thinkingStreamChannel(contentIndex: number): string {
   return `thinking-${contentIndex}`;
 }
 
-// ---------------------------------------------------------------------------
-// Tool classification (pi dialect → delta item shapes)
-// ---------------------------------------------------------------------------
-
-/**
- * Pi's bash tool runs in the session's working directory unless its args name
- * one, so the command item's `cwd` is the call's own or the thread's. Neither
- * known, the call stays a generic tool item: bb fabricates no
- * `commandExecution { cwd: "" }` (design §4).
- */
 function classifyPiToolUse(
   toolName: string,
   args: unknown,
@@ -327,21 +270,12 @@ function classifyPiToolUse(
   return { type: "tool", tool: toolName, args };
 }
 
-/**
- * Fallback classification for close-without-open. A bash call whose start
- * this process never saw has no command and no cwd to report, so it closes
- * as a generic tool item rather than a fabricated empty command.
- */
 function classifyPiToolResultFallback(toolName: string): DeltaItemShape {
   if (PI_FILE_CHANGE_TOOL_NAMES.has(toolName)) {
     return { type: "fileChange", changes: [] };
   }
   return { type: "tool", tool: toolName };
 }
-
-// ---------------------------------------------------------------------------
-// Model context-window resolution
-// ---------------------------------------------------------------------------
 
 interface PiModelContextWindowLookup {
   byCanonicalId: ReadonlyMap<string, number>;
@@ -366,18 +300,11 @@ function buildPiModelContextWindowLookup(
       toCanonicalPiModelId(model.provider, model.id),
       contextWindow,
     );
-    // Aggregator providers share model ids, so this map is ambiguous. It only
-    // serves messages that report no provider.
     byModelId.set(model.id, contextWindow);
   }
   return { byCanonicalId, byModelId };
 }
 
-/**
- * A resolver over an explicit catalog. The bridge builds one from what the
- * pi child reports (`get_available_models`, the live model on `get_state`)
- * and rebuilds it as the catalog changes; nothing here imports pi.
- */
 export function createPiModelContextWindowResolverFrom(
   models: readonly PiContextWindowModel[],
 ): PiModelContextWindowResolver {
@@ -395,12 +322,6 @@ function resolvePiModelContextWindow(
     return null;
   }
 
-  // Pi reports the provider and the provider-native model id separately, and an
-  // aggregator model id such as "deepseek/deepseek-v4-flash" also names a
-  // direct provider's model. A known provider therefore decides the answer on
-  // its own. Falling back to the id alone would hand a model another provider's
-  // window whenever the catalog lacks the pair, which happens for models the
-  // network refresh added and for custom models.
   const providerId = toOptionalString(lastAssistant?.provider);
   if (providerId) {
     return (
@@ -413,47 +334,24 @@ function resolvePiModelContextWindow(
   return modelContextWindowLookup.byModelId.get(modelId) ?? null;
 }
 
-// ---------------------------------------------------------------------------
-// Translator factory
-// ---------------------------------------------------------------------------
-
 interface PiDeltaTranslationContext {
   threadId?: string;
   parentToolCallId?: string;
-  /** The session's working directory: where a bash call without `cwd` runs. */
   cwd?: string;
 }
 
 interface CreatePiDeltaTranslatorOptions {
-  /**
-   * Resolves a model's context window for the `usage` delta. The bridge
-   * supplies one backed by the pi child's catalog; unit tests pass a fixture.
-   */
   resolveModelContextWindow: PiModelContextWindowResolver;
 }
 
-/** Bound on remembered started-tool shapes (calls that never report an end). */
 const MAX_STARTED_TOOL_SHAPES = 1024;
 
-/**
- * Per-process translator. The pi dialect carries every join key the assembler
- * needs, so no turn or id state lives here — the one dialect memory is the
- * started-tool shape cache: `tool_execution_end` omits the call's args, and
- * `item.close` must carry the full terminal item shape (the uniform close
- * rule), so the shape classified at `tool_execution_start` is remembered per
- * call until its end event replays it.
- */
-export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions) {
+export function createPiDeltaTranslator(
+  options: CreatePiDeltaTranslatorOptions,
+) {
   const { resolveModelContextWindow } = options;
 
-  /** `${threadId} ${toolCallId}` → shape emitted on the call's item.open. */
   const startedToolShapes = new Map<string, DeltaItemShape>();
-  /**
-   * Running session token total per thread for the `usage` delta: pi reports
-   * per turn, and this translator outlives sessions, so the bridge resets a
-   * thread's total at every session construction (`resetThread`, beside its
-   * `session.reset`).
-   */
   const cumulativeTokensByThreadId = new Map<
     string,
     ThreadEventTokenUsageBreakdown
@@ -482,11 +380,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
     }
   }
 
-  /**
-   * A settled turn abandons its unfinished calls (the old per-turn state was
-   * cleared at every turn finish): a late end after the boundary falls back
-   * to the bare classification instead of replaying a stale start.
-   */
   function clearThreadToolShapes(
     context: PiDeltaTranslationContext | undefined,
   ): void {
@@ -514,7 +407,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
     };
   }
 
-  /** Visibility classification: only unknown coverage becomes an `unhandled`. */
   function unhandledDeltas(
     rawEvent: JsonRpcMessage,
     parentToolCallId: string | undefined,
@@ -534,12 +426,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
     ];
   }
 
-  /**
-   * The raw payload a turn-requiring delta carries so the assembler can
-   * surface it as provider/unhandled when no turn is open — the old
-   * translator's `buildUnexpectedPiSdkEvent` no-active-turn guard, preserved
-   * across the bridge/assembler split.
-   */
   function noTurnFallbackFor(
     rawMessage: unknown,
     context: PiDeltaTranslationContext | undefined,
@@ -558,7 +444,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
     };
   }
 
-  /** A known event whose payload failed its schema: always surfaced. */
   function unexpectedSdkEventDeltas(
     rawMessage: unknown,
     context: PiDeltaTranslationContext | undefined,
@@ -583,8 +468,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
   ): ThreadDelta[] {
     const sdkEnvelope = sdkMessageEnvelopeSchema.safeParse(event);
     if (sdkEnvelope.success) {
-      // Checked here rather than in the recursive call because an empty
-      // translation is what triggers the unhandled fallback below.
       if (
         piIgnoredEventSchema.safeParse(sdkEnvelope.data.params.message).success
       ) {
@@ -686,8 +569,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
       case "message_end":
       case "message_start": {
         const piEvent = piCustomMessageBoundaryEventSchema.safeParse(event);
-        // Non-custom boundaries translate to nothing on purpose; the
-        // visibility metadata rates them noise (known roles) or unknown.
         if (!piEvent.success) {
           return [];
         }
@@ -954,9 +835,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
         )
           ? extractPiCommandExecutionOutput(piEvent.data.result)
           : undefined;
-        // The end event omits the call's args: the terminal shape is the one
-        // classified at tool_execution_start, or the bare fallback when this
-        // process never saw the start.
         const shapeKey = toolShapeKey(context, piEvent.data.toolCallId);
         const terminalShape =
           startedToolShapes.get(shapeKey) ??
@@ -1023,10 +901,6 @@ export function createPiDeltaTranslator(options: CreatePiDeltaTranslatorOptions)
 
   return { translate, resetThread };
 }
-
-// ---------------------------------------------------------------------------
-// Pi SDK event extraction helpers
-// ---------------------------------------------------------------------------
 
 function findLastAssistantMessage(
   messages: PiConversationMessage[],

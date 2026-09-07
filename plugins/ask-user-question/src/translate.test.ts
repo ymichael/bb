@@ -46,8 +46,6 @@ describe("tool input validation", () => {
   });
 
   it("steers the model to proceed rather than pad a one-option question", () => {
-    // Claude's steer replaces a schema error on purpose: the fix is to stop
-    // asking, not to invent a second option.
     expect(
       validateToolInput(
         parseInput({
@@ -171,8 +169,6 @@ describe("buildInteractionPayload", () => {
 
 describe("assertInteractionPayloadFits", () => {
   it("rejects a payload whose previews would blow the interaction limit", () => {
-    // 4 questions x 4 options x 4096-char previews is valid tool input but far
-    // over the 64 KiB the interaction payload allows.
     const preview = "x".repeat(4096);
     const questions = Array.from({ length: 4 }, (_unused, index) => ({
       question: `Question ${index}?`,
@@ -309,7 +305,6 @@ describe("buildToolResult", () => {
       preview: "CREATE TABLE t();",
       notes: "but shard it",
     });
-    // A question answered with nothing at all is omitted rather than sent as "".
     expect(result.answers).not.toHaveProperty("Which extras?");
   });
 
@@ -323,7 +318,6 @@ describe("buildToolResult", () => {
 
     expect(result.answers["Which DB?"]).toBe("DuckDB");
     expect(result.annotations).toBeUndefined();
-    // `response` is a single string, so it is only set for a lone question.
     expect(result.response).toBeUndefined();
   });
 

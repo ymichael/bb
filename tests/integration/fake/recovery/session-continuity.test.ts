@@ -69,11 +69,6 @@ describe.sequential("fake provider session continuity integration", () => {
         const eventsAfter = await getThreadEvents(harness.api, thread.id);
         expect(eventsAfter.length).toBeGreaterThan(eventsBefore.length);
         assertMonotonicSequences(eventsAfter);
-        // One message lifecycle per turn, each under its own id: the bridge
-        // names the message `msg-1` in both sessions (its counters restart with
-        // the process), and the runtime's assembler still mints distinct bb ids
-        // across the restart (#1224), so the second turn never collides with
-        // the first's rows.
         const messageLifecycles = new Map<string, string[]>();
         for (const event of eventsAfter) {
           if (

@@ -15,15 +15,6 @@ import {
 import { promptTextInput } from "./test/prompt-input.js";
 import type { AgentRuntime } from "./types.js";
 
-/**
- * `skills/configure` is sent only to a bridge whose handshake declares
- * `skills.configure`. In production the runtime always has skill roots (the
- * server's built-in skills tier), so a bridge that answers unknown methods
- * with METHOD_NOT_FOUND — the protocol's own instruction — must still start
- * threads; it just runs without injected skills. The third-party echo
- * example is exactly that bridge.
- */
-
 const echoExampleBridgePath = fileURLToPath(
   new URL(
     "../../../examples/plugins/echo-provider/src/provider-bridge.ts",
@@ -100,8 +91,6 @@ describe("skills/configure handshake capability", () => {
       text: "hello",
       threadId: "t1",
     });
-    // The example bridge records nothing; the proof is the thread that
-    // started and answered with roots configured on the runtime.
     expect(runtime.hasThread("t1")).toBe(true);
   });
 
@@ -111,7 +100,9 @@ describe("skills/configure handshake capability", () => {
       createAgentRuntime({
         workspacePath,
         env: record.env,
-        skillRoots: [{ id: "global-skills:builtin", path: stageSkillRoot(), skills: [] }],
+        skillRoots: [
+          { id: "global-skills:builtin", path: stageSkillRoot(), skills: [] },
+        ],
         onEvent: () => {},
         onToolCall: async () => ({ contentItems: [], success: true }),
       }),
@@ -133,8 +124,6 @@ describe("skills/configure handshake capability", () => {
   });
 
   it("rejects a relative skill root path", () => {
-    // Every root goes to every provider process, so it must be addressable
-    // from any of them.
     expect(() =>
       createAgentRuntime({
         workspacePath,

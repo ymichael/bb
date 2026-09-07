@@ -23,11 +23,6 @@ export async function listClaudeCodeBridgeModels(
   models: AvailableModel[];
   selectedOnlyModels: AvailableModel[];
 }> {
-  // Claude's initialization response is account-scoped and is the provider's
-  // authoritative list of runnable models. Keep BB's curated labels and
-  // reasoning policy, but only expose entries covered by a discovered value or
-  // its canonical resolved model id. Probe failures intentionally propagate so
-  // callers can distinguish temporary discovery failure from definite absence.
   let session: ReturnType<typeof query>;
   try {
     session = query({
@@ -54,16 +49,6 @@ interface ClaudeCodeBridgeModelListMemoOptions {
   ttlMs: number;
 }
 
-/**
- * Memoizes {@link listClaudeCodeBridgeModels} for one bridge process. Each
- * probe spawns a Claude CLI, and every picker open, thread open, and server
- * reconnect asks for the catalog; concurrent asks share one probe and a
- * settled catalog is reused until the window ends. Failures are never kept so
- * a transient probe error is retried on the next ask. The window stays short
- * because the server memoizes on top of this and this bridge outlives server
- * restarts: it absorbs bursts without doubling the staleness a login change
- * can see.
- */
 export function createClaudeCodeBridgeModelListMemo({
   list = listClaudeCodeBridgeModels,
   now = Date.now,

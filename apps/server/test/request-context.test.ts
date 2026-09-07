@@ -68,8 +68,6 @@ describe("request context", () => {
 
     await expect(surfaceFor("desktop")).resolves.toBe("desktop");
     await expect(surfaceFor("mobile")).resolves.toBe("mobile");
-    // The bb CLI, the SDK, automations, and agents send no header. They must
-    // not count as desktop or web users.
     await expect(surfaceFor(undefined)).resolves.toBe("api");
     await expect(surfaceFor("tv")).resolves.toBe("api");
   });

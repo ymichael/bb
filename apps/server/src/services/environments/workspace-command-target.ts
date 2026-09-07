@@ -33,8 +33,6 @@ export function workspaceContextFromPath(
 export function requireWorkspaceCommandTarget(
   environment: WorkspaceCommandTargetEnvironment,
 ): WorkspaceCommandTarget {
-  // Not lifecycle: API boundary validation — workspace commands need a ready
-  // workspace and answer with a 4xx otherwise; no transition is written here.
   if (environment.status !== "ready" || !environment.path) {
     throwEnvironmentNotReady(environment);
   }

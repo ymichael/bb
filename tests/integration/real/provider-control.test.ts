@@ -1,4 +1,3 @@
-// Real provider active-turn control coverage.
 import { describe, expect, it } from "vitest";
 import {
   getThreadEvents,

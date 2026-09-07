@@ -1,9 +1,3 @@
-/**
- * Named query policies keep cache lifecycle choices explicit at hook call
- * sites. Prefer one of these over open-coding refetch/stale-time combinations
- * unless a query has genuinely one-off behavior.
- */
-
 const SERVER_SESSION_STALE_TIME_MS = 60 * 60_000;
 const FOCUS_OWNED_LIVE_STALE_TIME_MS = 30_000;
 const TYPEAHEAD_STALE_TIME_MS = 15_000;
@@ -21,25 +15,12 @@ export const SERVER_SESSION_QUERY_POLICY = {
   staleTime: SERVER_SESSION_STALE_TIME_MS,
 } as const;
 
-/**
- * Live values with no realtime change kind (provider usage limits): focus and
- * reconnect are their only freshness sources, so the explicit `true`s
- * deliberately bypass the app-level lost-realtime-coverage gate that
- * `createAppQueryClient` applies to the defaults.
- */
 export const FOCUS_OWNED_LIVE_QUERY_POLICY = {
   refetchOnReconnect: true,
   refetchOnWindowFocus: true,
   staleTime: FOCUS_OWNED_LIVE_STALE_TIME_MS,
 } as const;
 
-/**
- * Explicit resume opt-in for queries whose realtime coverage has gaps: thread
- * tabs are absent from the reconnect-watermark catch-up list, and the thread
- * host file preview backs an open pane that must not keep stale bytes after
- * an offline stretch. Deliberately bypasses the app-level
- * lost-realtime-coverage gate (per-query options win over the defaults).
- */
 export const RESUME_REFETCH_QUERY_POLICY = {
   refetchOnReconnect: true,
   refetchOnWindowFocus: true,
@@ -68,16 +49,6 @@ export const REALTIME_OWNED_MOUNT_BASELINE_QUERY_POLICY = {
   refetchOnWindowFocus: false,
 } as const;
 
-/**
- * Heavy per-thread payloads (turn-summary details, file previews, diff
- * patches) are read once and then only useful while their consumer is on
- * screen. The default five-minute `gcTime` kept several such payloads per
- * visited thread resident, which on phones is memory the timeline and the
- * next thread need. One minute after the last observer leaves is enough for a
- * quick back-and-forth and short enough that a browsing session stays bounded.
- * Timeline windows are deliberately NOT on this tier: delta refetch depends on
- * the cached window surviving a thread leave.
- */
 export const HEAVY_PAYLOAD_GC_TIME_MS = 60_000;
 
 export const HEAVY_PAYLOAD_QUERY_POLICY = {

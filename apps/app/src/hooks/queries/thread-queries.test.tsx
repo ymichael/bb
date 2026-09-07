@@ -2,7 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ThreadListEntry } from "@bb/domain";
+import type { PendingInteraction, ThreadListEntry } from "@bb/domain";
 import type {
   SidebarBootstrapResponse,
   ThreadTimelineResponse,
@@ -11,13 +11,14 @@ import type {
 import { COMPACT_VIEWPORT_QUERY } from "@bb/shared-ui/hooks/use-compact-viewport";
 import * as api from "@/lib/api";
 import { sdk } from "@/lib/sdk";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { ARCHIVED_THREADS_PAGE_SIZE } from "./archived-threads-page-size";
 import {
   sidebarNavigationQueryKey,
   threadDetailBootstrapQueryKey,
   threadHostFilePreviewQueryKey,
+  threadPendingInteractionsQueryKey,
   threadQueuedMessagesQueryKey,
   threadQueryKey,
   threadTimelineQueryKey,
@@ -25,16 +26,26 @@ import {
 import {
   COMPACT_THREAD_TIMELINE_SEGMENT_LIMIT,
   didThreadDetailBootstrapRefreshAfterMount,
+  isPendingInteractionStateUnknown,
   useArchivedThreads,
   useChildThreads,
   useThread,
   useThreadDetailBootstrap,
   useThreadHostFilePreview,
   useThreadMentionCandidates,
+  useThreadPendingInteractions,
   useThreadQueuedMessages,
   useThreadStorageLocation,
   useThreadTimeline,
 } from "./thread-queries";
+import {
+  makeProjectWithThreadsResponse,
+  makeSidebarBootstrapResponse,
+} from "@/test/fixtures/projects";
+import {
+  makeThreadResponse,
+  makeThreadTimelineResponse,
+} from "@/test/fixtures/thread-responses";
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -50,6 +61,7 @@ vi.mock("@/lib/sdk", () => ({
       get: vi.fn(),
       list: vi.fn(),
       queuedMessages: { list: vi.fn() },
+      interactions: { list: vi.fn() },
       storageLocation: vi.fn(),
       timeline: vi.fn(),
     },
@@ -62,32 +74,16 @@ vi.mock("@/hooks/useRealtimeSubscription", () => ({
 }));
 
 const THREAD_WITH_INCLUDES = {
-  id: "thread-1",
-  projectId: "project-1",
-  environmentId: null,
-  providerId: "codex",
-  title: "Thread",
-  titleFallback: "Thread",
-  sectionId: null,
-  status: "idle",
-  parentThreadId: null,
-  sourceThreadId: null,
-  originKind: null,
-  originPluginId: null,
-  visibility: "visible",
-  archivedAt: null,
-  pinnedAt: null,
-  deletedAt: null,
-  lastReadAt: null,
-  latestAttentionAt: 1,
-  createdAt: 1,
-  updatedAt: 1,
-  runtime: {
-    displayStatus: "idle",
-    hostReconnectGraceExpiresAt: null,
-  },
-  activeBackgroundAgentCount: 0,
-  canSpawnChild: true,
+  ...makeThreadResponse({
+    id: "thread-1",
+    projectId: "project-1",
+    environmentId: null,
+    title: "Thread",
+    titleFallback: "Thread",
+    latestAttentionAt: 1,
+    createdAt: 1,
+    updatedAt: 1,
+  }),
   environment: null,
   host: null,
 } satisfies ThreadWithIncludesResponse;
@@ -96,33 +92,25 @@ function makeSidebarNavigation(
   projectThreads: ThreadListEntry[],
   personalThreads: ThreadListEntry[] = [],
 ): SidebarBootstrapResponse {
-  return {
-    sections: [],
+  return makeSidebarBootstrapResponse({
     projects: [
-      {
+      makeProjectWithThreadsResponse({
         id: "project-1",
-        kind: "standard",
         name: "Project",
-        gitRemoteUrl: null,
         createdAt: 1,
         updatedAt: 1,
-        sources: [],
         threads: projectThreads,
-        defaultExecutionOptions: null,
-      },
+      }),
     ],
-    personalProject: {
+    personalProject: makeProjectWithThreadsResponse({
       id: "proj_personal",
       kind: "personal",
       name: "Personal",
-      gitRemoteUrl: null,
       createdAt: 1,
       updatedAt: 1,
-      sources: [],
       threads: personalThreads,
-      defaultExecutionOptions: null,
-    },
-  };
+    }),
+  });
 }
 
 function mockMatchMedia(matching: readonly string[]) {
@@ -148,28 +136,22 @@ beforeEach(() => {
   vi.mocked(sdk.threads.get).mockResolvedValue(THREAD_WITH_INCLUDES);
   vi.mocked(sdk.threads.list).mockResolvedValue([]);
   vi.mocked(sdk.threads.queuedMessages.list).mockResolvedValue([]);
+  vi.mocked(sdk.threads.interactions.list).mockResolvedValue([]);
   vi.mocked(sdk.threads.storageLocation).mockResolvedValue({
     hostId: "host-1",
     storageRootPath: "/tmp/thread-storage/thread-1",
   });
-  vi.mocked(sdk.threads.timeline).mockResolvedValue({
-    rows: [],
-    activePromptMode: null,
-    activeThinking: null,
-    activeWorkflows: [],
-    activeBackgroundCommands: [],
-    pendingTodos: null,
-    goal: null,
-    modelFallback: null,
-    timelinePage: {
-      kind: "latest",
-      segmentLimit: 100,
-      returnedSegmentCount: 0,
-      hasOlderRows: false,
-      olderCursor: null,
-    },
-    maxSeq: 0,
-  } satisfies ThreadTimelineResponse);
+  vi.mocked(sdk.threads.timeline).mockResolvedValue(
+    makeThreadTimelineResponse({
+      timelinePage: {
+        kind: "latest",
+        segmentLimit: 100,
+        returnedSegmentCount: 0,
+        hasOlderRows: false,
+        olderCursor: null,
+      },
+    }),
+  );
   vi.mocked(api.getThreadHostFilePreview).mockResolvedValue({
     kind: "text",
     path: "/tmp/log.txt",
@@ -211,7 +193,7 @@ describe("useThreadDetailBootstrap", () => {
   });
 
   it("uses the cached timeline sequence and merges a prefetched delta", async () => {
-    const previousTimeline = {
+    const previousTimeline = makeThreadTimelineResponse({
       rows: [
         {
           id: "row-1",
@@ -228,13 +210,6 @@ describe("useThreadDetailBootstrap", () => {
           status: null,
         },
       ],
-      activePromptMode: null,
-      activeThinking: null,
-      activeWorkflows: [],
-      activeBackgroundCommands: [],
-      pendingTodos: null,
-      goal: null,
-      modelFallback: null,
       timelinePage: {
         kind: "latest",
         segmentLimit: 100,
@@ -243,7 +218,7 @@ describe("useThreadDetailBootstrap", () => {
         olderCursor: null,
       },
       maxSeq: 7,
-    } satisfies ThreadTimelineResponse;
+    });
     vi.mocked(sdk.threads.timeline).mockResolvedValueOnce({
       ...previousTimeline,
       rows: [],
@@ -443,6 +418,104 @@ describe("useThreadQueuedMessages", () => {
   });
 });
 
+describe("useThreadPendingInteractions", () => {
+  it("keeps cached empty interactions unknown while their refresh is pending", () => {
+    expect(isPendingInteractionStateUnknown([], true)).toBe(true);
+    expect(isPendingInteractionStateUnknown([], false)).toBe(false);
+  });
+
+  it("reuses the first owner's fresh baseline when a second owner mounts", async () => {
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const first = renderHook(() => useThreadPendingInteractions("thread-1"), {
+      wrapper,
+    });
+    await waitFor(() => {
+      expect(first.result.current.isSuccess).toBe(true);
+    });
+    queryClient.setQueryData(
+      threadPendingInteractionsQueryKey("thread-1"),
+      [],
+      { updatedAt: Date.now() - 1_000 },
+    );
+
+    renderHook(() => useThreadPendingInteractions("thread-1"), { wrapper });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(sdk.threads.interactions.list).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes the baseline after every zero-owner interval", async () => {
+    const { wrapper } = createQueryClientTestHarness();
+    const first = renderHook(() => useThreadPendingInteractions("thread-1"), {
+      wrapper,
+    });
+    await waitFor(() => {
+      expect(first.result.current.isSuccess).toBe(true);
+    });
+    first.unmount();
+    const pendingInteraction: PendingInteraction = {
+      id: "pint-plan",
+      threadId: "thread-1",
+      turnId: "turn-1",
+      providerId: "claude-code",
+      providerThreadId: "provider-thread-1",
+      providerRequestId: "request-1",
+      status: "pending",
+      statusReason: null,
+      createdAt: 1,
+      resolvedAt: null,
+      resolution: null,
+      payload: {
+        kind: "approval",
+        reason: null,
+        availableDecisions: ["allow_once", "deny"],
+        subject: {
+          kind: "plan",
+          itemId: "plan-1",
+          plan: "Refresh the baseline",
+          planFilePath: null,
+        },
+      },
+    };
+    vi.mocked(sdk.threads.interactions.list).mockResolvedValue([
+      pendingInteraction,
+    ]);
+
+    const second = renderHook(() => useThreadPendingInteractions("thread-1"), {
+      wrapper,
+    });
+
+    await waitFor(() => {
+      expect(second.result.current.data).toEqual([pendingInteraction]);
+    });
+    expect(sdk.threads.interactions.list).toHaveBeenCalledTimes(2);
+  });
+
+  it("refetches the interaction baseline when a stale owner remounts", async () => {
+    const { queryClient, wrapper } = createQueryClientTestHarness();
+    const first = renderHook(() => useThreadPendingInteractions("thread-1"), {
+      wrapper,
+    });
+    await waitFor(() => {
+      expect(first.result.current.isSuccess).toBe(true);
+    });
+    first.unmount();
+    queryClient.setQueryData(
+      threadPendingInteractionsQueryKey("thread-1"),
+      [],
+      { updatedAt: Date.now() - 2_500 },
+    );
+
+    renderHook(() => useThreadPendingInteractions("thread-1"), { wrapper });
+
+    await waitFor(() => {
+      expect(sdk.threads.interactions.list).toHaveBeenCalledTimes(2);
+    });
+  });
+});
+
 describe("useThreadHostFilePreview", () => {
   it("refetches stale host file previews on focus and reconnect", async () => {
     const { queryClient, wrapper } = createQueryClientTestHarness();
@@ -515,7 +588,6 @@ describe("useChildThreads", () => {
     expect(result.current.isLoading).toBe(false);
     expect(sdk.threads.list).not.toHaveBeenCalled();
 
-    // Realtime updates land in the sidebar cache and flow through.
     const newChild = makeThreadListEntry({
       id: "child-3",
       parentThreadId: "parent-1",
@@ -559,15 +631,12 @@ describe("useChildThreads", () => {
     const initialRenders = renders;
     expect(initialData?.map((thread) => thread.id)).toEqual(["child-1"]);
 
-    // Sidebar patches land on every status/title change of any thread; a
-    // consumer as heavy as ThreadDetailView must not re-render for them.
     act(() => {
       queryClient.setQueryData(
         sidebarNavigationQueryKey(),
         makeSidebarNavigation([child, { ...unrelated, title: "After" }]),
       );
     });
-    // Query notifications flush on a macrotask; let them land first.
     await act(async () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });

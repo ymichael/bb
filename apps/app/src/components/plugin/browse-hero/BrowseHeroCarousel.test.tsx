@@ -15,9 +15,6 @@ import { MINI_APP_SCENES } from "./MiniAppScenes";
 
 const openComposer = vi.fn<(seed: string | undefined) => void>();
 
-// The real composer needs live project/host/provider queries and a router; the
-// hero's own contract is which seed it hands over, so stub the composer and
-// assert on that.
 vi.mock("@/components/plugin/PluginNewThreadComposer", () => ({
   PluginNewThreadComposer: ({ initialPrompt }: { initialPrompt?: string }) => {
     openComposer(initialPrompt);
@@ -36,16 +33,12 @@ afterEach(() => {
 
 describe("BrowseHeroCarousel", () => {
   it("has a scene for every archetype", () => {
-    // A missing entry renders an empty window rather than failing loudly, so
-    // pin the mapping instead of trusting the renderer's null guard.
     for (const archetype of BROWSE_ARCHETYPES) {
       expect(MINI_APP_SCENES[archetype.id]).toBeTypeOf("function");
     }
   });
 
   it("dresses the shared engine in plugin copy, not another surface's", () => {
-    // The engine is shared across surfaces, so the wiring — headline lead,
-    // window badge, prompt prefix — is the part that can silently cross over.
     render(<BrowseHeroCarousel autoplay={false} />);
 
     const heading = screen.getByRole("heading", { level: 2 });
@@ -82,8 +75,6 @@ describe("BrowseHeroCarousel", () => {
   });
 
   it("opens blank-seeded and closes through the openRequest channel", () => {
-    // The create control lives at page level now; the engine's whole composer
-    // contract is the request channel.
     const { rerender } = render(
       <BrowseHeroCarousel autoplay={false} openRequest={null} />,
     );
@@ -97,7 +88,6 @@ describe("BrowseHeroCarousel", () => {
     );
     expect(screen.getByTestId("real-composer")).toBeTruthy();
     expect(openComposer).toHaveBeenCalledWith(CREATE_PLUGIN_PROMPT);
-    // The showcase yields the slot entirely: no tablist to tab into behind it.
     expect(screen.queryByRole("tab")).toBeNull();
 
     rerender(
@@ -157,7 +147,6 @@ describe("BrowseHeroCarousel", () => {
     );
     expect(openComposer).toHaveBeenLastCalledWith(archetypePrompt(first));
 
-    // A new nonce re-seeds the already-open composer.
     rerender(
       <BrowseHeroCarousel
         autoplay={false}
@@ -166,9 +155,6 @@ describe("BrowseHeroCarousel", () => {
     );
     expect(openComposer).toHaveBeenLastCalledWith(archetypePrompt(second));
 
-    // The same nonce re-rendered is a no-op: the composer stays mounted with
-    // the seed it already had (the stub re-reports on re-render, so assert on
-    // the seed rather than call count).
     rerender(
       <BrowseHeroCarousel
         autoplay={false}
@@ -216,7 +202,6 @@ describe("BrowseArchetypeCards", () => {
       </TooltipProvider>,
     );
 
-    // Both tiers render from the one shared source.
     for (const archetype of BROWSE_ARCHETYPES) {
       expect(screen.getByText(archetype.title)).toBeTruthy();
     }

@@ -1,10 +1,3 @@
-// Expo Router calls `redirectSystemPath` for every incoming URL (cold start
-// and while running) before routing it: the `bb://` scheme, universal links
-// (`https://<handle>.getbb.app/threads/<id>`), the dev-client's own URLs.
-// Pure resolution lives in src/lib/links and src/lib/shell; this file does the
-// RN side: pick the resolver for the current shell mode, activate the profile
-// that owns a web link, wait for its connection, and send unknown servers to
-// the add-server screen with the link remembered.
 import { waitForActiveConnection } from "@/app-shell/connector";
 import { e2eModeEnabled } from "@/app-shell/e2e";
 import { addServerPathForLink } from "@/lib/links";
@@ -26,8 +19,6 @@ export async function redirectSystemPath({
       activeProfileId: snapshot.activeProfileId,
       developerRoutesEnabled: e2eModeEnabled,
     };
-    // The page owns almost every surface, so a link resolves to one WebView
-    // route carrying a web path rather than a native route.
     const resolution = resolveShellIncomingLink(path, context);
     switch (resolution.kind) {
       case "passthrough":

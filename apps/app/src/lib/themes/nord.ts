@@ -1,11 +1,3 @@
-/**
- * Nord palette (https://www.nordtheme.com). Overrides only the two anchors
- * (--canvas/--ink), the accent, the secondary text tiers, the semantic colors,
- * and the ANSI palette — every neutral surface (cards, borders, sidebar, hover,
- * selection, ring) derives from the anchors and accent in theme.css, so it
- * follows automatically. The ANSI block lives in the light selector and applies
- * in both modes (terminal colors are mode-independent).
- */
 export const nordThemeCss = `
 :root, .light {
   --canvas: #eceff4;

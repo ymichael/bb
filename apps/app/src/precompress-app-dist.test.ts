@@ -28,8 +28,6 @@ describe("app asset precompression", () => {
     const distDir = await mkdtemp(resolve(tmpdir(), "bb-precompress-test-"));
     const compressibleBody = Buffer.from("compressible bb asset\n".repeat(400));
     const assetPath = resolve(distDir, "app.js");
-    // The document itself: without a sidecar every cold navigation on the
-    // relayed mobile path ships the shell uncompressed through the tunnel.
     const documentPath = resolve(distDir, "index.html");
     const smallPath = resolve(distDir, "small.js");
     const binaryPath = resolve(distDir, "image.png");

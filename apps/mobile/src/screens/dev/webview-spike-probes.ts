@@ -1,10 +1,3 @@
-// Injected probe scripts for the Phase 0 WebView shell spikes.
-//
-// Each probe is a self-contained expression that runs inside the WKWebView and
-// reports through `window.__bbSpike.post(...)`. `injectJavaScript` needs a
-// trailing `true;` so WebKit never tries to serialise the last value.
-
-/** Installed before any page content so every probe shares one channel. */
 export const SPIKE_HARNESS = String.raw`
 (function () {
   if (window.__bbSpike) return;
@@ -41,12 +34,6 @@ export const SPIKE_HARNESS = String.raw`
 true;
 `;
 
-/**
- * Reports the boot timeline: navigation timing, the first frame that paints
- * app content inside `#root`, and the transferred bytes of every resource.
- * "Interactive" here is the first frame on which the app has rendered a
- * composer or a sign-in form, which is the first frame a user can act on.
- */
 export const BOOT_TIMING_PROBE = String.raw`
 (function () {
   if (window.__bbBootWatch) return;
@@ -160,7 +147,6 @@ export const BOOT_TIMING_PROBE = String.raw`
 true;
 `;
 
-/** Origin capabilities: secure context, media, clipboard, WebGL, sockets. */
 export const ENVIRONMENT_PROBE = String.raw`
 (function () {
   var mediaRecorderTypes = [];
@@ -200,11 +186,6 @@ export const ENVIRONMENT_PROBE = String.raw`
 true;
 `;
 
-/**
- * Runs the same shape the app's `useVoiceInput` runs: `getUserMedia`, then a
- * timesliced `MediaRecorder`, then a multipart upload to the transcription
- * route. A failure at any step reports the step name.
- */
 export const VOICE_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -277,10 +258,6 @@ export const VOICE_PROBE = String.raw`
 true;
 `;
 
-/**
- * Records the same way and ships the raw bytes to a host sink, so the run can
- * decode the capture off-device and prove the container is well formed.
- */
 export const VOICE_EXPORT_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -313,11 +290,6 @@ export const VOICE_EXPORT_PROBE = String.raw`
 true;
 `;
 
-/**
- * Drives the app's own voice UI end to end: press the composer microphone,
- * let `useVoiceInput` record, press "Stop and transcribe recording", and
- * report the transcription request the hook actually issued.
- */
 export const VOICE_APP_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -396,7 +368,6 @@ export const VOICE_APP_PROBE = String.raw`
 true;
 `;
 
-/** Reports the app's own voice-input state machine, not a synthetic recorder. */
 export const VOICE_UI_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -422,7 +393,6 @@ export const VOICE_UI_PROBE = String.raw`
 true;
 `;
 
-/** Clipboard behaviour on the current origin, both API and fallback path. */
 export const CLIPBOARD_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -461,7 +431,6 @@ export const CLIPBOARD_PROBE = String.raw`
 true;
 `;
 
-/** Opens a same-origin WebSocket to /ws and reports the handshake result. */
 export const WEBSOCKET_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -492,7 +461,6 @@ export const WEBSOCKET_PROBE = String.raw`
 true;
 `;
 
-/** Reports xterm's canvas/WebGL renderer state and the terminal's geometry. */
 export const TERMINAL_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -524,10 +492,6 @@ export const TERMINAL_PROBE = String.raw`
 true;
 `;
 
-/**
- * Streams visual-viewport geometry and the composer's position while the soft
- * keyboard animates, so the shell can compare the web math against native.
- */
 export const VIEWPORT_WATCH_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;
@@ -583,7 +547,6 @@ export const VIEWPORT_WATCH_PROBE = String.raw`
 true;
 `;
 
-/** Focuses the page composer so the soft keyboard opens without a tap. */
 export const FOCUS_COMPOSER_PROBE = String.raw`
 (function () {
   var composer = document.querySelector("textarea, [contenteditable='true']");
@@ -597,7 +560,6 @@ export const FOCUS_COMPOSER_PROBE = String.raw`
 true;
 `;
 
-/** Reports every file input the page mounted, so the chooser test is targeted. */
 export const FILE_INPUT_PROBE = String.raw`
 (function () {
   var inputs = Array.prototype.slice.call(document.querySelectorAll("input[type='file']"));
@@ -617,7 +579,6 @@ export const FILE_INPUT_PROBE = String.raw`
 true;
 `;
 
-/** Clicks the first file input so WKWebView opens its native chooser. */
 export const OPEN_FILE_CHOOSER_PROBE = String.raw`
 (function () {
   var input = document.querySelector("input[type='file']");
@@ -640,7 +601,6 @@ export const OPEN_FILE_CHOOSER_PROBE = String.raw`
 true;
 `;
 
-/** Lists the page's interactive controls so a spike can target one by name. */
 export const BUTTONS_PROBE = String.raw`
 (function () {
   var nodes = Array.prototype.slice.call(document.querySelectorAll("button, [role='button'], [role='tab'], a[href]"));
@@ -659,10 +619,6 @@ export const BUTTONS_PROBE = String.raw`
 true;
 `;
 
-/**
- * Opens the thread's workspace panel and starts a terminal in it, so the xterm
- * probe has something to measure.
- */
 export const TERMINAL_OPEN_PROBE = String.raw`
 (function () {
   var post = window.__bbSpike.post;

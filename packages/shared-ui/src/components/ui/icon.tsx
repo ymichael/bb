@@ -53,11 +53,6 @@ import {
   subscribeExtendedIcons,
 } from "./icon-registry";
 
-// Custom "new section" glyph: the set's ListView rows with the middle and
-// bottom rows shortened so the plus owns the lower-right quadrant, matching
-// FolderAdd's non-overlapping plus placement (same plus geometry). Hugeicons
-// has no list-with-plus variant that keeps the ListView row shape, so this
-// inlines the artwork in the same element format the set uses.
 const SectionAddStrokeRoundedIcon: IconSvgElement = [
   [
     "path",
@@ -101,11 +96,6 @@ const SectionAddStrokeRoundedIcon: IconSvgElement = [
   ],
 ];
 
-// Core map: the glyphs the app shell renders before or at first paint
-// (sidebar rows and controls, header, toasts, menus, plugin chrome). Keep it
-// small: everything here is on the boot path of every page load. Any other
-// named icon belongs in `./icon-extended`, which loads with the first route
-// that needs it.
 const CORE_ICON_MAP = {
   AlertCircle: AlertCircleIcon,
   AlertTriangle: Alert02Icon,
@@ -160,27 +150,18 @@ type CoreIconName = keyof typeof CORE_ICON_MAP;
 
 export type IconName = CoreIconName | ExtendedIconName;
 
-// Object.keys loses the literal key type; the map's own keys are the source
-// of truth for CoreIconName, so this is the one place the cast is exact.
 const CORE_ICON_NAMES = Object.keys(CORE_ICON_MAP) as readonly CoreIconName[];
 
-/** Every renderable icon name (core and extended), without loading artwork. */
 export const ICON_NAMES: readonly IconName[] = [
   ...CORE_ICON_NAMES,
   ...EXTENDED_ICON_NAMES,
 ];
 
-// Widened view of the core map so a union-typed name can be looked up
-// without a cast; extended names simply miss.
 const CORE_ICON_LOOKUP: Readonly<Record<string, IconSvgElement | undefined>> =
   CORE_ICON_MAP;
 
 let extendedIconsLoad: Promise<void> | null = null;
 
-/**
- * Loads the extended glyph registry. Idempotent; a failed load (for example an
- * offline chunk fetch) is retried on the next call.
- */
 export function preloadExtendedIcons(): Promise<void> {
   if (getExtendedIcons() !== null) return Promise.resolve();
   extendedIconsLoad ??= import("./icon-extended").then(
@@ -198,7 +179,6 @@ const EMPTY_ICON: IconSvgElement = [];
 export interface IconProps {
   name: IconName;
   className?: string;
-  /** Inline style for data-driven accents (a bridge's per-theme tint). */
   style?: CSSProperties;
   "aria-hidden"?: boolean | "true" | "false";
   "aria-label"?: string;
@@ -235,11 +215,6 @@ export function Icon({
   );
 }
 
-/**
- * Renders an extended-registry glyph. Until the registry has loaded it renders
- * the same-size empty svg (no layout shift), kicks off the load, and
- * re-renders once the artwork is registered.
- */
 function ExtendedIcon({
   name,
   className,
@@ -247,7 +222,6 @@ function ExtendedIcon({
   "aria-hidden": ariaHidden,
   "aria-label": ariaLabel,
 }: IconProps) {
-  // Widened like CORE_ICON_LOOKUP so the union-typed name needs no cast.
   const extendedIcons: Readonly<
     Record<string, IconSvgElement | undefined>
   > | null = useSyncExternalStore(
@@ -257,8 +231,6 @@ function ExtendedIcon({
   );
   const icon = extendedIcons?.[name];
   if (icon === undefined) {
-    // Fire-and-forget: the store notifies subscribers when it lands, and
-    // preloadExtendedIcons handles the retry on failure.
     void preloadExtendedIcons().catch(() => undefined);
   }
   return (

@@ -16,9 +16,6 @@ describe("resolveVoiceSupport", () => {
   });
 
   it("blames the origin on a plain-HTTP LAN server", () => {
-    // getUserMedia is secure-context only, so a Direct-mode bb server over
-    // http:// has no microphone at all. Saying "this browser" is wrong and
-    // leaves the user with nothing to fix.
     expect(
       resolveVoiceSupport({
         hasMediaDevices: false,

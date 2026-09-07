@@ -8,7 +8,6 @@ function schemaFor(richTextEditing: boolean) {
   );
 }
 
-// Nodes/marks the Markdown rich-text feature added; gated by the preference.
 const GATED_NODES = ["heading", "bulletList", "orderedList", "listItem"];
 const GATED_MARKS = ["bold", "italic", "code"];
 
@@ -34,9 +33,6 @@ describe("promptEditorExtensions", () => {
   });
 
   it("keeps paragraph, blockquote, and mention available in both modes", () => {
-    // blockquote backs the quote-into-prompt flow and must round-trip stored
-    // `> ` drafts regardless of the rich-text preference; paragraph + mention
-    // are always required by the serializer.
     for (const richTextEditing of [true, false]) {
       const schema = schemaFor(richTextEditing);
       expect(schema.nodes.paragraph).toBeDefined();

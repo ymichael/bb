@@ -5,7 +5,7 @@ import { SettingsSidebarContent } from "@/components/settings/SettingsSidebar";
 import {
   SETTINGS_NAV_SECTIONS,
   type SettingsSectionId,
-} from "@/components/settings/settings-nav";
+} from "@/components/settings/settings-sections";
 import {
   SidebarInset,
   SidebarProvider,
@@ -22,7 +22,6 @@ export type SettingsStoryRoute =
   | { kind: "machine"; id: string }
   | { kind: "section"; id: SettingsSectionId };
 
-/** Resolve the story's real Settings links without depending on live app data. */
 export function useSettingsStoryRoute(): SettingsStoryRoute {
   const { pathname } = useLocation();
   const machineMatch = matchPath(SETTINGS_MACHINE_ROUTE_PATH, pathname);
@@ -37,7 +36,6 @@ export function useSettingsStoryRoute(): SettingsStoryRoute {
   return { kind: "section", id: section?.id ?? "general" };
 }
 
-/** Production application chrome around full-page Settings stories. */
 export function SettingsStoryChrome({
   activeSection,
   children,
@@ -45,7 +43,6 @@ export function SettingsStoryChrome({
 }: {
   activeSection?: SettingsSectionId;
   children: ReactNode;
-  /** Detail routes already render their production PageShell. */
   contentOwnsPageShell?: boolean;
 }) {
   const route = useSettingsStoryRoute();

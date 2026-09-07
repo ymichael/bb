@@ -1,11 +1,10 @@
 {
   "_comment": "Provider-literal ratchet (G1). Per-file occurrence count of provider-ID references in core. May only go DOWN. Regenerate: node scripts/check-provider-literal-ratchet.mjs --write. Every counted file must have an `allowlist` entry (count, reason, owner, diesAt); the entries are authored by hand and survive --write. Delete this file and the guard when empty.",
-  "total": 18,
+  "total": 15,
   "files": {
     "apps/demo-server/src/fixtures/providers.ts": 3,
     "apps/demo-server/src/fixtures/world.ts": 2,
     "apps/server/src/services/threads/thread-edit-message.ts": 1,
-    "packages/agent-runtime/src/runtime.ts": 3,
     "packages/config/src/bb-app-managed-config.ts": 4,
     "packages/scripts/src/commands/archive-codex-tmp-bb-sessions.ts": 1,
     "packages/scripts/src/lib/seed-perf-fixture.ts": 3,
@@ -29,12 +28,6 @@
       "reason": "legacy persisted data: pre-v3 codex timelines recorded the native turn id with no checkpoint; the fallback reads them.",
       "owner": "provider-codex",
       "diesAt": "legacy-tool-item-backfill migration (stamps the checkpoint onto old rows)"
-    },
-    "packages/agent-runtime/src/runtime.ts": {
-      "count": 3,
-      "reason": "the pre-experiment idle-session release policy: with `providerSessionReapingEnabled` off, only codex idle sessions are released (the behaviour bb shipped). The experiment reads `sessionRestorable` instead.",
-      "owner": "provider-codex / runtime",
-      "diesAt": "when `providerSessionReapingEnabled` graduates and the flag is deleted"
     },
     "packages/config/src/bb-app-managed-config.ts": {
       "count": 4,

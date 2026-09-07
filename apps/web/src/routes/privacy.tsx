@@ -8,15 +8,6 @@ import interWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal
 import landingCss from "../landing/landing.css?url";
 import blogCss from "../blog/blog.css?url";
 
-// App Store Connect requires a reachable privacy policy URL before a build can
-// go to external TestFlight testers, and the App Store requires one to list the
-// app at all. This page is that URL: https://getbb.app/privacy.
-//
-// It describes three separate things, because a bb user meets them separately:
-// the app on their own devices, the optional bb connect relay, and this
-// website. Keep it that way — most bb users never sign in to connect, and the
-// policy should make clear how little leaves their machine.
-
 const PAGE_TITLE = "Privacy — bb";
 const PAGE_DESCRIPTION =
   "What bb collects, what stays on your own machines, and what bb connect can see.";

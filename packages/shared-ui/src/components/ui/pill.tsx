@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "../../lib/utils";
 
-export type PillVariant =
-  | "secondary"
-  | "destructive"
-  | "outline"
-  | "emphasis";
+export type PillVariant = "secondary" | "destructive" | "outline" | "emphasis";
 
 export type PillSize = "default" | "sm";
 
@@ -28,7 +24,12 @@ export interface PillProps {
   children: ReactNode;
 }
 
-export function Pill({ variant, size = "default", className, children }: PillProps) {
+export function Pill({
+  variant,
+  size = "default",
+  className,
+  children,
+}: PillProps) {
   return (
     <span
       className={cn(

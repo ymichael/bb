@@ -3,6 +3,7 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import type { Thread } from "@bb/domain";
+import { makeThread as makeThreadFixture } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   FORK_THREAD_CREATE_SEED_LOCATION_STATE_KEY,
@@ -18,8 +19,6 @@ const mocks = vi.hoisted(() => ({
   setRootComposeProjectId: vi.fn(),
   queryClient: {
     fetchQuery: (...args: unknown[]) => mocks.fetchQuery(...args),
-    // findCachedProviderInfo scans cached execution-options responses for
-    // the source provider's fork capability.
     getQueriesData: () => [
       [
         ["systemExecutionOptions"],
@@ -48,7 +47,6 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@tanstack/react-query")>();
   return {
     ...actual,
-    // One stable client per test run, like the real provider hands out.
     useQueryClient: () => mocks.queryClient,
   };
 });
@@ -58,29 +56,18 @@ vi.mock("@/lib/root-compose-selection", () => ({
 }));
 
 function makeThread(overrides: Partial<Thread> = {}): Thread {
-  const base: Thread = {
-    archivedAt: null,
+  return makeThreadFixture({
     createdAt: 1,
-    deletedAt: null,
     environmentId: "env_source",
     id: "thr_source",
     lastReadAt: null,
     latestAttentionAt: 1,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    parentThreadId: null,
-    pinnedAt: null,
     projectId: "proj_source",
-    providerId: "codex",
-    sourceThreadId: null,
-    status: "idle",
     title: null,
     titleFallback: "Fallback fork title",
-    sectionId: null,
     updatedAt: 1,
-  };
-  return { ...base, ...overrides };
+    ...overrides,
+  });
 }
 
 afterEach(() => {
@@ -154,8 +141,6 @@ describe("useForkThreadFromMessage", () => {
     );
     const first = result.current;
 
-    // A refetch hands the hook a new thread object (same id, new title): the
-    // handler feeds the timeline static context, so its identity must hold.
     rerender({ sourceThread: makeThread({ title: "Renamed source" }) });
     expect(result.current).toBe(first);
 

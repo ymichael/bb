@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProviderInfo } from "@bb/domain";
 import { defaultAppSettings } from "@bb/domain";
+import { makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import {
   ProvidersSettingsSection,
   reorderProviderIds,
@@ -18,13 +19,10 @@ vi.mock("@/hooks/queries/system-queries", () => ({
 }));
 
 function provider(id: string, displayName: string): ProviderInfo {
-  return {
+  return makeProviderInfo({
     id,
-    pluginId: `provider-${id}`,
     displayName,
     logoUrl: null,
-    available: true,
-    maintenance: { health: false, usage: false, installation: false },
     capabilities: {
       supportsThreadArchive: false,
       supportsThreadRename: false,
@@ -35,8 +33,7 @@ function provider(id: string, displayName: string): ProviderInfo {
       modelCatalogScope: "workspace",
       permissionModes: ["full"],
     },
-    composerActions: [],
-  };
+  });
 }
 
 afterEach(cleanup);
@@ -57,7 +54,6 @@ describe("ProvidersSettingsSection", () => {
       />,
     );
 
-    // No explicit default: the first row reads as the default.
     const rows = screen.getAllByText(/Alpha|Beta|Gamma/);
     expect(rows.map((row) => row.textContent)).toEqual([
       "Alpha",
@@ -70,8 +66,6 @@ describe("ProvidersSettingsSection", () => {
       name: /Reorder (Alpha|Beta|Gamma)/,
     });
     expect(reorderHandles).toHaveLength(3);
-    // Keep each sortable row directly under the divided list. An extra wrapper
-    // makes every SettingsRow both `first` and `last` and removes its padding.
     expect(reorderHandles[0]?.parentElement?.className).toContain(
       "group/provider-row",
     );
@@ -98,7 +92,6 @@ describe("ProvidersSettingsSection", () => {
       />,
     );
     expect(screen.getByText("Unavailable")).toBeTruthy();
-    // An unavailable provider cannot become the default.
     expect(
       (
         screen.getByRole("button", {

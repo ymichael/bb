@@ -15,12 +15,14 @@ import {
   type AppDefaultKeybinding,
   type AppKeybinding,
 } from "@bb/domain";
+import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { AppCommandProvider, useAppCommandHandler } from "./AppCommandProvider";
 import {
   removePluginSlotRegistrations,
   setPluginSlotRegistrations,
 } from "@/lib/plugin-slots";
 import { CommandPalette } from "./CommandPalette";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 const PALETTE_SHORTCUT = {
   key: "p",
@@ -54,7 +56,6 @@ const THREAD_SEARCH_BINDING: AppKeybinding = {
   when: { all: ["mainSurface"], none: ["modalOpen"] },
 };
 
-// A chord that declines while any modal is open, like most app bindings.
 const THREAD_NEW_BINDING: AppKeybinding = {
   command: "thread.new",
   desktopOnly: false,
@@ -78,7 +79,17 @@ function defaults(...commands: AppCommandId[]): AppDefaultKeybinding[] {
   }));
 }
 
-const testState = vi.hoisted(() => ({ calls: [] as string[] }));
+const testState = vi.hoisted(() => ({
+  calls: [] as string[],
+  filesAvailable: false,
+  plugins: [] as Array<{
+    enabled: boolean;
+    hasSettings: boolean;
+    icon: string | null;
+    id: string;
+    name: string | null;
+  }>,
+}));
 
 vi.mock("@/hooks/queries/system-queries", () => ({
   useSystemConfig: () => ({
@@ -104,6 +115,21 @@ vi.mock("@/hooks/queries/system-queries", () => ({
 
 vi.mock("@/lib/bb-desktop", () => ({
   getBbDesktopInfo: () => null,
+}));
+
+vi.mock("@/hooks/useHostDaemon", () => ({
+  useHostDaemon: () => ({ hasDaemon: false }),
+  useLocalHostDaemonAccess: () => ({
+    accessState: testState.filesAvailable
+      ? "permission-required"
+      : "unavailable",
+  }),
+}));
+
+vi.mock("@/lib/app-query-client", () => ({
+  appQueryClient: {
+    fetchQuery: () => Promise.resolve(testState.plugins),
+  },
 }));
 
 vi.mock("./ThreadPaletteResults", () => ({
@@ -156,7 +182,7 @@ function Handler({ command }: { command: AppCommandId }) {
   return null;
 }
 
-function renderPalette() {
+function renderPalette(isCompactViewport = false) {
   const result = render(
     <MemoryRouter>
       <AppCommandProvider>
@@ -171,6 +197,13 @@ function renderPalette() {
         <LocationProbe />
       </AppCommandProvider>
     </MemoryRouter>,
+    {
+      wrapper: ({ children }) => (
+        <CompactViewportOverrideProvider isCompactViewport={isCompactViewport}>
+          {children}
+        </CompactViewportOverrideProvider>
+      ),
+    },
   );
   screen.getByTestId("origin").focus();
   return result;
@@ -201,7 +234,7 @@ function openThreadSearch(): KeyboardEvent {
 
 const searchField = () => screen.getByRole("combobox");
 const optionTitles = () =>
-  screen.getAllByRole("option").map((option) => option.textContent);
+  screen.queryAllByRole("option").map((option) => option.textContent);
 const selectedOption = () =>
   screen
     .getAllByRole("option")
@@ -210,7 +243,10 @@ const selectedOption = () =>
 afterEach(() => {
   cleanup();
   removePluginSlotRegistrations("linear");
+  removePluginSlotRegistrations("automations");
   testState.calls.length = 0;
+  testState.filesAvailable = false;
+  testState.plugins.length = 0;
   window.localStorage.clear();
 });
 
@@ -219,13 +255,11 @@ describe("CommandPalette", () => {
     renderPalette();
     const event = openPalette();
     await waitFor(() => expect(searchField()).toBeTruthy());
-    // Chrome maps Mod+Shift+P to print; only preventDefault stops it.
     expect(event.defaultPrevented).toBe(true);
     expect((searchField() as HTMLInputElement).value).toBe(">");
     const titles = optionTitles();
     expect(titles?.[0]).toContain("New thread");
-    // Every mounted handler is listed, including the palette's thread mode.
-    expect(titles).toHaveLength(5);
+    expect(titles).toHaveLength(17);
   });
 
   it("filters as the user types and keeps the selection on a live row", async () => {
@@ -241,16 +275,28 @@ describe("CommandPalette", () => {
     expect(selectedOption()?.textContent).toContain("Open terminal");
   });
 
-  it("wraps at both ends of the list", async () => {
+  it("finds commands when the query starts with a space", async () => {
     renderPalette();
     openPalette();
     await waitFor(() => expect(searchField()).toBeTruthy());
 
+    fireEvent.change(searchField(), { target: { value: "> new thread" } });
+
+    await waitFor(() => expect(optionTitles()).toHaveLength(1));
+    expect(selectedOption()?.textContent).toContain("New thread");
+  });
+
+  it("wraps at both ends of the list", async () => {
+    renderPalette();
+    openPalette();
+    await waitFor(() => expect(searchField()).toBeTruthy());
+    const titles = optionTitles();
+
     fireEvent.keyDown(searchField(), { key: "ArrowUp" });
-    expect(selectedOption()?.textContent).toContain("Open terminal");
+    expect(selectedOption()?.textContent).toBe(titles.at(-1));
 
     fireEvent.keyDown(searchField(), { key: "ArrowDown" });
-    expect(selectedOption()?.textContent).toContain("New thread");
+    expect(selectedOption()?.textContent).toBe(titles[0]);
   });
 
   it("runs the highlighted command, closes, and restores focus", async () => {
@@ -266,6 +312,18 @@ describe("CommandPalette", () => {
 
     await waitFor(() => expect(testState.calls).toEqual(["panel.toggle"]));
     expect(screen.queryByRole("combobox")).toBeNull();
+    expect(document.activeElement).toBe(screen.getByTestId("origin"));
+  });
+
+  it("runs a compact selection once after restoring focus", async () => {
+    renderPalette(true);
+    openPalette();
+    await waitFor(() => expect(searchField()).toBeTruthy());
+
+    fireEvent.change(searchField(), { target: { value: ">toggle panel" } });
+    fireEvent.keyDown(searchField(), { key: "Enter" });
+
+    await waitFor(() => expect(testState.calls).toEqual(["panel.toggle"]));
     expect(document.activeElement).toBe(screen.getByTestId("origin"));
   });
 
@@ -297,8 +355,6 @@ describe("CommandPalette", () => {
   });
 
   it("suppresses app chords while open and releases them on close", async () => {
-    // The palette is an open modal, so `none: ["modalOpen"]` bindings must
-    // decline rather than fire under the search field.
     renderPalette();
     const pressThreadNew = () =>
       fireEvent.keyDown(document.activeElement ?? window, {
@@ -321,7 +377,6 @@ describe("CommandPalette", () => {
   });
 
   it("scrolls the highlighted row into view when arrowing, but not on hover", async () => {
-    // Focus stays in the search field, so nothing scrolls the list on its own.
     const scrollIntoView = vi.spyOn(
       Element.prototype,
       "scrollIntoView",
@@ -339,7 +394,6 @@ describe("CommandPalette", () => {
     fireEvent.keyDown(searchField(), { key: "End" });
     await waitFor(() => expect(scrollIntoView).toHaveBeenCalledTimes(2));
 
-    // Hovering must not yank the list out from under the pointer.
     scrollIntoView.mockClear();
     fireEvent.pointerMove(screen.getAllByRole("option")[0] as HTMLElement);
     expect(scrollIntoView).not.toHaveBeenCalled();
@@ -348,24 +402,20 @@ describe("CommandPalette", () => {
   });
 
   it("lists a plugin's commandPaletteAction and runs it", async () => {
-    setPluginSlotRegistrations("linear", {
-      homepageSections: [],
-      settingsSections: [],
-      navPanels: [],
-      threadPanelActions: [],
-      sidebarFooterActions: [],
-      fileOpeners: [],
-      messageDirectives: [],
-      commandPaletteActions: [
-        {
-          id: "open-issue",
-          title: "Linear: open issue",
-          run: () => {
-            testState.calls.push("plugin-ran");
+    setPluginSlotRegistrations(
+      "linear",
+      makePluginRegistrationSet({
+        commandPaletteActions: [
+          {
+            id: "open-issue",
+            title: "Linear: open issue",
+            run: () => {
+              testState.calls.push("plugin-ran");
+            },
           },
-        },
-      ],
-    });
+        ],
+      }),
+    );
     renderPalette();
     openPalette();
     await waitFor(() => expect(searchField()).toBeTruthy());
@@ -426,6 +476,124 @@ describe("CommandPalette", () => {
         }) as HTMLInputElement
       ).value,
     ).toBe("");
+  });
+
+  it("opens a specific settings page from Cmd-K", async () => {
+    renderPalette();
+    openThreadSearch();
+    await waitFor(() => expect(searchField()).toBeTruthy());
+
+    fireEvent.change(searchField(), {
+      target: { value: ">keyboard settings" },
+    });
+    await waitFor(() =>
+      expect(selectedOption()?.textContent).toContain("Keyboard"),
+    );
+    fireEvent.keyDown(searchField(), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toContain(
+        "/settings/keyboard",
+      ),
+    );
+  });
+
+  it.each([false, true])(
+    "excludes Files settings when Settings has no local opener (compact: %s)",
+    async (compact) => {
+      renderPalette(compact);
+      openThreadSearch();
+      await waitFor(() => expect(searchField()).toBeTruthy());
+
+      fireEvent.change(searchField(), {
+        target: { value: ">files settings" },
+      });
+
+      await waitFor(() =>
+        expect(optionTitles()).not.toContainEqual(
+          expect.stringContaining("Files settings"),
+        ),
+      );
+    },
+  );
+
+  it("keeps Files settings when local helper access can be enabled", async () => {
+    testState.filesAvailable = true;
+    renderPalette();
+    openThreadSearch();
+    await waitFor(() => expect(searchField()).toBeTruthy());
+
+    fireEvent.change(searchField(), {
+      target: { value: ">files settings" },
+    });
+
+    await waitFor(() =>
+      expect(selectedOption()?.textContent).toContain("Files settings"),
+    );
+  });
+
+  it("opens a plugin settings page from Cmd-K", async () => {
+    testState.plugins.push({
+      enabled: true,
+      hasSettings: true,
+      icon: null,
+      id: "linear",
+      name: "Linear",
+    });
+    renderPalette();
+    openThreadSearch();
+    await waitFor(() => expect(searchField()).toBeTruthy());
+
+    fireEvent.change(searchField(), {
+      target: { value: ">linear settings" },
+    });
+    await waitFor(() =>
+      expect(selectedOption()?.textContent).toContain("Linear settings"),
+    );
+    fireEvent.keyDown(searchField(), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toContain(
+        "/settings/plugins/linear",
+      ),
+    );
+  });
+
+  it("opens a plugin page from Cmd-K", async () => {
+    setPluginSlotRegistrations(
+      "automations",
+      makePluginRegistrationSet({
+        navPanels: [
+          {
+            id: "automations",
+            title: "Automations",
+            icon: "Calendar",
+            path: "automations",
+            component: () => null,
+          },
+        ],
+        threadPanelActions: [],
+        sidebarFooterActions: [],
+        fileOpeners: [],
+      }),
+    );
+    renderPalette();
+    openThreadSearch();
+    await waitFor(() => expect(searchField()).toBeTruthy());
+
+    fireEvent.change(searchField(), {
+      target: { value: ">automations" },
+    });
+    await waitFor(() =>
+      expect(selectedOption()?.textContent).toContain("Automations"),
+    );
+    fireEvent.keyDown(searchField(), { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toContain(
+        "/plugins/automations/automations",
+      ),
+    );
   });
 
   it("opens a matched thread at its matched message", async () => {

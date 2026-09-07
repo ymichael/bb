@@ -61,10 +61,6 @@ export interface ServerConfig
   BB_POSTHOG_API_KEY: string;
   BB_MARKETPLACE_URL: string;
   BB_SERVER_BIND_HOST: ServerBindHost;
-  /**
-   * Present only when the bb-app launcher spawned this server. The launcher's
-   * readiness probe accepts a /health response only when it echoes this value.
-   */
   BB_SERVER_LAUNCH_ID?: string;
   BB_TELEMETRY: boolean;
   BB_TRANSCRIPTION: string;

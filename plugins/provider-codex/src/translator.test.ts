@@ -19,21 +19,6 @@ import {
   type CodexEventTranslator,
 } from "./translator.js";
 
-/**
- * Codex translation invariants, driven against `createCodexEventTranslator`
- * with app-server events and assembled through a real runtime delta assembler
- * (the exact translation the bridge protocol adapter performs), so every
- * historical fix keeps pinning live end-to-end behavior on the
- * narrow-grammar path. Ids are asserted via the assembler's provider↔bb maps
- * because minting moved off the bridge.
- *
- * Split of responsibility with delta-translation.test.ts: that file holds the
- * per-event translation surface; this one keeps the *stateful* correlation
- * invariants — command-output recovery across event reordering,
- * subagent/delegation parent links, accepted-turn correlation — which need
- * multi-event sequences against one translator instance.
- */
-
 const THREAD_ID = "t-codex-translator";
 const ENTROPY = "cxt-test";
 
@@ -79,7 +64,6 @@ function createHarness(
   const assembler = createDeltaAssembler({
     providerId: "codex",
     entropyPrefix: ENTROPY,
-    // Equivalence suites pin per-delta translation fidelity: no coalescing.
     textDeltaFlushMs: 0,
   });
   return {
@@ -103,10 +87,6 @@ function createHarness(
 function createTranslator() {
   return createCodexEventTranslator({ additionalWorkspaceWriteRoots: [] });
 }
-
-// ---------------------------------------------------------------------------
-// Workspace-write git-root staging lifecycle (a3d1f4a08, #1187)
-// ---------------------------------------------------------------------------
 
 const WORKSPACE_ASK_OPTIONS = {
   permissionMode: "accept-edits",
@@ -171,19 +151,7 @@ function dedupeRoots(roots: readonly string[]): string[] {
   return [...new Set(roots)];
 }
 
-/**
- * The translator has no thread/start vs thread/resume distinction — both build
- * the same `CodexSessionConstructionInput` — so the adapter's separate
- * start-constructed and resume-constructed cases collapse into one lifecycle
- * here.
- */
 describe("codex workspace-write git-root staging", () => {
-  // The git layout of a linked worktree is probed once, when the session is
-  // constructed. Turns must name the roots the session actually started with:
-  // re-probing at turn time silently drops write access when the worktree's
-  // .git link moves. Staging is two-phase for the mirror-image reason — a
-  // construction the provider never accepted must not leak its roots into a
-  // turn on some other session.
   it("hands staged roots to the thread only once the construction is accepted", () => {
     const fixture = createLinkedWorktreeFixture();
     const translator = createTranslator();
@@ -199,7 +167,6 @@ describe("codex workspace-write git-root staging", () => {
         "sandbox_workspace_write.writable_roots": fixture.expectedWritableRoots,
       });
 
-      // Staged is not active.
       expect(translator.getThreadGitWritableRoots("bb-thread-1")).toEqual([]);
 
       translator.activateThreadGitWritableRoots({
@@ -245,9 +212,6 @@ describe("codex workspace-write git-root staging", () => {
         threadId: "bb-thread-1",
       });
 
-      // The staged state stays git-only. Turn-time sandbox policy re-applies
-      // the host's roots from the same option, so carrying them in the staged
-      // set too would double-count them into every later turn.
       expect(translator.getThreadGitWritableRoots("bb-thread-1")).toEqual(
         fixture.expectedWritableRoots,
       );
@@ -256,11 +220,6 @@ describe("codex workspace-write git-root staging", () => {
     }
   });
 
-  // Constructions are staged by bb thread id but are only bound to a provider
-  // thread id on acceptance, and acceptance order is not construction order.
-  // Binding on construction instead cross-wired two concurrently starting
-  // sessions — and made `thread/closed`, which only knows the provider id,
-  // clear the wrong thread's roots.
   it("binds each construction's roots to its own accepted provider thread id", () => {
     const firstFixture = createLinkedWorktreeFixture();
     const secondFixture = createLinkedWorktreeFixture();
@@ -279,7 +238,6 @@ describe("codex workspace-write git-root staging", () => {
         });
       }
 
-      // Interleaved: the second construction is accepted first.
       translator.activateThreadGitWritableRoots({
         providerThreadId: "codex-thread-2",
         threadId: "bb-thread-2",
@@ -303,10 +261,6 @@ describe("codex workspace-write git-root staging", () => {
     }
   });
 });
-
-// ---------------------------------------------------------------------------
-// Raw shell command-output recovery (8e7cc5d2e, #1400)
-// ---------------------------------------------------------------------------
 
 function rawShellCall(args: {
   callId: string;
@@ -371,10 +325,6 @@ function completedCommand(args: {
   });
 }
 
-/**
- * Runs one raw-shell call to completion and returns the output bb ends up
- * publishing on the commandExecution item.
- */
 function publishedCommandOutput(args: {
   providerAggregatedOutput: string;
   rawOutput: string;
@@ -418,10 +368,6 @@ const METADATA_WRAPPER_LINES = [
 ];
 
 describe("codex raw shell command-output recovery", () => {
-  // Codex truncates the aggregated output it puts on the completed item; the
-  // full text arrives separately on the raw shell record, wrapped in UI
-  // metadata. The completion must publish the recovered text, not the
-  // truncation the user would otherwise be stuck with.
   it("repairs a completed command from a raw result that arrived first", () => {
     expect(
       publishedCommandOutput({
@@ -438,8 +384,6 @@ describe("codex raw shell command-output recovery", () => {
     ).toBe("OUT-1\nOUT-2\nOUT-3\n");
   });
 
-  // Only the *first* Output: marker frames the body. Splitting on every
-  // occurrence truncated any command that printed the literal string.
   it("preserves a literal Output: line inside the recovered body", () => {
     expect(
       publishedCommandOutput({
@@ -456,9 +400,6 @@ describe("codex raw shell command-output recovery", () => {
     ).toBe("prefix\nOutput:\nsuffix\n");
   });
 
-  // A command whose own stdout begins with something that looks like wrapper
-  // metadata is not wrapped: with no marker anywhere the whole text is the
-  // body, and stripping the first line would eat real output.
   it("preserves a body whose first line looks like wrapper metadata", () => {
     expect(
       publishedCommandOutput({
@@ -468,9 +409,6 @@ describe("codex raw shell command-output recovery", () => {
     ).toBe("Chunk ID: abc\nactual stdout\n");
   });
 
-  // Metadata with no marker at all is a framing shape we do not understand.
-  // Guessing a body out of it would publish wrapper text as command output, so
-  // recovery declines and the provider's own value stands.
   it("ignores a metadata wrapper with no Output marker", () => {
     expect(
       publishedCommandOutput({
@@ -480,8 +418,6 @@ describe("codex raw shell command-output recovery", () => {
     ).toBe("provider output\n");
   });
 
-  // Recovery is gated on the raw call being a shell tool, so every alias codex
-  // uses for it has to be recognized or those commands keep the truncation.
   it.each(["Bash", "bash"])(
     "repairs raw shell output for the %s alias",
     (toolName) => {
@@ -495,8 +431,6 @@ describe("codex raw shell command-output recovery", () => {
     },
   );
 
-  // Capture is keyed by call id: parallel commands in one turn must not hand
-  // each other's stdout to the wrong item.
   it("repairs concurrent command executions independently", () => {
     const harness = createHarness();
     const commands = [
@@ -548,9 +482,6 @@ describe("codex raw shell command-output recovery", () => {
     }
   });
 
-  // Captured output is per provider thread. A turn finishing on one thread
-  // releases only that thread's pending state; a global flush dropped the
-  // recovery for every other live session.
   it("keeps a thread's captured output when a different thread completes a turn", () => {
     const harness = createHarness();
     for (const suffix of ["a", "b"]) {
@@ -600,9 +531,6 @@ describe("codex raw shell command-output recovery", () => {
     );
   });
 
-  // A closed thread's call ids are gone; anything arriving afterwards belongs
-  // to no live command. Keeping the state alive let a stale raw record repair
-  // (and so overwrite) a later item that reused the id.
   it("drops recovered output state when the thread closes", () => {
     const harness = createHarness();
     harness.translate(
@@ -652,10 +580,6 @@ describe("codex command output capture across reordering", () => {
     turnId: "turn-1",
   };
 
-  // Codex truncates the aggregated output it puts on the completed item, but
-  // the full text arrives separately on the raw shell record — and it can
-  // arrive *after* the completion. Emitting the completion immediately
-  // published the truncated output permanently, since an item completes once.
   it("defers a completed command until the later raw shell result arrives", () => {
     const harness = createHarness();
     harness.translate(rawShellCall(shellCall));
@@ -686,8 +610,6 @@ describe("codex command output capture across reordering", () => {
     );
   });
 
-  // The deferral must not be able to swallow a command: if the raw record
-  // never lands, the turn boundary releases what the provider did report.
   it("releases a deferred command before turn completion when no raw result arrives", () => {
     const harness = createHarness();
     harness.translate(rawShellCall(shellCall));
@@ -707,7 +629,6 @@ describe("codex command output capture across reordering", () => {
       }),
     );
 
-    // Order matters: the item must settle inside the turn it belongs to.
     expect(completedEvents.map((event) => event.type)).toEqual([
       "item/completed",
       "turn/completed",
@@ -721,12 +642,24 @@ describe("codex command output capture across reordering", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Subagent activity correlation to the parent tool call (009dcbd4f, #1361)
-// ---------------------------------------------------------------------------
-
 describe("codex subagent activity correlation", () => {
   const rootProviderThreadId = "root-provider-thread";
+
+  function rawCollaborationCall(args: {
+    callId: string;
+    name: "followup_task" | "send_message";
+  }) {
+    return codexEvent("rawResponseItem/completed", {
+      threadId: rootProviderThreadId,
+      turnId: "parent-turn",
+      item: {
+        type: "function_call",
+        name: args.name,
+        arguments: '{"target":"/root/lifecycle_child"}',
+        call_id: args.callId,
+      },
+    });
+  }
 
   function subAgentActivity(args: {
     agentThreadId?: string;
@@ -765,10 +698,6 @@ describe("codex subagent activity correlation", () => {
     });
   }
 
-  // The delegation row IS the open-work signal: it opens pending at the
-  // spawn and closes when the child's turn ends, and the runtime counts a
-  // pending delegation as live provider work (so an idle-looking session
-  // with a running child is not reaped). There is no side channel.
   it("opens a pending delegation at the spawn and settles it with the child turn", () => {
     const harness = createHarness();
     const opened = harness.translate(
@@ -792,10 +721,6 @@ describe("codex subagent activity correlation", () => {
     ).toEqual(["turn/completed", "item/completed"]);
   });
 
-  // subAgentActivity is bookkeeping, not a timeline item: bb synthesizes the
-  // delegation tool call from it so the child's work renders nested and closes
-  // when the child's turn ends. Without the synthesized open/close pair the
-  // child's messages had no parent to hang under.
   it("materializes subagent activity as a nested delegation lifecycle", () => {
     const harness = createHarness();
 
@@ -881,10 +806,6 @@ describe("codex subagent activity correlation", () => {
     ]);
   });
 
-  // A subagent that finished and is then interacted with again runs its new
-  // turns on the same provider thread. Without re-arming the association on
-  // `interacted`, those turns detached from the spawning tool call and the
-  // resumed work rendered as top-level activity in the parent thread.
   it("re-arms the parent link when a completed subagent is interacted with again", () => {
     const harness = createHarness();
     harness.translate(
@@ -900,13 +821,13 @@ describe("codex subagent activity correlation", () => {
     );
     harness.translate(childTurnCompleted("child-turn-1"));
 
-    // A follow-up to a settled agent re-opens its delegation row (same item
-    // id): the agent works again, and an open delegation is open work.
     expect(
       harness.translate(
         subAgentActivity({ id: "interaction-1", kind: "interacted" }),
       ),
-    ).toEqual([
+    ).toEqual([]);
+
+    expect(harness.translate(childTurnStarted("child-turn-2"))).toEqual([
       expect.objectContaining({
         type: "item/started",
         scope: turnScope(harness.turnId("parent-turn")),
@@ -916,17 +837,13 @@ describe("codex subagent activity correlation", () => {
           status: "pending",
         }),
       }),
-    ]);
-
-    expect(harness.translate(childTurnStarted("child-turn-2"))).toContainEqual(
       expect.objectContaining({
         type: "turn/started",
         scope: turnScope(harness.turnId("child-turn-2")),
         parentToolCallId: harness.itemId("subagent-call-1"),
       }),
-    );
+    ]);
 
-    // The resumed turn settles the re-opened delegation again.
     const resumedTurnCompleted = harness.translate(
       childTurnCompleted("child-turn-2"),
     );
@@ -947,9 +864,249 @@ describe("codex subagent activity correlation", () => {
     ]);
   });
 
-  // Follow-ups queue: two interactions owe two more child turns. The re-arm is
-  // counted, so terminalizing the agent after the first follow-up must not
-  // discard the link the second one still needs.
+  it("links an unknown resumed subagent from the raw followup intent after translator restart", () => {
+    const harness = createHarness();
+
+    expect(
+      harness.translate(
+        rawCollaborationCall({
+          callId: "message-call",
+          name: "send_message",
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      harness.translate(
+        subAgentActivity({ id: "message-call", kind: "interacted" }),
+      ),
+    ).toEqual([]);
+
+    expect(
+      harness.translate(
+        rawCollaborationCall({
+          callId: "followup-call",
+          name: "followup_task",
+        }),
+      ),
+    ).toEqual([]);
+    expect(
+      harness.translate(
+        subAgentActivity({ id: "followup-call", kind: "interacted" }),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "item/started",
+        scope: turnScope(harness.turnId("parent-turn")),
+        item: expect.objectContaining({
+          type: "delegation",
+          id: harness.itemId("followup-call"),
+          childRef: "agent-thread-1",
+          status: "pending",
+        }),
+      }),
+    ]);
+
+    expect(
+      harness.translate(childTurnStarted("resumed-child-turn")),
+    ).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope(harness.turnId("resumed-child-turn")),
+        parentToolCallId: harness.itemId("followup-call"),
+      }),
+    );
+  });
+
+  it("does not reopen a known terminal subagent for send_message", () => {
+    const harness = createHarness();
+    harness.translate(
+      subAgentActivity({ id: "subagent-call-1", kind: "started" }),
+    );
+    harness.translate(childTurnStarted("child-turn-1"));
+    harness.translate(childTurnCompleted("child-turn-1"));
+
+    harness.translate(
+      rawCollaborationCall({ callId: "message-call", name: "send_message" }),
+    );
+    expect(
+      harness.translate(
+        subAgentActivity({ id: "message-call", kind: "interacted" }),
+      ),
+    ).toEqual([]);
+
+    expect(
+      harness.translator.prepareTurnStart({
+        clientRequestId: "creq_after_message",
+        providerThreadId: rootProviderThreadId,
+      }),
+    ).not.toBeNull();
+    const nextRootTurn = harness
+      .translate(childTurnStarted("next-root-turn"))
+      .find((event) => event.type === "turn/started");
+    expect(nextRootTurn).not.toHaveProperty("parentToolCallId");
+  });
+
+  it("links a rawless resumed subagent when its child turn starts", () => {
+    const harness = createHarness();
+
+    expect(
+      harness.translate(
+        subAgentActivity({ id: "rawless-followup", kind: "interacted" }),
+      ),
+    ).toEqual([]);
+
+    const resumedEvents = harness.translate(
+      childTurnStarted("rawless-child-turn"),
+    );
+    expect(resumedEvents).toEqual([
+      expect.objectContaining({
+        type: "item/started",
+        scope: turnScope(harness.turnId("parent-turn")),
+        item: expect.objectContaining({
+          type: "delegation",
+          id: harness.itemId("rawless-followup"),
+          childRef: "agent-thread-1",
+        }),
+      }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope(harness.turnId("rawless-child-turn")),
+        parentToolCallId: harness.itemId("rawless-followup"),
+      }),
+    ]);
+    expect(resumedEvents[0]).not.toHaveProperty("parentToolCallId");
+    expect(resumedEvents[0]).not.toHaveProperty("item.parentToolCallId");
+  });
+
+  it("keeps root input correlation independent from a rawless resumed child thread", () => {
+    const harness = createHarness();
+
+    expect(
+      harness.translate(
+        subAgentActivity({ id: "rawless-followup", kind: "interacted" }),
+      ),
+    ).toEqual([]);
+
+    expect(
+      harness.translate(
+        childTurnStarted("rawless-child-turn", "agent-thread-1"),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "item/started",
+        scope: turnScope(harness.turnId("parent-turn")),
+        item: expect.objectContaining({
+          type: "delegation",
+          id: harness.itemId("rawless-followup"),
+          childRef: "agent-thread-1",
+        }),
+      }),
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope(harness.turnId("rawless-child-turn")),
+        parentToolCallId: harness.itemId("rawless-followup"),
+      }),
+    ]);
+
+    harness.translate(childTurnCompleted("parent-turn"));
+    expect(
+      harness.translator.prepareTurnStart({
+        clientRequestId: "creq_while_child_running",
+        providerThreadId: rootProviderThreadId,
+      }),
+    ).not.toBeNull();
+
+    const rootEvents = harness.translate(childTurnStarted("next-root-turn"));
+    expect(rootEvents).toContainEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        scope: turnScope(harness.turnId("next-root-turn")),
+      }),
+    );
+    expect(rootEvents).toContainEqual(
+      expect.objectContaining({
+        type: "turn/input/accepted",
+        scope: turnScope(harness.turnId("next-root-turn")),
+        clientRequestId: "creq_while_child_running",
+      }),
+    );
+    expect(
+      rootEvents.find((event) => event.type === "turn/started"),
+    ).not.toHaveProperty("parentToolCallId");
+
+    expect(
+      harness
+        .translate(childTurnCompleted("rawless-child-turn", "agent-thread-1"))
+        .map((event) => event.type),
+    ).toEqual(["turn/completed", "item/completed"]);
+  });
+
+  it("discards a rawless message interaction at its parent boundary", () => {
+    const harness = createHarness();
+    expect(
+      harness.translate(
+        subAgentActivity({ id: "rawless-message", kind: "interacted" }),
+      ),
+    ).toEqual([]);
+    harness.translate(childTurnCompleted("parent-turn"));
+
+    harness.translator.prepareTurnStart({
+      clientRequestId: "creq_after_rawless_message",
+      providerThreadId: rootProviderThreadId,
+    });
+    const nextRootTurn = harness
+      .translate(childTurnStarted("next-root-after-message"))
+      .find((event) => event.type === "turn/started");
+    expect(nextRootTurn).not.toHaveProperty("parentToolCallId");
+  });
+
+  it("does not attach a rawless message to an unrelated multiplexed child", () => {
+    const harness = createHarness();
+    expect(
+      harness.translate(
+        subAgentActivity({
+          agentThreadId: "message-target-thread",
+          id: "rawless-message",
+          kind: "interacted",
+        }),
+      ),
+    ).toEqual([]);
+
+    harness.translate(
+      subAgentActivity({
+        agentThreadId: "unrelated-agent-thread",
+        id: "unrelated-subagent-call",
+        kind: "started",
+      }),
+    );
+    const unrelatedChild = harness
+      .translate(childTurnStarted("unrelated-child-turn"))
+      .find((event) => event.type === "turn/started");
+    expect(unrelatedChild).toEqual(
+      expect.objectContaining({
+        type: "turn/started",
+        parentToolCallId: harness.itemId("unrelated-subagent-call"),
+      }),
+    );
+    expect(unrelatedChild).not.toHaveProperty(
+      "parentToolCallId",
+      harness.itemId("rawless-message"),
+    );
+
+    harness.translate(childTurnCompleted("unrelated-child-turn"));
+    harness.translate(childTurnCompleted("parent-turn"));
+    expect(
+      harness.translator.prepareTurnStart({
+        clientRequestId: "creq_after_unrelated_child",
+        providerThreadId: rootProviderThreadId,
+      }),
+    ).not.toBeNull();
+    const nextRootTurn = harness
+      .translate(childTurnStarted("next-root-after-unrelated-child"))
+      .find((event) => event.type === "turn/started");
+    expect(nextRootTurn).not.toHaveProperty("parentToolCallId");
+  });
+
   it("preserves the parent link across queued follow-up resumes", () => {
     const harness = createHarness();
     harness.translate(
@@ -958,14 +1115,13 @@ describe("codex subagent activity correlation", () => {
     harness.translate(childTurnStarted("child-turn-1"));
     harness.translate(childTurnCompleted("child-turn-1"));
 
-    // The first follow-up re-opens the delegation; the second finds it open.
     expect(
       harness
         .translate(
           subAgentActivity({ id: "interaction-1", kind: "interacted" }),
         )
         .map((event) => event.type),
-    ).toEqual(["item/started"]);
+    ).toEqual([]);
     expect(
       harness.translate(
         subAgentActivity({ id: "interaction-2", kind: "interacted" }),
@@ -975,28 +1131,28 @@ describe("codex subagent activity correlation", () => {
     for (const index of [2, 3]) {
       expect(
         harness.translate(childTurnStarted(`child-turn-${index}`)),
-      ).toContainEqual(
+      ).toEqual([
+        expect.objectContaining({
+          type: "item/started",
+          item: expect.objectContaining({
+            type: "delegation",
+            id: harness.itemId("subagent-call-1"),
+          }),
+        }),
         expect.objectContaining({
           type: "turn/started",
           scope: turnScope(harness.turnId(`child-turn-${index}`)),
           parentToolCallId: harness.itemId("subagent-call-1"),
         }),
-      );
-      // The delegation closes only once the last owed follow-up turn settles.
+      ]);
       expect(
         harness
           .translate(childTurnCompleted(`child-turn-${index}`))
           .map((event) => event.type),
-      ).toEqual(
-        index === 3 ? ["turn/completed", "item/completed"] : ["turn/completed"],
-      );
+      ).toEqual(["turn/completed", "item/completed"]);
     }
   });
 
-  // The re-armed link is owed to the *child's* next turn, not to whatever turn
-  // opens next on the multiplexed root thread. A human follow-up sent while a
-  // resume is pending must stay a root turn, and must not consume the child's
-  // slot either.
   it("does not attach a resumed subagent parent to a later human turn", () => {
     const harness = createHarness();
     harness.translate(
@@ -1008,7 +1164,6 @@ describe("codex subagent activity correlation", () => {
       subAgentActivity({ id: "interaction-1", kind: "interacted" }),
     );
 
-    // A queued turn/start is what distinguishes a human turn from a child one.
     expect(
       harness.translator.prepareTurnStart({
         clientRequestId: "creq_followup",
@@ -1036,9 +1191,6 @@ describe("codex subagent activity correlation", () => {
     );
   });
 
-  // Nothing runs behind a dead app-server child, and an open delegation is
-  // open work for the runtime: the child-exit path settles every delegation
-  // the thread still had open, so the runtime can reap the thread.
   it("settles open delegations as failed when the child exits", () => {
     const harness = createHarness();
     harness.translate(
@@ -1062,7 +1214,6 @@ describe("codex subagent activity correlation", () => {
         }),
       }),
     ]);
-    // Idempotent: a second clear has nothing left to settle.
     expect(
       harness.translator.clearExitedChildThreadState({
         providerThreadId: rootProviderThreadId,
@@ -1070,9 +1221,6 @@ describe("codex subagent activity correlation", () => {
     ).toEqual([]);
   });
 
-  // Codex can redeliver the same activity item. Counting it twice queued a
-  // follow-up nobody owed, so the user's next turn was adopted by the finished
-  // subagent.
   it("ignores a duplicated interacted item", () => {
     const harness = createHarness();
     harness.translate(
@@ -1109,9 +1257,6 @@ describe("codex subagent activity correlation", () => {
     expect(laterHumanTurn).not.toHaveProperty("parentToolCallId");
   });
 
-  // Two resumed agents each owe a turn. When one of them announces itself on
-  // its own agent thread id, that explicit match must win and must not also
-  // consume the other agent's FIFO slot on the multiplexed root thread.
   it("does not FIFO-cross-link concurrently resumed subagents", () => {
     const harness = createHarness();
     for (const index of [1, 2]) {
@@ -1156,9 +1301,6 @@ describe("codex subagent activity correlation", () => {
     );
   });
 
-  // Concurrent children are multiplexed onto the root thread with no
-  // distinguishing id on turn/started, so the only correlation available is
-  // activity order. Getting it wrong swaps two live agents' timelines.
   it("links concurrent subagents to child turns in activity order", () => {
     const harness = createHarness();
     for (const index of [1, 2]) {
@@ -1184,9 +1326,6 @@ describe("codex subagent activity correlation", () => {
     }
   });
 
-  // An interrupted agent never emits a finishing turn, so the synthesized tool
-  // call has to be closed from the interruption or it renders as running
-  // forever (and pins the session open).
   it("terminalizes an open subagent when activity is interrupted", () => {
     const harness = createHarness();
     harness.translate(
@@ -1208,7 +1347,6 @@ describe("codex subagent activity correlation", () => {
       }),
     ]);
 
-    // A redelivered start for a call id bb already tracks must not reopen it.
     expect(
       harness.translate(
         subAgentActivity({ id: "subagent-call-1", kind: "started" }),
@@ -1216,10 +1354,6 @@ describe("codex subagent activity correlation", () => {
     ).toHaveLength(0);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Terminal retry-error classification (#1840)
-// ---------------------------------------------------------------------------
 
 const STREAM_DISCONNECT_MESSAGE =
   "stream disconnected before completion: error sending request for url (https://chatgpt.com/backend-api/codex/responses)";
@@ -1259,11 +1393,6 @@ function codexTerminalOtherError(turnId: string, message: string) {
 }
 
 describe("codex terminal retry-error classification", () => {
-  // Codex labels each reconnect attempt `responseStreamDisconnected`, then
-  // reports the terminal failure for the same stream error as `other` once
-  // its retry budget is exhausted (codex-rs maps `CodexErrorDetails::Stream`
-  // to `CodexErrorInfo::Other`). The translator keeps the structured
-  // classification for the terminal row without parsing provider prose.
   it("carries the retry classification into the degraded terminal error", () => {
     const harness = createHarness();
     harness.translate(codexReconnectError("turn-1"));
@@ -1282,7 +1411,6 @@ describe("codex terminal retry-error classification", () => {
       }),
     );
 
-    // The context is consumed by the terminal event: a repeat stays `other`.
     expect(
       harness.translate(
         codexTerminalOtherError("turn-1", STREAM_DISCONNECT_MESSAGE),
@@ -1360,19 +1488,7 @@ describe("codex terminal retry-error classification", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Accepted-turn correlation via turn/started (68d80092f, current semantics)
-// ---------------------------------------------------------------------------
-
 describe("codex accepted-input correlation", () => {
-  // Codex has no per-turn request id: the ack has to be correlated to the
-  // provider's next turn/started on that thread. `prepareTurnStart` queues the
-  // client request id before dispatch precisely because codex emits
-  // turn/started before the turn/start response settles.
-  //
-  // (The steer ack is NOT translator-owned — the bridge emits it as an
-  // `input.accepted` delta against the steered turn — so only the queued-turn
-  // half lives here.)
   it("acks a queued turn on turn/started and suppresses the later echo", () => {
     const harness = createHarness();
     expect(
@@ -1404,8 +1520,6 @@ describe("codex accepted-input correlation", () => {
       },
     ]);
 
-    // bb already owns the user message it sent; the provider's echo of it
-    // would render a duplicate.
     expect(
       harness.translate(
         codexEvent("item/completed", {
@@ -1423,8 +1537,6 @@ describe("codex accepted-input correlation", () => {
     ).toMatchObject([]);
   });
 
-  // A dispatch that never reached the provider must not leave a queued id that
-  // the *next* turn — possibly a different one — would claim.
   it("drops the queued ack when the dispatch is rolled back", () => {
     const harness = createHarness();
     const prepared = harness.translator.prepareTurnStart({
@@ -1454,16 +1566,7 @@ describe("codex accepted-input correlation", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Delegation-turn nesting (2da7eb652, #315)
-// ---------------------------------------------------------------------------
-
 describe("codex delegation-turn nesting", () => {
-  // Same-provider delegation runs the child's turns on the parent's own
-  // provider thread. The link is per-turn: it must cover the delegated turn
-  // and everything inside it, and must not leak onto the user's next turn on
-  // that same thread — which is what made an ordinary follow-up render nested
-  // under a finished spawnAgent call.
   it("does not inherit a delegation link onto a later human turn", () => {
     const harness = createHarness();
     const providerThreadId = "root-provider-thread";
@@ -1640,7 +1743,6 @@ describe("codex delegation-turn nesting", () => {
     );
     expect(followUpAssistant).not.toHaveProperty("item.parentToolCallId");
 
-    // The delegated turn keeps its link even though a newer turn has opened.
     expect(
       harness.translate(
         codexEvent("item/commandExecution/outputDelta", {
@@ -1659,10 +1761,6 @@ describe("codex delegation-turn nesting", () => {
     );
   });
 
-  // A delegation whose receivers are not known yet still owes its child turn a
-  // parent: the call is queued against the parent turn, and the next turn on
-  // the same provider thread claims it. Both delegation tools behave the same
-  // way, so both have to be recognized as delegations.
   it.each(["spawnAgent", "resumeAgent"] as const)(
     "stamps pending same-provider child turn events for %s",
     (tool) => {
@@ -1747,10 +1845,6 @@ describe("codex delegation-turn nesting", () => {
     },
   );
 
-  // When the delegation does name its receivers, the child runs on its own
-  // provider thread. That explicit mapping — not the FIFO fallback — is what
-  // nests the child's events, and it must hold for events the child emits
-  // after the call already completed.
   it.each(["spawnAgent", "resumeAgent"] as const)(
     "stamps explicit receiver-thread child events under the %s call",
     (tool) => {

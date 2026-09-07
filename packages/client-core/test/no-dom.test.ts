@@ -22,23 +22,11 @@ function stripComments(source: string): string {
     .replace(/(^|[^:"'`])\/\/.*$/gmu, "$1");
 }
 
-/**
- * Browser globals a shared module must not reach for, in any of the shapes a
- * "safe" probe tends to take: bare (`location.href`), hung off a host object
- * (`globalThis.window?.location`, `self.navigator`), `typeof` checks,
- * `"localStorage" in globalThis`, or `window as Window`. `typeof window`
- * guards count too: the native runtime has no window and the code path would
- * be dead there anyway, so the module belongs in `apps/app`.
- */
 const BROWSER_GLOBALS =
   "window|document|localStorage|sessionStorage|navigator|location|history|matchMedia|requestAnimationFrame";
 const GLOBAL_HOSTS = "globalThis|self|window";
 const BROWSER_GLOBAL_PATTERN = new RegExp(
   [
-    // `window.x`, `window?.x`, `window!.x`, `window[`, `window(`, `window;`,
-    // `window ?? x`, `window && x`, `window === x`, `window as Window`, and a
-    // bare `window` at end of line — optionally behind a `globalThis.`/`self.`
-    // host. A trailing `:` (object key, type member) or quote stays allowed.
     String.raw`(?<![\w$.])(?:(?:${GLOBAL_HOSTS})\s*\??\.\s*)?(?:${BROWSER_GLOBALS})(?![\w$])\s*(?:[?!]?[.[(]|[;,)]|\?\?|\|\||&&|[!=]==?|as\b|$)`,
     String.raw`\btypeof\s+(?:(?:${GLOBAL_HOSTS})\s*\??\.\s*)?(?:${BROWSER_GLOBALS})\b`,
     String.raw`["'](?:${BROWSER_GLOBALS})["']\s+in\s+(?:${GLOBAL_HOSTS})\b`,

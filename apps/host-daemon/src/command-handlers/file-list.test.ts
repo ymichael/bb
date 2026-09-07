@@ -240,7 +240,10 @@ describe("listPathsRecursively", () => {
     const root = await fs.mkdtemp(path.join(os.tmpdir(), "bb-file-list-"));
     try {
       await fs.writeFile(path.join(root, "state.json"), "{}");
-      await fs.symlink(path.join(root, "state.json"), path.join(root, "logo.svg"));
+      await fs.symlink(
+        path.join(root, "state.json"),
+        path.join(root, "logo.svg"),
+      );
 
       const result = await listPathsRecursively({
         dir: root,
@@ -262,4 +265,33 @@ describe("listPathsRecursively", () => {
       "src/components/Button.tsx",
     );
   });
+
+  it("does not overflow the call stack merging a large subdirectory", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "bb-file-list-"));
+    try {
+      const nested = path.join(root, "many");
+      await fs.mkdir(nested, { recursive: true });
+      const fileCount = 150_000;
+      const batchSize = 500;
+      for (let start = 0; start < fileCount; start += batchSize) {
+        const end = Math.min(start + batchSize, fileCount);
+        await Promise.all(
+          Array.from({ length: end - start }, (_, offset) =>
+            fs.writeFile(path.join(nested, `f${start + offset}.txt`), ""),
+          ),
+        );
+      }
+
+      const result = await listPathsRecursively({
+        dir: root,
+        root,
+        includeFiles: true,
+        includeDirectories: false,
+      });
+
+      expect(result).toHaveLength(fileCount);
+    } finally {
+      await fs.rm(root, { recursive: true, force: true });
+    }
+  }, 60_000);
 });

@@ -12,7 +12,6 @@ describe("formatRelativeTime", () => {
     expect(formatRelativeTime({ timestamp: NOW - 30 * 1000, now: NOW })).toBe(
       "just now",
     );
-    // A small clock skew must never render a negative duration.
     expect(formatRelativeTime({ timestamp: NOW + 5 * 1000, now: NOW })).toBe(
       "just now",
     );

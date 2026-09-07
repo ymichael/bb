@@ -34,7 +34,10 @@ it reports needs-configuration. No tokens are stored by the plugin.
 
 - Every BB project source whose checkout has a GitHub `origin` remote
   (repo → project mapping is also how spawn picks the project).
-- Plus the `extraRepos` setting: comma-separated `owner/repo` list.
+- Plus the `extraRepos` setting: comma-separated `owner/repo` list. Entries that
+  are not `owner/repo` — a `owner/*` wildcard, a bare owner, a typo — are not
+  tracked; `bb github repos` names them on stderr and the plugin log warns once
+  per distinct set. Wildcards are not supported.
 - `defaultProject` setting: where threads spawn for repos with no project.
 
 ```

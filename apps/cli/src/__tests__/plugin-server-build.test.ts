@@ -7,10 +7,6 @@ import {
   buildPluginServer,
   resolvePluginBuildToolchain,
 } from "@bb/plugin-build";
-/**
- * The monorepo's own toolchain: resolved from `@bb/plugin-build`'s
- * devDependencies, so tests never download one.
- */
 function testToolchain() {
   return resolvePluginBuildToolchain(join(tmpdir(), "bb-toolchain-unused"));
 }
@@ -33,8 +29,6 @@ const FIXTURE_PACKAGE_JSON = JSON.stringify(
   2,
 );
 
-// A local import that must be inlined, and a type-only SDK import that must
-// be fully erased (no runtime `@get-bb/plugin-sdk` import in the bundle).
 const FIXTURE_LIB_TS = `export const greeting = "PREBUILT_LIB_MARKER";\n`;
 const FIXTURE_SERVER_TS = `
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
@@ -72,12 +66,9 @@ describe("buildPluginServer", () => {
 
     expect(result.jsPath).toBe(join(root, "dist", "server.js"));
     const js = await readFile(result.jsPath, "utf8");
-    // ESM output, local deps inlined.
     expect(js).toMatch(/export\s*\{|export default/);
     expect(js).toContain("PREBUILT_LIB_MARKER");
-    // The SDK import was type-only — nothing of it may survive at runtime.
     expect(js).not.toContain("@get-bb/plugin-sdk");
-    // CJS-dep shim banner (createRequire) is present.
     expect(js).toContain("createRequire");
 
     const map = await readFile(result.mapPath, "utf8");
@@ -154,8 +145,6 @@ describe("buildPluginServer", () => {
     const before = await readFile(first.jsPath, "utf8");
     const metaBefore = await readFile(first.metaPath, "utf8");
 
-    // Break the entry: the failed rebuild must not clobber the previous
-    // artifacts (they are staged and only renamed into place on success).
     await writeFile(join(root, "server.ts"), "export default function ( {\n");
     await expect(
       buildPluginServer(root, TEST_BB_VERSION, await testToolchain()),

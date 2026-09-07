@@ -13,12 +13,6 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { syncPluginTypes } from "../src/plugin-scaffold.js";
 
-/**
- * `bb plugin new` seeds types/ once, but the SDK surface grows every release,
- * so a plugin scaffolded months ago typechecks against declarations that no
- * longer describe the running bb. syncPluginTypes is the refresh; these guard
- * the behavior the CLI (`bb plugin types`, build, dev) depends on.
- */
 describe("syncPluginTypes", () => {
   let rootDir: string;
 
@@ -72,8 +66,6 @@ describe("syncPluginTypes", () => {
   });
 
   it("refreshes existing app types even when the caller reports no bb.app", async () => {
-    // A manifest read can fail or predate the frontend entry; an app
-    // declaration already on disk must not be left stale because of it.
     await mkdir(join(rootDir, "types"), { recursive: true });
     await writeFile(
       join(rootDir, "types", "bb-plugin-sdk-app.d.ts"),
@@ -91,12 +83,6 @@ describe("syncPluginTypes", () => {
     ).toContain("definePluginApp");
   });
 
-  /**
-   * `bb plugin build` and `bb plugin dev` refresh declarations without being
-   * asked, and building a plugin never runs its code — so cloning an untrusted
-   * plugin and building it must not write outside that plugin. Both link forms
-   * redirected the write before this was guarded.
-   */
   describe("refuses to write through a symbolic link", () => {
     it("rejects a linked declaration file and leaves the target intact", async () => {
       const victim = join(rootDir, "victim.txt");

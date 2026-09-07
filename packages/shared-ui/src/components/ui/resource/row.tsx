@@ -208,22 +208,18 @@ export function ResourceRow({
 }: {
   leading?: ReactNode;
   title: ReactNode;
-  /** Secondary identity metadata shown beside the title, such as an author. */
   titleMeta?: ReactNode;
   description?: ReactNode;
   status?: ReactNode;
   state?: ReactNode;
   selected?: boolean;
   muted?: boolean;
-  /** Controls that communicate persistent state, such as enable switches. */
   persistentActions?: ReactNode;
-  /** Supporting metadata aligned with the trailing controls. */
   trailingMeta?: ReactNode;
   actions?: ReactNode;
   trailingVisual?: ReactNode;
   actionsVisibility?: "hover" | "always";
   className?: string;
-  /** Accessible name for the row's primary navigation control. */
   openLabel?: string;
   onOpen: () => void;
 }) {
@@ -286,11 +282,6 @@ export function ResourceRow({
             <span
               data-row-action
               className={cn(
-                // The row is clickable and sets `cursor-pointer` on itself, but
-                // `targetsResourceAction` exempts this slot from that click. An
-                // inert status glyph here would promise a click that goes
-                // nowhere. Real controls inside are buttons or links and
-                // reassert `cursor-pointer` on themselves.
                 "flex shrink-0 cursor-default items-center gap-0.5 transition-opacity",
                 actionsVisibility === "hover" &&
                   "opacity-0 group-hover:opacity-100 focus-within:opacity-100 [@media(hover:none)]:opacity-100",
@@ -369,13 +360,7 @@ export function ResourceListState({
   message: string;
   onRetry?: () => void;
   loadingRows?: number;
-  /**
-   * `detail` keeps a resource detail route's page width and centering while it
-   * is loading, missing, or failed, so the state reads as the same page rather
-   * than as a differently-shaped one.
-   */
   layout?: "list" | "detail";
-  /** Width of the centered detail frame when `layout` is `detail`. */
   maxWidthClassName?: string;
 }) {
   const frame = (children: ReactNode) =>

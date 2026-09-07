@@ -10,26 +10,12 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import { PromptMentionLinkContext } from "./prompt-mention-link";
 import { parsePromptEditorMentionAttrs } from "./prompt-editor-serialization";
 
-// The `selection:` utilities suppress the native `::selection` paint inside the
-// pill — it can't cover the SVG icon, so the pill paints its own selected
-// background instead. `group` lets an openable pill underline its label on
-// hover, link-style.
 const EDITOR_MENTION_PILL_CLASS = cn(
   "group",
   PROMPT_MENTION_PILL_CLASS,
   "selection:bg-transparent [&_*]:selection:bg-transparent",
 );
 
-/**
- * Renders an inserted prompt mention as a pill with a leading type icon (file,
- * section, filesystem folder, or thread) matching the suggestion menu rows. A Tiptap React
- * node view is used instead of `renderHTML` so the pill can mount the shared
- * `Icon` component; `renderHTML` remains the serialization fallback.
- *
- * When the surrounding composer supplies a `PromptMentionLinkResolver`, an
- * openable pill behaves like a link: its label underlines on hover and a plain
- * click opens the file/thread.
- */
 export function PromptMentionPillNodeView({
   node,
   decorations,
@@ -63,8 +49,6 @@ export function PromptMentionPillNodeView({
   const activationLabel = activate ? `Open ${title}` : undefined;
   const handleClick = activate
     ? (event: MouseEvent<HTMLElement>) => {
-        // Plain primary click only — leave modifier clicks and drag-selection
-        // releases to the editor's normal selection handling.
         if (
           event.button !== 0 ||
           event.metaKey ||

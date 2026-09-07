@@ -60,11 +60,6 @@ function registryHtml(args: {
   })}</script>`;
 }
 
-/**
- * Mocks the host online-RPC boundary for the skills commands. `host.list_skills`
- * returns the per-provider raw skill set; `host.delete_skill` echoes a deleted
- * path. Any other command fails loudly.
- */
 function registerSkillRpc(
   harness: Parameters<typeof registerHostRpcResponder>[0],
   args: {
@@ -91,8 +86,6 @@ function registerSkillRpc(
           },
         };
       }
-      // A plugin that resolves native roots per host answers none here: the
-      // listing is about the skills the daemon reports, not the roots.
       if (
         request.command.type === "plugin.host.call" &&
         request.command.method === "resolveNativeRoots"
@@ -444,9 +437,6 @@ describe("public project skills route", () => {
 
   it("asks the authenticated API for the trending view and keeps its order", async () => {
     await withTestHarness(async (harness) => {
-      // Without this the authenticated browse path is unpinned: reverting the
-      // view to all-time, or re-sorting the leaderboard the API already ranked,
-      // both stay green.
       vi.stubEnv("VERCEL_OIDC_TOKEN", "test-token");
       const requested: string[] = [];
       vi.stubGlobal(
@@ -456,7 +446,6 @@ describe("public project skills route", () => {
           if (url.startsWith("https://www.skills.sh/api/v1/skills?")) {
             requested.push(url);
             return Response.json({
-              // Deliberately not installs-descending: the API owns the ranking.
               data: [
                 {
                   id: "owner/repo/rising",
@@ -507,9 +496,6 @@ describe("public project skills route", () => {
   it("keeps the trending page's own order but ranks a filtered search", async () => {
     await withTestHarness(async (harness) => {
       vi.stubEnv("VERCEL_OIDC_TOKEN", "");
-      // Tied install counts where the source order is NOT alphabetical. Sorting
-      // an already-ranked page would swap these, replacing skills.sh's ordering
-      // within ties with an alphabetical one.
       const directory = [
         String.raw`\"source\":\"owner/zulu-repo\",\"skillId\":\"zulu-skill\",\"name\":\"Zulu skill\",\"installs\":500`,
         String.raw`\"source\":\"owner/alpha-repo\",\"skillId\":\"alpha-skill\",\"name\":\"Alpha skill\",\"installs\":500`,
@@ -556,8 +542,6 @@ describe("public project skills route", () => {
         "fetch",
         vi.fn(async (input: string | URL) => {
           const url = String(input);
-          // 200 with markup the parser cannot read — how an upstream redesign
-          // arrives. An empty catalog would look identical to a real one.
           if (url === "https://www.skills.sh/trending") {
             return new Response("<html><body>redesigned</body></html>", {
               status: 200,
@@ -577,7 +561,6 @@ describe("public project skills route", () => {
       expect(body.skills.map((skill) => skill.id)).toEqual([
         "owner/steady-repo/steady-skill",
       ]);
-      // These are lifetime counts, so the response must not call them trending.
       expect(body.ranking).toBe("all-time");
     });
   });
@@ -586,9 +569,6 @@ describe("public project skills route", () => {
     await withTestHarness(async (harness) => {
       vi.stubEnv("VERCEL_OIDC_TOKEN", "");
       const allTime = String.raw`\"source\":\"owner/steady-repo\",\"skillId\":\"steady-skill\",\"name\":\"Steady skill\",\"installs\":700`;
-      // A removed or renamed /trending route is at least as likely as its
-      // markup moving, and browse must not hard-fail on it while `/` — the URL
-      // it used before trending existed — is serving fine.
       for (const trendingFailure of [
         async () => new Response(null, { status: 404 }),
         async () => {
@@ -628,8 +608,6 @@ describe("public project skills route", () => {
   it("returns an empty page, not an error, when a search matches nothing", async () => {
     await withTestHarness(async (harness) => {
       vi.stubEnv("VERCEL_OIDC_TOKEN", "");
-      // The zero-record rule guards an unreadable page, so it must not fire for
-      // a page that read fine and simply had no match.
       const directory = String.raw`\"source\":\"owner/repo\",\"skillId\":\"present-skill\",\"name\":\"Present skill\",\"installs\":100`;
       vi.stubGlobal(
         "fetch",
@@ -788,9 +766,6 @@ describe("public project skills route", () => {
         String.raw`\"source\":\"owner/available-repo\",\"skillId\":\"available-skill\",\"name\":\"Available skill\",\"installs\":200`,
         String.raw`\"source\":\"owner/stale-repo\",\"skillId\":\"stale-skill\",\"name\":\"Stale skill\",\"installs\":100`,
       ].join("\n");
-      // Disjoint bodies: asserting on the response proves which directory page
-      // was actually consumed, where identical stubs would only prove which URL
-      // was requested.
       const allTime = [
         String.raw`\"source\":\"owner/available-repo\",\"skillId\":\"available-skill\",\"name\":\"Available skill\",\"installs\":900`,
         String.raw`\"source\":\"owner/stale-repo\",\"skillId\":\"stale-skill\",\"name\":\"Stale skill\",\"installs\":800`,
@@ -828,7 +803,6 @@ describe("public project skills route", () => {
         signal: expect.any(AbortSignal),
       });
 
-      // Search still filters the all-time directory, not the trending page.
       const searchResponse = await harness.app.request(
         "/api/v1/skills-registry?q=stale&page=0&perPage=24",
       );
@@ -971,9 +945,6 @@ describe("public project skills route", () => {
       );
 
       expect(response.status).toBe(200);
-      // Asserts the shape registrySkillInstallResponseSchema actually accepts;
-      // mocking a richer resolve value and asserting it back only proves the
-      // route spreads its mock.
       expect(await readJson(response)).toEqual({ ok: true, filePath });
       expect(installServerRegistrySkillMock).toHaveBeenCalledWith({
         dataDir: harness.deps.config.dataDir,
@@ -1036,8 +1007,6 @@ describe("public project skills route", () => {
         },
       );
 
-      // encodeURIComponent leaves ".." intact and `new URL` then normalizes it,
-      // which would walk an authenticated request to another path on skills.sh.
       expect(response.status).toBe(400);
       expect(fetchMock).not.toHaveBeenCalled();
       expect(installServerRegistrySkillMock).not.toHaveBeenCalled();
@@ -1047,9 +1016,6 @@ describe("public project skills route", () => {
   it("rejects a dash exposed by stripping the github.com prefix", async () => {
     await withTestHarness(async (harness) => {
       installServerRegistrySkillMock.mockClear();
-      // This id passes the leading-dash guard on the whole source; the dash is
-      // only exposed once "github.com/" is stripped to derive the package ref,
-      // which is handed to the skills CLI as a bare argv element.
       vi.stubGlobal(
         "fetch",
         vi.fn(
@@ -1108,8 +1074,6 @@ describe("public project skills route", () => {
         projectId: project.id,
         path: "/tmp/skills-env",
       });
-      // The same bb skill (identical filePath) is discovered under both
-      // providers; it must be listed once with provider:null.
       const bbSkill = discovered(
         "bb-helper",
         "bb-data-dir",
@@ -1216,10 +1180,6 @@ describe("public project skills route", () => {
           registrySkillId: null,
         },
       ]);
-      // Queried once per provider whose registration has a native-root
-      // surface (declared roots or a resolving plugin), with the env
-      // workspace cwd and exactly the declared roots (the resolver answered
-      // none here).
       const listed = stub.requests
         .map((request) => request.command)
         .filter((command) => command.type === "host.list_skills");
@@ -1746,8 +1706,6 @@ describe("public project skills route", () => {
 
   it("rejects a bb-project delete when no workspace resolves", async () => {
     await withTestHarness(async (harness) => {
-      // Primary host A is connected; the project's source lives on host B, so a
-      // request without an environment resolves no cwd.
       const { host: hostA, session } = seedHostSession(harness.deps, {
         id: "host-primary",
       });

@@ -565,7 +565,7 @@ What landed:
 - **Context banner + actions** (`src/data/environments/`,
   `src/screens/thread/banner/`, `src/screens/thread/actions/`): environment
   record / status / PR / merge-base queries with realtime mapping,
-  `useEnvironmentAction` (commit, squash merge, PR ready/draft/merge with
+  `useEnvironmentAction` (commit, PR ready/draft/merge with
   loading → success / 409 blocked / error toasts), `ThreadContextBanner`
   (children card; parent / fork / side-chat row; PR row with status pill,
   Mark ready, Merge sheet; changed-files row → `WorkspaceChangesList` +
@@ -575,7 +575,7 @@ What landed:
   main thread), `ThreadActionsSheet` (Handoff, New thread in this worktree,
   Rename, Pin, read state, Move to section, Copy link, Open in web, Archive
   with undo, Delete), `ThreadGitActionSheet` (branch, status, changed files,
-  merge base, Commit / Squash merge), `ThreadDetailHeader` now owns
+  Commit), `ThreadDetailHeader` now owns
   title-tap rename, the "…" button and the git button. Compose seeds:
   `buildForkComposeParams` / `buildHandoffComposeParams` /
   `buildNewThreadInWorktreeComposeParams` + readers; `useComposeController`
@@ -1037,7 +1037,7 @@ closeOtherTabs / closeAllTabs / consume* / updateTabsState`). Contents are
   commit picker over the merge base), collapse store, pure `diff-target.ts`
   / `diff-patch-state.ts` / `add-to-chat.ts`. Realtime: every environment
   change evicts the patch cache before invalidating the TOC / diff-file
-  keys; commit / squash merge do the same. UI: `DiffTabContent` (target
+  keys; commit does the same. UI: `DiffTabContent` (target
   picker, N files +A −D pills, collapse-all, refresh that also refetches the
   work status; FlashList of `DiffTabFileCard` over `@/diff` `DiffFileCard`
   with hunks / skeleton / "Load diff" / "Too large" / error + Retry / "No

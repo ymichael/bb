@@ -7,10 +7,10 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ProjectResponse } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router-dom";
 import { ProjectActionsMenu } from "./ProjectActionsMenu";
+import { makeProjectResponse } from "@/test/fixtures/projects";
 
 const mockPathPickerHost = vi.hoisted(() => ({
   value: { hostId: null as string | null, hostName: null as string | null },
@@ -30,18 +30,6 @@ vi.mock("./ProjectActionsProvider", () => ({
   useProjectActions: () => mockProjectActions,
 }));
 
-function makeProject(): ProjectResponse {
-  return {
-    id: "proj_test",
-    kind: "standard",
-    name: "Test project",
-    gitRemoteUrl: null,
-    sources: [],
-    createdAt: 0,
-    updatedAt: 0,
-  };
-}
-
 describe("ProjectActionsMenu", () => {
   afterEach(() => {
     cleanup();
@@ -50,7 +38,7 @@ describe("ProjectActionsMenu", () => {
   });
 
   it("closes after selecting an action", async () => {
-    const project = makeProject();
+    const project = makeProjectResponse();
 
     render(
       <MemoryRouter>

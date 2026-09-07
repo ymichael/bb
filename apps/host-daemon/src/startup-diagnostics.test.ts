@@ -17,7 +17,9 @@ describe("host daemon startup diagnostics", () => {
   it("installs safe diagnostics before loading the daemon module", async () => {
     const source = await readHostDaemonEntrypoint();
     const installCallIndex = source.indexOf("installSafeProcessDiagnostics({");
-    const startupImportIndex = source.indexOf('import("./start-host-daemon.js")');
+    const startupImportIndex = source.indexOf(
+      'import("./start-host-daemon.js")',
+    );
     const runCallIndex = source.indexOf("runHostDaemonEntrypoint().catch");
 
     expect(installCallIndex).toBeGreaterThanOrEqual(0);

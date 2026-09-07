@@ -9,18 +9,6 @@ interface UseProjectDefaultExecutionOptionsArgs {
   projectId: string | undefined;
 }
 
-interface FetchProjectDefaultExecutionOptionsArgs {
-  projectId: string;
-  signal?: AbortSignal;
-}
-
-function fetchProjectDefaultExecutionOptions({
-  projectId,
-  signal,
-}: FetchProjectDefaultExecutionOptionsArgs): Promise<ProjectExecutionDefaults | null> {
-  return sdk.projects.defaultExecutionOptions({ projectId, signal });
-}
-
 export function useProjectDefaultExecutionOptions(
   args: UseProjectDefaultExecutionOptionsArgs,
   options?: QueryOptions,
@@ -34,7 +22,7 @@ export function useProjectDefaultExecutionOptions(
       projectId: projectId ?? "",
     }),
     queryFn: ({ signal }) =>
-      fetchProjectDefaultExecutionOptions({
+      sdk.projects.defaultExecutionOptions({
         projectId: requireProjectId(
           projectId,
           "useProjectDefaultExecutionOptions",

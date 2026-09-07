@@ -16,7 +16,6 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   canceled: "var(--muted-foreground)",
 };
 
-/** Linear-style status ring: dashed, open, part-filled pie, or solid glyph. */
 export function StatusIcon({
   status,
   className,
@@ -96,7 +95,6 @@ export function StatusIcon({
   );
 }
 
-/** Linear-style priority bars; urgent is a filled warning square. */
 export function PriorityIcon({
   priority,
   className,
@@ -119,7 +117,13 @@ export function PriorityIcon({
     );
   }
   const lit =
-    priority === "high" ? 3 : priority === "medium" ? 2 : priority === "low" ? 1 : 0;
+    priority === "high"
+      ? 3
+      : priority === "medium"
+        ? 2
+        : priority === "low"
+          ? 1
+          : 0;
   const heights = [5, 8, 11];
   return (
     <svg
@@ -177,7 +181,6 @@ export const THREAD_STATUS_META: Record<
   },
 };
 
-/** Mirrors the app's PR pill styling (see apps/app pull-request-display). */
 export const PR_STATE_META: Record<
   TaskPullRequest["state"],
   { label: string; icon: IconName; textClassName: string }
@@ -222,7 +225,6 @@ export function formatRelativeTime(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-/** Formats a YYYY-MM-DD due date like "Jul 22" (with year when not this year). */
 export function formatDueDate(dueDate: string): string {
   const parsed = new Date(`${dueDate}T00:00:00`);
   if (Number.isNaN(parsed.valueOf())) return dueDate;

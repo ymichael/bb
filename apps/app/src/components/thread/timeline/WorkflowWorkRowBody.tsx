@@ -3,20 +3,13 @@ import { WorkflowProgress } from "@bb/shared-ui/workflow-progress";
 import type { DetailScrollSize } from "../../ui/detail-scroll-size.js";
 import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 
-/**
- * The Claude Code timeline and prompt-stack workflow renderer. The phase/agent
- * presentation lives in shared UI so built-in plugins can render the same
- * workflow language instead of maintaining a lookalike implementation.
- */
 export function WorkflowWorkRowBody({
   row,
   size = "delegation",
   collapsiblePhases = false,
 }: {
   row: TimelineViewWorkflowWorkRow;
-  /** Max-height tier for the scroll container. */
   size?: DetailScrollSize;
-  /** Follow the active phase and allow each phase to be toggled. */
   collapsiblePhases?: boolean;
 }) {
   if (!row.workflow) {

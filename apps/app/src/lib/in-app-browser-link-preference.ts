@@ -3,22 +3,13 @@ import { createBooleanPreferenceAtom } from "./browser-storage";
 
 const OPEN_LINKS_IN_APP_BROWSER_STORAGE_KEY = "bb.openLinksInAppBrowser";
 
-/**
- * Default ON: the feature routes bb links into the desktop in-app browser
- * instead of the external OS browser. Users can turn it OFF to fall back to the
- * external-open behavior. The preference only has an effect on desktop builds
- * (see {@link resolveUrlOpenTarget}); on web there is no in-app browser.
- */
 const OPEN_LINKS_IN_APP_BROWSER_DEFAULT = true;
 
 type UrlOpenTarget = "in-app-browser" | "external-browser" | "unhandled";
 
 interface ResolveUrlOpenTargetArgs {
-  /** Whether the desktop in-app browser surface is available in this build. */
   desktopBrowserAvailable: boolean;
-  /** The persisted user preference. */
   openLinksInAppBrowser: boolean;
-  /** The link's resolved href. */
   url: string;
 }
 
@@ -27,19 +18,12 @@ interface OpenUrlByPreferenceArgs extends ResolveUrlOpenTargetArgs {
   openInAppBrowser: (url: string) => void;
 }
 
-// Only ordinary web links are owned by this preference. mailto:, file://,
-// relative app routes, and other non-http schemes stay on their existing path.
 const HTTP_URL_SCHEME_PATTERN = /^https?:\/\//iu;
 
 export function isHttpOrHttpsUrl(url: string): boolean {
   return HTTP_URL_SCHEME_PATTERN.test(url);
 }
 
-/**
- * Decides where an ordinary web URL should open. Non-http(s) links are
- * deliberately unhandled so file links, app routes, mailto links, and other
- * schemes keep their dedicated behavior.
- */
 export function resolveUrlOpenTarget({
   desktopBrowserAvailable,
   openLinksInAppBrowser,

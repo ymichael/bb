@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { beginSplitDrag, type SplitDragConfig } from "./splitDragSession";
 import { decideThreadDrop, shouldEngageSidebarSplitDrag } from "./zones";
 
-// jsdom has no layout engine, so stub the rect the session reads.
 function fakeRect(
   left: number,
   top: number,
@@ -35,8 +34,6 @@ function fireWindowPointer(type: string, x: number, y: number): void {
   );
 }
 
-// The session hands ownership to the split drag past this x; before it, an
-// in-sidebar reorder still owns the gesture.
 const SIDEBAR_RIGHT = 248;
 const PANE_RECT = fakeRect(300, 0, 900, 800);
 
@@ -64,7 +61,6 @@ describe("beginSplitDrag — sidebar gesture arbitration and fallback", () => {
         : [],
     ) as typeof document.elementsFromPoint;
 
-    // Stand in for dnd-kit's pointer sensor, which cancels on an Escape keydown.
     escapeKeydowns = 0;
     escapeListener = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -111,15 +107,15 @@ describe("beginSplitDrag — sidebar gesture arbitration and fallback", () => {
     const config = baseConfig({ onEngage, onEnd });
     beginSplitDrag(config);
 
-    fireWindowPointer("pointermove", 30, 302); // still inside the sidebar
+    fireWindowPointer("pointermove", 30, 302);
     expect(escapeKeydowns).toBe(0);
     expect(config.onDrop).not.toHaveBeenCalled();
 
-    fireWindowPointer("pointermove", 900, 400); // crossed the edge -> engage
-    expect(escapeKeydowns).toBe(1); // reorder cancelled exactly once
+    fireWindowPointer("pointermove", 900, 400);
+    expect(escapeKeydowns).toBe(1);
     expect(onEngage).toHaveBeenCalledTimes(1);
 
-    fireWindowPointer("pointermove", 1150, 400); // right zone of the pane
+    fireWindowPointer("pointermove", 1150, 400);
     fireWindowPointer("pointerup", 1150, 400);
 
     expect(config.onDrop).toHaveBeenCalledTimes(1);
@@ -169,7 +165,6 @@ describe("beginSplitDrag — sidebar gesture arbitration and fallback", () => {
   });
 
   it("falls back to the container when no marked pane is under the pointer", () => {
-    // The wrapper-less single-pane surface: nothing carries the pane-id attr.
     document.elementsFromPoint = vi.fn(
       () => [],
     ) as typeof document.elementsFromPoint;
@@ -184,14 +179,98 @@ describe("beginSplitDrag — sidebar gesture arbitration and fallback", () => {
       fallback: { paneId: "pane-1", container },
     });
     beginSplitDrag(config);
-    fireWindowPointer("pointermove", 900, 400); // engage
-    fireWindowPointer("pointermove", 1150, 400); // right zone via the fallback rect
+    fireWindowPointer("pointermove", 900, 400);
+    fireWindowPointer("pointermove", 1150, 400);
     fireWindowPointer("pointerup", 1150, 400);
 
     expect(config.onDrop).toHaveBeenCalledWith({
       paneId: "pane-1",
       zone: "right",
     });
+    container.remove();
+  });
+
+  it("rejects marked panes outside a supplied target boundary", () => {
+    const boundary = document.createElement("aside");
+    document.body.append(boundary);
+    const config = baseConfig({ targetBoundary: boundary });
+
+    beginSplitDrag(config);
+    fireWindowPointer("pointermove", 900, 400);
+    fireWindowPointer("pointerup", 900, 400);
+
+    expect(config.onDrop).not.toHaveBeenCalled();
+    boundary.remove();
+  });
+
+  it("accepts marked panes inside a supplied target boundary", () => {
+    const boundary = document.createElement("aside");
+    boundary.append(paneEl);
+    document.body.append(boundary);
+    const config = baseConfig({ targetBoundary: boundary });
+
+    beginSplitDrag(config);
+    fireWindowPointer("pointermove", 900, 400);
+    fireWindowPointer("pointerup", 900, 400);
+
+    expect(config.onDrop).toHaveBeenCalledWith({
+      paneId: "pane-1",
+      zone: "center",
+    });
+    boundary.remove();
+  });
+
+  it("preserves fallback targeting when its container is inside the boundary", () => {
+    document.elementsFromPoint = vi.fn(
+      () => [],
+    ) as typeof document.elementsFromPoint;
+    const boundary = document.createElement("aside");
+    const container = document.createElement("main");
+    Object.defineProperty(container, "getBoundingClientRect", {
+      value: () => PANE_RECT,
+      configurable: true,
+    });
+    boundary.append(container);
+    document.body.append(boundary);
+    const config = baseConfig({
+      targetBoundary: boundary,
+      fallback: { paneId: "pane-1", container },
+    });
+
+    beginSplitDrag(config);
+    fireWindowPointer("pointermove", 900, 400);
+    fireWindowPointer("pointermove", 1150, 400);
+    fireWindowPointer("pointerup", 1150, 400);
+
+    expect(config.onDrop).toHaveBeenCalledWith({
+      paneId: "pane-1",
+      zone: "right",
+    });
+    boundary.remove();
+  });
+
+  it("rejects a fallback target outside a supplied target boundary", () => {
+    document.elementsFromPoint = vi.fn(
+      () => [],
+    ) as typeof document.elementsFromPoint;
+    const boundary = document.createElement("aside");
+    const container = document.createElement("main");
+    Object.defineProperty(container, "getBoundingClientRect", {
+      value: () => PANE_RECT,
+      configurable: true,
+    });
+    document.body.append(boundary, container);
+    const config = baseConfig({
+      targetBoundary: boundary,
+      fallback: { paneId: "pane-1", container },
+    });
+
+    beginSplitDrag(config);
+    fireWindowPointer("pointermove", 900, 400);
+    fireWindowPointer("pointerup", 900, 400);
+
+    expect(config.onDrop).not.toHaveBeenCalled();
+    boundary.remove();
     container.remove();
   });
 });

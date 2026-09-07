@@ -1,25 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { DiffFileEntry } from "@bb/server-contract";
 import {
   DIFF_CARD_HEADER_HEIGHT_PX,
   estimateCardHeight,
   resolveDiffFileCardInitialState,
 } from "./diffFilesStore";
 import { GIT_DIFF_AUTO_COLLAPSE_FILE_THRESHOLD } from "./gitDiffPanelHelpers";
-
-function buildEntry(overrides: Partial<DiffFileEntry> = {}): DiffFileEntry {
-  return {
-    path: "src/file.ts",
-    previousPath: null,
-    changeKind: "modified",
-    additions: 0,
-    deletions: 0,
-    binary: false,
-    origin: "tracked",
-    loadMode: "auto",
-    ...overrides,
-  };
-}
+import { makeDiffFileEntry as buildEntry } from "@/test/fixtures/diff-files";
 
 describe("resolveDiffFileCardInitialState", () => {
   it("collapses by default once the file count exceeds the threshold", () => {
@@ -91,10 +77,6 @@ describe("estimateCardHeight", () => {
     const expanded = estimateCardHeight({ entry, collapsed: false });
     const collapsed = estimateCardHeight({ entry, collapsed: true });
 
-    // A collapsed card renders only its header row, so a large-diff card that
-    // opens collapsed must not seed the virtualizer with its full expanded body
-    // height (which would overshoot the total size ~50-100x and jump the
-    // scrollbar).
     expect(collapsed).toBe(DIFF_CARD_HEADER_HEIGHT_PX);
     expect(collapsed).toBeLessThan(expanded);
   });

@@ -35,23 +35,6 @@ export function usePluginThreadPanelOpenHandler(): PluginThreadPanelOpenHandler 
   return useContext(PluginThreadPanelNavigationContext);
 }
 
-// ---------------------------------------------------------------------------
-// Active opener, for host surfaces mounted outside the provider
-// ---------------------------------------------------------------------------
-
-/**
- * The focused thread view's opener, published to a module-level store.
- *
- * The context above only reaches descendants of a thread view, which is right
- * for the timeline and its message actions. The quick palette is mounted by
- * `AppLayout` beside the routes, so it can never read that context, yet a
- * plugin's palette row must still be able to open that plugin's panel in the
- * thread the user is looking at.
- *
- * Only the focused pane publishes, because a split has one opener per pane and
- * "the thread side panel" otherwise has no single meaning. A lone thread view
- * counts as focused (see `DefaultPaneContextProvider`).
- */
 const focusedOpeners = new Map<symbol, PluginThreadPanelOpenHandler>();
 
 export function usePublishThreadPanelOpener(
@@ -74,11 +57,6 @@ export function usePublishThreadPanelOpener(
   }, [isActive]);
 }
 
-/**
- * Null when no thread view is on screen — the palette then reports a declined
- * open to the plugin rather than pretending. During a focus handover two views
- * can briefly claim focus; the most recent one wins.
- */
 export function getActiveThreadPanelOpener(): PluginThreadPanelOpenHandler | null {
   let active: PluginThreadPanelOpenHandler | null = null;
   for (const opener of focusedOpeners.values()) active = opener;

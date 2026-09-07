@@ -177,8 +177,6 @@ describe("ConnectTunnel socket lifecycle", () => {
       const socket = fakeWebSockets.instances[0]!;
       const terminate = vi.spyOn(socket, "terminate");
 
-      // No open/error/close arrives: a peer that drips header bytes keeps
-      // ws's idle handshakeTimeout from firing. The absolute deadline must.
       await vi.advanceTimersByTimeAsync(15_000);
 
       expect(terminate).toHaveBeenCalledOnce();

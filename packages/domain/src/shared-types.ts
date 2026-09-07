@@ -1,17 +1,6 @@
 import { z } from "zod";
 import { jsonObjectSchema } from "./json-value.js";
 
-/**
- * Order is load-bearing: `reasoningRank` (index) drives model-switch
- * reconciliation. "none" (no extended thinking) sits at the bottom — only
- * providers that expose a thinking-off variant list it (currently Cursor and
- * Pi models whose `thinkingLevelMap` advertises `off`).
- * "ultracode" sits between "xhigh" and "max" because its underlying effort IS
- * xhigh (plus standing workflow orchestration) — a model without ultracode
- * support should reconcile down to xhigh, not up to max.
- * "ultra" is a Codex-native top tier (max effort plus automatic task
- * delegation) exposed only by some models; it ranks above "max".
- */
 export const reasoningLevelValues = [
   "none",
   "low",
@@ -28,22 +17,10 @@ export type ReasoningLevel = z.infer<typeof reasoningLevelSchema>;
 export const serviceTierSchema = z.enum(["fast", "default"]);
 export type ServiceTier = z.infer<typeof serviceTierSchema>;
 
-/**
- * Controls how a provider should incorporate server-owned instructions into its
- * system prompt.
- *
- * - `append`: keep the provider's preset system prompt and append instructions.
- * - `replace`: use the provided instructions as the full system prompt.
- */
 export const instructionModeValues = ["append", "replace"] as const;
 export const instructionModeSchema = z.enum(instructionModeValues);
 export type InstructionMode = z.infer<typeof instructionModeSchema>;
 
-/**
- * Order is load-bearing: the index is the privilege rank that
- * {@link clampPermissionModeToCeiling} compares. "accept-edits" grants the
- * least and "full" the most.
- */
 export const permissionModeValues = ["accept-edits", "auto", "full"] as const;
 export const permissionModeSchema = z.enum(permissionModeValues);
 export type PermissionMode = z.infer<typeof permissionModeSchema>;
@@ -52,14 +29,6 @@ export function permissionModeRank(permissionMode: PermissionMode): number {
   return permissionModeValues.indexOf(permissionMode);
 }
 
-/**
- * Lower a mode to the machine's ceiling. A mode already at or below the ceiling
- * passes through untouched — including one the provider does not support, which
- * stays a provider-capability error rather than becoming a silent upgrade.
- * Above the ceiling, the result is the highest mode the provider supports that
- * still fits. Returns null when the provider supports nothing that low: a
- * machine capped below what the provider needs cannot run it at all.
- */
 export function clampPermissionModeToCeiling(args: {
   ceiling: PermissionMode;
   permissionMode: PermissionMode;
@@ -78,16 +47,10 @@ export function clampPermissionModeToCeiling(args: {
   return allowed[0] ?? null;
 }
 
-/**
- * Deprecated public input accepted for one compatibility window. Stored
- * history uses {@link recordedPermissionModeSchema} instead so legacy facts
- * remain distinguishable from current presets.
- */
 export const permissionModeInputSchema = z
   .union([permissionModeSchema, z.literal("workspace-write")])
-  .transform(
-    (permissionMode): PermissionMode =>
-      permissionMode === "workspace-write" ? "accept-edits" : permissionMode,
+  .transform((permissionMode): PermissionMode =>
+    permissionMode === "workspace-write" ? "accept-edits" : permissionMode,
   );
 
 const legacyRecordedPermissionModeValues = [
@@ -182,16 +145,7 @@ const canonicalPromptMentionResourceSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("plugin"),
     pluginId: z.string(),
-    /**
-     * Named shared-UI icon hint supplied by the plugin mention item. Omitted
-     * by mentions persisted before icon hints were stored.
-     */
     icon: z.string().nullable().optional(),
-    /**
-     * Opaque item reference minted by the server's mention search
-     * (`<providerId>:<provider item id>`); resolved back through the same
-     * plugin's mention provider at send time (plugin design §4.9).
-     */
     itemId: z.string(),
     label: z.string(),
   }),
@@ -211,11 +165,6 @@ function normalizeLegacyPromptMentionResource(value: unknown): unknown {
   return { ...rest, kind: "section", sectionId: folderId };
 }
 
-/**
- * Persisted prompts created before the section rename still contain the old
- * resource discriminator. Normalize those records at the validation boundary;
- * all newly parsed and authored resources use the canonical section contract.
- */
 export const promptMentionResourceSchema = z.preprocess(
   normalizeLegacyPromptMentionResource,
   canonicalPromptMentionResourceSchema,
@@ -243,21 +192,11 @@ export const promptInputSchema = z.discriminatedUnion("type", [
   }),
   z.object({
     type: z.literal("localImage"),
-    /**
-     * Absolute paths and URI-like values are passed through to the runtime.
-     * Relative paths are server-managed attachment references, not workspace
-     * relative files.
-     */
     path: z.string(),
     ...promptInputVisibilityFields,
   }),
   z.object({
     type: z.literal("localFile"),
-    /**
-     * Absolute paths and URI-like values are passed through to the runtime.
-     * Relative paths are server-managed attachment references, not workspace
-     * relative files.
-     */
     path: z.string(),
     name: z.string().optional(),
     sizeBytes: z.number().int().nonnegative().optional(),
@@ -290,20 +229,16 @@ function isSelectedPromptCommandMention(
   );
 }
 
-const BUILTIN_COMPACT_COMMAND = { trigger: "/", name: "compact" } as const;
-
-/**
- * Whether input consists solely of one selected built-in `/compact` mention.
- * Raw matching text and project/user commands intentionally do not qualify.
- */
-export function isStandaloneBuiltinCompactCommand(
+function isStandaloneBuiltinCommand(
   input: readonly PromptInput[],
+  name: string,
 ): boolean {
+  const selector = { trigger: "/" as const, name };
   const selected = input.flatMap((item) =>
     item.type === "text"
       ? item.mentions
           .filter((mention) =>
-            isSelectedPromptCommandMention(mention, BUILTIN_COMPACT_COMMAND),
+            isSelectedPromptCommandMention(mention, selector),
           )
           .map((mention) => ({ mention, text: item.text }))
       : [],
@@ -321,17 +256,27 @@ export function isStandaloneBuiltinCompactCommand(
     mention.resource.kind !== "command" ||
     mention.resource.source !== "command" ||
     mention.resource.origin !== "builtin" ||
-    text.slice(mention.start, mention.end) !== "/compact"
+    text.slice(mention.start, mention.end) !== `/${name}`
   ) {
     return false;
   }
-  return removeCommandMentionsFromPromptInput(
-    input,
-    BUILTIN_COMPACT_COMMAND,
-  ).every((item) => item.type === "text" && item.text.trim() === "");
+  return removeCommandMentionsFromPromptInput(input, selector).every(
+    (item) => item.type === "text" && item.text.trim() === "",
+  );
 }
 
-/** Structured prompt input for the selected built-in `/compact` command. */
+export function isStandaloneBuiltinCompactCommand(
+  input: readonly PromptInput[],
+): boolean {
+  return isStandaloneBuiltinCommand(input, "compact");
+}
+
+export function isStandaloneBuiltinClearCommand(
+  input: readonly PromptInput[],
+): boolean {
+  return isStandaloneBuiltinCommand(input, "clear");
+}
+
 export function createStandaloneBuiltinCompactCommandInput(): PromptInput[] {
   return [
     {
@@ -358,13 +303,6 @@ export function createStandaloneBuiltinCompactCommandInput(): PromptInput[] {
 
 const BUILTIN_PLAN_COMMAND_TEXT = "/plan";
 
-/**
- * Text prompt input that opens the provider's plan action for `text`: the
- * same `/plan` command mention the composer's plan action produces, so a CLI
- * or SDK caller reaches plan mode without hand-building a mention. Plan mode
- * is keyed on the mention, not on the literal text: plain `/plan ...` text is
- * forwarded to the provider unchanged.
- */
 export function createBuiltinPlanCommandTextInput(
   text: string,
 ): TextPromptInput {
@@ -495,6 +433,12 @@ const threadExecutionSourceSchema = z.enum([
 ]);
 export type ThreadExecutionSource = z.infer<typeof threadExecutionSourceSchema>;
 
+/**
+ * Where a caller-supplied execution value came from. `explicit` is a user
+ * choice and `client-preference` is a remembered client-side default. Only
+ * `explicit` is a user decision, so only `explicit` shapes project execution
+ * defaults.
+ */
 const callerExecutionInputSourceValues = [
   "explicit",
   "client-preference",
@@ -571,32 +515,14 @@ export type RuntimePermissionPolicy = z.infer<
   typeof runtimePermissionPolicySchema
 >;
 
-/**
- * BB prompt modes a provider maps natively. `plan` is entered through the
- * provider's declared `plan` composer action; absent means an ordinary
- * prompt.
- */
 export const promptModeSchema = z.literal("plan");
 export type PromptMode = z.infer<typeof promptModeSchema>;
 
-/**
- * The provider-agnostic execution options the server dispatches with every
- * session and turn command. No provider-named field may be added here:
- * provider-flavored knobs (memory, native subagents, a native plan flag, …)
- * travel in `providerOptions`, the opaque bag the owning plugin derives per
- * command (`deriveProviderOptions`) and only its bridge reads.
- */
 const runtimeThreadExecutionBaseOptionsSchema = z.object({
   model: z.string().min(1),
   serviceTier: serviceTierSchema,
   reasoningLevel: reasoningLevelSchema,
-  /** Present only when the prompt entered a BB prompt mode. */
   promptMode: promptModeSchema.optional(),
-  /**
-   * Plugin-derived, provider-scoped options. Always present — an empty
-   * object when the provider derives none — so the daemon never has to
-   * guess whether the server ran the hook.
-   */
   providerOptions: jsonObjectSchema,
 });
 

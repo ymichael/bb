@@ -95,7 +95,6 @@ function nativeRoots(
   };
 }
 
-/** A provider with one skills directory and one commands directory on each side. */
 const SKILLS_AND_COMMANDS = nativeRoots({
   skills: {
     project: [declared(".agent/skills")],
@@ -158,8 +157,6 @@ describe("discoverProviderCommands over declared roots", () => {
     const fixture = await makeWorkspaceFixture();
     await writeFileEnsuringDir(
       path.join(fixture.cwd, ".agent", "skills", "x", "SKILL.md"),
-      // Frontmatter `name` deliberately differs from the dir name: the
-      // invocation name must come from the directory, not frontmatter.
       "---\nname: frontmatter-name-ignored\ndescription: The x skill\nargument-hint: <target>\n---\nBody",
     );
     await writeFileEnsuringDir(
@@ -292,7 +289,14 @@ describe("discoverProviderCommands over declared roots", () => {
       );
     }
     await writeFileEnsuringDir(
-      path.join(fixture.homeDir, ".agent", "skills", "vendor-plugin", ".vendor-plugin", "plugin.json"),
+      path.join(
+        fixture.homeDir,
+        ".agent",
+        "skills",
+        "vendor-plugin",
+        ".vendor-plugin",
+        "plugin.json",
+      ),
       "{}",
     );
 
@@ -301,19 +305,25 @@ describe("discoverProviderCommands over declared roots", () => {
       null,
       nativeRoots({
         skills: {
-          user: [declared(".agent/skills", { skipIfManifest: ".vendor-plugin/plugin.json" })],
+          user: [
+            declared(".agent/skills", {
+              skipIfManifest: ".vendor-plugin/plugin.json",
+            }),
+          ],
         },
       }),
     );
     expect(marked.map((command) => command.name)).toEqual(["plain-skill"]);
 
-    // Without the marker the daemon knows no vendor layout: both are skills.
     const unmarked = await discover(
       fixture,
       null,
       nativeRoots({ skills: { user: [declared(".agent/skills")] } }),
     );
-    expect(unmarked.map((command) => command.name).sort()).toEqual(["plain-skill", "vendor-plugin"]);
+    expect(unmarked.map((command) => command.name).sort()).toEqual([
+      "plain-skill",
+      "vendor-plugin",
+    ]);
   });
 
   it("skips project roots and returns only user-origin records when cwd is null", async () => {
@@ -341,7 +351,6 @@ describe("discoverProviderCommands over declared roots", () => {
   it("enforces the depth cap on deep command trees", async () => {
     const fixture = await makeWorkspaceFixture();
     const commandsRoot = path.join(fixture.cwd, ".agent", "commands");
-    // 30 levels deep is past MAX_SCAN_DEPTH (24); the leaf must not be found.
     const deepSegments = Array.from({ length: 30 }, (_, index) => `d${index}`);
     await writeFileEnsuringDir(
       path.join(commandsRoot, ...deepSegments, "deep.md"),
@@ -363,7 +372,7 @@ describe("discoverProviderCommands over declared roots", () => {
   it("enforces the entry-count cap", async () => {
     const fixture = await makeWorkspaceFixture();
     const commandsRoot = path.join(fixture.cwd, ".agent", "commands");
-    const fileCount = 1_050; // > MAX_SCAN_ENTRY_COUNT (1000)
+    const fileCount = 1_050;
     await Promise.all(
       Array.from({ length: fileCount }, (_, index) =>
         writeFileEnsuringDir(
@@ -577,8 +586,6 @@ describe("discoverProviderCommands over declared roots", () => {
     );
     await chmod(blockedDir, 0o000);
     try {
-      // If the dir is still readable (e.g. the test runs as root), this case
-      // can't exercise EACCES — skip rather than assert a state we can't create.
       let unreadable = false;
       try {
         await readdir(blockedDir);
@@ -875,7 +882,6 @@ describe("resolveDeclaredScanRoots", () => {
     const fixture = await makeWorkspaceFixture();
     const pluginRoot = path.join(fixture.homeDir, "plugins", "local-plugin");
     const systemSkills = path.join(fixture.homeDir, "system", "skills");
-    // A resolved directory the host does not have: kept as a root, scans empty.
     const missingSkills = path.join(
       fixture.homeDir,
       "system",
@@ -910,7 +916,6 @@ describe("resolveDeclaredScanRoots", () => {
       path.join(pluginRoot, "extra", "deploy.md"),
       "---\ndescription: Deploy\n---\n",
     );
-    // A user-origin skill file may be a symlink (personal installs link them).
     const linkedSkillTarget = path.join(tempRoot, "linked-plugin-skill.md");
     await writeFileEnsuringDir(
       linkedSkillTarget,

@@ -212,8 +212,6 @@ describe("public thread parenting routes", () => {
         threadSchema.parse(await readJson(patchResponse)).parentThreadId,
       ).toBe(parentThread.id);
 
-      // Listing by parent alone returns children from every project; the
-      // sidebar bootstrap still files each child under its own project.
       const listResponse = await harness.app.request(
         `/api/v1/threads?parentThreadId=${parentThread.id}`,
       );
@@ -407,8 +405,6 @@ describe("public thread parenting routes", () => {
     });
   });
 
-  // Archiving one thread cascades too, not just archive-all: the plugin's
-  // `thread.archived` listener used to cover this route.
   it("archives hidden source-derived forks when archiving a single thread", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
@@ -445,8 +441,6 @@ describe("public thread parenting routes", () => {
     });
   });
 
-  // The cascade is BB's own, not the plugin's: a hidden fork retires with its
-  // source whether or not the plugin that created it is enabled.
   it("archives hierarchy children and hidden source-derived forks", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);
@@ -498,8 +492,6 @@ describe("public thread parenting routes", () => {
     });
   });
 
-  // A side chat is a hidden thread, and the list excludes hidden threads by
-  // default — no dedicated filter needed.
   it("excludes side chats from thread list results", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps);

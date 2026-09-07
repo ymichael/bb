@@ -19,26 +19,9 @@ import {
   type PiModelContextWindowResolver,
 } from "./delta-translation.js";
 
-/**
- * The bridge resolves context windows from the pi child's live catalog; the
- * suite stands in with pi's bundled catalog so the expectations below keep
- * the numbers the in-process bridge produced.
- */
 const builtinCatalogResolver = createPiModelContextWindowResolverFrom(
   getBuiltinProviders().flatMap((provider) => getBuiltinModels(provider)),
 );
-
-/**
- * Pi translation equivalence for the narrow-grammar path.
- *
- * These cases are the pi event-translation suite, ported so the SAME provider
- * fixtures drive the new pipeline: pi dialect events → semantic deltas → the
- * runtime delta assembler → canonical ThreadEvents. Event content, ordering,
- * scoping, and statuses are asserted exactly as before; ids are asserted by
- * shape and stability because minting moved from the bridge to the assembler
- * (turn ids are `<entropy>-tN` instead of `turn-N`, item ids `<entropy>-iN`
- * instead of provider tool-call ids / `pi-assistant-N`).
- */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = resolve(__dirname, "./__fixtures__/pi");
@@ -76,7 +59,6 @@ function createHarness(options?: {
   const assembler = createDeltaAssembler({
     providerId: "pi",
     entropyPrefix: ENTROPY,
-    // Equivalence suites pin per-delta translation fidelity: no coalescing.
     textDeltaFlushMs: 0,
   });
   return {
@@ -101,7 +83,6 @@ function sdkMessage(message: unknown) {
   };
 }
 
-/** Pi's `CustomMessage`: what an extension's `pi.sendMessage` injects. */
 function createPiCustomMessage(args: {
   content: string | Array<Record<string, unknown>>;
   display?: boolean;
@@ -218,7 +199,6 @@ describe("pi delta translation equivalence", () => {
       expect.objectContaining({ type: "turn/started", threadId: "" }),
     ]);
     expect(harness.openTurnId()).toMatch(TURN_ID_PATTERN);
-    // A second agent_start while the turn is open adds nothing.
     expect(harness.translate(loadFixture("agent-start.json"))).toEqual([]);
   });
 
@@ -307,8 +287,6 @@ describe("pi delta translation equivalence", () => {
   });
 
   it("records a displayed Pi custom message as the input of the turn it triggered", () => {
-    // The order Pi emits for an idle `sendMessage(..., { triggerTurn: true })`:
-    // agent_start opens the run, then the custom message's own boundaries.
     const harness = createHarness();
     harness.translate(sdkMessage(loadFixture("agent-start.json")));
     const turnId = harness.openTurnId();
@@ -377,8 +355,6 @@ describe("pi delta translation equivalence", () => {
   it("drops hidden and idle Pi custom messages without surfacing them as unhandled", () => {
     const harness = createHarness();
 
-    // Idle `attention: context` notes: Pi appends them without running the
-    // agent, so there is no bb turn to record them in.
     const idleMessage = createPiCustomMessage({ content: "idle context note" });
     expect(
       harness.translate(
@@ -713,7 +689,6 @@ describe("pi delta translation equivalence", () => {
         },
       },
     ]);
-    // Attaching to the closed turn must not reopen one.
     expect(harness.openTurnId()).toBe("");
   });
 
@@ -728,7 +703,6 @@ describe("pi delta translation equivalence", () => {
     );
 
     expect(deltaItemId).toMatch(ITEM_ID_PATTERN);
-    // Delta-first synthesis: the stream's first event opened the item.
     expect(deltaEvents.map((event) => event.type)).toEqual([
       "item/started",
       "item/agentMessage/delta",
@@ -751,7 +725,6 @@ describe("pi delta translation equivalence", () => {
     const preDelta = harness.translate(createTextDeltaEvent());
     const preItemId = agentMessageDeltaId(preDelta);
 
-    // Tool call starts — closes the assistant stream.
     harness.translate({
       type: "tool_execution_start",
       toolCallId: "tool-bash-1",
@@ -846,8 +819,6 @@ describe("pi delta translation equivalence", () => {
     ]);
   });
 
-  // -- tool calls ------------------------------------------------------------
-
   it("tool_execution_start emits item/started with an assembler-minted id", () => {
     const harness = createHarness();
     harness.translate(loadFixture("agent-start.json"));
@@ -866,7 +837,6 @@ describe("pi delta translation equivalence", () => {
         }),
       }),
     ]);
-    // The provider id is reverse-resolvable for the command plane.
     const startedId =
       events[0]?.type === "item/started" ? events[0].item.id : "";
     expect(harness.assembler.getProviderItemId(THREAD_ID, startedId)).toBe(
@@ -874,9 +844,6 @@ describe("pi delta translation equivalence", () => {
     );
   });
 
-  // Design §4: bb fabricates no `commandExecution { cwd: "" }`. A bash call
-  // runs in the session's cwd unless its args name one; with neither known
-  // the call is a generic tool item.
   it("gives a bash call without cwd args the session's working directory", () => {
     const harness = createHarness();
     harness.translate(loadFixture("agent-start.json"));
@@ -938,9 +905,18 @@ describe("pi delta translation equivalence", () => {
         isError: false,
       }),
     );
-    expect(closed.some((event) => event.type === "item/started" || event.type === "item/completed")).toBe(true);
+    expect(
+      closed.some(
+        (event) =>
+          event.type === "item/started" || event.type === "item/completed",
+      ),
+    ).toBe(true);
     expect(JSON.stringify(closed)).not.toContain('"cwd":""');
-    expect(closed.every((event) => !("item" in event) || event.item.type !== "commandExecution")).toBe(true);
+    expect(
+      closed.every(
+        (event) => !("item" in event) || event.item.type !== "commandExecution",
+      ),
+    ).toBe(true);
   });
 
   it("maps parent_tool_use_id on nested sdk/message events to the parent's minted id", () => {
@@ -969,11 +945,8 @@ describe("pi delta translation equivalence", () => {
     if (started?.type !== "item/started") {
       throw new Error("expected a commandExecution item/started");
     }
-    // The raw pi parent id never leaks onto emitted events; the assembler
-    // mints the parent's bb id and keeps parent and children consistent.
     expect(started.item.parentToolCallId).toBeDefined();
     expect(started.item.parentToolCallId).not.toBe("agent-parent-1");
-    // The parent's own tool_execution_start lands under that same minted id.
     const parentEvents = harness.translate({
       type: "tool_execution_start",
       toolCallId: "agent-parent-1",
@@ -1548,7 +1521,6 @@ describe("pi delta translation equivalence", () => {
         rawEvent: expect.objectContaining({ method: "sdk/message" }),
       }),
     ]);
-    // No turn was fabricated for the stray tool event.
     expect(harness.openTurnId()).toBe("");
   });
 
@@ -1678,8 +1650,6 @@ describe("pi delta translation equivalence", () => {
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "item/completed",
-        // A close whose start this process never saw is a generic tool
-        // item: there is no command or cwd to report, and none is invented.
         item: expect.objectContaining({
           type: "toolCall",
           tool: "bash",
@@ -1689,8 +1659,6 @@ describe("pi delta translation equivalence", () => {
     );
   });
 
-  // -- lifecycle deltas the bridge emits directly ----------------------------
-
   it("prompt-settled settles only a turn owed to accepted input", () => {
     const harness = createHarness();
     const settled = {
@@ -1699,11 +1667,8 @@ describe("pi delta translation equivalence", () => {
       params: { threadId: THREAD_ID, status: "completed" as const },
     };
 
-    // Idle: the fallback closer owns nothing (agent_end already settled).
     expect(harness.translate(settled)).toEqual([]);
 
-    // Accepted input with zero SDK events: the settle report must still
-    // open and close the turn (#1431 semantics, now assembler-owned).
     harness.assembler.assemble({
       threadId: THREAD_ID,
       deltas: [

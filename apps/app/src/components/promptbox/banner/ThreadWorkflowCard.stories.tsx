@@ -25,9 +25,7 @@ function Stage({
   return (
     <div
       data-promptbox-shell=""
-      className={
-        size === "desktop" ? "min-w-0 flex-1" : "w-[20rem] shrink-0"
-      }
+      className={size === "desktop" ? "min-w-0 flex-1" : "w-[20rem] shrink-0"}
     >
       {children}
     </div>
@@ -43,8 +41,6 @@ function ResponsiveStage({ children }: { children: React.ReactNode }) {
   );
 }
 
-// Mirrors the mockup: a six-agent Investigate phase (all done) plus a
-// single-agent Synthesize phase still running.
 const investigationSnapshot: WorkflowProgressSnapshot = {
   phases: [
     { index: 1, title: "Investigate" },
@@ -96,15 +92,11 @@ const runningWorkflow = workflowRow({
   taskStatus: "running",
   workflowName: "bb-plugin-investigation",
   description: "Investigate the plugin subsystem",
-  // ~5m26s ago, so the live duration reads like the mockup.
   startedAt: Date.now() - 326_000,
   workflow: investigationSnapshot,
   usage: { totalTokens: 633_400, toolUses: 261, durationMs: 326_000 },
 });
 
-// A long workflow (~40 phases) so the banner's max-height/scroll and per-phase
-// collapse are exercised. Phases before the active one are done, the active one
-// has a running agent, and the rest are queued.
 const PHASE_VERBS = [
   "Scan",
   "Map",
@@ -151,7 +143,7 @@ function buildManyPhasesSnapshot(
   for (let p = 1; p <= phaseCount; p++) {
     const title = phaseTitle(p - 1);
     phases.push({ index: p, title });
-    const agentCount = ((p - 1) % 3) + 1; // 1..3 agents per phase
+    const agentCount = ((p - 1) % 3) + 1;
     for (let a = 0; a < agentCount; a++) {
       const done = p < activePhase;
       const running = p === activePhase && a === 0;
@@ -200,9 +192,6 @@ const manyPhasesWorkflow = workflowRow({
   usage: { totalTokens: 4_210_000, toolUses: 1_284, durationMs: 1_472_000 },
 });
 
-// A second concurrent run, so the stack of cards a thread shows while it drives
-// several workflows at once can be reviewed. Shorter and earlier in its run than
-// `runningWorkflow` so the two cards do not read as duplicates.
 const secondRunningWorkflow = workflowRow({
   id: "thr_fixture:workflow:balance:running",
   status: "pending",
@@ -375,7 +364,10 @@ export function ConcurrentWorkflows() {
               workflow={secondRunningWorkflow}
               initialExpanded={false}
             />
-            <ToggleableCard workflow={runningWorkflow} initialExpanded={false} />
+            <ToggleableCard
+              workflow={runningWorkflow}
+              initialExpanded={false}
+            />
             <FauxComposer />
           </div>
         </ResponsiveStage>

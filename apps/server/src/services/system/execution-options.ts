@@ -22,7 +22,10 @@ import { callHostRetryableOnlineRpc } from "../hosts/online-rpc.js";
 import { getHostPermissionCeiling } from "../hosts/permission-ceiling.js";
 import { requireEnvironment } from "../lib/entity-lookup.js";
 import { createProviderListingBudget } from "../providers/native-roots.js";
-import type { ProviderRegistryService } from "../providers/provider-registry.js";
+import type {
+  ProviderHealthCacheKey,
+  ProviderRegistryService,
+} from "../providers/provider-registry.js";
 import { getSupportedReasoningLevelsForProvider } from "../threads/thread-reasoning-policy.js";
 import { resolveSystemLookupHostId } from "./host-lookup.js";
 import {
@@ -180,20 +183,34 @@ async function listInstalledPluginProviderInfos(
         registration.info.id,
       );
       if (bridgeLaunch === null) return null;
+      const cacheKey: ProviderHealthCacheKey = {
+        hostId,
+        providerId: registration.info.id,
+      };
+      const cached = deps.providerRegistry.lookupInstalled(cacheKey);
       try {
-        const result = await callHostRetryableOnlineRpc(deps, {
-          hostId,
-          timeoutMs: budget.remainingMs(),
-          command: {
-            type: "provider.health",
-            providerId: registration.info.id,
-            bridgeLaunch,
-          },
-        });
-        return result.supported && result.health.status !== "not_installed"
-          ? registration.info
-          : null;
+        const installed =
+          cached ??
+          (async () => {
+            const result = await callHostRetryableOnlineRpc(deps, {
+              hostId,
+              timeoutMs: budget.remainingMs(),
+              command: {
+                type: "provider.health",
+                providerId: registration.info.id,
+                bridgeLaunch,
+              },
+            });
+            return (
+              result.supported && result.health.status !== "not_installed"
+            );
+          })();
+        if (cached === undefined) {
+          deps.providerRegistry.rememberInstalled(cacheKey, installed);
+        }
+        return (await installed) ? registration.info : null;
       } catch (error) {
+        deps.providerRegistry.forgetInstalledKey(cacheKey);
         if (!canOmitProviderDiscoveryForError(error)) {
           throw error;
         }
@@ -261,21 +278,10 @@ export async function listSystemProviderInfos(
   deps: LoggedWorkSessionDeps,
   query: ListSystemProviderInfosRequest = {},
 ): Promise<ProviderInfo[]> {
-  // Plugins register their providers after the listener is already serving, so
-  // an early request would otherwise report an empty provider list.
   await deps.providerRegistry.whenRegistrationsSettled();
   return await resolveSystemProviderInfosPlan(deps, query).providersPromise;
 }
 
-/**
- * Load one provider's model catalog on an already-resolved host. Unlike the
- * full execution-options response, this does not probe for other installed ACP
- * agents, so thread creation can resolve an omitted model with one targeted
- * daemon request. This is execution policy, not a public list, so it keeps
- * every custom model: streamer mode must not change which default model a
- * thread resolves to, and a provider whose only models come from config.json
- * must still be able to start a thread.
- */
 export async function resolveSystemProviderModels(
   deps: LoggedWorkSessionDeps,
   args: ResolveSystemProviderModelsArgs,
@@ -315,14 +321,6 @@ export async function resolveSystemProviderModels(
   };
 }
 
-/**
- * The config.json custom models that public model lists may show. Streamer
- * mode hides all of them: a custom entry is often a private or early-access
- * model id, and the execution-options response is where every picker, the CLI,
- * and the SDK read them from. Execution policy is unaffected: an explicit
- * thread model request bypasses the catalog, and `resolveSystemProviderModels`
- * keeps the full list for default resolution.
- */
 function listVisibleCustomModels(
   deps: Pick<LoggedWorkSessionDeps, "config" | "db">,
 ): CustomProviderModel[] {
@@ -341,11 +339,6 @@ function buildCustomModel(
     model: customModel.model,
     displayName: customModel.displayName ?? customModel.model,
     description: "Custom model from config.json",
-    // Custom models advertise the provider's full reasoning ladder: per-model
-    // support is unknowable server-side and the picker reconciles the user's
-    // choice per model (see reconcileReasoningLevel in @bb/domain). The
-    // ladder comes from the same per-provider policy table that validates
-    // reasoning overrides, so the picker and validation cannot drift apart.
     supportedReasoningEfforts: reasoningEffortsForLevels(
       getSupportedReasoningLevelsForProvider(registry, customModel.providerId),
     ),
@@ -354,13 +347,6 @@ function buildCustomModel(
   };
 }
 
-// Appends the user's configured custom models for the provider to the
-// provider-reported catalog. Catalog metadata wins on model-id collision so
-// the picker never shows duplicate or conflicting rows: active entries are
-// kept as-is, and selected-only entries (retired/pinned models the catalog
-// describes accurately but no longer offers) are promoted into the active
-// list instead of being shadowed by a synthesized entry. This also runs when
-// the provider model list failed to load so custom models stay selectable.
 export function appendCustomModels(
   registry: ProviderRegistryService,
   {
@@ -550,9 +536,6 @@ async function loadSystemProviderModels(
   const command: ProviderListModelsCommand = {
     type: "provider.list_models",
     providerId: provider.id,
-    // Only a workspace-scoped catalog gets the path: the other bridges ignore
-    // it, and leaving it out lets every environment on the host share one
-    // memo entry.
     ...(cwd !== undefined &&
     providerModelCatalogDependsOnWorkspace(
       provider.capabilities.modelCatalogScope,
@@ -606,19 +589,6 @@ type ProviderListModelsCommand = Extract<
   { type: "provider.list_models" }
 >;
 
-/**
- * Runs the host model probe through the process-wide memo. The key carries
- * everything the answer depends on: the host, the daemon session serving it
- * (a reconnected daemon may have a new CLI or account, so its first probe is
- * fresh), the provider registration revision (a plugin reload can change the
- * bridge), and the full command (provider, launch spec, bridge launch, and the
- * workspace path when the catalog is workspace-scoped). Concurrent callers for
- * one key share the in-flight probe; failures are not memoized.
- *
- * The probe is skipped only when no daemon session is registered yet: the
- * retryable RPC waits for one, and its answer would then belong to a session
- * this call cannot name.
- */
 async function listProviderModelsMemoized(
   deps: LoggedWorkSessionDeps,
   { command, hostId }: { command: ProviderListModelsCommand; hostId: string },
@@ -642,13 +612,6 @@ async function listProviderModelsMemoized(
   return deps.lifecycleDedupers.providerModelList.run(memoKey, probe);
 }
 
-// A transient probe failure is not evidence that a model was retired, so the
-// picker gets the provider's declared cold-cache fallback instead of an empty
-// list. `modelLoadError` stays set, which is what keeps callers treating this
-// list as unverified: absence from it must never trigger thread model
-// recovery. `missing_executable` and `auth_required` are excluded on purpose —
-// those are actionable setup states the app routes to an install/auth prompt,
-// so offering models there would only defer the real failure to submit time.
 function listFallbackModelsForLoadError(
   deps: Pick<LoggedWorkSessionDeps, "providerRegistry">,
   {
@@ -663,7 +626,6 @@ function listFallbackModelsForLoadError(
     return [];
   }
   const fallback = deps.providerRegistry.get(providerId)?.fallbackModels ?? [];
-  // Fresh objects: these flow into mutable API responses.
   return fallback.map((model) => ({
     ...model,
     supportedReasoningEfforts: model.supportedReasoningEfforts.map(

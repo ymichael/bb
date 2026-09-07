@@ -10,13 +10,6 @@ interface DialogStageProps {
   children: ReactNode;
 }
 
-// Wraps a dialog's inner *Content component so it renders inline in a story
-// grid instead of portal-mounting to the document body. Mirrors DialogContent's
-// default desktop chrome (border + bg + p-6 + shadow + rounded, max-w-lg) plus
-// the top-right close affordance; pass `className` to override sizing/padding
-// for dialogs that customize their own DialogContent (e.g. p-0 wrappers used
-// by GitAction). DialogPrimitive.Root supplies the Radix context required by
-// DialogTitle / DialogDescription / DialogClose.
 export function DialogStage({ className, children }: DialogStageProps) {
   return (
     <DialogPrimitive.Root open onOpenChange={noop}>

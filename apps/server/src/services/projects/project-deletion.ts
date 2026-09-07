@@ -131,8 +131,6 @@ export function beginProjectDeletion(
       ? (environmentsById.get(thread.environmentId) ?? null)
       : null;
     if (environment) {
-      // Project deletion finalization owns non-runtime cleanup; only active
-      // runtime work needs a daemon stop request here.
       requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     }
   }
@@ -187,8 +185,6 @@ export async function advanceProjectDeletion(
     }
     deps.terminalSessions.closeDeletedThreadTerminals({ threadId: thread.id });
     if (environment) {
-      // Project deletion finalization owns non-runtime cleanup; only active
-      // runtime work needs a daemon stop request here.
       requestActiveRuntimeThreadStopIfNeeded(deps, thread, environment);
     }
     finalizeStoppedThread(deps, {

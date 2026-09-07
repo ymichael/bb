@@ -19,11 +19,6 @@ function selectionKey(value: ExperimentalProviderModelPickerValue): string {
   ].join("\0");
 }
 
-/**
- * Controlled SDK adapter over the same picker and selection controller used
- * by bb's composers. Provider previews stay inside ModelReasoningPicker; only
- * its verified, fully-resolved default is allowed across the public boundary.
- */
 export function PluginProviderModelPicker({
   value,
   onChange,

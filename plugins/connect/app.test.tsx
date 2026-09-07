@@ -1,6 +1,4 @@
 // @vitest-environment jsdom
-// Frontend coverage for the builtin Connect plugin's settings section, using
-// the official plugin app harness instead of a host app or built bundle.
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
@@ -94,8 +92,6 @@ describe("connect settings section", () => {
     );
 
     await slot.findByText("Get a connect code");
-    // Messy case/whitespace/dash input normalizes to the canonical XXXX-XXXX
-    // and connects automatically — no Connect click.
     fireEvent.change(slot.getByLabelText("Connect code"), {
       target: { value: "  k7qp-2m4x  " },
     });
@@ -126,7 +122,6 @@ describe("connect settings section", () => {
     fireEvent.change(slot.getByLabelText("Connect code"), {
       target: { value: "K7QP-2M4" },
     });
-    // Connect button stays disabled and nothing was submitted.
     expect(
       (slot.getByRole("button", { name: "Connect" }) as HTMLButtonElement)
         .disabled,
@@ -142,7 +137,6 @@ describe("connect settings section", () => {
         rpc: {
           status: () => status(),
           pair: () => {
-            // The server maps redeem failures to stable codes (see rpc.ts).
             throw new Error("expired_code");
           },
         },
@@ -187,7 +181,6 @@ describe("connect settings section", () => {
     await slot.findByText("Reconnecting…");
     await slot.findByText(/can't reach getbb.app — connection refused/);
     await slot.findByText(/Local access is unaffected/);
-    // The connected-only affordances are gone while the tunnel is down.
     expect(slot.queryByRole("button", { name: "Open" })).toBeNull();
   });
 
@@ -302,12 +295,9 @@ describe("connect settings section", () => {
       },
     );
 
-    // One header per host, even with two shares on the same host.
     await slot.findByText("Sawyer Air");
     expect(slot.getAllByText("Workstation")).toHaveLength(1);
 
-    // Live shares stay clickable links; the unreachable host's share shows
-    // its reason with no link and no copy affordance.
     expect(
       slot
         .getByText("workstation--3000.getbb.app")
@@ -319,7 +309,6 @@ describe("connect settings section", () => {
       slot.queryByRole("button", { name: "Copy share URL for port 5173" }),
     ).toBeNull();
 
-    // Revoke still works while the host is unreachable (removal is local).
     const revokeButtons = slot.getAllByRole("button", { name: "Revoke" });
     expect(revokeButtons).toHaveLength(3);
     fireEvent.click(revokeButtons[0]!);
@@ -346,7 +335,6 @@ describe("connect settings section", () => {
     );
 
     await slot.findByText("Shared ports");
-    // The form is hidden until the disclosure is clicked.
     expect(slot.queryByLabelText("Port to share")).toBeNull();
     fireEvent.click(slot.getByRole("button", { name: "Expose a port" }));
 
@@ -387,7 +375,6 @@ describe("connect settings section", () => {
     expect(
       slot.queryByRole("button", { name: "Add mobile device" }),
     ).toBeNull();
-    // The rest of the paired card is unaffected.
     slot.getByRole("button", { name: "Re-pair" });
   });
 
@@ -421,11 +408,9 @@ describe("connect settings section", () => {
         input: null,
       }),
     );
-    // The code is shown as copyable text…
     await slot.findByText("K7QP-2M4X");
     slot.getByRole("button", { name: "Copy pairing code" });
     slot.getByText(/Code expires in 9:5\d/);
-    // …and the QR carries the full pairing payload (code + server + apex).
     const qr = (await slot.findByRole("img", {
       name: "QR code to pair the bb mobile app",
     })) as HTMLImageElement;
@@ -446,7 +431,6 @@ describe("connect settings section", () => {
             minted += 1;
             return {
               code: minted === 1 ? "AAAA-1111" : "BBBB-2222",
-              // The first code dies almost immediately; the renewal lasts.
               expiresAt: Date.now() + (minted === 1 ? 1_200 : 600_000),
               serverUrl: "https://workstation.getbb.app",
             };
@@ -497,7 +481,6 @@ describe("connect settings section", () => {
       name: "Revoke a device you no longer use",
     }) as HTMLAnchorElement;
     expect(link.href).toBe("https://getbb.app/dashboard");
-    // No wire text, no stale code card; the action is available to retry.
     expect(slot.queryByText("machine_limit")).toBeNull();
     slot.getByRole("button", { name: "Add mobile device" });
   });
@@ -521,7 +504,6 @@ describe("connect settings section", () => {
     await slot.findByText("Connected");
     fireEvent.click(slot.getByRole("button", { name: "Disconnect" }));
 
-    // The dialog names the concrete URL that will die.
     await slot.findByText("Disconnect remote access?");
     await slot.findByText(/will stop working on all devices/);
     fireEvent.click(slot.getByRole("button", { name: "Disconnect" }));

@@ -30,24 +30,16 @@ import { useDeferredRealization } from "./useDeferredRealization";
 
 const IS_IOS = process.env.EXPO_OS === "ios";
 
-/** Top corner radius: the UIKit sheet radius on iOS, the Material one elsewhere. */
 export const SHEET_CORNER_RADIUS = IS_IOS ? 38 : 12;
-/** Grabber metrics (UISheetPresentationController). */
 const GRABBER_WIDTH = 36;
 const GRABBER_HEIGHT = 5;
 const GRABBER_ALPHA = 0.3;
 
-/** Imperative handle a mounted `<Sheet>` registers with its controller. */
 export interface SheetHandle {
   present: () => void;
   dismiss: () => void;
 }
 
-/**
- * Stable object from `useSheet()`; pass it to one `<Sheet controller>` (or
- * `<ActionSheet controller>`) and call `present()` / `dismiss()` from
- * handlers. Calls before the sheet mounts are ignored.
- */
 export interface SheetController extends SheetHandle {
   /** @internal set by the mounted Sheet. */
   attach: (handle: SheetHandle | null) => void;
@@ -64,20 +56,13 @@ function createSheetController(): SheetController {
   };
 }
 
-/** Creates the controller for one `<Sheet>`. */
 export function useSheet(): SheetController {
   const [controller] = useState(createSheetController);
   return controller;
 }
 
-/** Wrap the app root (inside `GestureHandlerRootView`) once. */
 export const SheetProvider = BottomSheetModalProvider;
 
-/**
- * Lets an ancestor (the composer) learn when a sheet mounted in its subtree
- * presents or dismisses: presenting dismisses the keyboard, and the composer
- * wants to stay expanded through a picker and refocus afterwards.
- */
 export const SheetPresenceContext = createContext<{
   onPresenceChange: (open: boolean) => void;
 } | null>(null);
@@ -96,36 +81,13 @@ export interface SheetProps extends Pick<
 > {
   controller: SheetController;
   children: ReactNode;
-  /** Optional centered title row (headline). */
   title?: string;
-  /**
-   * `view` (default) sizes to content; `scroll` puts children in a
-   * BottomSheetScrollView; `custom` renders children directly for
-   * BottomSheetFlatList/SectionList bodies.
-   */
   layout?: "view" | "scroll" | "custom";
-  /**
-   * `raised` (default): the lifted surface, rows sit directly on it.
-   * `grouped`: the grouped page color, for bodies made of inset cards
-   * (`ActionSheet`, `GroupedSection`) that need to stand out from it.
-   */
   surface?: SheetSurface;
-  /** Called when the sheet finishes presenting/dismissing (index ≥ 0 = open). */
   onOpenChange?: (open: boolean) => void;
-  /**
-   * Realize children two frames after presenting (default). Turn off for
-   * tiny sheets whose content is cheaper than the resize it would cause.
-   */
   deferContent?: boolean;
 }
 
-/**
- * Bottom sheet built on @gorhom/bottom-sheet, styled like a UIKit sheet:
- * large continuous top corners, no outline, a translucent grabber, the
- * raised surface color. Content is realized two frames after presenting so
- * the slide-in starts on an empty body, and retained afterwards (the web
- * persistent drawer contract). Requires `<SheetProvider>` up the tree.
- */
 export function Sheet({
   controller,
   children,
@@ -154,7 +116,6 @@ export function Sheet({
     if (!onPresenceChange) return;
     onPresenceChange(presented);
     return () => {
-      // Unmounting while presented counts as dismissed.
       if (presented) onPresenceChange(false);
     };
   }, [onPresenceChange, presented]);
@@ -162,8 +123,6 @@ export function Sheet({
   useEffect(() => {
     controller.attach({
       present: () => {
-        // A keyboard left open by the screen underneath would cover the
-        // sheet (the modal mounts below it); sheet-local inputs refocus.
         Keyboard.dismiss();
         setPresented(true);
         modalRef.current?.present();
@@ -235,12 +194,7 @@ export function Sheet({
       enableDynamicSizing={dynamic}
       maxDynamicContentSize={maxDynamicContentSize}
       enablePanDownToClose
-      // Off while the body hosts its own vertical drag (reorder lists), so
-      // the sheet does not follow the finger; the handle still closes it.
       enableContentPanningGesture={enableContentPanningGesture}
-      // The library marks the content container as one accessibility element
-      // ("Bottom Sheet"), which hides every row from VoiceOver and from UI
-      // automation. Expose the children instead.
       accessible={false}
       backdropComponent={renderBackdrop}
       backgroundStyle={backgroundStyle}
@@ -261,15 +215,9 @@ export function Sheet({
           {body}
         </>
       ) : layout === "scroll" ? (
-        // The header rides inside the scroll view (pinned) so dynamic sizing
-        // measures it: outside, the sheet came up short by the header height
-        // and the last row plus the bottom inset slid under the home
-        // indicator.
         <BottomSheetScrollView
           contentContainerStyle={bottomPad}
           stickyHeaderIndices={header ? [0] : undefined}
-          // Let a tap on a row/button land while the keyboard is up
-          // (otherwise the first tap only dismisses the keyboard).
           keyboardShouldPersistTaps="handled"
         >
           {header}

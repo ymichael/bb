@@ -16,8 +16,6 @@ interface CopyButtonProps
   label?: string;
 }
 
-// forwardRef + prop spreading so it can act as a Radix `asChild` trigger (e.g.
-// wrapped in a Tooltip) without also creating a native browser tooltip.
 export const CopyButton = forwardRef<HTMLButtonElement, CopyButtonProps>(
   function CopyButton(
     {
@@ -27,6 +25,7 @@ export const CopyButton = forwardRef<HTMLButtonElement, CopyButtonProps>(
       label = "Copy to clipboard",
       successMessage,
       errorMessage,
+      imageUrl,
       ...rest
     },
     ref,
@@ -35,6 +34,7 @@ export const CopyButton = forwardRef<HTMLButtonElement, CopyButtonProps>(
       text,
       successMessage,
       errorMessage,
+      imageUrl,
     });
 
     return (

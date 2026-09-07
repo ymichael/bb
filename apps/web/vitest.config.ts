@@ -10,7 +10,7 @@ export default defineWorkspaceTestConfig({
     projects: sharedWorkerProjects({
       pkgDir: __dirname,
       name: "@bb/web",
-      include: ["src/**/*.test.ts"],
+      include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
     }),
   },
 });

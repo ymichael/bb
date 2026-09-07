@@ -345,7 +345,6 @@ describe("bbAppManagedConfigSchema", () => {
     expect(parsed.customAcpAgents).toEqual([]);
     expect(warnings).toHaveLength(1);
     expect(warnings[0]?.index).toBe(0);
-    // The warning carries the ZodError's JSON-formatted message.
     expect(warnings[0]?.error).toMatch(/Unrecognized key: \\"absolute\\"/u);
   });
 

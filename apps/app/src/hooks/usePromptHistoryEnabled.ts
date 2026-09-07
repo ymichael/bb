@@ -1,15 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 
-/**
- * Prompt history (project + thread) exists for ArrowUp recall in the composer.
- * Fetching 50 full prompts on every thread open is wasted on phones, where no
- * hardware keyboard will ever press ArrowUp. Coarse-pointer devices therefore
- * defer the request until a real key is seen: an iPad with a keyboard flips
- * the flag on the first keystroke, well before an ArrowUp arrives. Fine-pointer
- * devices keep the eager fetch.
- */
-
 let keyboardSeen = false;
 const listeners = new Set<() => void>();
 

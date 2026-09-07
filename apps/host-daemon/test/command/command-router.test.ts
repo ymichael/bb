@@ -128,6 +128,7 @@ function createTurnSubmitCommand(
       providerThreadId: args.providerThreadId ?? "provider-thread-router",
       instructions: "Be a helpful coding agent.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [],
       instructionMode: "append",
     },
@@ -161,6 +162,7 @@ function createThreadStartCommand(): ThreadStartCommand {
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
+    contributedEnv: [],
     injectedSkillSources: [],
     instructionMode: "append",
   };
@@ -187,6 +189,7 @@ function createEnvironmentDestroyCommand(): EnvironmentDestroyCommand {
   return {
     type: "environment.destroy",
     environmentId: "env-router",
+    teardownTimeoutMs: 900000,
     workspaceContext: {
       workspacePath: "/tmp/env-router",
       workspaceProvisionType: "unmanaged",
@@ -332,8 +335,6 @@ describe("CommandRouter", () => {
     });
     await flushAsyncWork();
 
-    // The stop shares the in-flight start's thread lane and must not reach
-    // the runtime before the start handoff completes.
     expect(harness.runtimeState.stoppedThreadId).toBeUndefined();
     expect(stopResolved).toBe(false);
 
@@ -378,8 +379,6 @@ describe("CommandRouter", () => {
     });
     await flushAsyncWork();
 
-    // The resolution shares the turn's thread lane: it must not reach the
-    // interactive-request registry while the turn dispatch is in flight.
     expect(resolveInteractiveRequest).not.toHaveBeenCalled();
 
     releaseTurn.resolve();
@@ -420,8 +419,6 @@ describe("CommandRouter", () => {
       environmentId: "env-router-old",
       workspacePath: "/tmp/env-router-old",
     });
-    // The old environment still owns the provider session while its in-flight
-    // turn settles, which is the handoff race this barrier protects.
     oldHarness.threadControls.setProviderSession("thread-moved", {
       providerId: "fake",
       providerThreadId: "provider-moved",
@@ -503,9 +500,6 @@ describe("CommandRouter", () => {
   it.each(["codex", "claude-code", "acp-cursor"])(
     "does not route separate %s threads through one lane",
     async (providerId) => {
-      // Thread lanes are keyed per (environment, thread): every bridge keeps
-      // its state per bb thread and dispatches concurrently, so a
-      // thread.stop on one thread never delays another thread's dispatch.
       const harness = createHarness({ workspacePath: "/tmp/env-router" });
       await harness.manager.ensureEnvironment({
         environmentId: "env-router",

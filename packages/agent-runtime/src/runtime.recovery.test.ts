@@ -26,14 +26,6 @@ import type {
   AgentRuntimeProviderRecoveryHint,
 } from "./types.js";
 
-/**
- * The runtime's recovery actions, driven by the typed hints a bridge attaches
- * to a rejected request (`error.data.recovery`) or raises unsolicited
- * (`provider/recovery`). Every test runs under the provider id "fake": the
- * legacy codex-shaped text gates never fire for it, so only the typed hint
- * can make a case pass.
- */
-
 const PROVIDER_ID = "fake";
 
 interface RecoveryRuntime {
@@ -42,7 +34,6 @@ interface RecoveryRuntime {
   processLog: ReturnType<typeof createScriptedEchoProcessLog>;
   record: ReturnType<typeof createScriptedEchoRequestRecord>;
   runtime: LaunchBoundAgentRuntime;
-  /** The runtime's own stderr lines (deferrals, drops, restarts). */
   stderr: string[];
 }
 
@@ -61,7 +52,6 @@ describe("runtime recovery hints", () => {
 
   function createRecoveryRuntime(
     scripted: ScriptedEchoLaunchScript = {},
-    /** Process-level script: what a thread-less command (model/list) sees. */
     processScript: ScriptedEchoLaunchScript = {},
   ): RecoveryRuntime {
     const events: ThreadEvent[] = [];
@@ -80,7 +70,6 @@ describe("runtime recovery hints", () => {
         onEvent: (event) => events.push(event),
         onProviderRecovery: (hint) => hints.push(hint),
         onStderr: (line) => stderr.push(line),
-        // Two rungs, like production, in milliseconds instead of seconds.
         rateLimitRetry: { delaysMs: [20, 40] },
       },
       launch: { scripted },
@@ -203,11 +192,8 @@ describe("runtime recovery hints", () => {
       providerId: PROVIDER_ID,
       threadId: "t-auth",
     });
-    // Only the rejected request went out: no unarchive, no retry.
     expect(countRequests(record, "thread/resume")).toBe(1);
     expect(record.last("thread/unarchive")).toBeUndefined();
-    // Forwarded: the daemon learns the provider needs a sign-in from the
-    // hint, not only from this one request's failure.
     expect(hints).toContainEqual(
       expect.objectContaining({
         kind: "authRequired",
@@ -250,7 +236,6 @@ describe("runtime recovery hints", () => {
     expect((caught as AgentRuntimeRecoveryError).message).toBe(
       "session expired, sign in again",
     );
-    // The first attempt plus the one rung that hit the auth rejection.
     expect(countRequests(record, "turn/start")).toBe(2);
     expect(hints).toContainEqual(
       expect.objectContaining({
@@ -261,9 +246,6 @@ describe("runtime recovery hints", () => {
     );
   });
 
-  // A rung that ends the ladder with another kind gets that kind's own
-  // action — the same one a first rejection with it gets — never a
-  // `rate_limited` error wearing the other hint's message.
   it("sessionArchived at the end of a rateLimited ladder: unarchives and retries", async () => {
     const { record, runtime } = createRecoveryRuntime({
       failMethods: [
@@ -298,8 +280,6 @@ describe("runtime recovery hints", () => {
       method: "thread/unarchive",
       params: { threadId: "t-ladder-archived", providerThreadId },
     });
-    // The first attempt, the rung that found the session archived, and the
-    // retry after the unarchive.
     expect(countRequests(record, "thread/resume")).toBe(3);
     expect(runtime.hasThread("t-ladder-archived")).toBe(true);
   });
@@ -343,16 +323,10 @@ describe("runtime recovery hints", () => {
       threadId: "t-ladder-stale",
     });
 
-    // Reported stale (the daemon resubmits the message as a new turn), and
-    // the runtime no longer believes the turn is running.
     expect(result).toEqual({ status: "stale", activeTurnId: null });
     expect(runtime.getActiveTurnId("t-ladder-stale")).toBeNull();
   });
 
-  // Scripted failures count per bridge process, so the laddered request is a
-  // steer here: the turn that follows the restart is a plain turn/start on
-  // the replacement, which proves the restart ran without tripping the
-  // script again.
   it("restartRecommended at the end of a rateLimited ladder: the hint is forwarded and the thread restarts before its next turn", async () => {
     const { events, hints, processLog, record, runtime } =
       createRecoveryRuntime({
@@ -397,7 +371,6 @@ describe("runtime recovery hints", () => {
     } catch (error) {
       caught = error;
     }
-    // The rung's rejection is reported as is: not a typed rate-limit error.
     expect(caught).toBeInstanceOf(Error);
     expect(caught).not.toBeInstanceOf(AgentRuntimeRecoveryError);
     expect((caught as Error).message).toBe(
@@ -411,7 +384,6 @@ describe("runtime recovery hints", () => {
         threadId: "t-ladder-restart",
       }),
     ]);
-    // The running turn keeps its process; the restart waits for the next turn.
     await waitForThreadTurnCompleted({
       events,
       providerId: PROVIDER_ID,
@@ -422,7 +394,6 @@ describe("runtime recovery hints", () => {
     expect(countSpawns(processLog)).toBe(1);
     expect(record.last("thread/resume")).toBeUndefined();
 
-    // The scheduled restart runs at the next turn.
     await runtime.runTurn({
       clientRequestId: "creq_rcvrrungae",
       input: [promptTextInput({ text: "after restart" })],
@@ -443,9 +414,6 @@ describe("runtime recovery hints", () => {
     });
   });
 
-  // The retry after an unarchive is a request like any other: a hint on its
-  // rejection gets its own action instead of surfacing as an untyped
-  // failure the daemon can only report as `command_failed`.
   it("authRequired on the retry after an unarchive: typed auth_required and forwarded", async () => {
     const { hints, record, runtime } = createRecoveryRuntime({
       failMethods: [
@@ -526,7 +494,6 @@ describe("runtime recovery hints", () => {
       }),
     ).resolves.toEqual({ providerThreadId });
     expect(countRequests(record, "thread/unarchive")).toBe(1);
-    // The archived attempt, the rate-limited retry, and the rung that won.
     expect(countRequests(record, "thread/resume")).toBe(3);
     expect(hints.some((hint) => hint.kind === "rateLimited")).toBe(false);
   });
@@ -635,26 +602,23 @@ describe("runtime recovery hints", () => {
         options: fullRuntimeOptions,
       }),
     ).rejects.toThrow("session is archived");
-    // One unarchive, one retry: the protocol promises a retry, not a loop.
     expect(countRequests(record, "thread/unarchive")).toBe(1);
     expect(countRequests(record, "thread/resume")).toBe(2);
   });
 
-  // The hint is on the error, not on the call site: a command with no
-  // session to act on (model/list, a plain thread/start) still reaches the
-  // daemon as a typed `auth_required` — there is no regex left to rescue it.
   it("authRequired on model/list: typed auth_required and forwarded", async () => {
-    // model/list carries no thread and no per-command script, so the
-    // failure is scripted at the process level.
-    const { hints, runtime } = createRecoveryRuntime({}, {
-      failMethods: [
-        {
-          method: "model/list",
-          message: "ACP agent is not authenticated.",
-          recovery: { kind: "authRequired", retryable: false },
-        },
-      ],
-    });
+    const { hints, runtime } = createRecoveryRuntime(
+      {},
+      {
+        failMethods: [
+          {
+            method: "model/list",
+            message: "ACP agent is not authenticated.",
+            recovery: { kind: "authRequired", retryable: false },
+          },
+        ],
+      },
+    );
     let caught: unknown;
     try {
       await runtime.listModels({ providerId: PROVIDER_ID });
@@ -664,7 +628,10 @@ describe("runtime recovery hints", () => {
     expect(caught).toBeInstanceOf(AgentRuntimeRecoveryError);
     expect((caught as AgentRuntimeRecoveryError).code).toBe("auth_required");
     expect(hints).toContainEqual(
-      expect.objectContaining({ kind: "authRequired", providerId: PROVIDER_ID }),
+      expect.objectContaining({
+        kind: "authRequired",
+        providerId: PROVIDER_ID,
+      }),
     );
   });
 
@@ -690,7 +657,10 @@ describe("runtime recovery hints", () => {
       "Please sign in to the agent first",
     );
     expect(hints).toContainEqual(
-      expect.objectContaining({ kind: "authRequired", providerId: PROVIDER_ID }),
+      expect.objectContaining({
+        kind: "authRequired",
+        providerId: PROVIDER_ID,
+      }),
     );
     expect(runtime.hasThread("t-start-auth")).toBe(false);
   });
@@ -750,13 +720,8 @@ describe("runtime recovery hints", () => {
     }
     expect(caught).toBeInstanceOf(AgentRuntimeRecoveryError);
     expect((caught as AgentRuntimeRecoveryError).code).toBe("rate_limited");
-    // The first attempt plus one per rung of the ladder.
     expect(countRequests(record, "turn/start")).toBe(3);
-    // The thread is idle again: the next turn is accepted normally.
     expect(runtime.getActiveTurnId("t-rate-exhausted")).toBeNull();
-    // The ladder's final rejection is the one the host learns about: the
-    // hint is forwarded once, stamped with exactly the provider and the
-    // thread it failed for (nothing else from the retry's bookkeeping).
     expect(hints).toEqual([
       {
         kind: "rateLimited",
@@ -851,8 +816,6 @@ describe("runtime recovery hints", () => {
       options: fullRuntimeOptions,
       threadId: "t-restart",
     });
-    // The restart replaces the provider process while these waits poll, so
-    // they must not fail fast on "provider is no longer running".
     await waitForThreadTurnCompleted({
       events,
       threadId: "t-restart",
@@ -862,8 +825,8 @@ describe("runtime recovery hints", () => {
         `processLog=[${processLog.read().join(",")}], resumedThreadIds=[${resumedThreadIds(record).join(",")}]`,
       label: "the thread was resumed on a fresh process",
       predicate: () =>
-        processLog.read().filter((line) => line.startsWith("spawn:"))
-          .length === 2 &&
+        processLog.read().filter((line) => line.startsWith("spawn:")).length ===
+          2 &&
         record.last("thread/resume") !== undefined &&
         runtime.listRunningProviders().length === 1,
       runtime,
@@ -885,7 +848,6 @@ describe("runtime recovery hints", () => {
       providerId: PROVIDER_ID,
       providerThreadId,
     });
-    // The next turn runs on the replacement without another restart.
     events.splice(0, events.length);
     await runtime.runTurn({
       clientRequestId: "creq_rcvrhint2a",
@@ -931,7 +893,6 @@ describe("runtime recovery hints", () => {
       runtime,
       threadId: "t-restart-later",
     });
-    // The running turn kept its process; the restart waits for the next turn.
     expect(
       processLog.read().filter((line) => line.startsWith("spawn:")),
     ).toHaveLength(1);
@@ -973,7 +934,6 @@ describe("runtime recovery hints", () => {
       });
     const providerThreadId = await startThread(runtime, "t-restart-rejected");
 
-    // The rejected request is reported as is: no retry, no typed error.
     await expect(
       runtime.renameThread({ threadId: "t-restart-rejected", title: "x" }),
     ).rejects.toThrow("the agent wedged itself; restart me");
@@ -985,15 +945,11 @@ describe("runtime recovery hints", () => {
         threadId: "t-restart-rejected",
       }),
     ]);
-    // The hint arrived inside the rename's own thread operation, so the
-    // restart is scheduled for the next turn rather than run under it.
     expect(
       processLog.read().filter((line) => line.startsWith("spawn:")),
     ).toHaveLength(1);
     expect(record.last("thread/resume")).toBeUndefined();
 
-    // The next turn first moves the thread to a fresh process (the same
-    // provider session resumed), then runs on it.
     await runtime.runTurn({
       clientRequestId: "creq_rcvrhintd5",
       input: [promptTextInput({ text: "after restart" })],
@@ -1016,15 +972,8 @@ describe("runtime recovery hints", () => {
     });
   });
 
-  // The restart's shutdown detaches every sibling on the process, and the
-  // daemon resumes a detached thread on its next command without waiting for
-  // the restart: a sibling rebuilt that way (and possibly mid-turn already)
-  // must not get the restart's own thread/resume on top, which would replace
-  // the session its turn runs on.
   it("restartRecommended: a sibling the daemon resumed during the restart keeps its turn and is not resumed again", async () => {
     const { events, processLog, record, runtime } = createRecoveryRuntime({
-      // Every session construction takes this long, so the daemon's lazy
-      // resume of the sibling lands while the replacement is still coming up.
       startDelayMs: 300,
     });
     await startThread(runtime, "t-restart-a");
@@ -1044,8 +993,6 @@ describe("runtime recovery hints", () => {
       timeoutMs: 5_000,
     });
 
-    // What the daemon does on the sibling's next turn.submit: resume the
-    // thread it no longer finds live, then start the turn.
     await runtime.resumeThread({
       environmentId: "env-1",
       projectId: "p1",
@@ -1065,9 +1012,6 @@ describe("runtime recovery hints", () => {
       threadId: "t-restart-b",
     });
 
-    // The restart loop finishes with the hinted thread's own resume (the
-    // sibling is skipped synchronously right after it); leave a whole
-    // construction delay for a second resume to show up if one were sent.
     await waitForRuntimeState({
       label: "the hinted thread is live on the replacement",
       predicate: () =>
@@ -1076,14 +1020,11 @@ describe("runtime recovery hints", () => {
     });
     await wait(500);
 
-    // One resume each: the restart's for the hinted thread, the daemon's for
-    // the sibling (in whichever order the replacement answered them).
     expect(resumedThreadIds(record).sort()).toEqual([
       "t-restart-a",
       "t-restart-b",
     ]);
     expect(countSpawns(processLog)).toBe(2);
-    // The sibling's turn is still the one the bridge is running.
     expect(runtime.getActiveTurnId("t-restart-b")).toBe(turnId);
     await expect(
       runtime.steerTurn({
@@ -1101,11 +1042,6 @@ describe("runtime recovery hints", () => {
       createRecoveryRuntime();
     await startThread(runtime, "t-batch");
 
-    // The bridge opens the turn, settles it and raises the hint before it
-    // answers turn/start, so the hint reaches the runtime while the turn
-    // operation is still in flight — the state one read that batches the
-    // turn/start response, the terminal delta and the hint produces on a
-    // loaded machine. The hint must not wait for the thread's next turn.
     await runtime.runTurn({
       clientRequestId: "creq_rcvrbatchx",
       input: [promptTextInput({ text: "recover:restartRecommended" })],
@@ -1142,7 +1078,6 @@ describe("runtime recovery hints", () => {
     await startThread(runtime, "t-bg-a");
     await startThread(runtime, "t-bg-b");
 
-    // The sibling's turn settles but leaves a background task running.
     await runtime.runTurn({
       clientRequestId: "creq_rcvrbgwkab",
       input: [promptTextInput({ text: "bg_task" })],
@@ -1171,18 +1106,10 @@ describe("runtime recovery hints", () => {
         ),
       timeoutMs: 5_000,
     });
-    // Nothing was killed: one process, no resume, the task still open.
     expect(countSpawns(processLog)).toBe(1);
     expect(record.last("thread/resume")).toBeUndefined();
     expect(runtime.hasOpenBackgroundWork()).toBe(true);
 
-    // Once the sibling's work settles, the deferred restart runs at the
-    // hinted thread's next turn and both threads come back on the
-    // replacement. The settling turn closes the task before it completes,
-    // so wait for the turn itself as well: a turn on the hinted thread
-    // submitted while the sibling is still mid-turn defers the restart
-    // again. The splice precedes the turn because the wait scans recorded
-    // events and the sibling's first turn/completed is already among them.
     events.splice(0, events.length);
     await runtime.runTurn({
       clientRequestId: "creq_rcvrbgwkad",
@@ -1217,8 +1144,6 @@ describe("runtime recovery hints", () => {
     const { events, hints, processLog, record, runtime, stderr } =
       createRecoveryRuntime();
     await startThread(runtime, "t-victim");
-    // A second provider on its own process whose bridge names the first
-    // provider's thread on every unsolicited hint.
     await runtime.startThread({
       bridgeLaunch: createScriptedEchoLaunch({
         pluginId: "provider-hostile",
@@ -1250,7 +1175,6 @@ describe("runtime recovery hints", () => {
         ),
       timeoutMs: 5_000,
     });
-    // Not forwarded, and the victim's bridge was left alone.
     expect(hints).toEqual([]);
     expect(countSpawns(processLog)).toBe(2);
     expect(record.last("thread/resume")).toBeUndefined();
@@ -1284,8 +1208,6 @@ describe("runtime recovery hints", () => {
       options: fullRuntimeOptions,
       threadId: "t-forward",
     });
-    // The failed turn is the point here, so this wait must not fail fast on
-    // its provider/error row.
     await waitForRuntimeState({
       label: "the turn failed and the authRequired hint was forwarded",
       predicate: () =>
@@ -1303,7 +1225,6 @@ describe("runtime recovery hints", () => {
         retryable: false,
       }),
     );
-    // No restart, no retry, no unarchive: the hint only informs.
     expect(
       processLog.read().filter((line) => line.startsWith("spawn:")),
     ).toHaveLength(1);
@@ -1311,8 +1232,6 @@ describe("runtime recovery hints", () => {
     expect(record.last("thread/unarchive")).toBeUndefined();
   });
 
-  // Panel finding 1: two requests in flight on one thread, rejected with
-  // different hints — each action follows its own rejection.
   it("matches each action to its own rejection when two requests are in flight", async () => {
     const { events, hints, record, runtime } = createRecoveryRuntime({
       failMethods: [
@@ -1346,8 +1265,6 @@ describe("runtime recovery hints", () => {
     await turn;
     expect(countRequests(record, "turn/start")).toBe(2);
     expect(countRequests(record, "thread/name/set")).toBe(1);
-    // The rename's authRequired was forwarded; the turn's rateLimited was
-    // retried, not forwarded.
     expect(hints).toContainEqual(
       expect.objectContaining({ kind: "authRequired", threadId: "t-two" }),
     );
@@ -1361,8 +1278,6 @@ describe("runtime recovery hints", () => {
     });
   });
 
-  // Panel finding 2: a rewind staging thread suppresses its event stream;
-  // the hint rides the rejection, so the recovery still runs.
   it("recovers an archived source on a rewind staging fork", async () => {
     const { record, runtime } = createRecoveryRuntime({
       archivedSession: true,
@@ -1390,8 +1305,6 @@ describe("runtime recovery hints", () => {
     await runtime.discardThreadRewind({ leaseId: "lease-1" });
   });
 
-  // Panel finding 3: a fork of an archived source recovers through the
-  // fork's own rejection (the source, not the new thread, is unarchived).
   it("recovers an archived source on thread/fork", async () => {
     const { events, record, runtime } = createRecoveryRuntime({
       archivedSession: true,
@@ -1424,8 +1337,6 @@ describe("runtime recovery hints", () => {
     });
   });
 
-  // Panel finding 4: a bridge exit has no response and therefore no hint —
-  // a plain rejection, no action.
   it("treats a bridge exit as a plain rejection with no recovery", async () => {
     const { record, runtime } = createRecoveryRuntime({
       crashOn: "thread/resume",

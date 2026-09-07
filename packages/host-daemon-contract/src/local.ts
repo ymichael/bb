@@ -3,10 +3,6 @@ import { hc } from "hono/client";
 import { z } from "zod";
 import type { EmptyInput, Endpoint } from "@bb/hono-typed-routes";
 
-// ---------------------------------------------------------------------------
-// Schemas
-// ---------------------------------------------------------------------------
-
 export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH = "/health";
 export const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
 export const DEFAULT_HOST_DAEMON_LOCAL_HEALTH_VALUE = "ok";
@@ -150,8 +146,6 @@ export type HostPlatform = z.infer<typeof hostPlatformSchema>;
 export const statusResponseSchema = z.object({
   hostId: z.string().min(1),
   connected: z.boolean(),
-  // Informational local-daemon protocol marker. Dev restart tooling uses it
-  // to detect stale host-daemons; product UI must not gate behavior on it.
   protocolVersion: z.number().int().positive(),
   serverUrl: z.string(),
   supportsNativeFolderPicker: z.boolean(),
@@ -162,7 +156,6 @@ export type StatusResponse = z.infer<typeof statusResponseSchema>;
 export const healthResponseSchema = z.string().min(1);
 type HealthResponse = z.infer<typeof healthResponseSchema>;
 
-/** Registered provider id. Kept as a named type for the existing CLI/UI API. */
 const providerCliKeySchema = z.string().min(1);
 export type ProviderCliKey = z.infer<typeof providerCliKeySchema>;
 
@@ -268,34 +261,19 @@ export type ProviderCliInstallEvent = z.infer<
   typeof providerCliInstallEventSchema
 >;
 
-// ---------------------------------------------------------------------------
-// Route type definition for Hono typed client
-// ---------------------------------------------------------------------------
-
-/**
- * Local daemon HTTP API.
- *
- * This API is limited to client-machine-local helper actions about the machine
- * showing the UI, plus daemon status and health. Work-host operations are
- * exposed through server routes and forwarded to the connected daemon over
- * WebSocket RPC.
- */
 export type HostDaemonLocalSchema = {
   [DEFAULT_HOST_DAEMON_LOCAL_HEALTH_PATH]: {
     $get: Endpoint<EmptyInput, HealthResponse>;
   };
-  /** client-machine-local: discover editor/app launch targets on the UI machine. */
   "/workspace-open-targets": {
     $get: Endpoint<
       { query?: WorkspaceOpenTargetsQuery },
       WorkspaceOpenTargetsResponse
     >;
   };
-  /** client-machine-local: open a path in an editor/app on the UI machine. */
   "/open-in-target": {
     $post: Endpoint<{ json: OpenInTargetRequest }, Record<string, never>>;
   };
-  /** mixed: helper reachability plus connected work-host/session identity. */
   "/status": {
     $get: Endpoint<EmptyInput, StatusResponse>;
   };
@@ -303,15 +281,6 @@ export type HostDaemonLocalSchema = {
 
 type HostDaemonLocalRoutes = Hono<{}, HostDaemonLocalSchema, "/">;
 
-// ---------------------------------------------------------------------------
-// Client factory
-// ---------------------------------------------------------------------------
-
-/**
- * Create a typed Hono client for the daemon's local API.
- *
- * No auth — the local API is bound to 127.0.0.1 only.
- */
 export function createHostDaemonLocalClient(baseUrl: string) {
   const normalizedBaseUrl = baseUrl.replace(/\/$/, "");
   return hc<HostDaemonLocalRoutes>(normalizedBaseUrl);

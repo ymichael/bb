@@ -1,30 +1,3 @@
-/**
- * The echo bridge's parity self-run: the recorded-replay oracle the
- * first-party bridges regression-test with, reached through the published
- * `@get-bb/plugin-sdk/provider-bridge/testing` kit alone.
- *
- * `recordings/echo-agent/turn-tools` is a real recording: bb's host daemon
- * ran this plugin's built artifact with `BB_PROVIDER_BRIDGE_RECORD_DIR` set
- * (docs/provider-bridge-protocol.md, "Record mode"), a thread was spawned on
- * it, and the lanes were packaged and redacted with the recordings scripts.
- * The runtime lane holds exactly what the runtime sent (`thread/start`,
- * `turn/start`, the answer to the bridge's `item/tool/call`); the bridge
- * lane holds exactly what the bridge emitted.
- *
- * The test spawns the bridge the way the runtime does (the bootstrap, the
- * module, a plugin scope), drives the recorded runtime lane into it, answers
- * its tool call with the recorded answer, assembles what it emits with the
- * real delta assembler, and diffs that against the recording's own assembled
- * events: zero diffs, zero grammar drops, and every recorded-cell conformance
- * rule green. A bridge change that alters the stream for this session fails
- * here first; `experimental_rerecordCurrentBridgeLane` then writes the new
- * expectation beside the recording for the PR to explain.
- *
- * The echo bridge spawns no provider child, so no `ReplayProviderProfile` is
- * needed: the recording's provider lanes are empty and the default profile
- * applies. A bridge that drives a CLI supplies the env (or runtime-line
- * rewrite) that points the CLI at the kit's replay child.
- */
 import { cpSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -54,7 +27,6 @@ const RECORDINGS_ROOT = join(packageRoot, "recordings");
 const BRIDGE_MODULE = join(packageRoot, "src", "provider-bridge.ts");
 const PLUGIN_ID = "echo-provider";
 
-/** Every item kind the scripted turn emits; the recording must cover them all. */
 const SCRIPTED_ITEM_KINDS = [
   "agentMessage",
   "commandExecution",
@@ -66,7 +38,6 @@ const SCRIPTED_ITEM_KINDS = [
   "toolCall",
 ];
 
-/** The runtime adapter's exact delta→event translation, one event per delta. */
 const createAssembler: CreateParityAssembler = (providerId) => {
   const collector = createBridgeDeltaEventCollector(providerId);
   return { assembleMessage: (message) => collector.assembleMessage(message) };
@@ -91,9 +62,6 @@ it("ships a recorded cell for the echo provider", () => {
 it.each(cells.map((cell) => [cellKey(cell), cell] as const))(
   "%s replays through the current bridge with zero diffs",
   async (_key, cell) => {
-    // The recording's own view: what its bridge lane assembles to, no bridge
-    // in the loop. The current lane (a deliberate re-recording) wins when
-    // one exists beside the recorded lane.
     const recorded = assembleRecordedEvents(
       withCurrentBridgeLane(readBridgeRecording(cell.dir)),
       createAssembler,
@@ -117,8 +85,6 @@ it.each(cells.map((cell) => [cellKey(cell), cell] as const))(
       }),
       createAssembler,
       planFromCurrentLane: true,
-      // Generous: the bridge boots through a TypeScript loader, and a busy
-      // CI runner can take a while to spawn it.
       timeoutMs: 60_000,
       onStderr: (text) => process.stderr.write(`[echo bridge] ${text}`),
     });
@@ -131,7 +97,11 @@ it.each(cells.map((cell) => [cellKey(cell), cell] as const))(
         rows: [],
         grammarViolations: recorded.grammarViolations,
       },
-      { events: run.events, rows: [], grammarViolations: run.grammarViolations },
+      {
+        events: run.events,
+        rows: [],
+        grammarViolations: run.grammarViolations,
+      },
       [],
       { provider: cell.provider, cell: cell.cell },
     );
@@ -165,13 +135,6 @@ it.each(cells.map((cell) => [cellKey(cell), cell] as const))(
 );
 
 it("re-records the bridge lane beside a copy of the recording and replays from it", async () => {
-  // The workflow a bridge change follows: write the bridge's current output
-  // next to the recording (the recording itself is never rewritten), then the
-  // self-run compares against that lane. On an unchanged bridge the new lane
-  // assembles to the events of the lane currently pinned (the deliberate
-  // re-recording beside the original, when one exists), keeps the
-  // recording's workspace path, and names the recorded request id, so the
-  // recorded runtime answer still matches.
   const cell = cells[0]!;
   const copy = mkdtempSync(join(tmpdir(), "bb-echo-rerecord-"));
   try {
@@ -202,10 +165,13 @@ it("re-records the bridge lane beside a copy of the recording and replays from i
     const toolCallIds = lane
       .split("\n")
       .filter((raw) => raw.length > 0)
-      .map((raw) => JSON.parse((JSON.parse(raw) as { line: string }).line) as {
-        id?: string;
-        method?: string;
-      })
+      .map(
+        (raw) =>
+          JSON.parse((JSON.parse(raw) as { line: string }).line) as {
+            id?: string;
+            method?: string;
+          },
+      )
       .filter((message) => message.method === "item/tool/call")
       .map((message) => message.id);
     expect(toolCallIds).toEqual(["echo-req-1"]);

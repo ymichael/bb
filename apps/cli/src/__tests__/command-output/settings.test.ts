@@ -34,8 +34,6 @@ describe("bb settings commands", () => {
     });
   });
 
-  // Keys come from `appSettingsSchema`, so an unknown one is rejected by the
-  // command rather than sent to the server.
   it("rejects an unknown general setting key", async () => {
     stubServerApi({
       "v1.system.config.$get": vi.fn(async () => ({

@@ -23,6 +23,7 @@ out
 /build
 /apps/app/build/
 /packages/bb-app/host-daemon/
+/packages/bb-app/host-package/
 /apps/desktop/release/
 /apps/desktop/.electron-builder.generated.json
 
@@ -32,6 +33,7 @@ out
 /packages/templates/src/generated/
 /packages/plugin-sdk/bundled-types/
 /packages/plugin-build/src/generated/
+/apps/server/src/generated/
 
 # misc
 .DS_Store

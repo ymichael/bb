@@ -13,15 +13,6 @@ import {
   pastRowDimClassName,
 } from "./ThreadTimelineRows";
 
-// `pastRowDimClassName` is the timeline's active/inactive prominence decision:
-// finished rows recede (get the dim class) while live and attention-worthy rows
-// stay at full strength. These cases lock in that contract — in particular the
-// two states that used to be wrong (completed system rows now recede; the
-// active-latest bundle stays prominent). The opacity *value* is intentionally
-// not asserted beyond "is the past-dim class" so visual tuning stays free.
-
-// The view rows the renderer actually decides over come out of the projection,
-// so build them the same way rather than hand-rolling view-row shapes.
 function viewRow(
   rows: Parameters<typeof buildTimelineViewRows>[0],
 ): ThreadTimelineViewRow {
@@ -33,7 +24,10 @@ function viewRow(
   return first;
 }
 
-const inactiveScope = { activeLatestBundleId: null, scopeActive: false } as const;
+const inactiveScope = {
+  activeLatestBundleId: null,
+  scopeActive: false,
+} as const;
 
 describe("pastRowDimClassName", () => {
   it("recedes a completed work row", () => {
@@ -104,7 +98,6 @@ describe("pastRowDimClassName", () => {
     ]);
     expect(bundle.kind).toBe("bundle-summary");
 
-    // The live frontier: active scope + this bundle is the trailing one.
     expect(
       pastRowDimClassName({
         activeLatestBundleId: bundle.id,
@@ -113,7 +106,6 @@ describe("pastRowDimClassName", () => {
       }),
     ).toBeUndefined();
 
-    // Same bundle once the thread is idle (or it's no longer the frontier) recedes.
     expect(
       pastRowDimClassName({
         activeLatestBundleId: bundle.id,
@@ -127,9 +119,13 @@ describe("pastRowDimClassName", () => {
     const assistant = viewRow([
       conversationRow({ role: "assistant", text: "answer" }),
     ]);
-    expect(pastRowDimClassName({ ...inactiveScope, row: assistant })).toBeUndefined();
+    expect(
+      pastRowDimClassName({ ...inactiveScope, row: assistant }),
+    ).toBeUndefined();
 
     const user = viewRow([conversationRow({ role: "user", text: "question" })]);
-    expect(pastRowDimClassName({ ...inactiveScope, row: user })).toBeUndefined();
+    expect(
+      pastRowDimClassName({ ...inactiveScope, row: user }),
+    ).toBeUndefined();
   });
 });

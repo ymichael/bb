@@ -18,11 +18,6 @@ function latestCheckedAt(
   return left > right ? left : right;
 }
 
-/**
- * The version feed can establish availability, but only electron-updater can
- * establish native download activity. Keep those facts separate so a feed-only
- * result never masquerades as an active download.
- */
 export function mergeDesktopUpdateInfo(
   args: MergeDesktopUpdateInfoArgs,
 ): BbDesktopInfo | null {

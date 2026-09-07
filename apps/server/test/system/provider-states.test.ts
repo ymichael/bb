@@ -1,6 +1,7 @@
 import type { ProviderHealth } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import { getProviderStates } from "../../src/services/system/provider-states.js";
+import { setPluginAgentContributions } from "../../src/services/plugins/plugin-agent-contributions.js";
 import { registerHostRpcResponder } from "../helpers/host-rpc.js";
 import { minimalProviderRegistration } from "../helpers/provider-registry.js";
 import {
@@ -42,6 +43,75 @@ function healthForInstalledOnlyProvider(
 }
 
 describe("getProviderStates", () => {
+  it("reports an unauthenticated provider as ready when contributed env supplies credentials", async () => {
+    await withTestHarness(async (harness) => {
+      setPluginAgentContributions({
+        listSkillRootContributions: () => [],
+        listAgentTools: () => [],
+        listInstructionContributions: () => [],
+        findAgentTool: () => undefined,
+        invokeAgentTool: async () => ({
+          success: false,
+          contentItems: [{ type: "inputText", text: "unused" }],
+        }),
+        resolveMention: async () => ({ ok: false, error: "unused" }),
+        resolveProviderEnvHealth: async ({ providerId }) =>
+          providerId === "claude-code"
+            ? {
+                label: "Proxied",
+                statusMessage:
+                  "Credentials are provided by the Account Pooler hub.",
+              }
+            : null,
+      });
+      try {
+        const { host, session } = seedHostSession(harness.deps);
+        registerHostRpcResponder(harness, {
+          hostId: host.id,
+          sessionId: session.id,
+          handle: (request) => {
+            if (request.command.type === "provider.health") {
+              return {
+                ok: true,
+                result: {
+                  supported: true,
+                  health:
+                    request.command.providerId === "claude-code"
+                      ? {
+                          ...readyHealth("claude-code"),
+                          status: "unauthenticated",
+                          loginCommand: "claude /login",
+                        }
+                      : readyHealth(request.command.providerId),
+                },
+              };
+            }
+            throw new Error(`Unexpected command ${request.command.type}`);
+          },
+        });
+
+        const result = await getProviderStates(harness.deps, {
+          hostId: host.id,
+        });
+
+        expect(
+          result.providers.find(
+            (provider) => provider.providerId === "claude-code",
+          ),
+        ).toMatchObject({
+          status: "ready",
+          statusMessage:
+            "Credentials are provided by the Account Pooler hub.",
+          planLabel: "Proxied",
+          accountEmail: null,
+          loginCommand: null,
+        });
+      } finally {
+        setPluginAgentContributions(undefined);
+      }
+    });
+  });
+
   it("asks each provider bridge and preserves model-picker order", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
@@ -212,8 +282,6 @@ describe("getProviderStates", () => {
 
       expect(result.providers[0]?.providerId).toBe("codex");
       expect(primaryCalls).toBe(0);
-      // Installed-only discovery is host-scoped; provider readiness is
-      // workspace-scoped and receives the environment path.
       expect(healthCwds.filter((cwd) => cwd === undefined)).toHaveLength(4);
       expect(healthCwds.filter((cwd) => cwd !== undefined)).toEqual(
         Array(4).fill(environment.path),

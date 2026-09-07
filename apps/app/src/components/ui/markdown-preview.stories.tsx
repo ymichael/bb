@@ -10,10 +10,6 @@ export default {
   title: "ui/Markdown Preview",
 };
 
-// Mirrors the chat layout: a wide outer container scoped with `@container/page`
-// (so the table breakout's `100cqw` formula resolves against it), and a
-// narrower text column inside (where paragraphs and lists actually wrap).
-// The right margin of the outer container is where wide tables extend into.
 function PreviewStage({ children }: { children: ReactNode }) {
   return (
     <div

@@ -1,32 +1,10 @@
-// bb connect tunnel wire protocol.
-//
-// Every binary WebSocket message on a tunnel connection is exactly one frame:
-//
-//   byte 0        frame type
-//   bytes 1..4    stream id (u32 big-endian)
-//   bytes 5..     payload (JSON metadata, raw bytes, or empty — per type)
-//
-// Text messages are reserved for heartbeats (HEARTBEAT_* constants) so the
-// relay can answer them with Durable Object auto-response without waking.
-//
-// Streams are opened only by the relay side (visitor-originated); the tunnel
-// client never allocates stream ids. M2 hardening (backpressure credits,
-// account tags, reconnect-resume) extends this format — new frame types get
-// new type bytes, existing layouts stay stable.
-
 export const PROTOCOL_VERSION = 1;
 
-/**
- * Query param the tunnel client sets on `/__tunnel` with its
- * {@link PROTOCOL_VERSION}. Missing or unparsable is treated as 0 (pre-v1).
- */
 export const TUNNEL_PROTOCOL_QUERY_PARAM = "v";
 
-/** Heartbeat text messages (eligible for DO auto-response). */
 export const HEARTBEAT_REQUEST = "bbt:hb";
 export const HEARTBEAT_RESPONSE = "bbt:hb-ack";
 
-/** Body chunks larger than this must be split by the sender. */
 export const MAX_CHUNK_BYTES = 1024 * 1024;
 
 const FRAME_TYPE = {
@@ -42,37 +20,27 @@ const FRAME_TYPE = {
 
 export type HeaderPair = [name: string, value: string];
 
-/** Relay → client: a visitor HTTP request opened on `streamId`. */
 export interface OpenHttpFrame {
   type: "open-http";
   streamId: number;
   method: string;
-  /** Path + query, e.g. "/api/v1/threads?limit=5". */
   path: string;
   headers: HeaderPair[];
-  /** When true, body-chunk/body-end frames for this stream follow. */
   hasBody: boolean;
-  /**
-   * When set, route to the registered local share named by `target`
-   * (v1: decimal port string like "8000"). Absent = bb server loopback origin.
-   */
   target?: string;
 }
 
-/** Either direction: a piece of an HTTP request or response body. */
 interface BodyChunkFrame {
   type: "body-chunk";
   streamId: number;
   data: Uint8Array;
 }
 
-/** Either direction: the body for `streamId` is complete. */
 interface BodyEndFrame {
   type: "body-end";
   streamId: number;
 }
 
-/** Client → relay: response status + headers for an open-http stream. */
 interface RespHeadFrame {
   type: "resp-head";
   streamId: number;
@@ -80,29 +48,21 @@ interface RespHeadFrame {
   headers: HeaderPair[];
 }
 
-/** Relay → client: a visitor WebSocket upgrade opened on `streamId`. */
 export interface OpenWsFrame {
   type: "open-ws";
   streamId: number;
   path: string;
   headers: HeaderPair[];
   protocols: string[];
-  /**
-   * When set, route to the registered local share named by `target`
-   * (v1: decimal port string like "8000"). Absent = bb server loopback origin.
-   */
   target?: string;
 }
 
-/** Client → relay: the origin accepted the WebSocket. */
 interface WsOpenAckFrame {
   type: "ws-open-ack";
   streamId: number;
-  /** Negotiated subprotocol; null when none was negotiated. */
   protocol: string | null;
 }
 
-/** Either direction: one WebSocket message on an open-ws stream. */
 interface WsDataFrame {
   type: "ws-data";
   streamId: number;
@@ -110,11 +70,6 @@ interface WsDataFrame {
   data: Uint8Array;
 }
 
-/**
- * Either direction: terminate a stream. For open-ws streams `code`/`reason`
- * mirror the WebSocket close; for open-http streams they are advisory and a
- * receiver should abort the request/response.
- */
 interface CloseStreamFrame {
   type: "close-stream";
   streamId: number;
@@ -135,7 +90,11 @@ export type Frame =
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-function withHeader(type: number, streamId: number, payload: Uint8Array): Uint8Array {
+function withHeader(
+  type: number,
+  streamId: number,
+  payload: Uint8Array,
+): Uint8Array {
   if (!Number.isInteger(streamId) || streamId < 0 || streamId > 0xffffffff) {
     throw new Error(`tunnel-contract: stream id out of range: ${streamId}`);
   }
@@ -252,7 +211,10 @@ export function decodeFrame(message: ArrayBuffer | Uint8Array): Frame {
     case FRAME_TYPE.bodyEnd:
       return { type: "body-end", streamId };
     case FRAME_TYPE.respHead: {
-      const meta = parseJson<{ status: number; headers: HeaderPair[] }>(payload, "resp-head");
+      const meta = parseJson<{ status: number; headers: HeaderPair[] }>(
+        payload,
+        "resp-head",
+      );
       return { type: "resp-head", streamId, ...meta };
     }
     case FRAME_TYPE.openWs: {
@@ -272,17 +234,28 @@ export function decodeFrame(message: ArrayBuffer | Uint8Array): Frame {
       };
     }
     case FRAME_TYPE.wsOpenAck: {
-      const meta = parseJson<{ protocol: string | null }>(payload, "ws-open-ack");
+      const meta = parseJson<{ protocol: string | null }>(
+        payload,
+        "ws-open-ack",
+      );
       return { type: "ws-open-ack", streamId, protocol: meta.protocol };
     }
     case FRAME_TYPE.wsData: {
       if (payload.length < 1) {
         throw new Error("tunnel-contract: ws-data frame missing binary flag");
       }
-      return { type: "ws-data", streamId, isBinary: payload[0] === 1, data: payload.subarray(1) };
+      return {
+        type: "ws-data",
+        streamId,
+        isBinary: payload[0] === 1,
+        data: payload.subarray(1),
+      };
     }
     case FRAME_TYPE.closeStream: {
-      const meta = parseJson<{ code: number; reason: string }>(payload, "close-stream");
+      const meta = parseJson<{ code: number; reason: string }>(
+        payload,
+        "close-stream",
+      );
       return { type: "close-stream", streamId, ...meta };
     }
     default:
@@ -290,13 +263,18 @@ export function decodeFrame(message: ArrayBuffer | Uint8Array): Frame {
   }
 }
 
-/** Split an arbitrarily large buffer into MAX_CHUNK_BYTES-sized body chunks. */
-export function* chunkBody(streamId: number, data: Uint8Array): Generator<BodyChunkFrame> {
+export function* chunkBody(
+  streamId: number,
+  data: Uint8Array,
+): Generator<BodyChunkFrame> {
   for (let offset = 0; offset < data.length; offset += MAX_CHUNK_BYTES) {
     yield {
       type: "body-chunk",
       streamId,
-      data: data.subarray(offset, Math.min(offset + MAX_CHUNK_BYTES, data.length)),
+      data: data.subarray(
+        offset,
+        Math.min(offset + MAX_CHUNK_BYTES, data.length),
+      ),
     };
   }
 }

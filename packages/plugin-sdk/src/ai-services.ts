@@ -66,7 +66,13 @@ export type ExperimentalAiInferenceCompleteInput = z.infer<
 >;
 
 export const experimental_aiInferenceCompleteOutputSchema = z.union([
-  z.object({ ok: z.literal(true), model: z.string().min(1), value: jsonObjectSchema }).strict(),
+  z
+    .object({
+      ok: z.literal(true),
+      model: z.string().min(1),
+      value: jsonObjectSchema,
+    })
+    .strict(),
   failureSchema,
 ]);
 export type ExperimentalAiInferenceCompleteOutput = z.infer<
@@ -89,7 +95,9 @@ export type ExperimentalAiVoiceTranscribeInput = z.infer<
 >;
 
 export const experimental_aiVoiceTranscribeOutputSchema = z.union([
-  z.object({ ok: z.literal(true), model: z.string().min(1), text: z.string() }).strict(),
+  z
+    .object({ ok: z.literal(true), model: z.string().min(1), text: z.string() })
+    .strict(),
   failureSchema,
 ]);
 export type ExperimentalAiVoiceTranscribeOutput = z.infer<
@@ -111,4 +119,5 @@ export const experimental_aiServicesHostContract = defineRpcContract({
     output: experimental_aiVoiceTranscribeOutputSchema,
   },
 });
-export type ExperimentalAiServicesHostContract = typeof experimental_aiServicesHostContract;
+export type ExperimentalAiServicesHostContract =
+  typeof experimental_aiServicesHostContract;

@@ -13,6 +13,9 @@ export function isRunningThreadRuntimeDisplayStatus(
       return true;
     case "error":
     case "idle":
+    // A pending thread has never dispatched: nothing is running until its
+    // first attempt clears, so it sorts and filters exactly like idle.
+    case "pending":
     case "waiting-for-host":
       return false;
     default:

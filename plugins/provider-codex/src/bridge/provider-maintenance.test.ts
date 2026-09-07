@@ -94,11 +94,6 @@ describe("Codex provider maintenance", () => {
   });
 });
 
-/**
- * Health and usage read the codex CLI's own `auth.json`; these cases pin what
- * each credential state reports. A fake `codex` executable sits on PATH so
- * the installed/version checks that gate the credential read pass.
- */
 describe("Codex credential health and usage", () => {
   const tempDirs: string[] = [];
   let homeDir: string;

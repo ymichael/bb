@@ -52,9 +52,9 @@ import {
   subscribeAppUpdateCheck,
 } from "@/components/settings/app-update-check-store";
 import {
-  CHANGELOG_RELEASE_META,
   fetchLatestChangelogEntry,
   LATEST_CHANGELOG_ENTRY,
+  RELEASE_META,
   type ChangelogBlock,
 } from "@/components/settings/changelog-preview";
 import { appToast } from "@/components/ui/app-toast";
@@ -127,16 +127,8 @@ function isNewerChangelogVersion(
   return false;
 }
 
-/** Stalled machines needed before the page offers a bulk retry. */
 const BULK_RETRY_THRESHOLD = 1;
 
-/**
- * A row action. The icon-only form delegates to the shared
- * `ResourceActionButton`, which already owns the tooltip, the loading
- * spinner, and a `disabledReason` that explains a blocked action rather than
- * only greying it out. Labelled forms stay local — the shared atom is
- * icon-only by design.
- */
 export function UpdateActionButton({
   label,
   tooltipLabel,
@@ -151,7 +143,6 @@ export function UpdateActionButton({
   onClick,
 }: {
   label: string;
-  /** Short tooltip when the accessible label is a full sentence. */
   tooltipLabel?: string;
   icon: IconName;
   iconPosition?: "start" | "end";
@@ -182,9 +173,6 @@ export function UpdateActionButton({
       />
     );
   }
-  // Only a quiet button gets the quiet text colour. Applying it regardless
-  // painted `text-subtle-foreground` over a filled variant's own foreground —
-  // mid-grey on near-black, which is unreadable rather than merely quiet.
   const isQuiet = variant === undefined || variant === "ghost";
   return (
     <Button
@@ -212,32 +200,11 @@ export function UpdateActionButton({
   );
 }
 
-/**
- * The grid every line in a card sits on: mark, content, trailing controls.
- *
- * One constant rather than one string per caller, because the whole point is
- * that they agree — `ResourceRow` uses this template internally, so a row, a
- * caption and bb's own row all end their content column in the same place and
- * truncate long text at the same point.
- */
 const ROW_GRID =
   "grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)_auto] items-center gap-3";
 
-/**
- * Vertical rhythm for every row in a machine card. `SettingsSection` already
- * pads the card (`py-3.5`), so the first and last rows drop their own outer
- * padding the way `SettingsRow` does; without the reset a card's own padding
- * and the row's stacked to 22px at each end, while `UpdatesRow` — which had
- * the reset — sat at 14px, and the bb row's card came out lopsided.
- */
 const ROW_SPACING = "py-2 first:pt-0 last:pb-0";
 
-/**
- * A row with no destination — bb itself, which has no page of its own to open.
- * It borrows `ResourceRow`'s grid rather than its behaviour so its mark, name
- * and action land on the same three columns as the rows that are navigable;
- * a plain flex row put bb's name half a mark to the left of every CLI's.
- */
 function UpdatesRow({
   leading,
   children,
@@ -248,9 +215,7 @@ function UpdatesRow({
   className?: string;
 }) {
   return (
-    <div
-      className={cn(ROW_GRID, ROW_SPACING, "text-sm", className)}
-    >
+    <div className={cn(ROW_GRID, ROW_SPACING, "text-sm", className)}>
       <span className="flex size-6 shrink-0 items-center justify-center">
         {leading}
       </span>
@@ -259,22 +224,6 @@ function UpdatesRow({
   );
 }
 
-/**
- * Versions read as part of the name's own phrase — "Codex 0.145.0 → 0.146.0" —
- * rather than as a right-aligned column. Sitting in the same line box as the
- * name is what keeps the baselines shared no matter how long the name is; a
- * right-flushed column drifted away from the text it described and had to be
- * re-anchored every time an action's width changed.
- *
- * Not `font-mono`. The mono stack resolves to a single face here, so
- * `font-medium` on the target version rendered at exactly the same weight as
- * the version you are on — measured identical widths at 400 through 700 — and
- * the pair lost the contrast that makes it scannable. Mono is still right for
- * the upgrade *command*, which is text you retype; a version number is prose.
- *
- * No current version means nothing is installed here; showing `latest` alone
- * would read as the version you have, so the row's status label says it.
- */
 function RowVersions({
   current,
   latest,
@@ -294,11 +243,7 @@ function RowVersions({
       {latest !== null && latest !== current ? (
         <>
           <span className="px-1">→</span>
-          {/* The only recoloured half of the pair: what you'd move to reads
-              louder than what you're on, so the row is scannable without
-              parsing two version numbers. Semibold, not medium — at 10px a
-              single step buys almost no contrast, and small text needs more
-              weight than body text to hold the same emphasis. */}
+          {}
           <span className="font-semibold text-version-upgrade">{latest}</span>
         </>
       ) : null}
@@ -306,10 +251,6 @@ function RowVersions({
   );
 }
 
-/**
- * The bb app's row. `detail` carries the same weight as a machine row's
- * provider name: secondary to the thing's identity, ahead of its versions.
- */
 function RowName({
   name,
   detail,
@@ -332,45 +273,12 @@ function RowName({
   );
 }
 
-/**
- * A row's condition as one mark, named on hover.
- *
- * The bb card reports condition; the Providers card reports decisions. A
- * condition is the same handful of words on every row — "Up to date", "Offline"
- * — so spelling it out down a column reads as a wall of repetition that says
- * nothing about which row differs. A mark says which row differs at a glance.
- *
- * The tooltip is the state's name and nothing more. It does not repeat what the
- * row already prints (the CLI, the versions, the machine), and it never carries
- * something the reader has to act on — that is a visible caption's job. The
- * label is always in the accessibility tree, so nothing is hover-only for a
- * screen reader.
- */
-/**
- * Red belongs to the statement of what is wrong, and to nothing else.
- *
- * A row says its condition exactly once — as words (`RowStateCaption`) or, when
- * it has no words, as the inert glyph. That one element carries the error tone.
- * Controls never do: a button is the way out of the problem, not part of it, and
- * a destructive-red "Retry" reads as a second failure rather than a recovery.
- *
- * So there are two red surfaces on this page and no others. Anything that takes
- * a click stays untinted, whatever state it belongs to.
- */
 function stateTextClass(state: UpdateState): string {
   return UPDATE_STATE_PRESENTATION[state].tone === "error"
     ? "font-semibold text-destructive"
     : "font-semibold text-subtle-foreground";
 }
 
-/**
- * A state's words, placed beside the version rather than beside its control.
- *
- * The trailing column is the control spine: one thing per row sits on it. When
- * a row has both something to say and something to press, the words belong to
- * the row's identity — left, flush after the version — and the control keeps
- * the spine to itself.
- */
 function RowStateCaption({
   state,
   children,
@@ -397,29 +305,10 @@ function RowStateControl({
   onClick,
 }: {
   state: UpdateState;
-  /**
-   * Overrides the state's glyph when the control does something other than the
-   * state implies — the web bb row copies an upgrade command rather than
-   * fetching anything, and a Download arrow there promises an install that
-   * never happens.
-   */
   actionIcon?: IconName;
-  /**
-   * What clicking does. This is the accessible name, so it stays specific —
-   * two "Retry" buttons in a fleet are indistinguishable to a screen reader
-   * without the machine in them.
-   */
   actionLabel?: string;
-  /**
-   * The visible tooltip, when it should be shorter than the accessible name.
-   * A tooltip sits next to the row that already prints the CLI, its versions
-   * and its machine, so repeating them there is noise; a screen reader has no
-   * such context and needs the long form.
-   */
   actionTooltip?: string;
-  /** Optional decorative mark before a labelled action. */
   buttonLeading?: ReactNode;
-  /** Renders the control as a labelled button carrying the state's glyph. */
   buttonLabel?: string;
   loading?: boolean;
   live?: boolean;
@@ -427,23 +316,16 @@ function RowStateControl({
 }) {
   const presentation = UPDATE_STATE_PRESENTATION[state];
   const icon = actionIcon ?? (presentation.icon as IconName | null);
-  // A retryable failure defaults to the shared retry glyph. A caller can
-  // provide a product mark when the action is specifically about that product.
   const buttonIcon =
     state === "failed" ? (RETRY_ACTION_ICON as IconName) : null;
   const spin = loading || presentation.inFlight === true;
   const srLabel = presentation.label;
-  // A spinner is self-evident on sight, so it gets no tooltip — but it still
-  // needs its words in the accessibility tree, where nothing is self-evident.
   const explainOnHover = presentation.inFlight !== true;
 
-  // A state with a resolution is ONE labelled control carrying its mark — not
-  // a mark beside a button repeating it.
   if (onClick !== undefined && buttonLabel !== undefined) {
     return (
       <span className="flex min-w-0 items-center gap-1.5">
-        {/* Untinted by rule — see `stateTextClass`. A failure's control wears
-            the reload glyph; everything else is label-only. */}
+        {}
         <Button
           type="button"
           variant="outline"
@@ -481,8 +363,6 @@ function RowStateControl({
     );
   }
 
-  // A glyph-less state still holds the spine, so a column of rows keeps one
-  // right edge whether each row ends in an icon or a button.
   if (icon === null) {
     return <span className="flex h-7 shrink-0 items-center" />;
   }
@@ -518,8 +398,7 @@ function RowStateControl({
       <TooltipProvider delayDuration={250}>
         <Tooltip>
           <TooltipTrigger asChild>{mark}</TooltipTrigger>
-          {/* The state and nothing else. Anything a reader has to act on is a
-              visible caption; anything the row already shows is not repeated. */}
+          {}
           <TooltipContent>{presentation.label}</TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -527,16 +406,8 @@ function RowStateControl({
   );
 }
 
-/**
- * The trailing column, flush to the card's inner edge. Section bulk actions
- * land on the same edge, so every control on the page — per-row and
- * per-section — shares one right spine against the content's left one.
- */
-
 function RowActions({ children }: { children: ReactNode }) {
   return (
-    // `gap-1` is `ResourceRow`'s own gap between a row's meta and its action,
-    // so a bb row's status lands on the same spine as every machine row's.
     <span className="ml-auto flex shrink-0 items-center justify-end gap-1">
       {children}
     </span>
@@ -612,12 +483,6 @@ function ChangelogBlocks({
   );
 }
 
-/**
- * A compact card rendering of the same release structure as getbb.app. Version
- * and date stay in a short metadata line so the release content owns the full
- * card width. The bundled release stays available offline; the live source
- * keeps it current.
- */
 export function ChangelogPreviewCard() {
   const changelogQuery = useQuery({
     queryKey: ["updates", "changelog", "latest"],
@@ -682,7 +547,7 @@ export function ChangelogPreviewCard() {
   ) {
     return null;
   }
-  const releaseMeta = CHANGELOG_RELEASE_META[entry.version];
+  const releaseMeta = RELEASE_META[entry.version];
   const dismissalPhase =
     dismissal?.version === entry.version ? dismissal.phase : "visible";
   const releaseVisible = dismissalPhase === "visible";
@@ -697,48 +562,7 @@ export function ChangelogPreviewCard() {
           : "grid-rows-[1fr] translate-y-0 opacity-100",
       )}
     >
-      <SettingsSection
-        title={
-          <span
-            data-changelog-label
-            className="inline-flex rounded-sm border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium leading-none text-muted-foreground"
-          >
-            What's new
-          </span>
-        }
-        action={
-          releaseVisible ? (
-            <Tooltip delayDuration={300} disableHoverableContent>
-              <TooltipTrigger asChild>
-                <Button
-                  data-changelog-dismiss
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-7 text-muted-foreground hover:text-foreground"
-                  aria-label={`Dismiss bb ${entry.version} changelog preview`}
-                  onClick={() => {
-                    rawStringLocalStorage.setItem(
-                      CHANGELOG_DISMISSED_VERSION_STORAGE_KEY,
-                      entry.version,
-                    );
-                    setDismissal({
-                      phase: "confirming",
-                      version: entry.version,
-                    });
-                  }}
-                >
-                  <Icon aria-hidden name="X" className="size-3.5" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">Dismiss</TooltipContent>
-            </Tooltip>
-          ) : (
-            <span aria-hidden className="block size-7" />
-          )
-        }
-        bodyClassName="p-0"
-      >
+      <section className="overflow-hidden rounded-lg border border-border bg-card">
         <div
           data-changelog-release-panel
           aria-hidden={!releaseVisible}
@@ -751,21 +575,66 @@ export function ChangelogPreviewCard() {
         >
           <div className="min-h-0 overflow-hidden">
             <article data-changelog-preview className="min-w-0 p-4 sm:p-5">
-              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
-                <span
-                  data-changelog-version={entry.version}
-                  className="inline-flex rounded-full border border-border bg-muted/30 px-2.5 py-1 font-mono text-xs font-semibold leading-none tracking-tight text-foreground"
-                >
-                  {entry.version}
-                </span>
-                {releaseMeta === undefined ? null : (
+              <div
+                data-changelog-header
+                className="flex min-w-0 items-center justify-between gap-4"
+              >
+                <h2 className="min-w-0">
+                  <span
+                    data-changelog-label
+                    className="inline-flex rounded-sm border border-border bg-muted/40 px-2.5 py-1 text-xs font-medium leading-none text-muted-foreground"
+                  >
+                    What's new
+                  </span>
+                </h2>
+                {releaseVisible ? (
+                  <Tooltip delayDuration={300} disableHoverableContent>
+                    <TooltipTrigger asChild>
+                      <Button
+                        data-changelog-dismiss
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="size-7 text-muted-foreground hover:text-foreground"
+                        aria-label={`Dismiss bb ${entry.version} changelog preview`}
+                        onClick={() => {
+                          rawStringLocalStorage.setItem(
+                            CHANGELOG_DISMISSED_VERSION_STORAGE_KEY,
+                            entry.version,
+                          );
+                          setDismissal({
+                            phase: "confirming",
+                            version: entry.version,
+                          });
+                        }}
+                      >
+                        <Icon aria-hidden name="X" className="size-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom">Dismiss</TooltipContent>
+                  </Tooltip>
+                ) : null}
+              </div>
+              {releaseMeta === undefined ? null : (
+                <div className="mt-4 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span
+                    data-changelog-version={entry.version}
+                    className="inline-flex rounded-full border border-border bg-muted/30 px-2.5 py-1 font-mono text-xs font-semibold leading-none tracking-tight text-foreground"
+                  >
+                    {entry.version}
+                  </span>
                   <span className="text-xs text-muted-foreground">
                     {releaseMeta.date}
                   </span>
-                )}
-              </div>
+                </div>
+              )}
 
-              <div className="relative mt-3 min-w-0">
+              <div
+                className={cn(
+                  "relative min-w-0",
+                  releaseMeta === undefined ? "mt-4" : "mt-3",
+                )}
+              >
                 <div
                   ref={releaseBodyRef}
                   data-changelog-release-scroll
@@ -848,7 +717,7 @@ export function ChangelogPreviewCard() {
             </div>
           </div>
         </div>
-      </SettingsSection>
+      </section>
     </div>
   );
 }
@@ -859,15 +728,9 @@ interface BbAppUpdateRowsProps {
   isDesktop: boolean;
   onRelaunchDesktop: (() => void) | null;
   onRetryDesktop: (() => void) | null;
-  /** A check is in flight; the row says so instead of asserting a result. */
   isChecking?: boolean;
 }
 
-/**
- * The bb app's own row: on desktop the shell auto-downloads and applies on
- * relaunch; on web/npm installs the server can't replace itself, so the row
- * surfaces the upgrade command instead of a fake update button.
- */
 export function BbAppUpdateRows({
   systemVersion,
   desktopInfo,
@@ -876,20 +739,11 @@ export function BbAppUpdateRows({
   onRetryDesktop,
   isChecking = false,
 }: BbAppUpdateRowsProps) {
-  // No "checked 2m ago": opening this page runs the check, so the age of the
-  // claim is always "since you got here" and printing it just gives the reader
-  // a number to evaluate instead of an answer.
   const settledStatus = isChecking ? (
     <RowStateControl live state="in-progress" />
   ) : (
     <RowStateControl state="up-to-date" />
   );
-  // Every branch below ends in the same shape — mark, name, status, action
-  // slot — so no branch can quietly drop a column and knock the row out of the
-  // page's spines.
-  // One indicator per row. The state's mark *is* the control where the state
-  // has a resolution, so a row never shows a condition beside a separate
-  // button that means the same thing.
   const row = (name: ReactNode, indicator: ReactNode, caption?: ReactNode) => (
     <UpdatesRow
       leading={
@@ -907,9 +761,6 @@ export function BbAppUpdateRows({
   );
   if (isDesktop && desktopInfo === null) {
     return row(
-      // One bb, however it happens to be packaged. The desktop shell and a
-      // web/npm install are two ways to reach the same thing to update, not
-      // two things, so the row does not rename itself per surface.
       <RowName name="bb app" current={null} latest={null} />,
       <RowStateControl live state="in-progress" />,
     );
@@ -926,7 +777,6 @@ export function BbAppUpdateRows({
     if (desktopInfo.updateDownloaded) {
       return row(
         name,
-        // One control: a small bb mark inside its own outlined labelled button.
         <RowStateControl
           state="restart-required"
           buttonLeading={<BbLogo className="size-3" />}
@@ -952,8 +802,6 @@ export function BbAppUpdateRows({
       );
     }
     if (desktopInfo.updateAvailable) {
-      // The shell downloads on its own; the version pair in the name already
-      // says what is coming, so the mark only says it is in hand.
       return row(name, <RowStateControl state="update-available" />);
     }
     return row(name, settledStatus);
@@ -971,10 +819,6 @@ export function BbAppUpdateRows({
       name="bb app"
       detail={
         systemVersion.updateAvailable ? (
-          // The command is a readback of what the button copies, so it sits in
-          // the same slot a machine row gives its provider name — secondary to
-          // the thing's identity — instead of as a filled block competing with
-          // the version column for the right edge.
           <span className="hidden truncate font-mono text-2xs text-muted-foreground sm:inline">
             {systemVersion.upgradeCommand}
           </span>
@@ -1014,7 +858,6 @@ interface MachineUpdatesRowsProps {
   queuedJobKeys: ReadonlySet<string>;
   failuresByJobKey?: ReadonlyMap<string, ProviderCliInstallFailure>;
   onStartInstall: (hostId: string, issue: ProviderCliActionableIssue) => void;
-  /** Opens the Providers settings bucket — the row's real destination. */
   onOpenProvider: (providerId: string) => void;
 }
 
@@ -1043,7 +886,6 @@ function visibleProviderUpdateIssues(
   return machine.issues.filter(isProviderCliUpdateIssue);
 }
 
-/** Installed provider rows shown after a successful check, update or not. */
 function visibleInstalledProviderEntries(
   machine: UpdateInventoryMachine,
 ): ProviderCliStatusEntry[] {
@@ -1061,11 +903,6 @@ function visibleInstalledProviderEntries(
   );
 }
 
-/**
- * A machine's bb daemon condition. The machine name now owns the section, so
- * the row names the software that needs attention and uses the same bb mark as
- * the app row. App-versus-daemon is text, never an unexplained icon swap.
- */
 export function BbDaemonUpdateRow({
   machine,
   now,
@@ -1083,17 +920,9 @@ export function BbDaemonUpdateRow({
   const updateStalled =
     machine.canRetryDaemonUpdate && hostUpdateIsStalled(host, now);
   const updating = machine.canRetryDaemonUpdate && !updateStalled;
-  // The daemon is ahead of this server, so no amount of retrying on the
-  // machine can fix it — the server is the thing that has to move. Left
-  // unnamed, the row said only "Offline", which is true and useless: it sends
-  // the reader to check a network that is working. The caption says "this app"
-  // rather than "bb" because the opposite direction — a machine whose daemon
-  // is behind — is a different row entirely (it self-updates, with a Retry),
-  // and "Update bb" reads as an instruction to go touch the remote machine.
   const machineIsAhead = hostNeedsUpdate(host) && !hostCanRetryUpdate(host);
   const offline = host.status !== "connected";
 
-  // Words beside the name; the trailing column stays the control spine.
   const daemonCaption = updateStalled ? (
     <RowStateCaption state="failed">Update didn&apos;t finish</RowStateCaption>
   ) : machineIsAhead ? (
@@ -1117,9 +946,6 @@ export function BbDaemonUpdateRow({
       state={daemonCaption}
       trailingMeta={null}
       actions={
-        // One indicator. `waiting-to-retry` is the only machine state with a
-        // resolution here, so it is the only one drawn as a control; the rest
-        // are conditions and say so on hover.
         updating ? (
           <RowStateControl live state="in-progress" />
         ) : updateStalled ? (
@@ -1131,9 +957,6 @@ export function BbDaemonUpdateRow({
             onClick={() => onRetryDaemonUpdate(host.id)}
           />
         ) : machineIsAhead ? (
-          // No "needs attention": that names a feeling, not a fix. The row
-          // says what is true (unreachable) and what resolves it (update the
-          // app it is talking to).
           <RowStateControl state="offline" />
         ) : offline ? (
           <RowStateControl state="offline" />
@@ -1143,7 +966,6 @@ export function BbDaemonUpdateRow({
   );
 }
 
-/** A recoverable provider status failure, kept distinct from bb's daemon. */
 export function ProviderCliCheckRow({
   machine,
   onRecheckClis,
@@ -1187,18 +1009,6 @@ export function ProviderCliCheckRow({
   );
 }
 
-/**
- * The one update state a CLI row is in.
- *
- * Keyed off the same vocabulary the bb rows and `bb updates` use, so a CLI
- * that reads "update available" in Settings reads "update available" in the
- * terminal too. A CLI with nothing wrong produces no issue and so no row.
- *
- * `not-installed` is absent on purpose: this page filters to update issues, so
- * a CLI without an installed version never reaches a row here. The state still
- * exists in the shared vocabulary because `bb updates` prints a full status
- * table and does report it.
- */
 function providerRowState({
   issue,
 }: {
@@ -1213,7 +1023,6 @@ function providerRowState({
   return "update-available";
 }
 
-/** Provider update rows owned by the surrounding machine section. */
 export function MachineUpdatesRows({
   machine,
   runningJobKey,
@@ -1223,7 +1032,6 @@ export function MachineUpdatesRows({
   onOpenProvider,
 }: MachineUpdatesRowsProps) {
   const { host } = machine;
-  // The marks live with the provider registrations.
   const providerRoster = useSystemProviders().data;
   const providerEntries = visibleInstalledProviderEntries(machine);
   const issuesByProvider = new Map(
@@ -1267,7 +1075,11 @@ export function MachineUpdatesRows({
         onOpen={() => onOpenProvider(providerId)}
         leading={
           ProviderIcon === undefined ? null : (
-            <span data-provider-icon={providerId} aria-hidden>
+            <span
+              data-provider-icon={providerId}
+              aria-hidden
+              className="flex size-3.5 shrink-0 items-center justify-center"
+            >
               <ProviderIcon className="size-3.5 text-muted-foreground" />
             </span>
           )
@@ -1325,8 +1137,6 @@ export function MachineUpdatesRows({
                   ? `${issue.action.label} ${status.displayName} on ${host.name}`
                   : undefined
               }
-              // Just the verb on hover. The row already carries the CLI's
-              // name, its versions, and the machine heading above it.
               actionTooltip={actionable ? issue.action.label : undefined}
               onClick={
                 actionable ? () => onStartInstall(host.id, issue) : undefined
@@ -1341,16 +1151,13 @@ export function MachineUpdatesRows({
   return <>{rows}</>;
 }
 
-/** One machine owns one settings section; the badge makes local scope explicit. */
 export function MachineUpdatesSection({
   machine,
   isThisMachine,
-  action,
   children,
 }: {
   machine: UpdateInventoryMachine;
   isThisMachine: boolean;
-  action?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -1370,11 +1177,6 @@ export function MachineUpdatesSection({
               ) : null}
             </span>
           }
-          action={
-            action === undefined ? undefined : (
-              <div className="pr-4">{action}</div>
-            )
-          }
         >
           <SettingsRowList>{children}</SettingsRowList>
         </SettingsSection>
@@ -1383,7 +1185,25 @@ export function MachineUpdatesSection({
   );
 }
 
-/** Re-renders the relative "checked" stamp so it can't sit on a stale minute. */
+export function MachineUpdatesFleetSection({
+  action,
+  children,
+}: {
+  action?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <SettingsSection
+      action={action}
+      bodyClassName="border-0 bg-transparent p-0"
+      description="Manage bb and provider CLI updates across all machines."
+      title="Machine updates"
+    >
+      <div className="space-y-6 pt-1.5">{children}</div>
+    </SettingsSection>
+  );
+}
+
 function useNow(intervalMs: number): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -1393,12 +1213,7 @@ function useNow(intervalMs: number): number {
   return now;
 }
 
-/**
- * Settings → Updates: one consolidated, per-machine view of bb and provider
- * CLI updates. Replaces the stacked update/provider-health toasts (BB-48).
- */
 interface UpdatesSettingsSectionProps {
-  /** Default-off experiment gate owned by Settings → Experiments. */
   showChangelogPreview?: boolean;
 }
 
@@ -1411,8 +1226,6 @@ export function UpdatesSettingsSection({
   const { localDaemonHostId } = useHostDaemon();
   const { desktopApi, desktopInfo, isDesktop } = useDesktopUpdateInfo();
   const retryHostUpdate = useRetryHostUpdate();
-  // The check store outlives this view, so an in-flight check stays visible
-  // across navigation and a failure still toasts even if we unmount.
   const isChecking = useSyncExternalStore(
     subscribeAppUpdateCheck,
     getAppUpdateCheckSnapshot,
@@ -1444,8 +1257,6 @@ export function UpdatesSettingsSection({
       return runningJobKey !== jobKey && !queuedJobKeys.has(jobKey);
     });
 
-  // Snapshot the hosts at click time: the check runs in a module-level store
-  // so it survives navigating away, and must not read React state afterwards.
   const connectedHostIds = inventory.machines
     .filter((machine) => machine.host.status === "connected")
     .map((machine) => machine.host.id);
@@ -1466,11 +1277,6 @@ export function UpdatesSettingsSection({
     });
   }
 
-  // Opening the page is the request to check, so there is no button to press.
-  // This waits for the host list rather than firing on the first render: the
-  // check invalidates each connected machine's CLI status, and on mount that
-  // list is still empty, so an immediate run would refresh the app version and
-  // silently skip every machine.
   const hostsSettled = !inventory.isLoading;
   const checkedOnLoad = useRef(false);
   useEffect(() => {
@@ -1479,8 +1285,6 @@ export function UpdatesSettingsSection({
     }
     checkedOnLoad.current = true;
     handleCheckForUpdates();
-    // Deliberately runs once per mount; `handleCheckForUpdates` closes over the
-    // host snapshot taken at that moment, which is what the check should use.
     // oxlint-disable-next-line react/exhaustive-deps
   }, [hostsSettled]);
 
@@ -1491,9 +1295,6 @@ export function UpdatesSettingsSection({
   const relevantFleetMachines = inventory.machines.filter(
     machineHasRelevantHealthStatus,
   );
-  // A machine whose own bb update has stalled is outstanding update work, not
-  // just fleet trivia: it is the third update domain, and the page would claim
-  // everything is settled while a stalled row sat under it.
   const stalledMachines = relevantFleetMachines.filter(
     (machine) =>
       machine.canRetryDaemonUpdate && hostUpdateIsStalled(machine.host, now),
@@ -1529,9 +1330,6 @@ export function UpdatesSettingsSection({
     });
   }
 
-  // One toast for the whole sweep: a per-machine confirmation would stack as
-  // many toasts as there are stalled machines, which is exactly the pile the
-  // consolidated Updates page replaced.
   function retryAllStalledDaemonUpdates(): void {
     for (const machine of stalledMachines) {
       retryHostUpdate.mutate(machine.host.id);
@@ -1547,7 +1345,6 @@ export function UpdatesSettingsSection({
         label={`Update all ${actionableIssues.length} CLI tools`}
         tooltipLabel="Update all"
         icon={UPDATE_ACTION_ICON}
-        iconPosition="end"
         visibleLabel="Update all"
         variant="default"
         onClick={() => {
@@ -1585,95 +1382,99 @@ export function UpdatesSettingsSection({
     <div className="space-y-6">
       {showChangelogPreview ? <ChangelogPreviewCard /> : null}
 
-      {visibleMachines.length === 0 ? (
-        <ResourceListState state="empty" message="No machines available." />
-      ) : (
-        visibleMachines.map((machine, index) => {
-          const ownsApp = machine.host.id === appMachine?.host.id;
-          const showDaemon =
-            machine.canRetryDaemonUpdate || machine.host.status !== "connected";
-          return (
-            <MachineUpdatesSection
-              key={machine.host.id}
-              machine={machine}
-              isThisMachine={
-                inventory.machines.length > 1 &&
-                machine.host.id === localDaemonHostId
-              }
-              action={index === 0 ? bulkActions : null}
-            >
-              {ownsApp ? (
-                <BbAppUpdateRows
-                  systemVersion={inventory.systemVersion}
-                  desktopInfo={desktopInfo}
-                  isDesktop={isDesktop}
-                  isChecking={isChecking}
-                  onRelaunchDesktop={
-                    desktopApi === null || showFallbackBbStatus
-                      ? null
-                      : () => {
-                          void desktopApi.installUpdate().catch((error) => {
-                            appToast.error("Relaunch failed", {
-                              description: checkErrorDescription(error),
-                            });
-                          });
-                        }
-                  }
-                  onRetryDesktop={
-                    desktopApi === null || showFallbackBbStatus
-                      ? null
-                      : () => {
-                          void desktopApi.checkForUpdates().catch((error) => {
-                            appToast.error("Update retry failed", {
-                              description: checkErrorDescription(error),
-                            });
-                          });
-                        }
-                  }
-                />
-              ) : null}
-              {showDaemon ? (
-                <BbDaemonUpdateRow
-                  machine={machine}
-                  now={now}
-                  retryUpdatePending={
-                    retryHostUpdate.isPending &&
-                    retryHostUpdate.variables === machine.host.id
-                  }
-                  onRetryDaemonUpdate={retryDaemonUpdate}
-                  onOpenMachine={(hostId) =>
-                    navigate(getSettingsMachineRoutePath(hostId))
-                  }
-                />
-              ) : null}
-              {machine.statusError ? (
-                <ProviderCliCheckRow
-                  machine={machine}
-                  onRecheckClis={(hostId) => {
-                    void invalidateHostProviderCliStatus({
-                      queryClient,
-                      hostId,
-                    });
-                  }}
-                  onOpenMachine={(hostId) =>
-                    navigate(getSettingsMachineRoutePath(hostId))
-                  }
-                />
-              ) : null}
-              <MachineUpdatesRows
+      <MachineUpdatesFleetSection action={bulkActions}>
+        {visibleMachines.length === 0 ? (
+          <ResourceListState state="empty" message="No machines available." />
+        ) : (
+          visibleMachines.map((machine) => {
+            const ownsApp = machine.host.id === appMachine?.host.id;
+            const showDaemon =
+              machine.canRetryDaemonUpdate ||
+              machine.host.status !== "connected";
+            return (
+              <MachineUpdatesSection
+                key={machine.host.id}
                 machine={machine}
-                runningJobKey={runningJobKey}
-                queuedJobKeys={queuedJobKeys}
-                failuresByJobKey={failuresByJobKey}
-                onStartInstall={(hostId, issue) =>
-                  startInstall({ hostId, issue })
+                isThisMachine={
+                  inventory.machines.length > 1 &&
+                  machine.host.id === localDaemonHostId
                 }
-                onOpenProvider={() => navigate(getSettingsRoutePath("providers"))}
-              />
-            </MachineUpdatesSection>
-          );
-        })
-      )}
+              >
+                {ownsApp ? (
+                  <BbAppUpdateRows
+                    systemVersion={inventory.systemVersion}
+                    desktopInfo={desktopInfo}
+                    isDesktop={isDesktop}
+                    isChecking={isChecking}
+                    onRelaunchDesktop={
+                      desktopApi === null || showFallbackBbStatus
+                        ? null
+                        : () => {
+                            void desktopApi.installUpdate().catch((error) => {
+                              appToast.error("Relaunch failed", {
+                                description: checkErrorDescription(error),
+                              });
+                            });
+                          }
+                    }
+                    onRetryDesktop={
+                      desktopApi === null || showFallbackBbStatus
+                        ? null
+                        : () => {
+                            void desktopApi.checkForUpdates().catch((error) => {
+                              appToast.error("Update retry failed", {
+                                description: checkErrorDescription(error),
+                              });
+                            });
+                          }
+                    }
+                  />
+                ) : null}
+                {showDaemon ? (
+                  <BbDaemonUpdateRow
+                    machine={machine}
+                    now={now}
+                    retryUpdatePending={
+                      retryHostUpdate.isPending &&
+                      retryHostUpdate.variables === machine.host.id
+                    }
+                    onRetryDaemonUpdate={retryDaemonUpdate}
+                    onOpenMachine={(hostId) =>
+                      navigate(getSettingsMachineRoutePath(hostId))
+                    }
+                  />
+                ) : null}
+                {machine.statusError ? (
+                  <ProviderCliCheckRow
+                    machine={machine}
+                    onRecheckClis={(hostId) => {
+                      void invalidateHostProviderCliStatus({
+                        queryClient,
+                        hostId,
+                      });
+                    }}
+                    onOpenMachine={(hostId) =>
+                      navigate(getSettingsMachineRoutePath(hostId))
+                    }
+                  />
+                ) : null}
+                <MachineUpdatesRows
+                  machine={machine}
+                  runningJobKey={runningJobKey}
+                  queuedJobKeys={queuedJobKeys}
+                  failuresByJobKey={failuresByJobKey}
+                  onStartInstall={(hostId, issue) =>
+                    startInstall({ hostId, issue })
+                  }
+                  onOpenProvider={() =>
+                    navigate(getSettingsRoutePath("providers"))
+                  }
+                />
+              </MachineUpdatesSection>
+            );
+          })
+        )}
+      </MachineUpdatesFleetSection>
     </div>
   );
 }

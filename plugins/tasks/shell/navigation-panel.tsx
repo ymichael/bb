@@ -38,11 +38,6 @@ function TasksNavigationPanelContent({ subPath }: PluginNavPanelProps) {
         summaries={summaries.data}
         presets={presets.data}
         activeTasks={activeTasks.data}
-        // Skeleton only while there is nothing to draw and a first answer is
-        // still pending: a refetch (manual refresh, invalidation) keeps the
-        // last-known rows on screen, a snapshot-hydrated mount never shows
-        // the placeholder at all, and a failed companion request (folders,
-        // counts) settles the gate so loaded projects stay reachable.
         isLoading={
           isAwaitingFirstResult(folders) ||
           isAwaitingFirstResult(projects) ||

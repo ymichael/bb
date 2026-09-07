@@ -6,27 +6,12 @@ import { ApiError } from "../../errors.js";
 
 export type ThreadTimelinePageKind = "latest" | "older";
 
-/**
- * Marks a window that had to start at an event sequence rather than on a user
- * message because an event-count or byte budget cut the selected segment.
- *
- * A window is normally identified by the user message it begins at, and the
- * pagination cursor names that anchor. Inside a turn there is no anchor to
- * name, so the cursor names the event sequence the window was cut at instead —
- * and the row-derived cursor cannot be used, because the projection backfills a
- * turn's `turn/started` row from far below the cut and the first row's
- * `sourceSeqStart` would send the next page past everything in between.
- */
 export interface TimelineSequenceWindowStart {
-  /** Why this page starts inside a segment. */
   kind: "byte" | "event";
-  /** First event sequence this window covers. */
   sequenceStart: number;
   threadId: string;
 }
 
-// Keep the old opaque cursor value for event-budget cuts. A distinct value lets
-// older pages preserve byte-window projection and parent-read limits.
 const SEQUENCE_CURSOR_ANCHOR_ID_SEPARATOR = ":in-turn:";
 const BYTE_CURSOR_ANCHOR_ID_SEPARATOR = ":byte-window:";
 
@@ -40,12 +25,6 @@ function buildSequenceCursorAnchorId(
   return `${args.threadId}${separator}${args.sequenceStart}`;
 }
 
-/**
- * The sequence a sequence cursor points at, or null when the cursor names a
- * user-message anchor instead. Rejects a cursor whose id and sequence disagree,
- * which is the only self-consistency check available for a cursor that names no
- * stored row.
- */
 export function readSequenceCursor(
   cursor: TimelinePaginationCursor,
   threadId: string,
@@ -97,11 +76,15 @@ interface PaginatedTimelineRowsResult {
   rows: TimelineRow[];
 }
 
-function isTimelineSegmentAnchorRow(row: TimelineRow): boolean {
+function isTimelineSegmentAnchorRow(
+  row: TimelineRow,
+  contextBoundarySeq: number | null,
+): boolean {
   return (
-    row.kind === "conversation" &&
-    row.role === "user" &&
-    row.turnRequest.kind === "message"
+    row.sourceSeqStart === contextBoundarySeq ||
+    (row.kind === "conversation" &&
+      row.role === "user" &&
+      row.turnRequest.kind === "message")
   );
 }
 
@@ -124,13 +107,14 @@ function buildTimelineLogicalSegment(
 
 function buildTimelineLogicalSegments(
   rows: readonly TimelineRow[],
+  contextBoundarySeq: number | null,
 ): TimelineLogicalSegment[] {
   const segments: TimelineLogicalSegment[] = [];
   let currentRows: TimelineRow[] = [];
 
   for (const row of rows) {
     if (
-      isTimelineSegmentAnchorRow(row) &&
+      isTimelineSegmentAnchorRow(row, contextBoundarySeq) &&
       currentRows.length > 0 &&
       currentRows[0]?.sourceSeqStart !== row.sourceSeqStart
     ) {
@@ -150,19 +134,8 @@ function buildTimelineLogicalSegments(
 }
 
 interface PaginateTimelineRowsArgs {
-  /**
-   * Non-null only for a sequence-budgeted window. Such a window is already
-   * bounded by event sequence, so segment trimming would discard selected
-   * rows. The older cursor must name the cut rather than the oldest row.
-   */
+  contextBoundarySeq: number | null;
   sequenceWindowStart: TimelineSequenceWindowStart | null;
-  /**
-   * `hasOlderRows` is normally inferred by over-reading one segment past the
-   * page and noticing it was dropped. An event-budgeted window cannot afford
-   * that sentinel segment — it is unbounded work purely to answer a boolean —
-   * so the caller that already knows the answer from the anchor list passes it
-   * here. `null` keeps the sentinel inference.
-   */
   knownHasOlderSegments: boolean | null;
   page: ThreadTimelinePageRequest;
   rows: readonly TimelineRow[];
@@ -171,8 +144,14 @@ interface PaginateTimelineRowsArgs {
 export function paginateTimelineRows(
   args: PaginateTimelineRowsArgs,
 ): PaginatedTimelineRowsResult {
-  const { knownHasOlderSegments, page, rows, sequenceWindowStart } = args;
-  const segments = buildTimelineLogicalSegments(rows);
+  const {
+    contextBoundarySeq,
+    knownHasOlderSegments,
+    page,
+    rows,
+    sequenceWindowStart,
+  } = args;
+  const segments = buildTimelineLogicalSegments(rows, contextBoundarySeq);
   if (sequenceWindowStart !== null) {
     return {
       hasOlderRows: true,
@@ -184,8 +163,6 @@ export function paginateTimelineRows(
       rows: [...rows],
     };
   }
-  // Every window ends strictly before its cursor, so no segment at or past the
-  // cursor was read and none has to be trimmed off here.
   const selectedSegments = segments.slice(-page.segmentLimit);
   const hasOlderRows =
     knownHasOlderSegments ?? segments.length > selectedSegments.length;

@@ -13,10 +13,6 @@ export interface PluginScheduleRow {
   updatedAt: number;
 }
 
-/**
- * Registration-time upsert (plugin load): sets cron + next_run_at, keeping
- * last_run_at/last_status/last_error from previous runs.
- */
 export function upsertPluginSchedule(
   db: DbConnection,
   args: { pluginId: string; name: string; cron: string; nextRunAt: number },
@@ -31,7 +27,6 @@ export function upsertPluginSchedule(
     .run();
 }
 
-/** Drop rows whose schedule name is no longer registered by the plugin. */
 export function prunePluginSchedules(
   db: DbConnection,
   pluginId: string,
@@ -79,10 +74,6 @@ export function listDuePluginSchedules(
     .all();
 }
 
-/**
- * Optimistic at-most-once claim: advance next_run_at only if it still equals
- * the expected value. A single UPDATE, so no explicit transaction is needed.
- */
 export function claimPluginScheduledRun(
   db: DbConnection,
   args: {

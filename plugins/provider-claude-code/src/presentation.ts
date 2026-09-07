@@ -1,21 +1,3 @@
-/**
- * Declarative presentation for every item the claude-code bridge opens or
- * closes (grammar v3, docs/provider-plugin-api.md §3).
- *
- * This module is where Claude Code's tool-name knowledge lives: which
- * built-in is a shell command, a file read, a search, a file edit, a
- * sub-agent, a plan update, a low-value housekeeping call, and how each reads
- * as a timeline row (label while pending, label once settled, a host glyph,
- * an optional headline, and whether clients may collapse the row). Core keeps
- * no table of Claude tool names; the persisted event carries this snapshot,
- * so a row renders the same way after the plugin is upgraded or removed. The
- * rows whose wording is the same for every provider (compaction, file read,
- * search, web search and fetch, plan steps, the generic tool fallback) and
- * the headline/detail truncators come from the bridge kit.
- *
- * Icons are host glyph names from the shared icon registry
- * (`@bb/shared-ui/icon`); the persisted form is glyph-only by design.
- */
 import {
   type DeltaPresentation,
   experimental_presentationDetail as presentationDetail,
@@ -25,20 +7,19 @@ import {
   experimental_withTitle as withTitle,
 } from "@get-bb/plugin-sdk/provider-bridge";
 
-// ---------------------------------------------------------------------------
-// Core-kind items
-// ---------------------------------------------------------------------------
+const SANDBOX_ESCAPED_BADGE = {
+  glyph: "SquareUnlock02",
+  label: "Outside of sandbox",
+  hint: "Outside of sandbox",
+  tone: "destructive",
+} as const;
 
-/**
- * A `Bash` call. A backgrounded command's item settles when Claude
- * acknowledges the launch, so its settled label says so; the running work is
- * the `local_bash` background task that follows.
- */
 export function commandPresentation(args: {
   command: string;
   background: boolean;
+  sandboxEscaped: boolean;
 }): DeltaPresentation {
-  return withTitle(
+  const presentation = withTitle(
     {
       label: args.background
         ? {
@@ -50,6 +31,9 @@ export function commandPresentation(args: {
     },
     presentationTitle(args.command),
   );
+  return args.sandboxEscaped
+    ? { ...presentation, badge: SANDBOX_ESCAPED_BADGE }
+    : presentation;
 }
 
 export type ClaudeFileChangeVerb = "edit" | "write" | "notebook";
@@ -72,11 +56,6 @@ export function fileChangePresentation(args: {
   );
 }
 
-/**
- * An `Agent`/`Task` call. The headline is the call's description; the detail
- * names the sub-agent type and requested model, which the delegation shape
- * does not carry. A backgrounded call settles at the launch acknowledgement.
- */
 export function delegationPresentation(args: {
   description: string;
   subagentType: string | null;
@@ -101,28 +80,16 @@ export function delegationPresentation(args: {
     : { ...presentation, detail: presentationDetail(detailParts.join(" · ")) };
 }
 
-// ---------------------------------------------------------------------------
-// Generic tools
-// ---------------------------------------------------------------------------
-
 interface ToolPresentationSpec {
   label: DeltaPresentation["label"];
   glyph: string;
-  /** Low-value housekeeping rows clients collapse by default. */
   suppress?: boolean;
-  /** Argument field whose first line is the row headline. */
   titleField?: string;
 }
 
-/**
- * Claude Code built-ins with no core kind of their own. Unknown tools (new
- * built-ins, plugin tools) fall back to `Running <tool>` / `Ran <tool>`.
- */
 const BUILTIN_TOOL_PRESENTATIONS: Readonly<
   Record<string, ToolPresentationSpec>
 > = {
-  // The plan-list family: the planSteps snapshot carries the plan, the raw
-  // call row is bookkeeping.
   TodoWrite: {
     label: { pending: "Updating todos", completed: "Updated todos" },
     glyph: "ListTodo",
@@ -155,8 +122,6 @@ const BUILTIN_TOOL_PRESENTATIONS: Readonly<
     glyph: "ListTodo",
     suppress: true,
   },
-  // Low-value housekeeping (ToolSearch 219, TaskOutput 162 and Monitor 94
-  // calls in the production corpus, all opaque rows today).
   ToolSearch: {
     label: { pending: "Searching tools", completed: "Searched tools" },
     glyph: "Toolbox",
@@ -186,14 +151,11 @@ const BUILTIN_TOOL_PRESENTATIONS: Readonly<
     suppress: true,
     titleField: "to",
   },
-  // The question itself is the user-question interaction row; the call row
-  // would duplicate it.
   AskUserQuestion: {
     label: { pending: "Asking a question", completed: "Asked a question" },
     glyph: "MessageQuestion",
     suppress: true,
   },
-  // Plan mode.
   EnterPlanMode: {
     label: { pending: "Entering plan mode", completed: "Entered plan mode" },
     glyph: "ListTodo",
@@ -202,7 +164,6 @@ const BUILTIN_TOOL_PRESENTATIONS: Readonly<
     label: { pending: "Presenting plan", completed: "Presented plan" },
     glyph: "FileText",
   },
-  // Background work control (the work itself is a background task row).
   Workflow: {
     label: { pending: "Starting workflow", completed: "Started workflow" },
     glyph: "Workflow",
@@ -217,7 +178,7 @@ const BUILTIN_TOOL_PRESENTATIONS: Readonly<
   },
   Skill: {
     label: { pending: "Loading skill", completed: "Loaded skill" },
-    glyph: "Puzzle",
+    glyph: "Zap",
     titleField: "skill",
   },
   StructuredOutput: {
@@ -262,7 +223,6 @@ function titleFromArgs(
   return typeof value === "string" ? presentationTitle(value) : undefined;
 }
 
-/** A Claude built-in or plugin tool with no core kind. */
 export function builtinToolPresentation(
   tool: string,
   args: unknown,
@@ -281,7 +241,6 @@ export function builtinToolPresentation(
   );
 }
 
-/** A tool served by an MCP server other than bb's own (`mcp__<server>__<tool>`). */
 export function mcpToolPresentation(args: {
   server: string;
   tool: string;
@@ -289,16 +248,6 @@ export function mcpToolPresentation(args: {
   return withTitle(toolPresentation(args.tool), args.server);
 }
 
-// ---------------------------------------------------------------------------
-// Background tasks (the SDK task family)
-// ---------------------------------------------------------------------------
-
-/**
- * A provider background task row — a dynamic workflow (the Workflow tool), a
- * backgrounded shell command, or a backgrounded sub-agent — stays the core
- * `backgroundTask` kind (the genericity rule) and says how it reads. The
- * label names the work; the task's own status carries how it ended.
- */
 export function backgroundTaskPresentation(args: {
   taskType: string;
   description: string;

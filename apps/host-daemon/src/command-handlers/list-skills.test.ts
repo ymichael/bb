@@ -66,7 +66,9 @@ function declared(
   };
 }
 
-function skillRoots(skills: Partial<ProviderNativeRoots>): ProviderNativeRootSet {
+function skillRoots(
+  skills: Partial<ProviderNativeRoots>,
+): ProviderNativeRootSet {
   return {
     skills: { user: [], project: [], ...skills },
     commands: { user: [], project: [] },
@@ -74,7 +76,6 @@ function skillRoots(skills: Partial<ProviderNativeRoots>): ProviderNativeRootSet
   };
 }
 
-/** One provider-native skills directory in the workspace and one in the home. */
 const AGENT_SKILL_ROOTS = skillRoots({
   project: [declared(".agent/skills")],
   user: [declared(".agent/skills")],
@@ -149,7 +150,6 @@ describe("resolveSkillScanRoots + discoverSkills", () => {
     expect(byName(skills, "data-bb")).toBeUndefined();
     expect(byName(skills, "proj-agent")?.rootKind).toBe("provider-project");
     expect(byName(skills, "user-agent")?.rootKind).toBe("provider-user");
-    // Every record carries its absolute SKILL.md path.
     expect(byName(skills, "user-agent")?.filePath).toBe(files["user-agent"]);
   });
 
@@ -422,12 +422,6 @@ describe("resolveSkillScanRoots + discoverSkills", () => {
   });
 });
 
-/**
- * `linked` is what the skills page shows for a skill that reaches its root
- * through a symlink. Each scan shape has its own combination of links to
- * inspect (the root, the skill entry, the SKILL.md itself), so each shape is
- * pinned separately, with its negative.
- */
 describe("discoverSkills marks the linked flag per root shape", () => {
   const USER_SKILL_ROOT = {
     namePrefix: "",
@@ -443,11 +437,6 @@ describe("discoverSkills marks the linked flag per root shape", () => {
     return target;
   }
 
-  /**
-   * One root per scan: a root reached through a symlink resolves to the
-   * same SKILL.md as its target, and scanning both at once would fold the
-   * linked record away in de-duplication.
-   */
   async function discoverRoot(
     root: SkillScanRoot,
   ): Promise<[name: string, linked: boolean, filePath: string][]> {
@@ -512,8 +501,6 @@ describe("discoverSkills marks the linked flag per root shape", () => {
       path.join(plainRoot, "category", "nested", "SKILL.md"),
       "nested",
     );
-    // A symlinked category inside the tree is never followed, so it can
-    // neither surface a skill nor mark one as linked.
     await writeSkill(
       path.join(tempRoot, "nested-link-target", "SKILL.md"),
       "through-nested-link",
@@ -537,7 +524,6 @@ describe("discoverSkills marks the linked flag per root shape", () => {
           rootPath,
         }),
       ).toEqual([
-        // Reported under the root as declared, not under its realpath.
         [
           "nested",
           linked,
@@ -668,10 +654,8 @@ describe("deleteHostSkill", () => {
 
   it("refuses a skill symlinked outside the bb root after realpath", async () => {
     const fixture = await makeWorkspaceFixture();
-    // A real skill dir living outside any bb root.
     const outside = path.join(tempRoot, "outside", "secret");
     await writeSkill(path.join(outside, "SKILL.md"), "secret");
-    // A symlink inside the bb-user root pointing at it.
     const skillsRoot = path.join(fixture.dataDir, "skills");
     await mkdir(skillsRoot, { recursive: true });
     await symlink(outside, path.join(skillsRoot, "link"));
@@ -688,7 +672,6 @@ describe("deleteHostSkill", () => {
         { dataDir: fixture.dataDir },
       ),
     ).rejects.toMatchObject({ code: "skill_outside_root" });
-    // The real target survives the refusal.
     expect(
       await stat(path.join(outside, "SKILL.md")).catch(() => null),
     ).not.toBeNull();
@@ -697,7 +680,6 @@ describe("deleteHostSkill", () => {
   it("refuses a skill symlinked to a sibling inside the same root", async () => {
     const fixture = await makeWorkspaceFixture();
     const skillsRoot = path.join(fixture.dataDir, "skills");
-    // A real sibling skill, and a symlink that resolves to it.
     await writeSkill(path.join(skillsRoot, "real", "SKILL.md"), "real");
     await symlink(
       path.join(skillsRoot, "real"),
@@ -716,7 +698,6 @@ describe("deleteHostSkill", () => {
         { dataDir: fixture.dataDir },
       ),
     ).rejects.toMatchObject({ code: "skill_outside_root" });
-    // The sibling the alias pointed at is untouched.
     expect(
       await stat(path.join(skillsRoot, "real", "SKILL.md")).catch(() => null),
     ).not.toBeNull();

@@ -7,8 +7,6 @@ describe("NotificationHub.notifyThreadOpen", () => {
     const hub = new NotificationHub();
     const viewing = createMockHubSocket();
     const other = createMockHubSocket();
-    // Subscriptions differ, but the open-file signal broadcasts to every client
-    // so a client not currently viewing the thread can open it on navigation.
     hub.subscribe(viewing, { kind: "thread-detail", threadId: "thr_1" });
     hub.subscribe(other, { kind: "thread-detail", threadId: "thr_2" });
 

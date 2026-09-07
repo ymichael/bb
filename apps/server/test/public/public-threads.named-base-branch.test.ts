@@ -1,5 +1,6 @@
 import { getThread } from "@bb/db";
-import { threadSchema, type ProjectSourceCheckout } from "@bb/domain";
+import { threadSchema, type GitSourceInspection } from "@bb/domain";
+import type { HostDaemonRpcCommand } from "@bb/host-daemon-contract";
 import { threadResponseSchema } from "@bb/server-contract";
 import { describe, expect, it, vi } from "vitest";
 import {
@@ -22,20 +23,15 @@ import { withTestHarness, type TestAppHarness } from "../helpers/test-app.js";
 const SOURCE_PATH = "/tmp/named-base-branch-source";
 
 function buildCheckout(
-  defaultBranchRelation: ProjectSourceCheckout["defaultBranchRelation"],
-): ProjectSourceCheckout {
+  defaultBranchRelation: GitSourceInspection["defaultBranchRelation"],
+): GitSourceInspection {
   return {
-    branches: ["main"],
-    branchesTruncated: false,
     checkout: { kind: "branch", branchName: "main", headSha: "abc123" },
     defaultBranch: "main",
     defaultBranchRelation,
     hasUncommittedChanges: false,
     operation: { kind: "none" },
     originDefaultBranch: "origin/main",
-    remoteBranches: ["origin/main"],
-    remoteBranchesTruncated: false,
-    selectedBranch: null,
   };
 }
 
@@ -43,8 +39,13 @@ async function createNamedBaseBranchThread(
   harness: TestAppHarness,
   args: {
     baseBranch: string;
-    defaultBranchRelation: ProjectSourceCheckout["defaultBranchRelation"];
-    onListBranches?: () => void;
+    defaultBranchRelation: GitSourceInspection["defaultBranchRelation"];
+    onInspectGitSource?: (
+      command: Extract<
+        HostDaemonRpcCommand,
+        { type: "host.inspect_git_source" }
+      >,
+    ) => void;
   },
 ): Promise<string | null> {
   const { host, session } = seedHostSession(harness.deps);
@@ -52,8 +53,10 @@ async function createNamedBaseBranchThread(
   registerTestHostRpcCapture(harness, {
     hostId: host.id,
     sessionId: session.id,
-    listBranchesResult: buildCheckout(args.defaultBranchRelation),
-    ...(args.onListBranches ? { onListBranches: args.onListBranches } : {}),
+    gitSourceInspectionResult: buildCheckout(args.defaultBranchRelation),
+    ...(args.onInspectGitSource
+      ? { onInspectGitSource: args.onInspectGitSource }
+      : {}),
   });
   const { project } = seedProjectWithSource(harness.deps, {
     hostId: host.id,
@@ -89,17 +92,17 @@ async function createNamedBaseBranchThread(
 }
 
 describe("named managed-worktree base branch", () => {
-  // Issue #1770: `--base-branch main` used to reach the daemon verbatim, and
-  // the daemon only fetches remote-qualified bases, so a checkout whose local
-  // main was behind origin seeded every new worktree from the stale commit.
-  it("bases on origin when the named default branch is behind origin", async () => {
+  it("preserves a named default branch without inspecting or reinterpreting it", async () => {
     await withTestHarness(async (harness) => {
+      const onInspectGitSource = vi.fn();
       await expect(
         createNamedBaseBranchThread(harness, {
           baseBranch: "main",
           defaultBranchRelation: "local-behind",
+          onInspectGitSource,
         }),
-      ).resolves.toBe("origin/main");
+      ).resolves.toBe("main");
+      expect(onInspectGitSource).not.toHaveBeenCalled();
     });
   });
 
@@ -127,34 +130,32 @@ describe("named managed-worktree base branch", () => {
 
   it("does not inspect an origin-qualified branch before provisioning", async () => {
     await withTestHarness(async (harness) => {
-      const onListBranches = vi.fn();
+      const onInspectGitSource = vi.fn();
       await expect(
         createNamedBaseBranchThread(harness, {
           baseBranch: "origin/main",
           defaultBranchRelation: "local-behind",
-          onListBranches,
+          onInspectGitSource,
         }),
       ).resolves.toBe("origin/main");
-      expect(onListBranches).not.toHaveBeenCalled();
+      expect(onInspectGitSource).not.toHaveBeenCalled();
     });
   });
 
-  it("keeps a fork on its source branch even when local main is behind origin", async () => {
+  it("passes a fork's explicitly named base branch through unchanged", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps);
       registerTestHostRpcCapture(harness, {
         hostId: host.id,
         sessionId: session.id,
-        listBranchesResult: buildCheckout("local-behind"),
+        gitSourceInspectionResult: buildCheckout("local-behind"),
       });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
         path: SOURCE_PATH,
       });
-      // An unmanaged checkout sitting on local main. A fork continues that
-      // conversation, so it must start from the branch the source is on.
       const environment = seedEnvironment(harness.deps, {
-        branchName: "main",
+        branchName: "feature/source",
         hostId: host.id,
         path: SOURCE_PATH,
         projectId: project.id,
@@ -182,7 +183,14 @@ describe("named managed-worktree base branch", () => {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           sourceThreadId: sourceThread.id,
-          workspace: "isolated",
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "named", name: "main" },
+            },
+          },
         }),
       });
       expect(response.status).toBe(201);

@@ -50,15 +50,6 @@ interface ArchiveThreadAndChildrenArgs {
   parentThread: Thread;
 }
 
-/**
- * Resolve the environment archive needs to stop the thread's live work, or
- * null when there is nothing to stop. A thread loses its environment pointer
- * when the environment row is pruned (threads.environment_id is ON DELETE SET
- * NULL); that thread is settled and archivable without an environment. A
- * pointer-less thread whose setup is still in flight (its environment row does
- * not exist yet) keeps the refusal: archive does not cancel setup, so admitting
- * it would let setup create an environment for an archived thread.
- */
 export function resolveArchiveThreadEnvironment(
   deps: Pick<AppDeps, "db">,
   args: ResolveArchiveThreadEnvironmentArgs,
@@ -95,9 +86,6 @@ function archiveThreadWithLifecycleEffects(
   deps.terminalSessions.closeArchivedThreadTerminals({
     threadId: archivedThread.id,
   });
-  // Archive only stops active runtime work; manual stop is the pre-start
-  // provisioning cancellation entrypoint. A thread whose environment row was
-  // pruned has no runtime left to stop.
   if (args.environment !== null) {
     requestActiveRuntimeThreadStopIfNeeded(
       deps,
@@ -118,12 +106,6 @@ function archiveThreadWithLifecycleEffects(
   return archivedThread;
 }
 
-/**
- * Archive one thread plus the hidden forks that retire with it. A hidden fork
- * (a side chat, say) has no row of its own to reach, so it must not outlive its
- * source. Structural rather than plugin-owned: archiving cannot depend on
- * whichever plugin created the fork still being enabled.
- */
 export function archiveThreadAndHiddenSourceForks(
   deps: AppDeps,
   args: ArchiveThreadWithLifecycleEffectsArgs,
@@ -187,8 +169,6 @@ export function archiveThreadAndChildren(
   const childThreads = listUnarchivedAssignedChildThreads(deps.db, {
     parentThreadId: args.parentThread.id,
   });
-  // Collected here rather than through archiveThreadAndHiddenSourceForks so
-  // every cascaded id lands in this route's response.
   const hiddenSourceThreads = listUnarchivedHiddenSourceThreads(deps.db, {
     sourceThreadId: args.parentThread.id,
   });

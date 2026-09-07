@@ -14,8 +14,6 @@ import { listSystemProviderInfos } from "./execution-options.js";
 import { resolveBridgeLaunchForProviderId } from "./provider-bridge-launch.js";
 import { mapProviderMaintenanceRequests } from "./provider-maintenance-concurrency.js";
 
-// Leave five seconds for HTTP response delivery before the Node SDK's
-// 75-second default request timeout.
 const PROVIDER_INSTALLATION_STATUS_TIMEOUT_MS = 70_000;
 
 function canOmitProviderInstallationStatusError(error: unknown): boolean {
@@ -27,7 +25,6 @@ function canOmitProviderInstallationStatusError(error: unknown): boolean {
   );
 }
 
-/** Aggregate provider-owned installation state in registry order. */
 export async function getProviderInstallations(
   deps: AppDeps,
   args: { hostId: string },
@@ -74,10 +71,7 @@ export async function getProviderInstallations(
             bridgeLaunch,
           },
         });
-        return [
-          provider.id,
-          { displayName: provider.displayName, ...status },
-        ];
+        return [provider.id, { displayName: provider.displayName, ...status }];
       } catch (error) {
         if (!canOmitProviderInstallationStatusError(error)) {
           throw error;

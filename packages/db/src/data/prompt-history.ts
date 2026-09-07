@@ -40,8 +40,6 @@ export interface ListStoredThreadPromptHistoryArgs
 }
 
 function rawPromptHistoryRowLimit(limit: number): number {
-  // Fetch one extra visible window to absorb consecutive duplicate collapse
-  // without falling back to OFFSET paging.
   return Math.min(
     PROMPT_HISTORY_ENTRY_LIMIT * 2,
     limit + PROMPT_HISTORY_ENTRY_LIMIT,

@@ -150,16 +150,6 @@ function isAssistantResponseMessage(
   );
 }
 
-/**
- * Assistant text that the provider followed directly with more assistant
- * text, with no work in between, was a complete response, not narration about
- * upcoming tool activity. Providers re-query the model after it stops without
- * telling bb why (a Claude Code Stop hook injects its reason as a synthetic
- * user message that never becomes a thread event), so the turn carries two
- * answers and only the last one is the terminal message. The earlier answer
- * must stay visible at rest instead of being folded into the collapsed work
- * summary. Text followed by work keeps the existing collapse.
- */
 function findVisibleResponseMessageIds(
   summaryMessages: readonly EventProjectionMessage[],
   terminalMessage: EventProjectionMessage | undefined,
@@ -232,9 +222,6 @@ function groupCompletedTurnSummaryMessages(
       return;
     }
 
-    // Human follow-ups split one provider turn into multiple visible exchange
-    // segments. Keep each segment's last assistant/error message beside the
-    // user row instead of burying it inside that segment's collapsed summary.
     const sourceMessages = groupedMessages;
     groupedMessages = [];
     const terminalMessage = preserveLastTerminalMessage

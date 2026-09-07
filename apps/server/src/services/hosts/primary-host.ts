@@ -79,10 +79,6 @@ export function requirePrimaryHostId(deps: PrimaryHostDeps): string {
   return hostId;
 }
 
-/**
- * Validates an explicit execution target. Any non-destroyed persistent host is
- * accepted; connectivity remains a dispatch-time concern.
- */
 export function assertUsableHostId(
   deps: PrimaryHostDeps,
   args: AssertUsableHostIdArgs,

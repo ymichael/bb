@@ -1,5 +1,3 @@
-/** Provider integration tests for completed command output normalization. */
-
 import { describe, expect, it } from "vitest";
 import {
   cleanup,

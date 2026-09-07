@@ -8,37 +8,18 @@ import { CHROME_SECTION_LABEL_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 import { LIST_HOVER_TRANSITION } from "@bb/shared-ui/motion";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-// Shared shell for the secondary-panel launcher rows — the app/file/recent
-// results in the New tab page and the browser tab's recently-visited list — so
-// density, hover, and the trailing open-affordance stay identical across both
-// surfaces rather than drifting in two parallel class bundles. These are dense,
-// arrow-navigable list rows, so the hover/active fill is instant both ways
-// (LIST_HOVER_TRANSITION) — the highlight tracks the pointer and arrow keys
-// exactly instead of lagging behind fast navigation.
 const LAUNCHER_ROW_SHELL_CLASS = `group flex w-full min-w-0 items-center gap-1.5 rounded px-2 py-1.5 text-left ${LIST_HOVER_TRANSITION} focus-visible:outline-none ${COARSE_POINTER_TEXT_SM_CLASS}`;
 export const LAUNCHER_ROW_BASE_CLASS = `${LAUNCHER_ROW_SHELL_CLASS} focus-visible:ring-1 focus-visible:ring-ring`;
 export const LAUNCHER_ACTION_ROW_BASE_CLASS = `${LAUNCHER_ROW_SHELL_CLASS} focus-visible:bg-state-hover focus-visible:text-foreground`;
 export const LAUNCHER_ROW_ICON_CLASS = `flex shrink-0 items-center justify-center overflow-hidden text-muted-foreground ${COARSE_POINTER_ICON_SIZE_CLASS}`;
 
-// Section labels above launcher row groups (new-tab actions, file search,
-// recents, and the browser tab's recently-visited list). Mirrors the
-// detail-card key style rather than a loud uppercase, tracked header.
 const LAUNCHER_SECTION_LABEL_CLASS = CHROME_SECTION_LABEL_CLASS;
 
 interface LauncherRowTrailingProps {
-  /** Resting content (e.g. a relative timestamp) shown until the row is highlighted. */
   idle: ReactNode;
-  /**
-   * Highlighted via keyboard navigation. When false the row still reveals the
-   * "open" affordance on hover; when true it shows it outright.
-   */
   isActive: boolean;
 }
 
-/**
- * The trailing cell of a launcher row: shows {@link LauncherRowTrailingProps.idle}
- * at rest and an "open" affordance when the row is hovered or keyboard-active.
- */
 export function LauncherRowTrailing({
   idle,
   isActive,
@@ -73,25 +54,12 @@ export function LauncherRowTrailing({
 
 interface LauncherSectionHeaderProps {
   label: ReactNode;
-  /** Optional count rendered as a muted monospace badge after the label. */
   count?: number;
-  /** Optional trailing control (e.g. a Clear button), pushed to the right edge. */
   action?: ReactNode;
-  /**
-   * Stick the header to the top of a scrolling result list with a solid
-   * background, so it stays visible while rows scroll beneath it.
-   */
   sticky?: boolean;
   className?: string;
 }
 
-/**
- * Section label above a group of launcher rows. Shares the rows' horizontal
- * padding (`px-2`) so the label aligns with the row content rather than sitting
- * inboard of the rows' invisible resting padding, and carries the detail-card
- * key typography. Used by both the New tab page sections and the browser tab's
- * recently-visited list so the two surfaces stay identical.
- */
 export function LauncherSectionHeader({
   label,
   count,

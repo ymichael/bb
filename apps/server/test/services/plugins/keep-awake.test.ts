@@ -7,8 +7,6 @@ import {
 } from "../../helpers/test-app.js";
 
 describe("builtin Keep Awake plugin", () => {
-  // This intentionally boots an HTTP server and a real plugin worker. Keep
-  // the assertion waits strict while allowing startup on a loaded runner.
   it("owns its configuration and reconciles it without a core adapter", async () => {
     const server = await startTestServer();
     try {

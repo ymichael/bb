@@ -13,7 +13,7 @@
   "files": [
     {
       "path": "registry/components/ui/label.tsx",
-      "content": "/* shadcn/ui-derived */\nimport * as React from \"react\";\nimport * as LabelPrimitive from \"@radix-ui/react-label\";\n\nimport { cn } from \"../../lib/utils\";\n\nconst Label = React.forwardRef<\n  React.ComponentRef<typeof LabelPrimitive.Root>,\n  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>\n>(({ className, ...props }, ref) => (\n  <LabelPrimitive.Root\n    ref={ref}\n    className={cn(\n      \"text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70\",\n      className,\n    )}\n    {...props}\n  />\n));\nLabel.displayName = LabelPrimitive.Root.displayName;\n\nexport { Label };\n",
+      "content": "import * as React from \"react\";\nimport * as LabelPrimitive from \"@radix-ui/react-label\";\n\nimport { cn } from \"../../lib/utils\";\n\nconst Label = React.forwardRef<\n  React.ComponentRef<typeof LabelPrimitive.Root>,\n  React.ComponentPropsWithoutRef<typeof LabelPrimitive.Root>\n>(({ className, ...props }, ref) => (\n  <LabelPrimitive.Root\n    ref={ref}\n    className={cn(\n      \"text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70\",\n      className,\n    )}\n    {...props}\n  />\n));\nLabel.displayName = LabelPrimitive.Root.displayName;\n\nexport { Label };\n",
       "type": "registry:ui",
       "target": "components/ui/label.tsx"
     }

@@ -6,8 +6,6 @@ import {
 
 describe("desktop update feed url", () => {
   it("gives each platform its own feed file inside one release tag", () => {
-    // macOS and Linux assets share the desktop-latest release, so a single
-    // feed name would make the last publish overwrite the other platform.
     expect(createDesktopUpdateFeedUrl("macos")).toBe(
       "https://github.com/get-bb/bb/releases/download/desktop-latest/desktop-version.json",
     );
@@ -33,9 +31,6 @@ describe("desktop update support", () => {
   });
 
   it("installs updates on Linux only inside an AppImage", () => {
-    // electron-updater replaces the running AppImage file in place. A distro
-    // package or an extracted directory has nothing to replace, so it would
-    // fail every download instead of quietly doing nothing.
     expect(
       resolveDesktopUpdateSupport({
         canReplaceAppImage: alwaysReplaceable,
@@ -60,9 +55,6 @@ describe("desktop update support", () => {
   });
 
   it("refuses to install into an AppImage it cannot replace", () => {
-    // electron-updater unlinks the running AppImage before moving the new one
-    // in, so attempting this in a read-only directory deletes the user's app
-    // and leaves nothing behind. Version checks must survive that.
     const checked: Array<string> = [];
 
     expect(
@@ -79,7 +71,6 @@ describe("desktop update support", () => {
   });
 
   it("does not consult the filesystem on macOS", () => {
-    // macOS installs through Squirrel, which owns its own replacement path.
     let consulted = false;
 
     resolveDesktopUpdateSupport({

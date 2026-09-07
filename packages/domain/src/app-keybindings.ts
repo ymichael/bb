@@ -50,10 +50,12 @@ export const APP_COMMAND_IDS = [
   "pane.maximize.toggle",
   "pane.close",
   "window.new",
+  "app.back",
   "settings.open",
   "settings.openServers",
   "sidebar.toggle",
   "panel.newTab",
+  "panel.reopenClosedTab",
   "panel.close",
   "panel.toggle",
   "file.quickOpen",
@@ -72,6 +74,7 @@ export const APP_COMMAND_IDS = [
   "browser.find",
   "workspace.openPreferred",
   "logs.openServerDaemon",
+  "notifications.open",
   ...QUESTION_SELECT_APP_COMMAND_IDS,
 ] as const;
 
@@ -98,8 +101,6 @@ export type AppCommandContext = Record<AppCommandContextKey, boolean>;
 
 export const appShortcutSchema = z
   .object({
-    // Store the unshifted base key; `shift` records the modifier separately.
-    // For example, Command+Shift+[ is `{ key: "[", shift: true }`.
     key: z.string().min(1).max(32),
     mod: z.boolean(),
     meta: z.boolean(),
@@ -112,7 +113,6 @@ export type AppShortcut = z.infer<typeof appShortcutSchema>;
 
 export interface AppShortcutInput {
   altKey: boolean;
-  /** The physical key (`KeyboardEvent.code`), layout- and modifier-independent. */
   code: string;
   ctrlKey: boolean;
   key: string;
@@ -144,8 +144,6 @@ const SHIFTED_KEY_BASES: Readonly<Record<string, string>> = {
   "?": "/",
 };
 
-// The unshifted letter or digit a physical key produces, or null for every
-// other key (arrows, punctuation, F-keys), whose `key` is already stable.
 function baseKeyFromCode(code: string): string | null {
   if (/^Key[A-Z]$/u.test(code)) return code.slice(3).toLowerCase();
   if (/^Digit[0-9]$/u.test(code)) return code.slice(5);
@@ -160,11 +158,6 @@ export function normalizeAppShortcutInputKey(input: AppShortcutInput): string {
   if (input.key === " " || input.key === "Spacebar") {
     return "Space";
   }
-  // macOS composes Option+<letter> into another character — Option+M reports
-  // key "µ" — so an Alt chord could never be matched by `key` there. Fall back
-  // to the physical key only when the composed character is NOT a plain letter
-  // or digit. A non-US layout still reports one (AZERTY Alt+A is key "a", code
-  // "KeyQ"), so it keeps matching the character the user actually sees.
   if (input.altKey && !isAsciiAlphanumeric(input.key)) {
     const fromCode = baseKeyFromCode(input.code);
     if (fromCode !== null) return fromCode;
@@ -213,7 +206,6 @@ export const appKeybindingSchema = z
 export type AppKeybinding = z.infer<typeof appKeybindingSchema>;
 
 const appDefaultKeybindingSchema = appKeybindingSchema.extend({
-  // Null keeps a command assignable without shipping a default shortcut.
   shortcut: appShortcutSchema.nullable(),
 });
 export type AppDefaultKeybinding = z.infer<typeof appDefaultKeybindingSchema>;
@@ -242,7 +234,6 @@ export type AppDefaultKeybindings = z.infer<typeof appDefaultKeybindingsSchema>;
 const appKeybindingOverrideSchema = z
   .object({
     command: appCommandIdSchema,
-    // Null has explicit meaning: disable every default binding for this command.
     shortcut: appShortcutSchema.nullable(),
   })
   .strict();

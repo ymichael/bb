@@ -15,10 +15,7 @@ describe("CommentProviderAvatar", () => {
     };
     const { container } = render(<CommentProviderAvatar provider={provider} />);
 
-    // The avatar chip is labeled with the provider name for screen readers.
     expect(screen.getByRole("img", { name: "Codex" })).toBeTruthy();
-    // The logo is the mask's alpha, so it takes the chip's text color; an
-    // <img> of an SVG would render black on dark themes.
     const mask = container.querySelector("[data-provider-logo]");
     expect(mask?.getAttribute("data-provider-logo")).toBe(
       "/api/v1/system/providers/codex/logo",
@@ -26,7 +23,6 @@ describe("CommentProviderAvatar", () => {
     expect((mask as HTMLElement).style.maskImage).toContain(
       "/api/v1/system/providers/codex/logo",
     );
-    // No bundled brand mark: the plugin's declared logo is the only source.
     expect(container.querySelector("svg > title")).toBeNull();
   });
 

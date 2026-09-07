@@ -133,7 +133,6 @@ function formatInteractionKind(interaction: PendingInteraction): string {
     return "plugin";
   }
   if (!isApprovalPendingInteractionPayload(interaction.payload)) {
-    // A provider's plugin-defined request: the namespaced kind names the form.
     return interaction.payload.kind;
   }
 
@@ -246,8 +245,6 @@ function printApprovalInteraction(
       }
       break;
     case "tool_use":
-      // The bridge's presentation is the whole description (§4): tool name,
-      // headline, and detail, the same lines the child-thread blocker prints.
       for (const line of formatPendingInteractionSubjectDetailLines(
         interaction,
       )) {
@@ -320,10 +317,6 @@ function printInteraction(interaction: PendingInteraction): void {
   printPluginRequestInteraction(interaction);
 }
 
-/**
- * A plugin form, raised by a plugin or by the agent through a provider: the
- * title, the form that renders it, and its data, which the plugin defines.
- */
 function printPluginRequestInteraction(
   interaction: PluginPendingInteraction | PluginExtensionPendingInteraction,
 ): void {

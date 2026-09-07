@@ -6,7 +6,6 @@ import {
 } from "./assistant-stream-projection.js";
 import type { ProjectionState } from "./event-projection-state.js";
 import {
-  finalizeReasoningTextBuffer,
   getReasoningTextBuffer,
   isReasoningProjectionKeyFinalized,
 } from "./reasoning-lifecycle-projection.js";
@@ -178,6 +177,5 @@ export function projectReasoningTextEvent(
   }
 
   setVisibleTextBuffer(buffer, args.text, true);
-  finalizeReasoningTextBuffer(args.state, messageKey);
   return true;
 }

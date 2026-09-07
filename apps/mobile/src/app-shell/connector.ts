@@ -8,7 +8,6 @@ import { createSessionScheduler } from "@/lib/session";
 
 let instance: ActiveProfileConnector | null = null;
 
-/** App-wide connector: the live socket/session for the active profile. */
 export function getActiveProfileConnector(): ActiveProfileConnector {
   if (!instance) {
     instance = createActiveProfileConnector({
@@ -21,12 +20,6 @@ export function getActiveProfileConnector(): ActiveProfileConnector {
   return instance;
 }
 
-/**
- * Resolve once the connector has activated `profileId` (the ProfilesProvider
- * activates the store's active profile on its next render), or after 5 s so
- * a deep link / notification never hangs on a profile that fails to come up.
- * Resolves immediately when it is already live.
- */
 export function waitForActiveConnection(profileId: string): Promise<boolean> {
   const timeoutMs = 5_000;
   const connector = getActiveProfileConnector();

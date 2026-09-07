@@ -254,8 +254,6 @@ export function resolvePreferredWorkspaceOpenTarget(
     }
   }
 
-  // Preserve stale preferences rather than clearing them. The app may be
-  // temporarily unavailable and should become primary again after reinstall.
   return resolveFallbackWorkspaceOpenTarget(
     args.capability,
     contextKind,

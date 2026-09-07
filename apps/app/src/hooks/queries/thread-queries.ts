@@ -38,6 +38,7 @@ import {
 import {
   getCachedSidebarNavigationThreads,
   getCachedThreadListPlaceholder,
+  findSidebarNavigationThreadPlaceholder,
 } from "../cache-owners/query-cache";
 import { useSidebarNavigationThreadSelection } from "./sidebar-navigation-query";
 import {
@@ -234,8 +235,6 @@ function threadMatchesProjectThreadSubset(
   ) {
     return false;
   }
-  // Hidden threads never enter subset caches: every subset consumer is a
-  // navigation surface, matching the server's default list exclusion.
   if (thread.visibility === "hidden") {
     return false;
   }
@@ -319,7 +318,6 @@ export function hasThreadSearchableQuery(value: string): boolean {
 
 export interface UseArchivedThreadsFilters {
   projectId?: string;
-  /** Restrict to root or child threads. */
   kind?: ArchivedThreadsKindFilter;
 }
 
@@ -398,16 +396,6 @@ interface UseChildThreadsResult {
   isLoading: boolean;
 }
 
-/**
- * Live children of one parent across every project. A child may live in a
- * different project than its parent, so this list is keyed by parent only and
- * never derived from a project-scoped thread list.
- *
- * The sidebar bootstrap already carries every visible unarchived thread across
- * every project, so while that cache is populated the children are derived
- * from it (no per-thread-open `GET /threads?parentThreadId=`). The targeted
- * list request is the fallback for surfaces mounted without the sidebar cache.
- */
 export function useChildThreads({
   enabled: enabledOption,
   parentThreadId,
@@ -423,8 +411,6 @@ export function useChildThreads({
   );
   const { data: sidebarChildren, isBootstrapPending } =
     useSidebarNavigationThreadSelection(selectChildren);
-  // A cold open (deep link) mounts the thread while the app shell's bootstrap
-  // is still in flight; wait for it instead of racing it with a list request.
   const shouldFetch =
     enabled && sidebarChildren === undefined && !isBootstrapPending;
   const fallbackQuery = useQuery<ThreadListResponse>({
@@ -541,12 +527,6 @@ export function useProjectThreadSubset({
   };
 }
 
-/**
- * Threads offered by the `@` mention picker. The sidebar-navigation cache
- * already holds every visible unarchived thread, so while it is populated the
- * candidates are derived from it and no `GET /threads?limit=200` is issued.
- * The list request is the fallback for surfaces mounted without that cache.
- */
 export function useThreadMentionCandidates({
   enabled: enabledOption,
 }: UseThreadMentionCandidatesArgs): UseThreadMentionCandidatesResult {
@@ -651,15 +631,12 @@ export function useThread(id: string, options?: QueryOptions) {
     placeholderData: (previousData, previousQuery) =>
       resolveThreadPlaceholder(previousData, previousQuery?.queryKey, id) ??
       liftThreadListPlaceholder(
-        getCachedThreadListPlaceholder(queryClient, id),
+        getCachedThreadListPlaceholder(queryClient, id) ??
+          findSidebarNavigationThreadPlaceholder(queryClient, id),
       ),
   });
 }
 
-// A thread primed from the sidebar list cache has no spawn-policy flag (the
-// list response omits it). Conservatively hide the spawn affordance on the
-// placeholder; the real single-thread response, which carries the server-
-// computed value, resolves moments later.
 function liftThreadListPlaceholder(
   thread: ThreadListEntry | undefined,
 ): ThreadResponse | undefined {
@@ -670,6 +647,7 @@ function liftThreadListPlaceholder(
     ...thread,
     activeBackgroundAgentCount: thread.activity.activeBackgroundAgentCount,
     canSpawnChild: false,
+    queuedMessageCount: 0,
   };
 }
 
@@ -687,10 +665,6 @@ export function useThreadDetailBootstrap(
       const threadId = requireThreadId(id, "useThreadDetailBootstrap");
       const timelinePrefetch = options?.timelinePrefetch ?? false;
 
-      // The thread shell and timeline are independent reads. Starting the
-      // timeline only after the bootstrap completes adds a full network
-      // round-trip to every cold thread open, which is especially visible
-      // through bb connect's edge + tunnel path.
       if (timelinePrefetch) {
         void queryClient.prefetchQuery({
           queryKey: threadTimelineQueryKey(threadId),
@@ -777,9 +751,13 @@ export function useThreadPendingInteractions(
         signal,
       }),
     enabled,
-    refetchOnMount: options?.refetchOnMount ?? true,
+    refetchOnMount:
+      options?.refetchOnMount ??
+      ((query) => (query.getObserversCount() === 1 ? "always" : true)),
     ...REALTIME_OWNED_NO_FOCUS_QUERY_POLICY,
-    staleTime: options?.staleTime,
+    ...(options?.staleTime === undefined
+      ? {}
+      : { staleTime: options.staleTime }),
   });
 }
 
@@ -803,8 +781,6 @@ export function useThreadStorageFiles(
       });
     },
     enabled,
-    // Subscriptions can be absent while no UI is listening, so remount must
-    // establish a fresh baseline instead of trusting cached data.
     ...REALTIME_OWNED_MOUNT_BASELINE_QUERY_POLICY,
   });
 }
@@ -901,13 +877,6 @@ export function useThreadHostFilePreview(
   });
 }
 
-/**
- * Resolve a timeline response into the full window to cache. A `delta` response
- * is applied to the window we already hold (preserving unchanged row identity);
- * a full response is returned as-is. Falls back to a full fetch if the delta's
- * base is stale (should not happen, since the server only sends a delta when it
- * can reconstruct our exact window).
- */
 async function mergeThreadTimelineDelta(
   previous: ThreadTimelineResponse | undefined,
   response: ThreadTimelineResponse,
@@ -931,13 +900,6 @@ interface FetchThreadTimelineArgs {
   threadId: string;
 }
 
-/**
- * First-window size requested on compact viewports. Phones show a handful of
- * segments above the fold, so the 20-segment server default mostly ships rows
- * the user scrolls to later (older pages still load on demand). The server
- * keys its delta cache on the page request, so a stable per-client limit keeps
- * `afterSequence` deltas working.
- */
 export const COMPACT_THREAD_TIMELINE_SEGMENT_LIMIT = 8;
 
 function resolveThreadTimelineSegmentLimit(): number | undefined {
@@ -951,9 +913,6 @@ async function fetchThreadTimeline({
   signal,
   threadId,
 }: FetchThreadTimelineArgs): Promise<ThreadTimelineResponse> {
-  // Ask for a delta against the window we already hold. The server only
-  // honors it when it can still reconstruct exactly what we have; otherwise
-  // it returns the full window.
   const queryKey = threadTimelineQueryKey(threadId);
   const previous = queryClient.getQueryData<ThreadTimelineResponse>(queryKey);
   const segmentLimit = resolveThreadTimelineSegmentLimit();
@@ -1006,15 +965,6 @@ export function useThreadTimeline(
   });
 }
 
-/**
- * Full conversation outline (every user/agent message) for a thread's
- * table-of-contents minimap. Unlike {@link useThreadTimeline}, this is not
- * paginated — it always reflects the whole thread — so the minimap can show
- * messages that have not yet been scrolled/paged into the loaded window. It is
- * refreshed when a turn completes. The table of contents merges the live
- * timeline window into this full-history snapshot while a turn is streaming,
- * avoiding a full outline request for every appended text delta.
- */
 export function useThreadConversationOutline(
   id: string,
   options?: ThreadTimelineQueryOptions,
@@ -1080,4 +1030,11 @@ export function getLatestPendingInteraction(
       interaction.createdAt > latest.createdAt ? interaction : latest,
     firstInteraction,
   );
+}
+
+export function isPendingInteractionStateUnknown(
+  interactions: readonly PendingInteraction[] | undefined,
+  isFetching: boolean,
+): boolean {
+  return getLatestPendingInteraction(interactions) === null && isFetching;
 }

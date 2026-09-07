@@ -1,12 +1,9 @@
 import { SURFACES_BY_ID, type PluginSurface } from "./surfaces";
 
-/** Stable plugin identity carried by every pasted Guide reference. */
 export const PLUGIN_GUIDE_PLUGIN_ID = "plugin-api-docs";
 
-/** Stable mention-provider identity owned by the Plugin Guide plugin. */
 export const PLUGIN_GUIDE_SURFACE_PROVIDER_ID = "surface";
 
-/** The app-side input for one structured Plugin Guide surface reference. */
 export interface PluginSurfaceAgentMention {
   provider: typeof PLUGIN_GUIDE_SURFACE_PROVIDER_ID;
   id: string;
@@ -20,9 +17,7 @@ export function pluginSurfaceAgentMention(
 }
 
 export interface PluginSurfaceAgentClipboardContent {
-  /** Plain fallback for pasting outside bb. */
   text: string;
-  /** bb's existing structured mention markup, consumed by composer paste. */
   html: string;
 }
 
@@ -34,7 +29,6 @@ export interface PluginSurfaceAgentResource {
   label: string;
 }
 
-/** One canonical object owns every representation of a Guide reference. */
 export interface PluginSurfaceAgentReference {
   identity: PluginSurfaceAgentMention;
   resource: PluginSurfaceAgentResource;
@@ -43,9 +37,6 @@ export interface PluginSurfaceAgentReference {
 }
 
 const AGENT_REFERENCE_PREFIX = "Build a plugin that uses ";
-// A single space after the pill keeps consecutive pastes and follow-on
-// typing from gluing to the label; no punctuation is added, so the pasted
-// text carries exactly what the source content contains.
 const AGENT_REFERENCE_SUFFIX = " ";
 
 function escapeHtml(value: string): string {
@@ -56,11 +47,6 @@ function escapeHtml(value: string): string {
     .replaceAll(">", "&gt;");
 }
 
-/**
- * Derive identity, clipboard bytes, and send-time context from one canonical
- * surface record. No transient UI state, timestamps, prose bullets, or random
- * ids enter the result, so equal surface data produces equal output.
- */
 export function createPluginSurfaceAgentReference(
   surface: PluginSurface,
 ): PluginSurfaceAgentReference {
@@ -89,10 +75,6 @@ export function createPluginSurfaceAgentReference(
   return { identity, resource, clipboard, context };
 }
 
-/**
- * Serialize one Guide surface with bb's existing composer-pill clipboard
- * contract. This is private first-party integration, not a Plugin SDK API.
- */
 export function pluginSurfaceAgentClipboardContent(
   surface: PluginSurface,
 ): PluginSurfaceAgentClipboardContent {
@@ -141,7 +123,6 @@ function copyWithEditingCommand(
   }
 }
 
-/** Copy one surface as a real, composable bb composer pill. */
 export async function copyPluginSurfaceAgentReference(
   surface: PluginSurface,
 ): Promise<boolean> {
@@ -159,18 +140,11 @@ export async function copyPluginSurfaceAgentReference(
         }),
       ]);
       return true;
-    } catch {
-      // The synchronous copy-event path also works on insecure LAN origins.
-    }
+    } catch {}
   }
   return copyWithEditingCommand(content);
 }
 
-/**
- * Resolve a stable surface id into only the pointers an agent needs. The
- * installed authoring skill owns workflow guidance; references stay compact
- * and composable instead of embedding a tutorial per pill.
- */
 export function pluginSurfaceAgentContext(surfaceId: string): string | null {
   const surface = SURFACES_BY_ID.get(surfaceId);
   if (!surface) return null;

@@ -6,20 +6,6 @@ import { Hono } from "hono";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ifNoneMatchSatisfied, registerStaticAppRoutes } from "./server.js";
 
-/**
- * The shell contract the connect worker's edge cache builds on: the document
- * (served directly and as the SPA fallback for every client route) carries a
- * build-id ETag and `Cache-Control: no-cache`, answers If-None-Match with a
- * cheap 304, and ships its precompressed sidecar when the client accepts it.
- *
- * `no-cache` is load-bearing: any positive freshness lifetime lets a browser
- * or the desktop window reuse the shell after a bb update without asking
- * (`must-revalidate` only governs stale entries), and a stale shell
- * references hashed assets that no longer exist — a blank page until the
- * window expires. A regression here either masks a new build for the whole
- * window or turns every relayed navigation back into a full-document tunnel
- * round trip.
- */
 describe("app shell serving", () => {
   const shellHtml = "<!doctype html><title>bb</title><p>build-a</p>";
   const shellBrotli = brotliCompressSync(Buffer.from(shellHtml));

@@ -49,14 +49,7 @@ export async function startHostDaemon(
   const resolvedConfig = loadHostDaemonStartConfig({});
   const dataDir = resolvedConfig.dataDir;
   const hostDaemonConfig = resolvedConfig.connectionConfig;
-  // The real logger writes into the shared data dir, so it must not exist
-  // before the lock is held (a losing daemon would mutate the winner's
-  // rolling logs). Lock diagnostics delegate to it once it is created below;
-  // until then they fall back to the console. Compromise can only fire after
-  // acquisition, so in practice the logger is already set.
   let lockDiagnosticsLogger: HostDaemonLogger | null = null;
-  // Losing the lock to another live daemon before the app exists exits
-  // directly; once the app is running it gets a graceful shutdown first.
   let handleDaemonLockLost: () => void = () => process.exit(1);
   const releaseLock = await acquireDaemonLock(dataDir, {
     logger: {
@@ -163,9 +156,6 @@ export async function startHostDaemon(
         serverUrl,
       });
     }
-    // Run @parcel/watcher in an isolated child process. A parcel inotify
-    // crash/hang/leak is then contained in the child and self-heals via
-    // SIGKILL + respawn, instead of taking down the daemon.
     setParcelWatcherBackend(
       createSubprocessParcelWatcherBackend({
         log: (level, message, fields) => {
@@ -216,23 +206,17 @@ export async function startHostDaemon(
       resolveRuntimeShellEnv,
       hostWatcher,
       closeMachineAuthProxy: machineAuthProxy?.close,
-      // This function owns the daemon process, so it arms the shutdown
-      // force-exit. A self-update restart depends on the process exiting.
-      forceExit: (code) => process.exit(code),
+      exitProcess: (code) => process.exit(code),
     });
     const startedApp = app;
     handleDaemonLockLost = () => {
       void startedApp.daemon
-        .shutdown("daemon-lock-lost")
-        .catch(() => undefined)
-        .finally(() => process.exit(1));
+        .shutdown("daemon-lock-lost", 1)
+        .catch(() => process.exit(1));
     };
     await app.daemon.start();
     return app.daemon;
   } catch (error) {
-    // Once the app exists, daemon.start() owns startup-failure cleanup through
-    // the normal shutdown lifecycle. Before that point, release the resources
-    // acquired directly by this function.
     if (!app) {
       await machineAuthProxy?.close().catch(() => undefined);
       await releaseLock().catch(() => undefined);

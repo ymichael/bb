@@ -55,6 +55,7 @@ import {
   pendingInteractionResolutionEquals,
   validatePendingInteractionResolution,
 } from "./pending-interaction-validation.js";
+import { emitPluginInteractionPending } from "../plugins/plugin-thread-events.js";
 
 type RegisterPendingInteractionResult =
   | {
@@ -191,7 +192,6 @@ function buildResolveConflictError(interaction: PendingInteraction): ApiError {
   );
 }
 
-/** The plugins a server can hand a plugin-defined request to. */
 export interface PendingInteractionPluginDirectory {
   isLoaded(pluginId: string): boolean;
 }
@@ -201,8 +201,6 @@ function getUnsupportedPendingInteractionReason(
   plugins: PendingInteractionPluginDirectory | null,
 ): string | null {
   if (isPluginExtensionInteractionRequestPayload(interaction.payload)) {
-    // A request only a loaded plugin can render. Refusing it here gives the
-    // bridge a clear error instead of a pending row only a stop can clear.
     const { pluginId } = parseExtensionKind(interaction.payload.kind);
     if (plugins === null || !plugins.isLoaded(pluginId)) {
       return `Plugin "${pluginId}" is not loaded on this server, so the "${interaction.payload.kind}" request has no form to render`;
@@ -272,10 +270,6 @@ function notifyInteractionChanged({
   );
 }
 
-/**
- * Owns the server-side pending interaction lifecycle: registration, resolution
- * command queuing, terminal state transitions, and timeline events.
- */
 export class PendingInteractionLifecycle {
   private readonly deps: CreateLifecycleDeps;
   private readonly pluginWaiters = new Map<string, PluginInteractionWaiter>();
@@ -301,10 +295,6 @@ export class PendingInteractionLifecycle {
     };
   }
 
-  /**
-   * The plugin runtime registers the plugins it has loaded, so a provider's
-   * plugin-defined request is accepted only while its plugin can render it.
-   */
   setPluginDirectory(directory: PendingInteractionPluginDirectory): void {
     this.pluginDirectory = directory;
   }
@@ -325,14 +315,6 @@ export class PendingInteractionLifecycle {
     );
   }
 
-  /**
-   * Registers the one listener that runs after an interaction reaches a
-   * terminal state (resolving, resolved, or interrupted). It releases work held
-   * back while the thread was blocked. The listener must re-check
-   * `hasPendingThreadInteraction`: a thread can settle one interaction and
-   * still hold another, and a `resolving` interaction still counts as pending.
-   * It may run inside a database transaction, so it must only schedule work.
-   */
   setThreadInteractionSettledListener(
     listener: ThreadInteractionSettledListener,
   ): void {
@@ -466,6 +448,7 @@ export class PendingInteractionLifecycle {
         hasPendingInteraction: true,
         threadId: pendingInteraction.threadId,
       });
+      emitPluginInteractionPending(thread, pendingInteraction);
     }
 
     return {
@@ -573,12 +556,6 @@ export class PendingInteractionLifecycle {
     return pending;
   }
 
-  /**
-   * A plugin form's submitted value, routed by who raised the form: a
-   * plugin's own request settles its in-memory waiter; a provider's
-   * plugin-defined request resolves like any provider interaction, with the
-   * value carried to the bridge as a request answer.
-   */
   respondToInteraction(args: {
     interactionId: string;
     threadId: string;
@@ -627,7 +604,6 @@ export class PendingInteractionLifecycle {
   }): PendingInteraction {
     const current = this.getThreadInteraction(args);
     if (!isPluginPendingInteraction(current)) {
-      // A provider's request ends with its turn, not with a cancel.
       throw new ApiError(
         400,
         "invalid_request",

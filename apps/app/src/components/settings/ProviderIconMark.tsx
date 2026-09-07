@@ -8,12 +8,6 @@ interface ProviderIconMarkProps {
   className?: string;
 }
 
-/**
- * A provider's mark coloured by its declared `strings.iconTint` when it
- * declared one, else by the surrounding text color. Marks paint with
- * `currentColor`, so the tint is set on a box-less wrapper the mark inherits
- * from; core holds no per-provider colour of its own.
- */
 export function ProviderIconMark({
   provider,
   icon: Mark,

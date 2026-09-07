@@ -4,7 +4,6 @@ import {
   type FrameScheduler,
 } from "./deferred-realization";
 
-/** Manual scheduler: frames and timers fire only when the test says so. */
 function fakeScheduler() {
   const frames = new Map<number, () => void>();
   const timers = new Map<ReturnType<typeof setTimeout>, () => void>();

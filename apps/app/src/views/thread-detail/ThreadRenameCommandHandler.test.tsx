@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { Thread } from "@bb/domain";
+import { makeThread as makeThreadFixture } from "@bb/test-helpers/domain-fixtures";
 import { defaultAppSettings } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppCommandProvider } from "@/components/commands/AppCommandProvider";
@@ -48,28 +49,15 @@ vi.mock("@/lib/bb-desktop", () => ({
 }));
 
 function makeThread(id: string, title: string): Thread {
-  return {
-    archivedAt: null,
+  return makeThreadFixture({
     createdAt: 1,
-    deletedAt: null,
-    environmentId: "env_test",
     id,
     lastReadAt: null,
     latestAttentionAt: 1,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    parentThreadId: null,
-    pinnedAt: null,
-    projectId: "proj_test",
-    providerId: "codex",
-    sectionId: null,
-    sourceThreadId: null,
-    status: "idle",
     title,
     titleFallback: null,
     updatedAt: 1,
-  };
+  });
 }
 
 const firstThread = makeThread("thr_first", "First pane title");

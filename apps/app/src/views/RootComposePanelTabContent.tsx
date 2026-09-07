@@ -115,8 +115,6 @@ export function resolveRootComposeProjectFileRouting({
   selectedEnvironmentId: string | null;
   selectedHostId: string | null;
 }): { environmentId: string | null; hostId: string | null } {
-  // Root file tabs survive compose context changes, so a plugin opener's
-  // persisted project route must outrank the newly selected environment/host.
   if (
     fileOpenerSource?.kind === "workspace" &&
     fileOpenerSource.environmentId === null &&

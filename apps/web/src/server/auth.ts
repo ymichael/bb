@@ -14,12 +14,6 @@ import { resolveDevEmailPasswordEnabled } from "./local-auth.js";
 
 export type Auth = ReturnType<typeof createAuth>;
 
-/**
- * better-auth bound to the Cloud D1 via drizzle. Production uses GitHub;
- * local Cloud additionally enables email/password credentials.
- * Cookies are scoped to `.${BASE_DOMAIN}` so the tunnel gate on
- * `<handle>.${BASE_DOMAIN}` can validate the same session.
- */
 export function createAuth(env: Env) {
   const db = drizzle(env.DB);
   const appUrl = new URL(env.APP_URL);
@@ -32,10 +26,6 @@ export function createAuth(env: Env) {
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.APP_URL,
     trustedOrigins: [env.APP_URL, subdomainOrigin],
-    // `better-auth` and `@better-auth/drizzle-adapter` resolve to two copies of
-    // `@better-auth/core` under pnpm (different peer hashes — workers-types is in
-    // one peer set), so the adapter's type is nominally distinct though identical
-    // at runtime. Cast across that boundary to the option's own database type.
     database: drizzleAdapter(db, {
       provider: "sqlite",
       schema: { user, session, account, verification },

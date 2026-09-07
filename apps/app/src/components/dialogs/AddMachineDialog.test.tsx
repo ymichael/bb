@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { makeHost as host } from "@bb/test-helpers/domain-fixtures";
 import type { InstalledPlugin } from "@bb/server-contract";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -16,6 +17,7 @@ import { BbHttpError, sdk } from "@/lib/sdk";
 import { hostsQueryKey } from "@/hooks/queries/query-keys";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
 import { AddMachineDialog } from "./AddMachineDialog";
+import { makeInstalledPlugin } from "@/test/fixtures/plugins";
 
 vi.mock("@/lib/sdk", async (importOriginal) => {
   const original = await importOriginal<typeof import("@/lib/sdk")>();
@@ -35,55 +37,24 @@ vi.mock("@/lib/ws", () => ({
   wsManager: { subscribe: vi.fn(), unsubscribe: vi.fn() },
 }));
 
-function host(overrides: Partial<Host> & Pick<Host, "id" | "name">): Host {
-  return {
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: null,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
-    createdAt: 0,
-    updatedAt: 0,
-    ...overrides,
-  };
-}
-
 const existingHost = host({ id: "host_primary", name: "MacBook Pro" });
 
 function connectPlugin(
   overrides: Pick<InstalledPlugin, "enabled" | "status">,
 ): InstalledPlugin {
-  return {
+  return makeInstalledPlugin({
     id: "connect",
     source: "builtin:connect",
     rootDir: "/plugins/connect",
-    version: "0.1.0",
     provenance: "builtin",
-    isOrphanedBuiltin: false,
     publisherLabel: "BB Official",
     sourceDisplay: "builtin · connect",
-    updateState: {},
-    description: null,
     name: "Remote access",
-    icon: null,
-    iconUrl: null,
-    statusDetail: null,
-    handlerStats: { count: 0, totalMs: 0, maxMs: 0, errorCount: 0 },
-    services: [],
-    schedules: [],
-    cliCommand: null,
-    capabilities: [],
     hasSettings: true,
-    app: { hasApp: false, bundle: null },
-    logoUrl: null,
-    logoDarkUrl: null,
-    providerIds: [],
-    icons: {},
     ...overrides,
-  };
+  });
 }
 
-/** What the rpc dispatcher returns for any plugin that is not running. */
 function notRunningRpcError(status: string): BbHttpError {
   const message = `plugin "connect" is not running (status: ${status})`;
   return new BbHttpError({
@@ -111,8 +82,6 @@ describe("AddMachineDialog", () => {
       hostId: "host_new",
       expiresAt: Date.now() + 15 * 60 * 1000,
     });
-    // The connect serverUrl differs from the browser origin (bb viewed on
-    // localhost while paired through a tunnel) — the command must use it.
     vi.mocked(sdk.plugins.callRpc).mockResolvedValue({
       code: "mc_test456",
       expiresAt: Date.now() + 10 * 60 * 1000,
@@ -164,7 +133,6 @@ describe("AddMachineDialog", () => {
       expect(screen.getByRole("button", { name: "Copied" })).toBeDefined();
     });
 
-    // Baseline host list is loaded before the new machine appears.
     await waitFor(() => {
       expect(queryClient.getQueryData<Host[]>(hostsQueryKey())).toHaveLength(1);
     });
@@ -219,8 +187,6 @@ describe("AddMachineDialog", () => {
       { wrapper },
     );
 
-    // No machine code (not connect-paired): the direct/LAN command uses the
-    // server-reported URL and carries no --machine-code flag.
     const command = await screen.findByText(/--join-code jc_test123/);
     expect(command.textContent).toContain(
       "curl -fL --progress-meter --connect-timeout 10 --max-time 60 --retry 2 http://direct.example.test:38886/install.sh",
@@ -234,7 +200,6 @@ describe("AddMachineDialog", () => {
       expect(queryClient.getQueryData<Host[]>(hostsQueryKey())).toHaveLength(2);
     });
 
-    // A pre-existing machine reconnecting is not the machine being added.
     act(() => {
       queryClient.setQueryData<Host[]>(hostsQueryKey(), [
         existingHost,
@@ -279,8 +244,6 @@ describe("AddMachineDialog", () => {
       { wrapper },
     );
 
-    // The desktop server listens on loopback only. Another machine cannot
-    // reach it, so a curl command against 127.0.0.1 can never work.
     const notice = await screen.findByRole("status");
     expect(notice.textContent).toContain(
       "Another machine cannot use this address.",
@@ -320,9 +283,6 @@ describe("AddMachineDialog", () => {
       { wrapper },
     );
 
-    // A 503 says nothing about pairing. Do not print a command that dials the
-    // new machine itself, and do not claim connect is unpaired: let the user
-    // retry.
     expect(
       await screen.findByText("Remote access isn't ready yet."),
     ).toBeDefined();
@@ -337,8 +297,6 @@ describe("AddMachineDialog", () => {
       hostId: "host_new",
       expiresAt: Date.now() + 15 * 60 * 1000,
     });
-    // A disabled plugin answers 503 like a plugin that is still starting;
-    // only the plugin list tells them apart.
     vi.mocked(sdk.plugins.callRpc).mockRejectedValue(
       notRunningRpcError("disabled"),
     );
@@ -359,14 +317,13 @@ describe("AddMachineDialog", () => {
       { wrapper },
     );
 
-    // Retrying cannot help: point at the plugin instead of a dead end.
     const notice = await screen.findByRole("status");
     expect(notice.textContent).toContain("The Connect plugin is disabled");
     const link = screen.getByRole("link", {
       name: "Enable the Connect plugin",
     });
     expect(link.getAttribute("href")).toBe(
-      "/extensions/plugins/connect?view=installed",
+      "/settings/plugins/connect?view=installed",
     );
     expect(screen.queryByText("Remote access isn't ready yet.")).toBeNull();
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();

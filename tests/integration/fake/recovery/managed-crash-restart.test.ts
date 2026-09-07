@@ -15,54 +15,58 @@ import {
 } from "./shared.js";
 
 describe.sequential("fake provider managed crash recovery integration", () => {
-  it("survives a crash with a managed-worktree environment and resumes after restart", () =>
-    withHarness(async (harness) => {
-      const { thread } = await createRecoveryThread(
-        harness,
-        "Managed Worktree Crash Restart",
-        "managed-worktree",
-      );
+  it(
+    "survives a crash with a managed-worktree environment and resumes after restart",
+    () =>
+      withHarness(async (harness) => {
+        const { thread } = await createRecoveryThread(
+          harness,
+          "Managed Worktree Crash Restart",
+          "managed-worktree",
+        );
 
-      await sendTextMessage(harness.api, thread.id, {
-        text: "before managed crash",
-      });
-      await waitForThreadOutputContaining(
-        harness.api,
-        thread.id,
-        "before managed crash",
-        TURN_TIMEOUT_MS,
-      );
-      await waitForThreadStatus(
-        harness.api,
-        thread.id,
-        "idle",
-        TURN_TIMEOUT_MS,
-      );
+        await sendTextMessage(harness.api, thread.id, {
+          text: "before managed crash",
+        });
+        await waitForThreadOutputContaining(
+          harness.api,
+          thread.id,
+          "before managed crash",
+          TURN_TIMEOUT_MS,
+        );
+        await waitForThreadStatus(
+          harness.api,
+          thread.id,
+          "idle",
+          TURN_TIMEOUT_MS,
+        );
 
-      await harness.crashDaemon();
-      await waitForHostDisconnected(
-        harness.api,
-        harness.hostId,
-        RECOVERY_TIMEOUT_MS,
-      );
+        await harness.crashDaemon();
+        await waitForHostDisconnected(
+          harness.api,
+          harness.hostId,
+          RECOVERY_TIMEOUT_MS,
+        );
 
-      await harness.startDaemon();
-      await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
+        await harness.startDaemon();
+        await waitForHostConnected(harness.api, RECOVERY_TIMEOUT_MS);
 
-      await sendTextMessage(harness.api, thread.id, {
-        text: "after managed crash",
-      });
-      await waitForThreadOutputContaining(
-        harness.api,
-        thread.id,
-        "after managed crash",
-        TURN_TIMEOUT_MS,
-      );
-      await waitForThreadStatus(
-        harness.api,
-        thread.id,
-        "idle",
-        TURN_TIMEOUT_MS,
-      );
-    }), RECOVERY_TEST_TIMEOUT_MS);
+        await sendTextMessage(harness.api, thread.id, {
+          text: "after managed crash",
+        });
+        await waitForThreadOutputContaining(
+          harness.api,
+          thread.id,
+          "after managed crash",
+          TURN_TIMEOUT_MS,
+        );
+        await waitForThreadStatus(
+          harness.api,
+          thread.id,
+          "idle",
+          TURN_TIMEOUT_MS,
+        );
+      }),
+    RECOVERY_TEST_TIMEOUT_MS,
+  );
 });

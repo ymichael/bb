@@ -51,11 +51,6 @@ export async function readOrCreateSecretFile(
   return racedSecret;
 }
 
-/**
- * Write a caller-supplied secret to `path` (0600), creating parent
- * directories as needed. Atomic: written to a temp file in the same
- * directory, then renamed over the target.
- */
 export async function writeSecretFile(
   path: string,
   value: string,
@@ -71,7 +66,6 @@ export async function writeSecretFile(
   }
 }
 
-/** Delete a secret file; missing files are not an error. */
 export async function deleteSecretFile(path: string): Promise<void> {
   await rm(path, { force: true });
 }

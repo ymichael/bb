@@ -5,26 +5,19 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import { formatFileSize } from "../views/activity/time.js";
 import type { AttachmentOwnerRef } from "../views/detail/attachments.js";
 
-/** Frontend mirror of attachments/index.ts `MAX_ATTACHMENT_SIZE_BYTES`. */
 const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024;
 
 export interface StagedAttachment {
   id: number;
   file: File;
-  /**
-   * staged: waiting for send · oversized: rejected at pick time, never sent ·
-   * failed: the owner was created but this upload failed; retry targets owner.
-   */
   status: "staged" | "oversized" | "failed";
   owner?: AttachmentOwnerRef;
   error?: string;
-  /** A retry for this entry is in flight; the chip disables its Retry button. */
   busy?: boolean;
 }
 
 let nextStagedId = 0;
 
-/** Size-validates picked files: oversized ones become rejected chips. */
 export function stageFiles(files: readonly File[]): StagedAttachment[] {
   return files.map((file) =>
     file.size > MAX_ATTACHMENT_BYTES
@@ -39,8 +32,6 @@ export function stageFiles(files: readonly File[]): StagedAttachment[] {
 }
 
 function ChipThumbnail({ file }: { file: File }) {
-  // Created inside an effect so abandoned renders never leak object URLs.
-  // jsdom has no URL.createObjectURL; fall back to the generic file icon.
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   useEffect(() => {
     if (
@@ -74,7 +65,6 @@ export function AttachmentChip({
   entry: StagedAttachment;
   onRemove: () => void;
   onRetry?: () => void;
-  /** Locks remove/retry, e.g. while the owning form is submitting. */
   disabled?: boolean;
 }) {
   const broken = entry.status !== "staged";

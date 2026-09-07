@@ -44,9 +44,7 @@ function rejectedWebSocketStatus(url: string, origin: string): Promise<number> {
       }
       resolve(status);
     });
-    socket.once("error", () => {
-      // The status-bearing unexpected-response event is asserted above.
-    });
+    socket.once("error", () => {});
   });
 }
 

@@ -127,8 +127,6 @@ describe("LegacyToolsPathRedirect", () => {
   });
 
   it("loses /tools/automations to that route's own more-specific redirect", () => {
-    // Ranking, not order, decides this: the automations paths must keep their
-    // plugin-panel redirect instead of being rewritten to /extensions/automations.
     render(
       <MemoryRouter initialEntries={[LEGACY_TOOLS_AUTOMATIONS_ROUTE_PATH]}>
         <Routes>

@@ -15,7 +15,6 @@ import type { EventProjectionAssistantTextMessage } from "./event-projection-typ
 import { messageId } from "./format-helpers.js";
 import {
   finalizeReasoningLifecycle,
-  trackReasoningTurn,
   upsertReasoningLifecycle,
 } from "./reasoning-lifecycle-projection.js";
 import type { ProjectionState } from "./event-projection-state.js";
@@ -25,7 +24,6 @@ interface ProjectAssistantAndReasoningEventArgs {
   eventParentToolCallId: string | undefined;
   eventTurnId: string | undefined;
   meta: EventMeta;
-  shouldTrackActiveThinking: boolean;
   state: ProjectionState;
 }
 
@@ -72,18 +70,14 @@ export function projectAssistantAndReasoningEvent(
     turnId: args.eventTurnId,
   });
 
-  if (
-    args.decoded.type === "item/started" &&
-    args.decoded.item.type === "reasoning"
-  ) {
-    trackReasoningTurn(args.state, reasoningIdentity);
-    if (args.shouldTrackActiveThinking) {
-      upsertReasoningLifecycle({
-        identity: reasoningIdentity,
-        meta: args.meta,
-        state: args.state,
-      });
-    }
+  if (reasoningIdentity) {
+    upsertReasoningLifecycle({
+      identity: reasoningIdentity,
+      meta: args.meta,
+      parentToolCallId: args.eventParentToolCallId,
+      state: args.state,
+      threadId: args.decoded.threadId,
+    });
   }
 
   if (
@@ -137,21 +131,6 @@ export function projectAssistantAndReasoningEvent(
   }
 
   if (
-    (args.decoded.type === "item/reasoning/summaryTextDelta" ||
-      args.decoded.type === "item/reasoning/textDelta") &&
-    reasoningIdentity
-  ) {
-    trackReasoningTurn(args.state, reasoningIdentity);
-    if (args.shouldTrackActiveThinking) {
-      upsertReasoningLifecycle({
-        identity: reasoningIdentity,
-        meta: args.meta,
-        state: args.state,
-      });
-    }
-  }
-
-  if (
     projectReasoningTextEvent({
       identity: reasoningIdentity,
       mode: "delta",
@@ -162,29 +141,25 @@ export function projectAssistantAndReasoningEvent(
     return true;
   }
 
-  if (
-    projectReasoningTextEvent({
-      identity: reasoningIdentity,
-      mode: "final",
-      state: args.state,
-      text: parseReasoningFinalText(args.decoded),
-    })
-  ) {
-    if (
-      args.decoded.type === "item/completed" &&
-      args.decoded.item.type === "reasoning"
-    ) {
-      finalizeReasoningLifecycle(args.state, reasoningIdentity);
-    }
-    return true;
-  }
+  const projectedReasoningFinal = projectReasoningTextEvent({
+    identity: reasoningIdentity,
+    mode: "final",
+    state: args.state,
+    text: parseReasoningFinalText(args.decoded),
+  });
 
   if (
     args.decoded.type === "item/completed" &&
     args.decoded.item.type === "reasoning"
   ) {
-    finalizeReasoningLifecycle(args.state, reasoningIdentity);
+    finalizeReasoningLifecycle({
+      identity: reasoningIdentity,
+      meta: args.meta,
+      state: args.state,
+      status: "completed",
+      text: parseReasoningFinalText(args.decoded),
+    });
   }
 
-  return false;
+  return projectedReasoningFinal;
 }

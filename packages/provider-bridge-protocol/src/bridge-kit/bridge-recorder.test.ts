@@ -10,13 +10,6 @@ import {
   type BridgeRecordingEntry,
 } from "./bridge-recorder.js";
 
-/**
- * The recorder's one non-trivial job is routing: a response carries only an
- * id, so it must land in the scope of the request it answers, on both the
- * runtime→bridge and bridge→runtime sides. Everything else here (append,
- * split, seq) is what the parity harness's merge-by-seq relies on.
- */
-
 let dir: string;
 
 afterEach(() => {
@@ -37,7 +30,12 @@ describe("bridge recorder", () => {
 
     recorder.recordRuntimeLine(
       "runtime→bridge",
-      JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      }),
     );
     recorder.recordRuntimeLine(
       "bridge→runtime",
@@ -52,8 +50,6 @@ describe("bridge recorder", () => {
         params: { threadId: "thr_a" },
       }),
     );
-    // A bridge-originated request for thr_a; the runtime's answer carries the
-    // bridge's id only.
     recorder.recordRuntimeLine(
       "bridge→runtime",
       JSON.stringify({
@@ -65,11 +61,19 @@ describe("bridge recorder", () => {
     );
     recorder.recordRuntimeLine(
       "runtime→bridge",
-      JSON.stringify({ jsonrpc: "2.0", id: "br-7", result: { decision: "allow" } }),
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: "br-7",
+        result: { decision: "allow" },
+      }),
     );
     recorder.recordRuntimeLine(
       "bridge→runtime",
-      JSON.stringify({ jsonrpc: "2.0", id: 2, result: { providerThreadId: "p" } }),
+      JSON.stringify({
+        jsonrpc: "2.0",
+        id: 2,
+        result: { providerThreadId: "p" },
+      }),
     );
     recorder.recordRuntimeLine(
       "bridge→runtime",
@@ -96,7 +100,9 @@ describe("bridge recorder", () => {
       ),
     ).toEqual([1]);
     expect(
-      readLane("thr_a", "runtime→bridge").map((entry) => JSON.parse(entry.line).id),
+      readLane("thr_a", "runtime→bridge").map(
+        (entry) => JSON.parse(entry.line).id,
+      ),
     ).toEqual([2, "br-7"]);
     const outbound = readLane("thr_a", "bridge→runtime");
     expect(outbound.map((entry) => JSON.parse(entry.line).id)).toEqual([
@@ -104,7 +110,6 @@ describe("bridge recorder", () => {
       2,
       undefined,
     ]);
-    // One counter across every lane: merging by seq restores the wire order.
     const all = [
       ...readLane(BRIDGE_RECORDING_PROCESS_SCOPE, "runtime→bridge"),
       ...readLane(BRIDGE_RECORDING_PROCESS_SCOPE, "bridge→runtime"),
@@ -124,9 +129,10 @@ describe("bridge recorder", () => {
     recorder.recordChildIo({ stdin, stdout }, { threadId: "thr_b" });
 
     stdin.write('{"jsonrpc":"2.0","id":1,"method":"initialize"}\n');
-    // Partial chunks must reassemble into one recorded line.
     stdout.write('{"jsonrpc":"2.0",');
-    stdout.write('"id":1,"result":{}}\n{"jsonrpc":"2.0","method":"turn/started"}\n');
+    stdout.write(
+      '"id":1,"result":{}}\n{"jsonrpc":"2.0","method":"turn/started"}\n',
+    );
     recorder.close();
 
     expect(

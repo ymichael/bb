@@ -4,11 +4,7 @@ import {
   normalizeProviderThreadNameEvent,
   toProviderExternalThreadName,
 } from "@bb/domain";
-import type {
-  DynamicTool,
-  InstructionMode,
-  ThreadEvent,
-} from "@bb/domain";
+import type { DynamicTool, InstructionMode, ThreadEvent } from "@bb/domain";
 import type { AdapterCommand } from "./provider-adapter.js";
 import {
   BRIDGE_JSON_RPC_ERRORS,
@@ -56,6 +52,7 @@ import { RuntimeThreadGoalState } from "./runtime-thread-goal-state.js";
 import { RuntimeBackgroundWorkState } from "./runtime-background-work-state.js";
 import { RuntimeTurnState } from "./runtime-turn-state.js";
 import type {
+  AgentRuntimeContributedEnvEntry,
   AgentRuntime,
   AgentRuntimeProviderRecoveryHint,
   AgentRuntimeBridgeLaunch,
@@ -63,10 +60,12 @@ import type {
   AgentRuntimeOptions,
   ReapedIdleProviderSession,
 } from "./types.js";
-import { buildThreadShellEnvironment } from "./thread-shell-environment.js";
 import {
-  bridgeLaunchProcessKey,
-} from "./bridge-launch-process-key.js";
+  resolveThreadEnvironment,
+  type DroppedThreadEnvironmentContribution,
+  type ResolvedThreadEnvironmentEntry,
+} from "./thread-shell-environment.js";
+import { bridgeLaunchProcessKey } from "./bridge-launch-process-key.js";
 
 interface RecordThreadExecutionOptionsArgs {
   options: AgentRuntimeExecutionOptions;
@@ -101,11 +100,6 @@ interface PreparingThreadRewind {
   promise: Promise<{ providerThreadId: string }>;
 }
 
-/**
- * A staged rewind fork, keyed by the server-minted per-attempt lease id.
- * Each attempt owns exactly one staged fork; there is no cross-attempt
- * sharing, so discarding a lease can never affect another attempt.
- */
 type StagedThreadRewind = PreparingThreadRewind | PreparedThreadRewind;
 
 interface ReapIdleProviderSessionCandidate {
@@ -118,7 +112,6 @@ interface ReapIdleProviderSessionCandidate {
 interface FindReapableIdleProviderSessionArgs {
   idleForMs: number;
   nowMs: number;
-  providerSessionReapingEnabled: boolean;
   threadId: string;
 }
 
@@ -128,10 +121,6 @@ interface ResolveProviderProcessKeyArgs {
 }
 
 interface ArchiveOrUnarchiveThreadArgs {
-  /**
-   * The launch to spawn the bridge with. Absent only for a recovery
-   * unarchive on a thread with a runtime config, which supplies it.
-   */
   bridgeLaunch?: AgentRuntimeBridgeLaunch;
   commandType: "thread/archive" | "thread/unarchive";
   providerId: string;
@@ -139,12 +128,6 @@ interface ArchiveOrUnarchiveThreadArgs {
   threadId: string;
 }
 
-/**
- * What a request needs so the runtime can act on the recovery hint a bridge
- * attaches to its rejection: the session to unarchive, the thread to retry.
- * `bridgeLaunch` pins the process for a thread that has no runtime config
- * yet (a rewind staging fork); every other thread's config carries it.
- */
 interface RequestRecoveryArgs {
   bridgeLaunch?: AgentRuntimeBridgeLaunch;
   providerId: string;
@@ -152,12 +135,6 @@ interface RequestRecoveryArgs {
   threadId: string;
 }
 
-/**
- * A runtime request the bridge rejected with a typed recovery hint. `code` is
- * the host-side failure code (`getErrorCode` in the daemon reads a string
- * `code` before any message text), so an `authRequired` rejection reaches the
- * server as `auth_required` without a regex anywhere on the way.
- */
 export class AgentRuntimeRecoveryError extends Error {
   readonly code: "auth_required" | "rate_limited";
   readonly recovery: AgentRuntimeProviderRecoveryHint;
@@ -175,10 +152,6 @@ export class AgentRuntimeRecoveryError extends Error {
   }
 }
 
-/**
- * A `rateLimited { retryable: true }` rejection is retried on this ladder;
- * the failure after the last rung propagates as a typed error.
- */
 const DEFAULT_RATE_LIMITED_RETRY_DELAYS_MS = [2_000, 8_000] as const;
 
 interface ResolveProviderRequestThreadIdArgs extends ResolveRuntimeProviderRequestThreadIdArgs {
@@ -203,10 +176,6 @@ function defaultBridgeNodeEnv(): Record<string, string> | undefined {
   return { ELECTRON_RUN_AS_NODE: "1" };
 }
 
-// ---------------------------------------------------------------------------
-// Runtime implementation
-// ---------------------------------------------------------------------------
-
 type ProviderProcess = RuntimeProviderProcess;
 
 const threadGoalClearResultSchema = z.object({ cleared: z.boolean() }).strict();
@@ -215,22 +184,14 @@ const PREPARED_THREAD_REWIND_TTL_MS = 5 * 60_000;
 const PREPARED_THREAD_REWIND_RETRY_MS = 30_000;
 
 interface ThreadRuntimeConfig {
-  /**
-   * The launch spec the live provider session was constructed with. Kept so a
-   * runtime-internal re-resume (a `restartRecommended` bridge restart) can
-   * rebuild the same process key and adapter for a plugin-delivered bridge,
-   * which cannot be resolved from the provider id alone.
-   */
   bridgeLaunch: AgentRuntimeBridgeLaunch;
+  contributedEnv: readonly AgentRuntimeContributedEnvEntry[];
   dynamicTools?: DynamicTool[];
   disallowedTools?: readonly string[];
   environmentId: string;
   instructionMode: InstructionMode;
-  /**
-   * The instructions the live provider session was constructed with. Frozen
-   * until the next session construction (start, resume, fork).
-   */
   instructions?: string;
+  envVars: Record<string, string>;
   options: AgentRuntimeExecutionOptions;
   processKey: string;
   projectId?: string;
@@ -255,15 +216,7 @@ interface RequireProviderRequestPlanArgs {
   providerId: string;
 }
 
-/**
- * The one provider id the pre-experiment idle reap releases (the behavior
- * bb shipped before `providerSessionReapingEnabled` extended release to every
- * restorable provider). Product policy, not a process-topology fact: one
- * bridge process serves every thread of a provider in the environment.
- */
-const CODEX_PROVIDER_ID = "codex";
 const DEFAULT_THREAD_CREATION_REQUEST_TIMEOUT_MS = 2 * 60_000;
-/** How long a failed construction waits for the bridge to release the thread. */
 const FAILED_CONSTRUCTION_RELEASE_TIMEOUT_MS = 5_000;
 
 async function delay(ms: number): Promise<void> {
@@ -282,18 +235,11 @@ function resolveThreadStoragePath(
   return path.join(rootPath, args.threadId);
 }
 
-/**
- * Coordinates provider processes for an environment and bridges provider
- * JSON-RPC traffic into bb thread events, dynamic tool calls, and pending
- * interactions.
- */
 export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const additionalWorkspaceWriteRoots =
     options.additionalWorkspaceWriteRoots ?? [];
   const skillRoots = options.skillRoots ?? [];
   for (const skillRoot of skillRoots) {
-    // Every root goes to every provider process in the one generic
-    // `skills/configure` shape; it must be addressable from any of them.
     if (!path.isAbsolute(skillRoot.path)) {
       throw new Error(
         `Agent runtime skill root "${skillRoot.id}" must use an absolute path: ${skillRoot.path}`,
@@ -308,26 +254,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const threadCreationRequestTimeoutMs =
     options.threadCreation?.requestTimeoutMs ??
     DEFAULT_THREAD_CREATION_REQUEST_TIMEOUT_MS;
-  /**
-   * Threads whose bridge raised `restartRecommended` while a turn was
-   * active: the restart runs before the thread's next turn or steer.
-   */
   const threadsAwaitingBridgeRestart = new Map<
     string,
     AgentRuntimeProviderRecoveryHint
   >();
-  /**
-   * Threads whose unsolicited `restartRecommended` hint arrived while an
-   * operation was in flight and no turn was open: the restart is retried as
-   * soon as the operations drain. A hint carried by a rejected request never
-   * joins this set — that restart waits for the thread's next turn by design.
-   */
   const threadsRetryingBridgeRestartOnIdle = new Set<string>();
   const idleProviderSessionSinceMsByThreadId = new Map<string, number>();
-  // Accepted turn dispatches awaiting the provider's turn/started. The
-  // watchdog makes a stalled entry visible instead of silently hung (#1156's
-  // unimplemented third suggestion; grammar rule 4 in
-  // docs/provider-bridge-protocol.md).
   const pendingTurnStarts = new Map<
     string,
     { sinceMs: number; watchdogFired: boolean }
@@ -360,9 +292,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
   const threadGoalState = new RuntimeThreadGoalState();
   const turnState = new RuntimeTurnState();
   const backgroundWorkState = new RuntimeBackgroundWorkState();
-  // The host's live grammar check on bridge event streams: the conformance
-  // kit's rules, applied to every bridge including the third-party artifacts
-  // nobody ran the kit against.
   const threadEventGrammar = new ThreadEventGrammar();
   const bridgeNodeEnv = defaultBridgeNodeEnv();
 
@@ -386,9 +315,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       handleStdoutLine(args.line, args.providerProcess),
     onProcessExit: options.onProcessExit,
     onProviderThreadDetached: (threadId) => {
-      // Open background work dies with the provider process: bridges settle
-      // it with explicit deltas on their own teardown, and the server's
-      // reconciliation settles what a dead process never could.
       threadIdentityRegistry.clearThread(threadId);
       clearThreadRuntimeConfig(threadId);
       turnState.clearThread(threadId);
@@ -400,20 +326,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     workspacePath: options.workspacePath,
   });
 
-  /**
-   * One process per provider artifact: every thread of a provider in this
-   * environment runs on the same bridge process, and the bridge supervises
-   * whatever children it needs (the codex bridge runs one `codex app-server`
-   * per thread underneath itself). The runtime never scopes a process to a
-   * thread.
-   */
   function resolveProviderProcessKey(
     args: ResolveProviderProcessKeyArgs,
   ): string {
-    // A plugin-delivered bridge keys process identity by its artifact hash AND
-    // by the declaration facts baked into the adapter at spawn (capabilities,
-    // static provider options): a plugin can change either one alone, and
-    // whichever changed, the running adapter is the superseded one.
     return `${args.providerId}#bridge:${bridgeLaunchProcessKey(args.bridgeLaunch)}`;
   }
 
@@ -432,20 +347,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  /**
-   * `thread/stop { release }` for a thread the runtime is about to forget
-   * without a settled session (a construction that failed or timed out on
-   * the runtime's side). The bridge may have nothing for the thread, may
-   * reject, or may not answer in time; none of that changes the outcome, so
-   * every failure is logged and swallowed.
-   */
   async function releaseThreadOnBridgeBestEffort(args: {
     proc: ProviderProcess;
     threadId: string;
   }): Promise<void> {
     if (hasChildProcessExited(args.proc.child)) {
-      // A bridge that has exited holds nothing for the thread and cannot
-      // answer: asking would only wait out the request's timeout.
       return;
     }
     const providerThreadId =
@@ -475,27 +381,18 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
   }
 
-  /**
-   * Releasing a thread is the moment a process can become retirable: a
-   * bridge process superseded by a plugin update was only being kept alive
-   * by the threads still running on it. A current process stays up for the
-   * provider's next thread; its own per-thread children are the bridge's
-   * business (the codex bridge kills a thread's app-server on release).
-   */
   async function releaseIdleProviderProcess(
     proc: ProviderProcess,
   ): Promise<void> {
-    await providerProcesses.retireSupersededBridgeProcessIfIdle(proc);
+    if (proc.identity.threadIds.size > 0) {
+      return;
+    }
+    await providerProcesses.shutdownProvider({
+      processKey: proc.processKey,
+      providerId: proc.providerId,
+    });
   }
 
-  /**
-   * A failed session construction (thread/start, thread/resume or a fork)
-   * has no session to keep. The bridge may still hold one — the request
-   * timed out on the runtime's side, or its result carried no identity — so
-   * tell it to release the thread (best effort, bounded) before the runtime
-   * forgets the thread; otherwise a child of the shared provider process
-   * would run with no owner. The caller rethrows its own error.
-   */
   async function abandonFailedSessionConstruction(args: {
     proc: ProviderProcess;
     threadId: string;
@@ -528,21 +425,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         message: args.message,
         pending: args.proc.pending,
         resultSchema: args.resultSchema,
-        ...(args.timeoutMs !== undefined
-          ? { timeoutMs: args.timeoutMs }
-          : {}),
+        ...(args.timeoutMs !== undefined ? { timeoutMs: args.timeoutMs } : {}),
       },
     });
   }
 
-  /**
-   * The recovery a rejected request gets: the `recovery` args are the
-   * session the actions that need one (unarchive, retry) act on; a command
-   * with no session of its own (model/list, a plain thread/start) passes
-   * none. `allowUnarchive` is on for a request's first rejection and off for
-   * the retry after an unarchive — the protocol promises one retry, not a
-   * loop.
-   */
   interface RequestRecoveryPolicy<TResult> {
     allowUnarchive: boolean;
     proc: ProviderProcess;
@@ -550,14 +437,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     request: SendJsonRpcRequestArgs<TResult>;
   }
 
-  /**
-   * Send the request on `proc` and act on the hint its rejection carries. The
-   * hint rides the rejection itself (`error.data.recovery`), so it can only
-   * ever explain this request; a timeout or a bridge exit has no response and
-   * therefore no hint. A command with no session still forwards the hint and
-   * types the error, which is the only way an `authRequired` reaches the
-   * daemon as a typed `auth_required` now that no regex reads the message.
-   */
   async function sendRequestWithRecovery<TResult>(
     args: RequestRecoveryPolicy<TResult>,
   ): Promise<TResult> {
@@ -581,12 +460,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
   }
 
-  /**
-   * The per-kind action for a rejected request (docs/provider-bridge-protocol.md
-   * "Recovery hints"). Every rejection of the request goes through here —
-   * the first one, a rate-limit ladder rung, the retry after an unarchive —
-   * so a hint means the same thing whichever attempt it arrived on.
-   */
   async function actOnRejection<TResult>(
     args: RequestRecoveryPolicy<TResult> & {
       error: unknown;
@@ -596,10 +469,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const { error, hint, recovery } = args;
     switch (hint.kind) {
       case "sessionArchived":
-        // Retryable with a session to act on: unarchive it and retry once.
-        // Otherwise the bridge says the session cannot be unarchived from
-        // here (a fork source it cannot reopen, for example), or the retry
-        // after an unarchive is archived again.
         if (recovery !== undefined && hint.retryable && args.allowUnarchive) {
           return await unarchiveAndRetryRequest({
             error,
@@ -626,20 +495,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         handleRecoveryHint({ hint, proc: args.proc, source: "rejection" });
         throw toRecoveryError({ cause: error, code: "auth_required", hint });
       case "restartRecommended":
-        // The request itself failed and is reported as is; the restart runs
-        // once this operation is over (before the thread's next turn).
         handleRecoveryHint({ hint, proc: args.proc, source: "rejection" });
         throw error;
       case "staleTurn":
-        // Only a steer can be stale; steerTurn claims this hint itself.
         throw error;
     }
   }
 
-  /**
-   * The rejection's hint, stamped with the provider it came from and, for a
-   * request with a session, the thread it is about.
-   */
   function rejectionHint(
     error: unknown,
     scope: { providerId: string; threadId?: string },
@@ -650,11 +512,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return { ...scope, ...error.recovery };
   }
 
-  /**
-   * The typed error an `authRequired` or `rateLimited` rejection becomes.
-   * The code is named by the caller's `case`, never derived from the hint:
-   * no other kind has a typed error.
-   */
   function toRecoveryError(args: {
     cause: unknown;
     code: AgentRuntimeRecoveryError["code"];
@@ -675,13 +532,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     request: SendJsonRpcRequestArgs<TResult>;
   }
 
-  /**
-   * `sessionArchived`: unarchive the session, then retry the request once.
-   * The retry is a request like any other: a hint on its rejection gets its
-   * own action (a typed `authRequired`, a rate-limit ladder, a scheduled
-   * restart), except that a second `sessionArchived` is reported, not
-   * unarchived again.
-   */
   async function unarchiveAndRetryRequest<TResult>(
     args: RetryableRequestArgs<TResult>,
   ): Promise<TResult> {
@@ -695,16 +545,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         commandType: "thread/unarchive",
         ...recovery,
       });
-      // Unarchiving can replace an exited provider process, so resolve the
-      // process again instead of writing to the captured child's stdin.
       retryProc = providerProcesses.requireProviderProcess({
         processKey: args.proc.processKey,
         providerId: args.proc.providerId,
       });
     } catch (recoveryError) {
-      // The archived-session error names the session and the CLI command
-      // that fixes it, so keep it as the reported failure whenever the
-      // recovery itself could not run.
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(message, { cause: recoveryError });
     }
@@ -717,13 +562,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  /**
-   * `rateLimited { retryable: true }`: re-send on a short bounded ladder. A
-   * rung that is rate limited again climbs to the next; a rung rejected with
-   * any other hint ends the ladder and gets that hint's own action, exactly
-   * as a first rejection with it would; the failure after the last rung
-   * surfaces as the typed `rate_limited` error.
-   */
   async function retryRateLimitedRequest<TResult>(
     args: RetryableRequestArgs<TResult> & {
       allowUnarchive: boolean;
@@ -753,7 +591,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           threadId: args.recovery.threadId,
         });
         if (nextHint === null) {
-          // The bridge rejected for a different, untyped reason: report it.
           throw retryError;
         }
         if (!(nextHint.kind === "rateLimited" && nextHint.retryable)) {
@@ -770,9 +607,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         lastHint = nextHint;
       }
     }
-    // Still rate limited after the last rung: forward the hint so the daemon
-    // learns the provider is rate limited, not only that this request failed.
-    handleRecoveryHint({ hint: lastHint, proc: args.proc, source: "rejection" });
+    handleRecoveryHint({
+      hint: lastHint,
+      proc: args.proc,
+      source: "rejection",
+    });
     throw toRecoveryError({
       cause: lastError,
       code: "rate_limited",
@@ -880,16 +719,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     threadOperationCounts.set(threadId, current - 1);
   }
 
-  /**
-   * A `restartRecommended` hint that reached the thread while one of its
-   * operations was in flight was kept, not scheduled. One read can carry the
-   * turn/start response, the turn's terminal delta and the hint together: the
-   * response settles the turn operation on a microtask that runs only after
-   * the whole batch, so the hint still finds the operation in flight and,
-   * without this, waits for the thread's next turn. Schedule it now that the
-   * thread is idle, exactly as if the hint had arrived one read later. A
-   * thread whose turn is still open keeps waiting for that turn.
-   */
   function retryBridgeRestartOnIdle(threadId: string): void {
     if (!threadsRetryingBridgeRestartOnIdle.has(threadId)) {
       return;
@@ -949,11 +778,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  /**
-   * Removes one thread's runtime state while its provider process keeps
-   * running: identity, execution config, turn state (resolving pending
-   * active-turn waiters with `null`), and replay-filter state.
-   */
   function forgetThreadRuntimeStateForProviderState(
     providerState: RuntimeProviderProcess["identity"],
     threadId: string,
@@ -1016,15 +840,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
 
     const runtimeConfig = threadRuntimeConfigs.get(args.threadId);
-    if (
-      !runtimeConfig ||
-      // The experiment extends release to every restorable provider. It does
-      // not gate release: Codex idle sessions are released without it, which
-      // is the behavior BB shipped before the experiment.
-      (args.providerSessionReapingEnabled
-        ? !runtimeConfig.sessionRestorable
-        : runtimeConfig.providerId !== CODEX_PROVIDER_ID)
-    ) {
+    if (!runtimeConfig?.sessionRestorable) {
       return null;
     }
 
@@ -1061,20 +877,9 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     return providerThreadId;
   }
 
-  /**
-   * An unsolicited `provider/recovery` notification: a condition with no
-   * runtime request to ride on (a terminal 401 mid-turn). A hint that
-   * explains a rejected request arrives on that request's error response
-   * instead (see sendCommand). Actions key on `kind` only; the provider id
-   * is never consulted.
-   */
   function handleRecoveryHint(args: {
     hint: AgentRuntimeProviderRecoveryHint;
     proc: ProviderProcess;
-    /**
-     * A hint carried by a rejected request restarts before the thread's next
-     * turn; an unsolicited one restarts as soon as the thread is idle.
-     */
     source: "rejection" | "unsolicited";
   }): void {
     const { hint } = args;
@@ -1088,12 +893,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
   }
 
-  /**
-   * `restartRecommended`: replace the bridge process the thread runs on and
-   * resume the thread on the fresh one. Runs right away when the thread is
-   * idle; a thread with an active turn keeps its turn and restarts before
-   * the next turn or steer (`restartThreadBridgeIfRecommended`).
-   */
   function scheduleBridgeRestart(args: {
     hint: AgentRuntimeProviderRecoveryHint;
     retryOnIdle: boolean;
@@ -1135,15 +934,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     });
   }
 
-  /**
-   * A bridge process hosts every live thread of its provider in the
-   * environment, so restarting it for one thread restarts it for all of
-   * them. The restart runs only while no other thread on the process is
-   * mid-turn or holds open background work — the hint is a recommendation,
-   * never a reason to kill another thread's work — and every hosted thread
-   * is resumed on the fresh process. A deferred restart stays marked and is
-   * tried again at the hinted thread's next turn or steer.
-   */
   async function restartThreadBridgeIfRecommended(
     args: RestartThreadBridgeArgs,
   ): Promise<void> {
@@ -1171,8 +961,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         turnState.getActiveTurnId(threadId) !== null ||
         pendingTurnStarts.has(threadId) ||
         threadHasInFlightOperation(threadId) ||
-        // Open background tasks and delegations are live provider work that
-        // dies with the process, exactly as the idle reaper sees them.
         backgroundWorkState.hasOpenThreadWork(threadId),
     );
     if (busyThreadId !== undefined) {
@@ -1184,7 +972,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
     threadsAwaitingBridgeRestart.delete(args.threadId);
     const providerThreadId = requireProviderThreadId(args.threadId);
-    // Snapshot before the shutdown detaches every hosted thread.
     const hostedSessions = hostedThreadIds.flatMap((threadId) => {
       const config = threadRuntimeConfigs.get(threadId);
       const hostedProviderThreadId =
@@ -1209,13 +996,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       threadId: args.threadId,
     });
     for (const hosted of hostedSessions) {
-      // The shutdown detached every sibling, and the daemon resumes a
-      // detached thread on its next command without waiting for this loop.
-      // A sibling that is live again — or on its way: an operation in
-      // flight, a turn pending or active — was rebuilt by that path, and a
-      // second thread/resume would replace the session it now runs on
-      // (codex, pi and the ACP kit close the existing session on resume),
-      // killing the turn the daemon just started.
       if (
         threadIdentityRegistry.getProviderSession(hosted.threadId) !== null ||
         threadHasInFlightOperation(hosted.threadId) ||
@@ -1233,8 +1013,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           threadId: hosted.threadId,
         });
       } catch (error) {
-        // The thread is no longer live; the server resumes it on its next
-        // turn, as after any provider exit.
         options.onStderr?.(
           `Failed to resume thread "${hosted.threadId}" after the bridge restart: ${error instanceof Error ? error.message : String(error)}`,
           hosted.threadId,
@@ -1243,7 +1021,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }
   }
 
-  /** Re-resume a thread from the config its live session was built with. */
   async function resumeThreadFromConfig(args: {
     currentConfig: ThreadRuntimeConfig;
     instructions: string | undefined;
@@ -1254,8 +1031,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     const { currentConfig } = args;
     const resumeInstructions = args.instructions ?? currentConfig.instructions;
     await runtime.resumeThread({
-      // The restart can only rebuild the session from the launch the session
-      // started with.
       bridgeLaunch: currentConfig.bridgeLaunch,
       environmentId: currentConfig.environmentId,
       threadId: args.threadId,
@@ -1264,6 +1039,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
         : {}),
       providerThreadId: args.providerThreadId,
       providerId: currentConfig.providerId,
+      contributedEnv: currentConfig.contributedEnv,
       options: args.options,
       ...(resumeInstructions !== undefined
         ? { instructions: resumeInstructions }
@@ -1323,8 +1099,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       resultSchema: ignoredJsonRpcResultSchema,
     });
     if (commandType === "thread/archive") {
-      // An archived thread is no longer live in the runtime; the next turn
-      // must resume it (after unarchive) instead of reusing stale state.
       forgetThreadRuntimeStateForProviderState(proc.identity, threadId);
     }
     await releaseIdleProviderProcess(proc);
@@ -1337,16 +1111,71 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     if (!currentConfig) {
       return;
     }
-    // Execution settings ride on the next turn command and the bridge
-    // reconciles them internally, so record them without replacing the
-    // session (which would kill its background tasks). Instructions are
-    // frozen for the life of a provider session for the same reason: drifted
-    // instructions (memory catalog, AGENTS.md edits, plugin dynamic
-    // instructions) never force a thread/resume; fresh instructions apply
-    // when the next session is constructed.
     setThreadRuntimeConfig(args.threadId, {
       ...currentConfig,
       options: args.options,
+    });
+  }
+
+  function environmentRecordsEqual(
+    left: Readonly<Record<string, string>>,
+    right: Readonly<Record<string, string>>,
+  ): boolean {
+    const leftEntries = Object.entries(left);
+    const rightEntries = Object.entries(right);
+    return (
+      leftEntries.length === rightEntries.length &&
+      leftEntries.every(([name, value]) => right[name] === value)
+    );
+  }
+
+  function emitResolvedProviderEnvironment(args: {
+    droppedContributions: DroppedThreadEnvironmentContribution[];
+    entries: ResolvedThreadEnvironmentEntry[];
+    providerThreadId: string;
+    threadId: string;
+  }): void {
+    options.onEvent({
+      type: "provider.env-resolved",
+      threadId: args.threadId,
+      providerThreadId: args.providerThreadId,
+      entries: args.entries,
+      scope: { kind: "thread" },
+    });
+    for (const contribution of args.droppedContributions) {
+      options.onEvent({
+        type: "provider/warning",
+        threadId: args.threadId,
+        providerThreadId: args.providerThreadId,
+        category: "config",
+        summary: `Dropped environment variable "${contribution.name}" from plugin "${contribution.plugin}".`,
+        details:
+          "BB_SERVER_URL is unavailable, so its serverPath contribution was not applied.",
+        scope: { kind: "thread" },
+      });
+    }
+  }
+
+  function resolveRuntimeThreadEnvironment(args: {
+    contributedEnv: readonly AgentRuntimeContributedEnvEntry[];
+    environmentId: string;
+    projectId?: string;
+    threadId: string;
+  }): {
+    droppedContributions: DroppedThreadEnvironmentContribution[];
+    envVars: Record<string, string>;
+    entries: ResolvedThreadEnvironmentEntry[];
+  } {
+    return resolveThreadEnvironment({
+      baseShellEnv: options.shellEnv,
+      contributedEnv: args.contributedEnv,
+      environmentId: args.environmentId,
+      projectId: args.projectId,
+      threadStoragePath: resolveThreadStoragePath({
+        options,
+        threadId: args.threadId,
+      }),
+      threadId: args.threadId,
     });
   }
 
@@ -1429,18 +1258,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     ) {
       return;
     }
-    // A typed recovery hint is a runtime signal, not timeline traffic: act on
-    // it, forward it, and let the translator see nothing of it.
     const recoveryHint = args.proc.adapter.decodeRecoveryHint?.(args.parsed);
     if (recoveryHint !== null && recoveryHint !== undefined) {
       if (
         recoveryHint.threadId !== undefined &&
         !args.proc.identity.threadIds.has(recoveryHint.threadId)
       ) {
-        // A process speaks only for the threads it hosts, as on the event
-        // path: a session-scoped hint naming any other thread (another
-        // provider's, or one that moved to a replacement process) would
-        // otherwise restart a bridge the emitter has nothing to do with.
         options.onStderr?.(
           `Dropping provider/recovery ${recoveryHint.kind} from "${args.proc.providerId}": it names thread "${recoveryHint.threadId}", which that process does not host.`,
         );
@@ -1499,19 +1322,11 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return;
     }
 
-    // The runtime does NOT interpret notification content — it delegates
-    // entirely to the adapter's translateEvent. Every provider now speaks the
-    // canonical bridge protocol, so this is always a bb/* envelope the generic
-    // adapter unwraps; the branch stays provider-agnostic regardless.
     handleProviderNotification({
       parsed: parsedLine.parsed,
       proc,
     });
   }
-
-  // -------------------------------------------------------------------------
-  // Public API
-  // -------------------------------------------------------------------------
 
   function schedulePreparedThreadRewindCleanup(
     leaseId: string,
@@ -1653,6 +1468,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       projectId,
       providerId,
       bridgeLaunch,
+      contributedEnv = [],
       clientRequestId,
       input,
       inputGroups,
@@ -1681,6 +1497,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             options: execOpts,
             providerId,
           });
+          const resolvedEnvironment = resolveRuntimeThreadEnvironment({
+            contributedEnv,
+            environmentId,
+            projectId,
+            threadId,
+          });
           threadIdentityRegistry.registerThreadProvider({
             providerId,
             providerState: proc.identity,
@@ -1689,34 +1511,22 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           });
           setThreadRuntimeConfig(threadId, {
             bridgeLaunch,
+            contributedEnv,
             dynamicTools,
             disallowedTools,
             environmentId,
+            envVars: resolvedEnvironment.envVars,
             instructionMode,
             instructions,
             options: execOpts,
             processKey,
             projectId,
             providerId,
-            // Seeded false: the bridge reports the real answer on the
-            // thread/start (or resume) result, the sole source for every
-            // provider.
             sessionRestorable: false,
           });
 
-          const envVars = buildThreadShellEnvironment({
-            baseShellEnv: options.shellEnv,
-            environmentId,
-            projectId,
-            threadStoragePath: resolveThreadStoragePath({
-              options,
-              threadId,
-            }),
-            threadId,
-          });
-
           const providerExecutionContext = toProviderExecutionContext({
-            envVars,
+            envVars: resolvedEnvironment.envVars,
             execOpts,
             instructions,
             skillRoots,
@@ -1749,9 +1559,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               };
           let resolved: string;
           try {
-            // Inside the try: building the plan can itself reject the command
-            // (a fork the bridge's handshake says it cannot perform), and that
-            // is a failed session construction like any other.
             const cmd = requireProviderRequestPlan({
               commandType: adapterCommand.type,
               plan: proc.adapter.buildCommandPlan(adapterCommand),
@@ -1762,9 +1569,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               message: cmd,
               resultSchema: threadIdentityResultSchema,
               timeoutMs: threadCreationRequestTimeoutMs,
-              // A fork reads the source session, so an archived source fails
-              // the same way a resume does. A plain start has no session to
-              // unarchive.
               ...(fork
                 ? {
                     recovery: {
@@ -1775,10 +1579,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                   }
                 : {}),
             });
-            // The result is the one carrier of the provider identity: the
-            // protocol's result schema requires it, so a bridge that omits
-            // it fails the construction here (a thread/identity
-            // notification never stands in for it).
             updateSessionRestoreCapability(threadId, result.sessionRestorable);
             recordProviderThreadIdentity(
               proc,
@@ -1786,9 +1586,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               result.providerThreadId,
             );
             resolved = result.providerThreadId;
+            emitResolvedProviderEnvironment({
+              droppedContributions: resolvedEnvironment.droppedContributions,
+              entries: resolvedEnvironment.entries,
+              providerThreadId: resolved,
+              threadId,
+            });
           } catch (startError) {
-            // A failed FIRST TURN (below) deliberately keeps the session
-            // live for a retry; a failed construction keeps nothing.
             await abandonFailedSessionConstruction({ proc, threadId });
             throw startError;
           }
@@ -1805,6 +1609,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               ...(inputGroups !== undefined ? { inputGroups } : {}),
               clientRequestId,
               options: execOpts,
+              contributedEnv,
               instructions,
             });
           }
@@ -1821,6 +1626,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       leaseId,
       projectId,
       providerId,
+      contributedEnv = [],
       sourceProviderThreadId,
       retainThroughProviderCheckpoint,
       bridgeLaunch,
@@ -1832,8 +1638,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
     }) {
       const existing = stagedThreadRewinds.get(leaseId);
       if (existing !== undefined) {
-        // The server mints a fresh lease per attempt, so a duplicate can only
-        // be a replay of this exact request; return the same staged fork.
         return existing.state === "preparing"
           ? existing.promise
           : { providerThreadId: existing.providerThreadId };
@@ -1862,8 +1666,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             providerId,
           });
 
-          // The lease id is a server-minted UUID, so it is safe inside
-          // identities that provider adapters may turn into filesystem keys.
           const stagingThreadId = `${threadId}:rewind:${leaseId}`;
           suppressedThreadEventIds.add(stagingThreadId);
           threadIdentityRegistry.registerThreadProvider({
@@ -1875,14 +1677,10 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           let retainedForDiscard = false;
           let providerThreadIdForCleanup: string | undefined;
           try {
-            const envVars = buildThreadShellEnvironment({
-              baseShellEnv: options.shellEnv,
+            const resolvedEnvironment = resolveRuntimeThreadEnvironment({
+              contributedEnv,
               environmentId,
               projectId,
-              threadStoragePath: resolveThreadStoragePath({
-                options,
-                threadId,
-              }),
               threadId,
             });
             const adapterCommand: AdapterCommand = {
@@ -1892,7 +1690,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               sourceProviderThreadId,
               sourceProviderCheckpointId: retainThroughProviderCheckpoint,
               options: toProviderExecutionContext({
-                envVars,
+                envVars: resolvedEnvironment.envVars,
                 execOpts,
                 instructions,
                 skillRoots,
@@ -1911,10 +1709,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               message: command,
               resultSchema: threadIdentityResultSchema,
               timeoutMs: threadCreationRequestTimeoutMs,
-              // The staging fork reads the source session, so an archived
-              // source is recovered the way a plain fork's is: the hint
-              // rides this request's own rejection, and the staging thread's
-              // suppressed event stream plays no part in it.
               recovery: {
                 bridgeLaunch,
                 providerId,
@@ -1963,12 +1757,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                   );
                 }
               } else {
-                // The fork produced no session the runtime adopted (it was
-                // rejected, timed out, or answered without a
-                // providerThreadId), so there is no provider identity to
-                // discard by. The bridge may still hold the staging thread
-                // under its bb id: tell it to release the thread, exactly as
-                // a failed thread/start does.
                 await releaseThreadOnBridgeBestEffort({
                   proc,
                   threadId: stagingThreadId,
@@ -2009,6 +1797,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       providerThreadId,
       providerId,
       bridgeLaunch,
+      contributedEnv = [],
       options: execOpts,
       instructions,
       dynamicTools,
@@ -2033,6 +1822,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             options: execOpts,
             providerId,
           });
+          const resolvedEnvironment = resolveRuntimeThreadEnvironment({
+            contributedEnv,
+            environmentId,
+            projectId,
+            threadId,
+          });
           threadIdentityRegistry.registerThreadProvider({
             providerId,
             providerState: proc.identity,
@@ -2041,35 +1836,23 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           });
           setThreadRuntimeConfig(threadId, {
             bridgeLaunch,
+            contributedEnv,
             dynamicTools,
             disallowedTools,
             environmentId,
+            envVars: resolvedEnvironment.envVars,
             instructionMode,
             instructions,
             options: execOpts,
             processKey,
             projectId,
             providerId,
-            // Seeded false: the bridge reports the real answer on the
-            // thread/start (or resume) result, the sole source for every
-            // provider.
             sessionRestorable: false,
           });
 
           if (providerThreadId) {
             recordProviderThreadIdentity(proc, threadId, providerThreadId);
           }
-
-          const envVars = buildThreadShellEnvironment({
-            baseShellEnv: options.shellEnv,
-            environmentId,
-            projectId,
-            threadStoragePath: resolveThreadStoragePath({
-              options,
-              threadId,
-            }),
-            threadId,
-          });
 
           const adapterCommand: AdapterCommand = {
             type: "thread/resume",
@@ -2078,7 +1861,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             providerThreadId:
               providerThreadId ?? requireProviderThreadId(threadId),
             options: toProviderExecutionContext({
-              envVars,
+              envVars: resolvedEnvironment.envVars,
               execOpts,
               instructions,
               skillRoots,
@@ -2089,8 +1872,12 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           };
           const plan = proc.adapter.buildCommandPlan(adapterCommand);
           if (plan.kind === "noop") {
-            // No request, so no result to read: the session keeps the
-            // identity the command was built with.
+            emitResolvedProviderEnvironment({
+              droppedContributions: resolvedEnvironment.droppedContributions,
+              entries: resolvedEnvironment.entries,
+              providerThreadId: adapterCommand.providerThreadId,
+              threadId,
+            });
             return { providerThreadId: adapterCommand.providerThreadId };
           }
 
@@ -2106,9 +1893,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                 threadId,
               },
             });
-            // As on thread/start, the result is the one carrier of the
-            // provider identity; a bridge that omits it fails the
-            // construction here.
             recordProviderThreadIdentity(
               proc,
               threadId,
@@ -2116,12 +1900,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             );
             updateSessionRestoreCapability(threadId, result.sessionRestorable);
             resolved = result.providerThreadId;
+            emitResolvedProviderEnvironment({
+              droppedContributions: resolvedEnvironment.droppedContributions,
+              entries: resolvedEnvironment.entries,
+              providerThreadId: resolved,
+              threadId,
+            });
           } catch (resumeError) {
-            // The thread was registered above under the caller's identity
-            // so the release can name the bridge's session; a rejected,
-            // timed-out or identity-less resume leaves no live session
-            // behind it, so the registration goes too and the next command
-            // resumes the thread again.
             await abandonFailedSessionConstruction({ proc, threadId });
             throw resumeError;
           }
@@ -2137,6 +1922,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       inputGroups,
       clientRequestId,
       options: execOpts,
+      contributedEnv,
       instructions,
     }) {
       return runThreadOperation({
@@ -2150,28 +1936,43 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             options: execOpts,
             instructions,
           });
-          // A restart replaces the thread's provider process, so resolve the
-          // process again before constructing the turn command.
           const proc = requireProviderProcessForThread(threadId);
           assertProviderSupportsExecutionOptions({
             adapter: proc.adapter,
             options: execOpts,
             providerId: pid,
           });
+          const currentConfig = threadRuntimeConfigs.get(threadId);
+          if (!currentConfig) {
+            throw new Error(`No runtime configuration for thread ${threadId}`);
+          }
+          const resolvedContributedEnv =
+            contributedEnv ?? currentConfig.contributedEnv;
+          const resolvedEnvironment = resolveRuntimeThreadEnvironment({
+            contributedEnv: resolvedContributedEnv,
+            environmentId: currentConfig.environmentId,
+            projectId: currentConfig.projectId,
+            threadId,
+          });
+          const environmentChanged = !environmentRecordsEqual(
+            currentConfig.envVars,
+            resolvedEnvironment.envVars,
+          );
           recordThreadExecutionOptions({
             threadId,
             options: execOpts,
           });
 
+          const providerThreadId = requireProviderThreadId(threadId);
           const adapterCommand: AdapterCommand = {
             type: "turn/start",
             threadId,
-            providerThreadId: requireProviderThreadId(threadId),
+            providerThreadId,
             input,
             ...(inputGroups !== undefined ? { inputGroups } : {}),
             clientRequestId,
             options: toProviderExecutionContext({
-              envVars: {},
+              envVars: resolvedEnvironment.envVars,
               execOpts,
               instructions,
             }),
@@ -2198,6 +1999,20 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                 threadId,
               },
             });
+            setThreadRuntimeConfig(threadId, {
+              ...currentConfig,
+              contributedEnv: resolvedContributedEnv,
+              envVars: resolvedEnvironment.envVars,
+              options: execOpts,
+            });
+            if (environmentChanged) {
+              emitResolvedProviderEnvironment({
+                droppedContributions: resolvedEnvironment.droppedContributions,
+                entries: resolvedEnvironment.entries,
+                providerThreadId,
+                threadId,
+              });
+            }
           } catch (error) {
             pendingTurnStarts.delete(threadId);
             markHostedProviderSessionIdle(threadId);
@@ -2214,6 +2029,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       inputGroups,
       clientRequestId,
       options: execOpts,
+      contributedEnv,
       instructions,
     }) {
       return runThreadOperation({
@@ -2243,24 +2059,39 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
             options: execOpts,
             instructions,
           });
-          // A restart replaces the thread's provider process, so resolve the
-          // process again before constructing the steer command.
           const proc = requireProviderProcessForThread(threadId);
+          const currentConfig = threadRuntimeConfigs.get(threadId);
+          if (!currentConfig) {
+            throw new Error(`No runtime configuration for thread ${threadId}`);
+          }
+          const resolvedContributedEnv =
+            contributedEnv ?? currentConfig.contributedEnv;
+          const resolvedEnvironment = resolveRuntimeThreadEnvironment({
+            contributedEnv: resolvedContributedEnv,
+            environmentId: currentConfig.environmentId,
+            projectId: currentConfig.projectId,
+            threadId,
+          });
+          const environmentChanged = !environmentRecordsEqual(
+            currentConfig.envVars,
+            resolvedEnvironment.envVars,
+          );
           recordThreadExecutionOptions({
             threadId,
             options: execOpts,
           });
 
+          const providerThreadId = requireProviderThreadId(threadId);
           const adapterCommand: AdapterCommand = {
             type: "turn/steer",
             threadId,
-            providerThreadId: requireProviderThreadId(threadId),
+            providerThreadId,
             expectedTurnId,
             input,
             ...(inputGroups !== undefined ? { inputGroups } : {}),
             clientRequestId,
             options: toProviderExecutionContext({
-              envVars: {},
+              envVars: resolvedEnvironment.envVars,
               execOpts,
               instructions,
             }),
@@ -2281,9 +2112,21 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
                 threadId,
               },
             });
+            setThreadRuntimeConfig(threadId, {
+              ...currentConfig,
+              contributedEnv: resolvedContributedEnv,
+              envVars: resolvedEnvironment.envVars,
+              options: execOpts,
+            });
+            if (environmentChanged) {
+              emitResolvedProviderEnvironment({
+                droppedContributions: resolvedEnvironment.droppedContributions,
+                entries: resolvedEnvironment.entries,
+                providerThreadId,
+                threadId,
+              });
+            }
           } catch (error) {
-            // `staleTurn`: the turn this steer targeted is gone. sendCommand
-            // rethrows the rejection with its hint for the steer to read.
             if (
               error instanceof JsonRpcResponseError &&
               error.recovery?.kind === "staleTurn"
@@ -2295,9 +2138,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
               turnState.clearThread(threadId);
               return { status: "stale", activeTurnId: null };
             }
-            // The typed code is the contract: any bridge that answers a
-            // steer with NO_ACTIVE_TURN is telling bb the turn it meant is
-            // already gone, whoever the provider is.
             if (
               error instanceof JsonRpcResponseError &&
               error.code === BRIDGE_JSON_RPC_ERRORS.NO_ACTIVE_TURN
@@ -2557,12 +2397,7 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       });
     },
 
-    async providerInstallationRun({
-      providerId,
-      bridgeLaunch,
-      cwd,
-      action,
-    }) {
+    async providerInstallationRun({ providerId, bridgeLaunch, cwd, action }) {
       await runtime.ensureProvider({ providerId, bridgeLaunch });
       const proc = providerProcesses.requireProviderProcess({
         processKey: resolveProviderProcessKey({ bridgeLaunch, providerId }),
@@ -2603,19 +2438,13 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
       return threadIdentityRegistry.getProviderSession(threadId);
     },
 
-    async reapIdleProviderSessions({
-      idleForMs,
-      nowMs,
-      providerSessionReapingEnabled,
-      runThreadExclusive,
-    }) {
+    async reapIdleProviderSessions({ idleForMs, nowMs, runThreadExclusive }) {
       const reapedSessions: ReapedIdleProviderSession[] = [];
       for (const threadId of [...threadRuntimeConfigs.keys()]) {
         const release = async (): Promise<ReapedIdleProviderSession | null> => {
           const candidate = findReapableIdleProviderSession({
             idleForMs,
             nowMs,
-            providerSessionReapingEnabled,
             threadId,
           });
           if (!candidate) {
@@ -2623,7 +2452,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           }
 
           try {
-            // A session whose process is gone has nothing to release.
             providerProcesses.requireProviderProcess({
               processKey: candidate.runtimeConfig.processKey,
               providerId: candidate.runtimeConfig.providerId,
@@ -2631,9 +2459,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           } catch {
             return null;
           }
-          // Open background tasks and open delegations (a codex native
-          // sub-agent still running, or still owed a followup turn) are
-          // live provider work; reaping the session would destroy it.
           if (backgroundWorkState.hasOpenThreadWork(candidate.threadId)) {
             return null;
           }
@@ -2641,8 +2466,6 @@ export function createAgentRuntime(options: AgentRuntimeOptions): AgentRuntime {
           try {
             await runtime.stopThread({ threadId: candidate.threadId });
           } catch (error) {
-            // One damaged session must not block every later candidate, so
-            // report the failure and let the next pass retry this thread.
             options.onStderr?.(
               `Provider session release failed for ${candidate.threadId}: ${
                 error instanceof Error ? error.message : String(error)

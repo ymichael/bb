@@ -2,12 +2,10 @@ import { memo } from "react";
 import { OptionDisplay } from "@bb/shared-ui/option-display";
 import { copyToClipboardWithToast } from "@/lib/clipboard";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@bb/shared-ui/tooltip";
-import { normalizeAbsoluteFilePath } from "@/lib/absolute-file-path";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@bb/shared-ui/tooltip";
+import { cn } from "@bb/shared-ui/lib/utils";
+import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
+import type { EnvironmentWorkspaceTypeLabel } from "@/lib/environment-workspace-display";
 import type { WorkspaceCheckoutDisplay } from "@/lib/workspace-checkout-display";
 
 const CHECKOUT_CHIP_BASE_CLASS_NAME =
@@ -15,125 +13,105 @@ const CHECKOUT_CHIP_BASE_CLASS_NAME =
 const CHECKOUT_CHIP_BUTTON_CLASS_NAME = `${CHECKOUT_CHIP_BASE_CLASS_NAME} cursor-pointer transition-colors hover:bg-state-hover hover:text-foreground`;
 
 interface ThreadEnvironmentSummaryProps {
-  /** Display name of the thread's project, shown alongside the environment. */
   projectName?: string;
-  /** Project source path on the environment's host. */
-  projectRootPath?: string;
-  /** Full path of the thread's active environment. */
-  environmentPath?: string;
-  /** Full mode label used on larger prompt boxes and in the title. */
   environmentLabel?: string;
-  /** Short label used when the promptbox switches to its compact layout. */
   environmentCompactLabel?: string;
-  /** Icon for the environment (e.g. monitor / git branch). */
   environmentIcon?: IconName;
-  /** Live checkout label for this environment. Branch checkouts are copyable. */
+  environmentTypeLabel?: EnvironmentWorkspaceTypeLabel;
   environmentCheckout?: WorkspaceCheckoutDisplay;
-  /** When set, render a "new thread in this worktree" affordance beside the
-   * environment label. Caller is responsible for only providing this when the
-   * environment is a provisioned worktree. */
   onCreateNewThreadInWorktree?: () => void;
 }
 
-/**
- * Inline strip shown in the follow-up composer that describes the thread's
- * current environment: label and (when on a worktree) a copy-branch button.
- * Read-only — environment editing happens elsewhere.
- *
- * Responsive behavior:
- * - The full environment label is replaced by the compact display string in
- *   narrow promptbox shells.
- * - The summary can shrink inside the follow-up strip so permission/context
- *   controls stay pinned and text truncates instead of wrapping.
- * - Branch chip hides only in very narrow promptbox shells and truncates
- *   within its available space above that breakpoint.
- */
 export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
   projectName,
-  projectRootPath,
-  environmentPath,
   environmentLabel,
   environmentCompactLabel,
   environmentIcon,
+  environmentTypeLabel,
   environmentCheckout,
   onCreateNewThreadInWorktree,
 }: ThreadEnvironmentSummaryProps) {
-  if (!environmentLabel) {
+  if (
+    !projectName &&
+    !environmentLabel &&
+    !environmentCheckout &&
+    !onCreateNewThreadInWorktree
+  ) {
     return null;
   }
 
   const checkoutCopyValue = environmentCheckout?.copyValue ?? null;
-  const normalizedProjectRootPath = projectRootPath
-    ? normalizeAbsoluteFilePath({ path: projectRootPath })
-    : null;
-  const normalizedEnvironmentPath = environmentPath
-    ? normalizeAbsoluteFilePath({ path: environmentPath })
-    : null;
-  const environmentDirectoryName = normalizedEnvironmentPath
-    ?.split("/")
-    .at(-1);
-  const visibleProjectName =
-    projectName &&
-    normalizedProjectRootPath &&
-    normalizedEnvironmentPath &&
-    normalizedProjectRootPath !== normalizedEnvironmentPath &&
-    environmentDirectoryName
-      ? `${projectName} / ${environmentDirectoryName}`
-      : projectName;
-
   return (
     <div className="flex min-w-0 max-w-full items-center gap-2 pr-1.5">
-      {visibleProjectName ? (
+      {projectName ? (
+        <OptionDisplay
+          label="Project"
+          value={projectName}
+          compactValue={projectName}
+          leading={<Icon name="Folder" className="size-4 shrink-0" />}
+          className="h-6 min-w-0 max-w-[10rem] shrink"
+          tooltip={`Project: ${projectName}`}
+          muted
+        />
+      ) : null}
+      {environmentLabel ? (
+        <div className="inline-flex h-6 w-fit max-w-full min-w-0 shrink items-center justify-start gap-1.5 px-1 text-xs leading-tight text-muted-foreground">
+          {environmentIcon && environmentTypeLabel ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span
+                  role="img"
+                  tabIndex={0}
+                  aria-label={`Environment type: ${environmentTypeLabel}`}
+                  className="inline-flex size-4 shrink-0 items-center justify-center rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  <Icon name={environmentIcon} className="size-4" />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>{environmentTypeLabel}</TooltipContent>
+            </Tooltip>
+          ) : environmentIcon ? (
+            <Icon
+              name={environmentIcon}
+              className={cn(
+                "size-4 shrink-0",
+                environmentIcon === "Loading" && "animate-spin",
+              )}
+            />
+          ) : null}
+          <OptionDisplay
+            label="Environment"
+            value={environmentLabel}
+            compactValue={environmentCompactLabel}
+            className="h-6 min-w-0 shrink px-0"
+            tooltip={environmentLabel}
+            muted
+          />
+        </div>
+      ) : null}
+      {environmentCheckout && checkoutCopyValue !== null ? (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span className="inline-flex min-w-0 shrink-0">
-              <OptionDisplay
-                label="Project"
-                value={visibleProjectName}
-                compactValue={visibleProjectName}
-                leading={<Icon name="Folder" className="size-4 shrink-0" />}
-                className="h-6 max-w-[10rem]"
-                title=""
-                muted
-              />
-            </span>
+            <button
+              type="button"
+              data-promptbox-hide-branch-compact=""
+              className={CHECKOUT_CHIP_BUTTON_CLASS_NAME}
+              onClick={() => {
+                void copyToClipboardWithToast(checkoutCopyValue, {
+                  successMessage:
+                    environmentCheckout.copySuccessMessage ?? "Value copied",
+                  errorMessage:
+                    environmentCheckout.copyErrorMessage ??
+                    "Failed to copy value",
+                });
+              }}
+            >
+              <Icon name="GitBranch" className="size-3.5 shrink-0" />
+              <span className="truncate">{environmentCheckout.label}</span>
+            </button>
           </TooltipTrigger>
-          <TooltipContent>
-            {environmentPath ?? `Project: ${projectName}`}
-          </TooltipContent>
+          <TooltipContent>{environmentCheckout.title}</TooltipContent>
         </Tooltip>
-      ) : null}
-      <OptionDisplay
-        label="Environment"
-        value={environmentLabel}
-        compactValue={environmentCompactLabel}
-        leading={
-          environmentIcon ? (
-            <Icon name={environmentIcon} className="size-4 shrink-0" />
-          ) : null
-        }
-        className="h-6 max-w-[10rem] shrink-0"
-        title={`Environment: ${environmentLabel}`}
-        muted
-      />
-      {environmentCheckout && checkoutCopyValue !== null ? (
-        <button
-          type="button"
-          data-promptbox-hide-branch-compact=""
-          className={CHECKOUT_CHIP_BUTTON_CLASS_NAME}
-          title={environmentCheckout.title}
-          onClick={() => {
-            void copyToClipboardWithToast(checkoutCopyValue, {
-              successMessage:
-                environmentCheckout.copySuccessMessage ?? "Value copied",
-              errorMessage:
-                environmentCheckout.copyErrorMessage ?? "Failed to copy value",
-            });
-          }}
-        >
-          <Icon name="GitBranch" className="size-3.5 shrink-0" />
-          <span className="truncate">{environmentCheckout.label}</span>
-        </button>
       ) : environmentCheckout ? (
         <span
           data-promptbox-hide-branch-compact=""
@@ -149,14 +127,17 @@ export const ThreadEnvironmentSummary = memo(function ThreadEnvironmentSummary({
           <TooltipTrigger asChild>
             <button
               type="button"
-              aria-label="Create new thread in this worktree"
+              aria-label="Create thread in worktree"
               onClick={onCreateNewThreadInWorktree}
-              className="-ml-1 inline-flex cursor-pointer shrink-0 items-center justify-center rounded-md px-1 py-0.5 text-muted-foreground transition-colors hover:bg-state-hover hover:text-foreground"
+              className={cn(
+                "-ml-1 inline-flex cursor-pointer shrink-0 items-center justify-center rounded-md px-1 py-0.5 transition-colors hover:bg-state-hover",
+                CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS,
+              )}
             >
               <Icon name="MessageSquarePlus" className="size-4" />
             </button>
           </TooltipTrigger>
-          <TooltipContent>Create new thread in this worktree</TooltipContent>
+          <TooltipContent>Create thread in worktree</TooltipContent>
         </Tooltip>
       ) : null}
     </div>

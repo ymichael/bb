@@ -30,7 +30,6 @@ vi.mock("@/components/dialogs/ThreadRenameDialog", () => ({
 }));
 
 vi.mock("@/hooks/mutations/thread-state-mutations", () => {
-  // Real mutation objects keep a stable `mutate`; the mock must too.
   const mutationResult = { isPending: false, mutate: vi.fn() };
   const mutation = () => mutationResult;
   return {
@@ -55,7 +54,6 @@ afterEach(() => {
 
 const consumerRenders: ThreadActionsContextValue[] = [];
 
-/** Stands in for a memoized sidebar ThreadRow: props never change. */
 const ActionsConsumer = memo(function ActionsConsumer() {
   consumerRenders.push(useThreadActions());
   return null;
@@ -68,7 +66,6 @@ const RouteNavigateConsumer = memo(function RouteNavigateConsumer() {
   return null;
 });
 
-/** Real router navigation, driven from a click so no test code renders. */
 function NavigationProbe() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -114,9 +111,6 @@ describe("ThreadActionsProvider across navigations", () => {
     expect(screen.getByTestId("pathname").textContent).toBe(
       "/projects/p1/threads/t2",
     );
-    // Under BrowserRouter `useNavigate()` rebuilds per pathname; the provider
-    // must not fold that churn into its context value or every mounted
-    // sidebar ThreadRow (a `memo` consumer) re-renders per navigation.
     expect(consumerRenders).toHaveLength(1);
   });
 });

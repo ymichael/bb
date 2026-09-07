@@ -24,6 +24,7 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@bb/test-helpers": "workspace:*",
     "@bb/tsconfig": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "npm:@typescript/typescript6@^6.0.2",

@@ -53,8 +53,6 @@ function pluginActivityIcon(state: "running" | "ok" | "error" | null): {
     };
   }
   if (state === "running") {
-    // The app says "working" by shimmering a row's own icon, never by swapping
-    // it for a spinner (ThreadRow.tsx:144). A running job keeps its clock.
     return {
       name: "Clock",
       className: "animate-shine-icon text-muted-foreground",
@@ -218,9 +216,22 @@ function pluginAppSurfaceItems(
     ),
     ...namedSlotItems(
       pluginId,
+      slots.appOverlays,
+      "app-overlay",
+      "Renders app-wide floating interface content.",
+    ),
+    ...namedSlotItems(
+      pluginId,
       slots.threadLists,
       "thread-list",
       "Can replace the sidebar thread list; configured in Appearance.",
+      () => getSettingsRoutePath("appearance"),
+    ),
+    ...namedSlotItems(
+      pluginId,
+      slots.experimentalSidebarNavigations,
+      "sidebar-navigation",
+      "Can replace the sidebar navigation controls; configured in Appearance.",
       () => getSettingsRoutePath("appearance"),
     ),
     ...namedSlotItems(
@@ -253,12 +264,18 @@ function pluginAppSurfaceItems(
       "input",
       "Renders a custom interaction inside a thread.",
     ),
-    ...namedSlotItems(
-      pluginId,
-      slots.sidebarFooterActions,
-      "sidebar",
-      "Adds an action to the app sidebar.",
-    ),
+    ...slots.sidebarFooterItems
+      .filter((slot) => slot.pluginId === pluginId)
+      .map((slot) =>
+        namedSurface(
+          "sidebar-footer",
+          slot.id,
+          slot.label,
+          slot.kind === "action"
+            ? "Adds an action to the app sidebar footer."
+            : "Adds content revealed from the app sidebar footer.",
+        ),
+      ),
     ...namedSlotItems(
       pluginId,
       slots.messageActions,
@@ -372,9 +389,6 @@ export function PluginIncludes({ plugin }: { plugin: PluginListItem }) {
               : undefined,
       }));
 
-  // `kind` is the name behind the glyph, not a column. Most plugins contribute
-  // one or two items per kind, so a Kind column is near-unique per row and
-  // reads as filler; the glyph carries it and names itself on hover or focus.
   const categories: Array<{
     icon: IconName;
     kind: string;
@@ -426,15 +440,6 @@ export function PluginIncludes({ plugin }: { plugin: PluginListItem }) {
 
   if (!plugin.enabled || items.length === 0) return null;
 
-  // Commands, settings, agent tools, thread integrations and app surfaces are
-  // only observable on a *running* plugin — not merely an enabled one. A
-  // plugin that is enabled but failed to load, or is still loading, reports
-  // none of them, so keying this off `enabled` would tell the user it declares
-  // nothing when the truth is that we cannot see yet.
-  // "needs-configuration" is set on a *loaded* plugin, so its tools, slots and
-  // settings are registered and its capabilities do render — it just cannot do
-  // useful work yet. Treating it as not-running would caption a populated list
-  // with "this plugin isn't running".
   const live =
     plugin.status === "running" ||
     plugin.status === "degraded" ||
@@ -542,14 +547,6 @@ function PluginRuntimeStatusAlert({
   );
 }
 
-/**
- * The plugin's highest-priority health problem for the page banner.
- *
- * The banner owns the page-level consequence and recovery action. Runtime
- * diagnostics and cumulative handler counts stay out of user copy because
- * they do not identify one coherent, actionable incident. Scheduled-job
- * outcomes stay row-level and do not cause this runtime banner.
- */
 export function PluginHealthBanner({
   plugin,
   runtimeStatus,
@@ -559,6 +556,7 @@ export function PluginHealthBanner({
 }) {
   const queryClient = useQueryClient();
   const reload = useMutation({
+    meta: { showErrorToast: false },
     mutationFn: () => reloadPlugin(fetch, plugin.id),
     onSuccess: () => invalidatePluginList({ queryClient }),
     onError: (error) => {
@@ -579,7 +577,6 @@ export function PluginHealthBanner({
   );
 }
 
-/** Long-running processes the plugin keeps alive. */
 export function PluginServices({ plugin }: { plugin: PluginListItem }) {
   return (
     <div className="max-w-full overflow-hidden rounded-lg border border-border bg-card align-top">
@@ -645,7 +642,6 @@ export function PluginServices({ plugin }: { plugin: PluginListItem }) {
   );
 }
 
-/** Work the plugin has asked bb to run on a timer. */
 export function PluginSchedules({ plugin }: { plugin: PluginListItem }) {
   return (
     <PluginDetailTable>

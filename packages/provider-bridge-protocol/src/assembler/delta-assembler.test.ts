@@ -14,8 +14,6 @@ const CREQ = "creq_abcdefghjk" as ClientTurnRequestId;
 const CREQ_2 = "creq_bcdefghjkm" as ClientTurnRequestId;
 
 function createAssembler(): DeltaAssembler {
-  // The base suite pins per-delta assembly; the dedicated batching suite
-  // below exercises textDeltaFlushMs with an injected clock.
   return createDeltaAssembler({
     providerId: "pi",
     entropyPrefix: "as-test",
@@ -39,8 +37,6 @@ function bashOpen(providerItemId: string): ThreadDelta {
 }
 
 describe("delta assembler", () => {
-  // -- accepted input --------------------------------------------------------
-
   it("queues accepted input and drains it right after turn/started", () => {
     const assembler = createAssembler();
     expect(
@@ -76,11 +72,8 @@ describe("delta assembler", () => {
     ]);
   });
 
-  // -- turn boundary / claim-if-idle -----------------------------------------
-
   it("claimIfIdle boundary opens and settles a turn only when input is pending", () => {
     const assembler = createAssembler();
-    // Idle, no pending input: the fallback closer owns nothing.
     expect(
       assemble(assembler, {
         kind: "turn.boundary",
@@ -144,8 +137,6 @@ describe("delta assembler", () => {
     expect(turnIdOf(first[0])).not.toBe(turnIdOf(second[0]));
   });
 
-  // -- items: open/close pairing --------------------------------------------
-
   it("settles a paired close from its terminal shape under the opened id", () => {
     const assembler = createAssembler();
     assemble(assembler, { kind: "turn.open" });
@@ -168,8 +159,6 @@ describe("delta assembler", () => {
       status: "failed",
       exitCode: 1,
       aggregatedOutput: "tests failed",
-      // The uniform close rule: the carried shape is the full terminal shape
-      // and it wins (bridges replay the started fields they cached).
       item: { type: "command", command: "npm test", cwd: "/repo" },
     });
     expect(closed).toEqual([
@@ -218,9 +207,6 @@ describe("delta assembler", () => {
   });
 
   it("settles both shapes when the terminal shape differs from the opened one", () => {
-    // ACP's mid-flight reclassification: a generic toolCall's terminal update
-    // reveals a diff. The opened shape settles first, then the terminal shape
-    // follows, both under the same minted id (today's dual-complete).
     const assembler = createAssembler();
     assemble(assembler, { kind: "turn.open" });
     const started = assemble(assembler, {
@@ -257,8 +243,6 @@ describe("delta assembler", () => {
       expect("status" in item && item.status).toBe("completed");
     }
   });
-
-  // -- grammar v3 presentation ----------------------------------------------
 
   const openPresentation = {
     label: { pending: "Reading file", completed: "Read file" },
@@ -467,7 +451,6 @@ describe("delta assembler", () => {
   it("a child-first parentRef mints the parent id instead of leaking the raw provider id", () => {
     const assembler = createAssembler();
     assemble(assembler, { kind: "turn.open" });
-    // The child arrives before its parent's own open has been seen.
     const childStarted = assemble(assembler, {
       kind: "item.open",
       key: { providerItemId: "tc-child", parentRef: "agent-parent-1" },
@@ -477,11 +460,8 @@ describe("delta assembler", () => {
       childStarted[0]?.type === "item/started"
         ? childStarted[0].item.parentToolCallId
         : undefined;
-    // The emitted event must never carry the raw provider parent id …
     expect(childParentId).toBeDefined();
     expect(childParentId).not.toBe("agent-parent-1");
-    // … and when the parent finally appears it maps onto that same minted id
-    // (the old bridges' deterministic parent/child id consistency).
     const parentStarted = assemble(assembler, {
       kind: "item.open",
       key: { providerItemId: "agent-parent-1" },
@@ -492,8 +472,6 @@ describe("delta assembler", () => {
       item: { id: childParentId },
     });
   });
-
-  // -- command output snapshots ----------------------------------------------
 
   it("diffs cumulative snapshots into append deltas and resets", () => {
     const assembler = createAssembler();
@@ -509,7 +487,6 @@ describe("delta assembler", () => {
         delta: "FIRST\n",
       }),
     ]);
-    // Identical snapshot: nothing new.
     expect(
       assemble(assembler, {
         kind: "command.outputSnapshot",
@@ -582,8 +559,6 @@ describe("delta assembler", () => {
     ]);
   });
 
-  // -- usage / context window ------------------------------------------------
-
   it("attaches currentOrLast context-window updates to the turn that just closed", () => {
     const assembler = createAssembler();
     assemble(assembler, { kind: "turn.open" });
@@ -633,8 +608,6 @@ describe("delta assembler", () => {
       }),
     ]);
   });
-
-  // -- errors / unhandled ----------------------------------------------------
 
   it("a settling error fails the open turn after the error event", () => {
     const assembler = createAssembler();
@@ -812,8 +785,6 @@ describe("delta assembler", () => {
     ).toEqual([expect.objectContaining({ scope: turnScope(turnId) })]);
   });
 
-  // -- turnless item/stream deltas --------------------------------------------
-
   it("never fabricates a turn for turnless item deltas: fallback surfaces, no fallback drops", () => {
     const assembler = createAssembler();
     const raw = {
@@ -836,7 +807,6 @@ describe("delta assembler", () => {
         scope: threadScope(),
       }),
     ]);
-    // No fallback attached: the turnless delta drops silently.
     expect(
       assemble(assembler, {
         kind: "item.textDelta",
@@ -859,7 +829,6 @@ describe("delta assembler", () => {
         item: { type: "command", command: "", cwd: "" },
       }),
     ).toEqual([]);
-    // The claim still belongs to the lifecycle closer.
     const events = assemble(assembler, {
       kind: "turn.boundary",
       status: "completed",
@@ -871,8 +840,6 @@ describe("delta assembler", () => {
       "turn/completed",
     ]);
   });
-
-  // -- session settlement ----------------------------------------------------
 
   it("session.ended interrupts the open turn and its open items", () => {
     const assembler = createAssembler();
@@ -912,8 +879,6 @@ describe("delta assembler", () => {
       "turn/completed",
     ]);
   });
-
-  // -- id discipline ---------------------------------------------------------
 
   it("keeps threads isolated and ids unique across threads", () => {
     const assembler = createAssembler();
@@ -966,11 +931,6 @@ describe("diffCumulativeText", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Keyed provider-turn space (codex): vouched turn ids, multiplexed turns,
-// item-keyed text/output deltas, settle/reopen dedup, session resets.
-// ---------------------------------------------------------------------------
-
 describe("delta assembler (keyed provider turns)", () => {
   it("keeps several keyed turns open at once and settles only the named one", () => {
     const assembler = createAssembler();
@@ -1000,10 +960,7 @@ describe("delta assembler (keyed provider turns)", () => {
       "turn/completed",
       "item/completed",
     ]);
-    // The child boundary must not sweep the parent's scope: the late item
-    // still lands in the parent turn.
     expect(events[3]).toMatchObject({ scope: turnScope(parentTurnId) });
-    // Both directions of the turn map serve the command plane.
     expect(assembler.getProviderTurnId(THREAD_ID, parentTurnId)).toBe(
       "parent-turn",
     );
@@ -1100,7 +1057,6 @@ describe("delta assembler (keyed provider turns)", () => {
       "turn/started",
       "item/commandExecution/outputDelta",
     ]);
-    // The id is still mapped so a later open/close correlates.
     const itemId = assembler.getBbItemId(THREAD_ID, "cmd-1") ?? "";
     expect(events[1]).toMatchObject({ itemId, delta: "line\n" });
   });
@@ -1125,8 +1081,8 @@ describe("delta assembler (keyed provider turns)", () => {
       { kind: "turn.open", providerTurnId: "turn-1" },
       open,
       close,
-      close, // provider retry: dropped
-      open, // explicit reopen: same bb id, new lifecycle
+      close,
+      open,
       close,
     );
     const completions = events.filter(
@@ -1181,8 +1137,6 @@ describe("delta assembler (keyed provider turns)", () => {
     );
     const reopenedId =
       events[1]?.type === "item/started" ? events[1].item.id : "";
-    // The new session's reused provider ids mint fresh bb ids: uniqueness
-    // across resumes survives central minting.
     expect(reopenedId).not.toBe("");
     expect(reopenedId).not.toBe(firstItemId);
   });
@@ -1215,11 +1169,6 @@ describe("delta assembler (keyed provider turns)", () => {
     });
   });
 });
-
-// ---------------------------------------------------------------------------
-// One streaming dialect (item.textDelta / item.textClose) and one usage
-// dialect (usage + contextWindow)
-// ---------------------------------------------------------------------------
 
 describe("delta assembler unified streaming dialect", () => {
   const assistantKey = { channel: "assistant" };
@@ -1262,7 +1211,6 @@ describe("delta assembler unified streaming dialect", () => {
         item: { type: "agentMessage", id: itemId, text: "Hello" },
       }),
     ]);
-    // The key is released: later text mints a fresh item.
     const next = assemble(
       assembler,
       textDelta(assistantKey, "agentMessage", "again"),
@@ -1290,7 +1238,6 @@ describe("delta assembler unified streaming dialect", () => {
       id: itemId,
       text: "final text",
     });
-    // Nothing streamed under the key: the provider-final text is enough.
     const bare = assemble(assembler, {
       kind: "item.textClose",
       key: { channel: "thinking-0" },
@@ -1316,8 +1263,6 @@ describe("delta assembler unified streaming dialect", () => {
         channel: "agentMessage",
       }),
     ).toEqual([]);
-    // A close for a key nothing streamed under, with no text, is a no-op
-    // (ACP flushes the thought stream before every message chunk).
     expect(
       assemble(assembler, {
         kind: "item.textClose",
@@ -1355,7 +1300,6 @@ describe("delta assembler unified streaming dialect", () => {
       summary: ["Sum"],
       content: ["Body"],
     });
-    // A repeated close for the settled provider id is a retry.
     expect(
       assemble(assembler, {
         kind: "item.textClose",
@@ -1383,7 +1327,6 @@ describe("delta assembler unified streaming dialect", () => {
     );
     const anonymousId = itemOf(anonymous[0])?.id;
     const namedId = itemOf(named[0])?.id;
-    // A tool in a DIFFERENT scope leaves both alone …
     assemble(assembler, {
       kind: "item.open",
       key: { providerItemId: "tc-root" },
@@ -1401,7 +1344,6 @@ describe("delta assembler unified streaming dialect", () => {
         )[0],
       ),
     ).toBeUndefined();
-    // … a tool in the SAME scope releases the anonymous stream only.
     assemble(assembler, {
       kind: "item.open",
       key: { providerItemId: "tc-child", parentRef: "agent-1" },
@@ -1486,7 +1428,6 @@ describe("delta assembler unified usage dialect", () => {
         },
       }),
     ]);
-    // Same totals again: emitted as given, not summed.
     const again = assemble(assembler, {
       kind: "usage",
       total: { ...usage, totalTokens: 100 },
@@ -1548,10 +1489,6 @@ describe("delta assembler unified usage dialect", () => {
     ).toEqual([]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Grammar v3 core kinds: fileRead, search, planSteps, delegation
-// ---------------------------------------------------------------------------
 
 describe("delta assembler grammar v3 core kinds", () => {
   function itemOf(event: ThreadEvent | undefined) {
@@ -1793,16 +1730,12 @@ describe("delta assembler grammar v3 core kinds", () => {
     });
     const delegationId = itemOf(started)?.id;
 
-    // The spawning turn settles; the delegation is thread-attached and
-    // survives it.
     const boundary = assemble(assembler, {
       kind: "turn.boundary",
       status: "completed",
     });
     expect(boundary.map((event) => event.type)).toEqual(["turn/completed"]);
 
-    // Progress with no turn open: thread-scoped, pending, keeps the open
-    // item's presentation and id.
     const [progress] = assemble(assembler, {
       kind: "item.progress",
       key: { providerItemId: "d-bg" },
@@ -1819,8 +1752,6 @@ describe("delta assembler grammar v3 core kinds", () => {
       },
     });
 
-    // Terminal state turns later, still with no turn open: the close needs
-    // none. A bare terminal shape keeps the opened item's summary.
     const [completed] = assemble(assembler, {
       kind: "item.close",
       key: { providerItemId: "d-bg" },
@@ -1885,10 +1816,6 @@ describe("delta assembler grammar v3 core kinds", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Grammar v3 extension kinds: extension items and extension.state
-// ---------------------------------------------------------------------------
-
 describe("delta assembler extension kinds", () => {
   const presentation = {
     label: { pending: "Updating goal", completed: "Goal updated" },
@@ -1925,8 +1852,6 @@ describe("delta assembler extension kinds", () => {
     });
     expect(startedItem?.parentToolCallId).toBeDefined();
 
-    // The close carries the full terminal payload and no presentation: the
-    // opened one echoes onto the completed item.
     const [closed] = assemble(assembler, {
       kind: "item.close",
       key: { providerItemId: "x-1", parentRef: "agent-1" },
@@ -1988,7 +1913,6 @@ describe("delta assembler extension kinds", () => {
 
   it("emits plugin thread state as a thread-scoped extensionState event", () => {
     const assembler = createAssembler();
-    // No turn needed: thread state is thread metadata like goals.
     const events = assemble(assembler, {
       kind: "extension.state",
       extensionKind: "provider-codex/goal",
@@ -2006,10 +1930,6 @@ describe("delta assembler extension kinds", () => {
     ]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Background tasks, central progress throttling, model fallback (claude cut)
-// ---------------------------------------------------------------------------
 
 describe("delta assembler background tasks and progress policy", () => {
   function createClockedAssembler(progressThrottleMs?: number) {
@@ -2073,7 +1993,6 @@ describe("delta assembler background tasks and progress policy", () => {
     const itemId = assembler.getBbItemId(THREAD_ID, "task:wf-1") ?? "";
     expect(itemId).not.toBe("");
 
-    // The open seeded the throttle window: progress inside it is suppressed.
     advance(100);
     expect(
       assemble(assembler, {
@@ -2083,7 +2002,6 @@ describe("delta assembler background tasks and progress policy", () => {
       }),
     ).toEqual([]);
 
-    // After the window, progress emits thread-scoped with the full snapshot.
     advance(500);
     const progress = assemble(assembler, {
       kind: "item.progress",
@@ -2102,7 +2020,6 @@ describe("delta assembler background tasks and progress policy", () => {
       }),
     ]);
 
-    // The task survives the turn boundary; its terminal close needs no turn.
     assemble(assembler, { kind: "turn.boundary", status: "completed" });
     const completed = assemble(assembler, {
       kind: "item.close",
@@ -2141,7 +2058,6 @@ describe("delta assembler background tasks and progress policy", () => {
     });
     expect(flushed).toHaveLength(1);
 
-    // The flush reset the window: the next unflushed progress is suppressed.
     advance(100);
     expect(
       assemble(assembler, {
@@ -2169,8 +2085,6 @@ describe("delta assembler background tasks and progress policy", () => {
       }),
     ).toEqual([]);
 
-    // Unrelated later traffic after the window elapses carries the pending
-    // snapshot out first.
     advance(600);
     const events = assemble(assembler, {
       kind: "turn.boundary",
@@ -2199,13 +2113,9 @@ describe("delta assembler background tasks and progress policy", () => {
       }),
     ).toEqual([]);
 
-    // The window elapses, but the next traffic is a session replacement: the
-    // suppressed snapshot belongs to the session being replaced and must not
-    // flush across the reset boundary.
     advance(600);
     expect(assemble(assembler, { kind: "session.reset" })).toEqual([]);
 
-    // Nor later — the reset dropped it with the rest of the thread state.
     const afterReset = assemble(assembler, { kind: "turn.open" });
     expect(afterReset.map((event) => event.type)).toEqual(["turn/started"]);
   });
@@ -2230,8 +2140,6 @@ describe("delta assembler background tasks and progress policy", () => {
       status: "completed",
       item: taskShape({ status: "completed", taskStatus: "completed" }),
     });
-    // The pending snapshot flushes with this batch, then the terminal event —
-    // the close always carries the final state, so nothing pends afterwards.
     expect(events.map((event) => event.type)).toEqual([
       "item/backgroundTask/progress",
       "item/backgroundTask/completed",
@@ -2250,7 +2158,6 @@ describe("delta assembler background tasks and progress policy", () => {
       },
     );
     advance(100);
-    // Suppressed turn-scoped message progress.
     expect(
       assemble(assembler, {
         kind: "item.progress",
@@ -2260,7 +2167,6 @@ describe("delta assembler background tasks and progress policy", () => {
     ).toEqual([]);
     assemble(assembler, { kind: "turn.boundary", status: "completed" });
 
-    // The turn is gone; the pending progress must not resurface later.
     advance(600);
     expect(
       assemble(assembler, { kind: "turn.open" }).map((e) => e.type),
@@ -2292,8 +2198,6 @@ describe("delta assembler background tasks and progress policy", () => {
       key: { providerItemId: "tool-1" },
       message: "later",
     });
-    // The newer progress supersedes the suppressed one: exactly one emission,
-    // carrying the latest state.
     expect(events).toEqual([
       expect.objectContaining({
         type: "item/toolCall/progress",
@@ -2325,9 +2229,6 @@ describe("delta assembler background tasks and progress policy", () => {
 
   it("keeps queued accepted input across LRU pressure (pending input pins the thread)", () => {
     const { assembler } = createClockedAssembler();
-    // Accepted input with no turn yet: the acceptance queues, and evicting
-    // the thread now would drop it — the eventual turn.open would emit no
-    // turn/input/accepted, stranding the terminal-turn invariant.
     assemble(assembler, { kind: "input.accepted", clientRequestId: CREQ });
     for (let index = 0; index < 300; index += 1) {
       assembler.assemble({
@@ -2439,31 +2340,20 @@ describe("delta assembler background tasks and progress policy", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// The conformance/equivalence assembly helper (test-only surface)
-// ---------------------------------------------------------------------------
-
 describe("bridge delta assembly helper", () => {
   it("throws on an invalid thread/delta notification instead of returning []", () => {
     const collector = createBridgeDeltaEventCollector("pi");
-    // Swallowing the parse failure would let a bridge pass conformance while
-    // emitting garbage; the helper must fail the suite loudly.
     expect(() =>
       collector.assembleMessage({
         method: "thread/delta",
         params: { threadId: THREAD_ID, deltas: [{ kind: "nope" }] },
       }),
     ).toThrowError(/Invalid thread\/delta notification/);
-    // Non-delta traffic still routes through untouched (empty result).
     expect(
       collector.assembleMessage({ method: "thread/identity", params: {} }),
     ).toEqual([]);
   });
 });
-
-// ---------------------------------------------------------------------------
-// Text-delta batching (streamed-text coalescing per flush window)
-// ---------------------------------------------------------------------------
 
 describe("delta assembler text-delta batching", () => {
   function createBatchingAssembler(textDeltaFlushMs = 100) {
@@ -2514,14 +2404,11 @@ describe("delta assembler text-delta batching", () => {
     ]);
     expect(first[1]).toMatchObject({ delta: "Hel" });
 
-    // Inside the window: buffered, nothing emitted.
     advance(20);
     expect(assemble(assembler, assistantDelta("lo "))).toEqual([]);
     advance(20);
     expect(assemble(assembler, assistantDelta("wor"))).toEqual([]);
 
-    // Window elapsed: the coalesced buffer flushes trailing-edge ahead of
-    // this batch, and the incoming delta starts the next window's buffer.
     advance(100);
     const flushed = assemble(assembler, assistantDelta("ld"));
     expect(flushed).toEqual([
@@ -2542,8 +2429,6 @@ describe("delta assembler text-delta batching", () => {
     const { assembler, advance } = createBatchingAssembler();
     assemble(assembler, { kind: "turn.open" });
     assemble(assembler, assistantDelta("a"));
-    // Nothing buffered; the stream went quiet past its window. The next
-    // delta must not wait for further traffic.
     advance(150);
     expect(assemble(assembler, assistantDelta("b"))).toEqual([
       expect.objectContaining({
@@ -2560,8 +2445,6 @@ describe("delta assembler text-delta batching", () => {
     advance(20);
     expect(assemble(assembler, assistantDelta("b"))).toEqual([]);
 
-    // Later non-text traffic after the window elapsed carries the buffer out
-    // first.
     advance(200);
     const events = assemble(assembler, {
       kind: "contextWindow",
@@ -2582,8 +2465,6 @@ describe("delta assembler text-delta batching", () => {
     assemble(assembler, { kind: "turn.open" });
     assemble(assembler, assistantDelta("first"));
     advance(10);
-    // One batch: buffered text, then an item.open. The buffer must land
-    // before the item/started even though its window has not elapsed.
     const events = assemble(
       assembler,
       assistantDelta(" second"),
@@ -2640,7 +2521,6 @@ describe("delta assembler text-delta batching", () => {
   it("keeps concurrent streams independent (no cross-stream merging)", () => {
     const { assembler, advance } = createBatchingAssembler();
     assemble(assembler, { kind: "turn.open" });
-    // Two assistant streams under different parent tool calls.
     assemble(assembler, assistantDelta("A1", "tool-a"));
     assemble(assembler, assistantDelta("B1", "tool-b"));
     advance(10);
@@ -2741,8 +2621,6 @@ describe("delta assembler text-delta batching", () => {
     advance(10);
     expect(assemble(assembler, snapshot("abc"))).toEqual([]);
 
-    // The snapshot restarted: the buffered suffix flushes first, then the
-    // reset delta emits unabsorbed — a reset can never ride a concatenation.
     advance(10);
     const events = assemble(assembler, snapshot("x"));
     expect(events).toEqual([
@@ -2765,9 +2643,6 @@ describe("delta assembler text-delta batching", () => {
     advance(10);
     expect(assemble(assembler, assistantDelta(" tail"))).toEqual([]);
 
-    // Unlike suppressed progress (superseded by the terminal snapshot),
-    // dropped text would be lost for good; the buffered event was fully
-    // assembled against the old session's ids and flushes ahead of the reset.
     const events = assemble(assembler, { kind: "session.reset" });
     expect(events).toEqual([
       expect.objectContaining({

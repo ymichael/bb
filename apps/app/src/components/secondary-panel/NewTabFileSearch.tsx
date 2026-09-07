@@ -15,7 +15,7 @@ import {
   COARSE_POINTER_ICON_SIZE_CLASS,
   COARSE_POINTER_TEXT_SM_CLASS,
 } from "@bb/shared-ui/coarse-pointer-sizing";
-import { Icon, type IconName } from "@bb/shared-ui/icon";
+import { Icon } from "@bb/shared-ui/icon";
 import { EmptyStatePanel } from "@bb/shared-ui/empty-state";
 import { LIST_HOVER_TRANSITION } from "@bb/shared-ui/motion";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
@@ -27,8 +27,6 @@ import {
   type FileSearchSuggestion,
 } from "@/hooks/useFileSearchSuggestions";
 import type { FileSearchSelection } from "./useThreadFileTabs";
-import type { PluginPanelActionEntry } from "@/components/plugin/PluginPanelActions";
-import { PluginIcon } from "@/components/plugin/PluginIcon";
 import {
   useThreadRecentItems,
   THREAD_RECENT_ITEMS_VISIBLE_LIMIT,
@@ -39,18 +37,14 @@ import {
   resolveRightPanelFileVisual,
 } from "./rightPanelFileVisuals";
 import { cn } from "@bb/shared-ui/lib/utils";
-import { isDesktopBrowserAvailable } from "@/lib/bb-desktop";
+import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider";
 import { formatRelativeTime } from "@/lib/relative-time";
 import {
-  LAUNCHER_ACTION_ROW_BASE_CLASS,
   LAUNCHER_ROW_BASE_CLASS,
   LAUNCHER_ROW_ICON_CLASS,
   LauncherRowTrailing,
   LauncherSectionHeader,
 } from "./launcherRow";
-import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider";
-import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
-import type { AppShortcutPresentation } from "@/lib/app-keybindings";
 
 export interface NewTabFileSearchProps {
   projectId: string | undefined;
@@ -64,20 +58,6 @@ export interface NewTabFileSearchProps {
   onSelect: (selection: FileSearchSelection) => void;
   recentItemsThreadId?: string | null;
   showFileSearch?: boolean;
-}
-
-export type OpenBrowserHandler = () => void;
-export type StartTerminalHandler = () => void;
-
-interface NewTabActionsProps {
-  /** Open a session-based side chat of the current thread in its own tab. */
-  /** Desktop-only: open a new in-panel browser tab. Absent ⇒ no Browser entry. */
-  onOpenBrowser?: OpenBrowserHandler;
-  onStartTerminal?: StartTerminalHandler;
-  startTerminalDisabled?: boolean;
-  startTerminalTrailing?: ReactNode;
-  /** Plugin `threadPanelAction` rows, rendered after the built-in entries. */
-  pluginActions?: readonly PluginPanelActionEntry[];
 }
 
 interface FileResultRowProps {
@@ -103,12 +83,6 @@ interface FileSearchMessageProps {
   message: string;
 }
 
-/**
- * A navigable entry in a section. Search results carry a {@link FileSearchSuggestion};
- * a recent entry carries the previously-opened {@link ThreadRecentItem}. The
- * file-search screen keeps both in one union so the keyboard handler can walk a
- * single index space across Files and Recent sections.
- */
 type FileSearchSectionEntry =
   | { kind: "suggestion"; suggestion: FileSearchSuggestion }
   | { kind: "recent"; item: ThreadRecentItem };
@@ -125,8 +99,7 @@ interface FileSearchSection {
 
 type LauncherKeyDownHandler = (event: KeyboardEvent<HTMLElement>) => void;
 type FileSearchSource = FileSearchSuggestion["source"];
-type FileSearchSectionKind = "actions" | "files" | "recent";
-type LauncherTileVariant = "result" | "action";
+type FileSearchSectionKind = "files" | "recent";
 
 interface GroupFileSearchSectionsArgs {
   suggestions: readonly FileSearchSuggestion[];
@@ -134,26 +107,12 @@ interface GroupFileSearchSectionsArgs {
 }
 
 interface LauncherTileProps {
-  ariaKeyshortcuts?: string;
   id: string;
   isActive: boolean;
-  variant?: LauncherTileVariant;
   onActivate: () => void;
   onSelect: () => void;
   title?: string;
   children: ReactNode;
-}
-
-interface NewTabActionTileProps {
-  disabled?: boolean;
-  id: string;
-  iconName: IconName;
-  label: string;
-  isActive: boolean;
-  onActivate: () => void;
-  onSelect: () => void;
-  shortcut?: AppShortcutPresentation;
-  trailing?: ReactNode;
 }
 
 interface ShowMoreToggleProps {
@@ -169,7 +128,6 @@ const FILE_SEARCH_SECTION_ORDER: readonly FileSearchSectionKind[] = [
 ];
 
 const FILE_SEARCH_SECTION_LABELS = {
-  actions: "Actions",
   files: "Files",
   recent: "Recent",
 } satisfies Record<FileSearchSectionKind, string>;
@@ -178,9 +136,6 @@ const FILE_SEARCH_SOURCE_LABELS = {
   workspace: "Workspace",
   "thread-storage": "Thread storage",
 } satisfies Record<FileSearchSource, string>;
-
-const OPEN_BROWSER_ENTRY_ID = "file-search-result-open-browser";
-const START_TERMINAL_ENTRY_ID = "file-search-result-start-terminal";
 
 const RECENT_ENTRY_ID_PREFIX = "file-search-result-recent";
 
@@ -231,8 +186,6 @@ function groupFileSearchSections({
     });
   }
 
-  // Recent rows trail search matches so the unified index space reads top-down:
-  // open a matching result first, then jump back to a recently-opened file.
   for (const entry of recentEntries) {
     ensureSection("recent").items.push({ entry, index: 0 });
   }
@@ -278,116 +231,31 @@ function FileSearchMessage({
   );
 }
 
-/**
- * Shared button shell for launcher rows. File-search result rows use listbox
- * option semantics; secondary new-tab actions keep native button semantics
- * because they are separate commands rather than part of the file combobox.
- */
 function LauncherTile({
-  ariaKeyshortcuts,
   id,
   isActive,
-  variant = "result",
   onActivate,
   onSelect,
   title,
   children,
 }: LauncherTileProps) {
-  const baseClass =
-    variant === "action"
-      ? LAUNCHER_ACTION_ROW_BASE_CLASS
-      : LAUNCHER_ROW_BASE_CLASS;
-
   return (
     <button
       type="button"
       id={id}
-      role={variant === "result" ? "option" : undefined}
-      aria-selected={variant === "result" ? isActive : undefined}
-      aria-keyshortcuts={ariaKeyshortcuts}
+      role="option"
+      aria-selected={isActive}
       onClick={onSelect}
       onMouseEnter={onActivate}
       title={title}
       className={cn(
-        baseClass,
+        LAUNCHER_ROW_BASE_CLASS,
         "relative scroll-mt-7",
         isActive ? "bg-state-active" : "hover:bg-state-hover",
       )}
     >
       {children}
     </button>
-  );
-}
-
-function NewTabActionTile({
-  disabled = false,
-  id,
-  iconName,
-  label,
-  isActive,
-  onActivate,
-  onSelect,
-  shortcut,
-  trailing,
-}: NewTabActionTileProps) {
-  if (trailing !== undefined) {
-    return (
-      <div
-        id={id}
-        className={cn(
-          LAUNCHER_ACTION_ROW_BASE_CLASS,
-          "relative scroll-mt-7",
-          isActive ? "bg-state-active" : disabled ? "" : "hover:bg-state-hover",
-        )}
-      >
-        <button
-          type="button"
-          aria-label={label}
-          aria-keyshortcuts={shortcut?.ariaKeyshortcuts}
-          disabled={disabled}
-          onClick={onSelect}
-          onMouseEnter={onActivate}
-          className="absolute inset-0 rounded focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-default"
-        />
-        <span className={cn(LAUNCHER_ROW_ICON_CLASS, "pointer-events-none")}>
-          <Icon
-            name={iconName}
-            className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
-            aria-hidden
-          />
-        </span>
-        <span className="pointer-events-none min-w-0 flex-1 truncate text-foreground">
-          {label}
-        </span>
-        <div className="relative z-10 ml-auto flex min-w-0 shrink-0 items-center">
-          {trailing}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <LauncherTile
-      id={id}
-      isActive={isActive}
-      ariaKeyshortcuts={shortcut?.ariaKeyshortcuts}
-      variant="action"
-      onActivate={onActivate}
-      onSelect={onSelect}
-    >
-      <span className={LAUNCHER_ROW_ICON_CLASS}>
-        <Icon
-          name={iconName}
-          className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
-          aria-hidden
-        />
-      </span>
-      <span className="min-w-0 flex-1 truncate text-foreground">{label}</span>
-      <AppCommandShortcutHint
-        shortcut={shortcut ?? null}
-        className="absolute right-2 top-1/2 -translate-y-1/2"
-      />
-    </LauncherTile>
   );
 }
 
@@ -441,12 +309,6 @@ function FileResultRow({
   );
 }
 
-/**
- * A recently-opened file row. It uses the compact launcher shell so recents sit
- * at roughly the same density as file-search results, with the file-kind glyph
- * carried inline. Reopening routes through the same `onSelect` path as a
- * file-search result.
- */
 function RecentResultRow({
   id,
   item,
@@ -544,8 +406,6 @@ export function NewTabFileSearch({
   const [query, setQuery] = useState(initialQuery);
   const [activeIndex, setActiveIndex] = useState(-1);
   const [isRecentExpanded, setIsRecentExpanded] = useState(false);
-  // Captured once on mount: the launcher is transient, so a static "now" keeps
-  // every relative timestamp consistent within a single open without ticking.
   const [nowMs] = useState(() => Date.now());
   const defaultRecentItemsThreadId =
     currentThreadId.length > 0 ? currentThreadId : null;
@@ -574,9 +434,6 @@ export function NewTabFileSearch({
     () => (hasQuery ? suggestions : []),
     [hasQuery, suggestions],
   );
-  // Collapsed to the visible cap by default. Recents are file/artifact entries,
-  // so this section is owned by the Open file/search surface rather than the
-  // secondary action rows on the new-tab page.
   const visibleRecentItems = useMemo(
     () =>
       isRecentExpanded
@@ -634,20 +491,11 @@ export function NewTabFileSearch({
       return;
     }
 
-    // Focus synchronously, then again on the next frame to win the focus race
-    // against the panel/tab content mounting in the same commit, which can
-    // otherwise pull focus away from the input. `preventScroll` so focusing never
-    // scrolls an ancestor to reveal the input — during the panel's open swipe the
-    // content is briefly wider than the panel, and a scroll there would shift the
-    // whole panel content sideways.
     inputRef.current?.focus({ preventScroll: true });
     focusFrameRef.current = requestAnimationFrame(() => {
       focusFrameRef.current = null;
       inputRef.current?.focus({ preventScroll: true });
     });
-    // Consume the request immediately so a later passive remount does not
-    // interpret the previous explicit open as another focus request. The frame
-    // has separate unmount cleanup so this state update does not cancel it.
     onAutoFocusHandled();
   }, [autoFocus, isPointerCoarse, onAutoFocusHandled]);
 
@@ -727,9 +575,6 @@ export function NewTabFileSearch({
     ? getFileSearchEntryId(activeEntry)
     : undefined;
   const isSearchDisabled = isUnavailable;
-  // The results listbox renders only when there is a searchable source and at
-  // least one option. Gate the combobox relationship on that so
-  // `aria-controls`/`aria-activedescendant` never point at an absent element.
   const hasListbox = !isSearchDisabled && navigableEntries.length > 0;
 
   if (!showFileSearch) {
@@ -752,9 +597,6 @@ export function NewTabFileSearch({
           onChange={(event) => handleQueryChange(event.target.value)}
           onKeyDown={handleLauncherKeyDown}
           disabled={isSearchDisabled}
-          // Combobox with a list autocomplete popup: one listbox holds the
-          // navigable Files/Recent options, and the highlighted row is the
-          // combobox's active descendant within that controlled listbox.
           role="combobox"
           aria-label={
             quickOpenShortcut
@@ -821,93 +663,6 @@ export function NewTabFileSearch({
   );
 }
 
-export function NewTabActions({
-  onOpenBrowser,
-  onStartTerminal,
-  pluginActions,
-  startTerminalDisabled,
-  startTerminalTrailing,
-}: NewTabActionsProps) {
-  const terminalShortcut = useAppCommandShortcut("terminal.open");
-  const showOpenBrowserEntry =
-    onOpenBrowser !== undefined && isDesktopBrowserAvailable();
-  const showStartTerminalEntry = onStartTerminal !== undefined;
-
-  const handleOpenBrowser = useCallback(() => {
-    onOpenBrowser?.();
-  }, [onOpenBrowser]);
-
-  const handleStartTerminal = useCallback(() => {
-    onStartTerminal?.();
-  }, [onStartTerminal]);
-
-  const hasOpenActions =
-    showOpenBrowserEntry ||
-    showStartTerminalEntry ||
-    (pluginActions !== undefined && pluginActions.length > 0);
-
-  if (!hasOpenActions) {
-    return null;
-  }
-
-  return (
-    <div data-testid="new-tab-actions" className="flex min-w-0 flex-col">
-      <section>
-        <LauncherSectionHeader
-          label={FILE_SEARCH_SECTION_LABELS.actions}
-          className="pb-1"
-        />
-        <div className="flex flex-col gap-px">
-          {showOpenBrowserEntry ? (
-            <NewTabActionTile
-              id={OPEN_BROWSER_ENTRY_ID}
-              iconName="Globe"
-              label="Open browser"
-              isActive={false}
-              onActivate={() => undefined}
-              onSelect={handleOpenBrowser}
-            />
-          ) : null}
-          {showStartTerminalEntry ? (
-            <NewTabActionTile
-              disabled={startTerminalDisabled}
-              id={START_TERMINAL_ENTRY_ID}
-              iconName="Terminal"
-              label="Start terminal"
-              isActive={false}
-              onActivate={() => undefined}
-              onSelect={handleStartTerminal}
-              shortcut={terminalShortcut ?? undefined}
-              trailing={startTerminalTrailing}
-            />
-          ) : null}
-          {pluginActions?.map((action) => (
-            <LauncherTile
-              key={action.id}
-              id={action.id}
-              isActive={false}
-              variant="action"
-              onActivate={() => undefined}
-              onSelect={action.onSelect}
-            >
-              <span className={LAUNCHER_ROW_ICON_CLASS}>
-                <PluginIcon
-                  pluginId={action.pluginId}
-                  icon={action.icon}
-                  className={COARSE_POINTER_COMPACT_ICON_SIZE_CLASS}
-                />
-              </span>
-              <span className="min-w-0 flex-1 truncate text-foreground">
-                {action.title}
-              </span>
-            </LauncherTile>
-          ))}
-        </div>
-      </section>
-    </div>
-  );
-}
-
 interface NewTabRecentState {
   count: number;
   showMoreCount: number;
@@ -922,7 +677,6 @@ interface NewTabResultsProps {
   hasQuery: boolean;
   searchError: boolean;
   isLoading: boolean;
-  /** Id of the single combobox listbox that wraps the Files/Recent option groups. */
   listboxId: string;
   nowMs: number;
   onActivateIndex: (index: number) => void;
@@ -959,11 +713,6 @@ function NewTabResults({
   const hasRecentSectionPredecessor = hasSearchResults || showSearchMessage;
   const showEmptyMessage =
     !hasSearchResults && !showRecentSection && !showLoading && !showError;
-  // The combobox popup is a single listbox spanning both groups, so the active
-  // descendant the input points at always resolves inside one controlled
-  // element. It renders only when a group has option rows; the loading/error
-  // message, the empty-recent card, and the show-more toggle are not options
-  // and stay outside the listbox.
   const showListbox = showFilesSection || recentSection !== undefined;
 
   if (showEmptyMessage) {
@@ -979,8 +728,7 @@ function NewTabResults({
 
   return (
     <div className="pb-1">
-      {/* The loading/error message stands in for search results while no result
-          rows exist, so it leads the results just as a result group would. */}
+      {}
       {showSearchMessage ? (
         <FileSearchMessage
           iconName={
@@ -1065,10 +813,6 @@ function NewTabResults({
       ) : null}
 
       {recent.emptyHintVisible && recentSection === undefined ? (
-        // Empty Recent zero-state. It is a framed dashed placeholder card, not a
-        // selectable option, so it sits outside the listbox. This belongs to the
-        // Open file / search surface only; the browser new-tab and secondary
-        // action rows stay card-less.
         <section className={cn(hasRecentSectionPredecessor && "mt-3")}>
           <LauncherSectionHeader
             label={FILE_SEARCH_SECTION_LABELS.recent}

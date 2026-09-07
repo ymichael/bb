@@ -110,7 +110,6 @@ describe("buildBridgeMcpServer", () => {
     await client.close();
   });
 
-  // Before this, an image-only result reached the model as the text "OK".
   it("serves an image-only tool result as an MCP image block", async () => {
     const server = buildBridgeMcpServer(
       [

@@ -60,10 +60,6 @@ function registerTabCommand(args: RegisterDesktopBrowserTabCommandArgs): void {
 export function registerDesktopBrowserIpc(
   manager: DesktopBrowserViewManager,
 ): void {
-  // Every browser command is renderer -> main fire-and-forget; navigation state
-  // flows back over `BB_DESKTOP_BROWSER_STATE_CHANNEL`. Each handler resolves
-  // its own host window from the sender, so multi-window is safe, and zod-parses
-  // the untrusted-content-adjacent payload before touching the view.
   ipcMain.on(BB_DESKTOP_BROWSER_ATTACH_CHANNEL, (event, payload: unknown) => {
     const hostWindow = hostWindowFromBrowserIpcEvent(event);
     if (hostWindow === null) {

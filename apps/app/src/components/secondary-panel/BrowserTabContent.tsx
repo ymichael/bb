@@ -10,6 +10,7 @@ import {
 } from "react";
 import type {
   BbDesktopBrowserApi,
+  BbDesktopBrowserControl,
   BbDesktopBrowserFindInPageRequest,
   BbDesktopBrowserState,
   BbDesktopBrowserViewportBounds,
@@ -54,29 +55,13 @@ import { isLocalOnlyUrl } from "@/lib/loopback-hostname";
 
 interface BrowserTabContentProps {
   tabId: string;
+  existingOnly?: true;
   initialUrl: string;
   addressFocusRequest: BrowserAddressFocusRequest | null;
   onAddressFocusRequestConsumed?: (request: BrowserAddressFocusRequest) => void;
-  /**
-   * Whether this browser tab's native view may be visible. The native view
-   * stays attached (and its page intact) across deactivation; only its
-   * visibility follows this readiness-gated flag, so switching tabs never
-   * destroys/reloads it.
-   */
   canShowNativeBrowserView: boolean;
-  /**
-   * Whether browser commands target this tab. This is separate from native-view
-   * visibility because multiple split panes may remain visible while only the
-   * focused pane owns keyboard commands.
-   */
   canHandleBrowserCommands?: boolean;
-  /** Called when focus enters this tab's native page surface. */
   onNativeFocus?: () => void;
-  /**
-   * Deck-owned coordinator that serializes view visibility so the previously
-   * shown view is always hidden before this one is shown (no two native overlays
-   * visible at once). Null on the web build, where there is no native view.
-   */
   visibilityCoordinator: BrowserViewVisibilityCoordinator | null;
   environmentId: string | null;
   threadId: string;
@@ -163,18 +148,6 @@ function browserViewportBounds(): BbDesktopBrowserViewportBounds {
   };
 }
 
-/**
- * Measure the panel rect the native view must overlay, in the renderer's
- * layout coordinate space. This rect is the single placement authority: it is
- * pushed over IPC whenever it changes, at the renderer's own layout cadence
- * (ResizeObserver ticks, window resizes, explicit layout-sync events), so the
- * native overlay always lands where the chrome around it is painted. The
- * desktop main process never extrapolates placement on its own: during native
- * window resize bursts — where no bounds protocol can keep the independently
- * composited overlay glued to the lagging chrome — it hides the view outright
- * and reveals it at the latest pushed rect (clamped to the live window) once
- * the resize settles.
- */
 function browserViewBoundsFromElement(
   args: BrowserViewBoundsFromElementArgs,
 ): BbDesktopBrowserViewBounds {
@@ -436,6 +409,7 @@ function BrowserPageLoadError({
 
 export function BrowserTabContent({
   tabId,
+  existingOnly,
   initialUrl,
   addressFocusRequest,
   onAddressFocusRequestConsumed,
@@ -465,32 +439,53 @@ export function BrowserTabContent({
   } = useBrowserHistory(threadId);
 
   const [state, setState] = useState<BbDesktopBrowserState | null>(null);
+  const [control, setControl] = useState<BbDesktopBrowserControl | null>(null);
+  useEffect(() => {
+    let current = true;
+    let receivedEvent = false;
+    setControl(null);
+    const accept = (next: {
+      tabId: string;
+      threadId: string;
+      control: BbDesktopBrowserControl | null;
+    }) => {
+      if (current && next.tabId === tabId && next.threadId === threadId)
+        setControl(next.control);
+    };
+    const unsubscribe = desktopBrowser?.onControl?.((next) => {
+      if (next.tabId !== tabId || next.threadId !== threadId) return;
+      receivedEvent = true;
+      accept(next);
+    });
+    void desktopBrowser
+      ?.getControl?.(tabId)
+      .then((next) => {
+        if (next !== null && !receivedEvent) accept(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+      unsubscribe?.();
+    };
+  }, [desktopBrowser, tabId, threadId]);
   const [currentUrl, setCurrentUrl] = useState(initialUrl);
   const [addressDraft, setAddressDraft] = useState(initialUrl);
   const [isEditing, setIsEditing] = useState(false);
   const [isFindOpen, setIsFindOpen] = useState(false);
-  // Mirror for effect cleanups that must not re-run on every open/close.
   const isFindOpenRef = useRef(false);
   isFindOpenRef.current = isFindOpen;
   const [findQuery, setFindQuery] = useState("");
   const [findMatches, setFindMatches] = useState<BrowserFindMatches | null>(
     null,
   );
-  // Bitmap stand-in pushed by the desktop main process while the native view
-  // is hidden during a native window resize; null outside resize bursts.
   const [resizeSnapshotUrl, setResizeSnapshotUrl] = useState<string | null>(
     null,
   );
 
-  // Keep the latest persistence/visit callbacks in refs so the attach effect can
-  // run once per tab without re-subscribing when these identities change.
   const onUpdateRef = useRef(onUpdate);
   const recordVisitRef = useRef(recordVisit);
   onUpdateRef.current = onUpdate;
   recordVisitRef.current = recordVisit;
-  // The URL to load when the view is first created. Captured once so navigation
-  // (which updates the persisted `initialUrl` prop) never re-runs the attach
-  // effect — and the live view keeps its page across tab switches.
   const initialUrlRef = useRef(initialUrl);
   const [attachedBrowserViewIdentity, setAttachedBrowserViewIdentity] =
     useState<BrowserViewAttachIdentity | null>(null);
@@ -507,10 +502,6 @@ export function BrowserTabContent({
     desktopBrowser.setVisibleWithoutFocus !== undefined;
   const pageLoadErrorText = state?.errorText ?? null;
   const hasPageLoadError = pageLoadErrorText !== null && hasPage;
-  // A blocking modal (e.g. the git-action dialog) dims the panel with a DOM
-  // backdrop the native browser overlay cannot sit behind. While one is open,
-  // hide the view and fall back to the DOM new-tab screen so the backdrop dims
-  // the whole panel.
   const isBrowserDimmingModalOpen = useIsBrowserDimmingModalOpen();
   const lastSentBoundsRef = useRef<BbDesktopBrowserViewBounds | null>(null);
 
@@ -533,9 +524,6 @@ export function BrowserTabContent({
     [desktopBrowser, tabId],
   );
 
-  // Measure and push the current placement synchronously — measurements happen
-  // inside ResizeObserver callbacks (post-layout) or force layout themselves,
-  // so the rect is always fresh for the frame about to paint.
   const syncPlacement = useCallback(
     ({ force }: SyncBrowserViewPlacementArgs) => {
       const bounds = readBounds();
@@ -555,9 +543,6 @@ export function BrowserTabContent({
     [readBounds, sendBounds],
   );
 
-  // Unconditional push for the coordinator's show() path, so bounds always
-  // land before the view is made visible (never a stale/zero-bounds flash on
-  // activation).
   const syncBounds = useCallback(() => {
     syncPlacement({ force: true });
   }, [syncPlacement]);
@@ -566,19 +551,12 @@ export function BrowserTabContent({
     syncPlacement({ force: false });
   }, [syncPlacement]);
 
-  // Initial bounds for attach. When the content element is not measurable yet
-  // the dedupe key stays null, so the first layout observation always sends a
-  // real placement.
   const syncInitialBounds = useCallback(() => {
     const bounds = readBounds();
     lastSentBoundsRef.current = bounds;
     return bounds ?? EMPTY_BROWSER_VIEW_BOUNDS;
   }, [readBounds]);
 
-  // Create (or re-attach to) the native view on mount and stream navigation
-  // state back. Unmount is not ownership teardown: switching threads unmounts
-  // the deck, but the native view is intentionally retained so returning to the
-  // thread can show the existing page without recreating/reloading it.
   useEffect(() => {
     if (desktopBrowser === null) {
       return;
@@ -588,10 +566,10 @@ export function BrowserTabContent({
     registerBrowserView({ environmentId, tabId, threadId });
     desktopBrowser.attach({
       tabId,
+      threadId,
+      ...(existingOnly === true ? { existingOnly } : {}),
       url: mountUrl,
       bounds: initialBounds,
-      // First show is coordinator-owned so it can sync bounds immediately
-      // before making the native overlay visible.
       visible: false,
     });
     setAttachedBrowserViewIdentity({ environmentId, tabId, threadId });
@@ -601,9 +579,6 @@ export function BrowserTabContent({
       if (nextState.tabId !== tabId) {
         return;
       }
-      // A navigation or a reload replaces the document and drops Chromium's
-      // find session with it, so the last match count no longer describes
-      // the page on screen. A same-URL reload only shows as a load start.
       if (
         lastSeenState !== null &&
         (lastSeenState.url !== nextState.url ||
@@ -627,8 +602,6 @@ export function BrowserTabContent({
       }
     });
 
-    // Optional for version skew: an older shell's preload has no snapshot
-    // channel, and the panel falls back to its bare background during resizes.
     const unsubscribeSnapshot = desktopBrowser.onSnapshot?.((snapshot) => {
       if (snapshot.tabId !== tabId) {
         return;
@@ -636,8 +609,6 @@ export function BrowserTabContent({
       setResizeSnapshotUrl(snapshot.dataUrl);
     });
 
-    // Optional for version skew: an older shell's preload has no find-in-page
-    // channel, and the find command stays unhandled.
     const unsubscribeFindResult = desktopBrowser.onFindResult?.((result) => {
       if (result.tabId !== tabId) {
         return;
@@ -652,15 +623,9 @@ export function BrowserTabContent({
       unsubscribe();
       unsubscribeSnapshot?.();
       unsubscribeFindResult?.();
-      // The native view outlives this component (tab/thread switch), but its
-      // find bar does not: end the native session so highlights never linger
-      // in a view whose controls are gone.
       if (isFindOpenRef.current) {
         desktopBrowser.stopFindInPage?.({ tabId, action: "clearSelection" });
       }
-      // The native view survives this unmount. Only explicit tab close/thread
-      // deletion owns detach; unmount just disconnects this component's state
-      // listener and forgets any stale visibility ownership.
       visibilityCoordinator?.release(tabId);
     };
   }, [
@@ -670,13 +635,9 @@ export function BrowserTabContent({
     visibilityCoordinator,
     tabId,
     threadId,
+    existingOnly,
   ]);
 
-  // Track panel-shape changes. The callback runs post-layout in the frame that
-  // will paint the new shape, so measuring and pushing here keeps the native
-  // view in lockstep with the chrome as it is actually painted — including
-  // during native window drags, where the renderer's relayout (not the OS
-  // window size) is what the surrounding chrome reflects.
   useEffect(() => {
     const element = contentRef.current;
     if (element === null || desktopBrowser === null) {
@@ -691,12 +652,6 @@ export function BrowserTabContent({
     };
   }, [desktopBrowser, syncBoundsIfChanged]);
 
-  // ResizeObserver only reports size changes, but the content rect can move
-  // without resizing: dragging the left sidebar shifts it (AppLayout emits the
-  // sync event from the same rAF that applies the live sidebar width), and a
-  // native window resize can translate a fixed-size panel. The window resize
-  // listener re-measures on the renderer's own layout cadence; the bounds
-  // dedupe in syncPlacement drops the no-op ticks.
   useEffect(() => {
     if (desktopBrowser === null) {
       return;
@@ -717,12 +672,6 @@ export function BrowserTabContent({
     };
   }, [desktopBrowser, syncBoundsIfChanged]);
 
-  // The native view is shown whenever this tab has a page, has attached hidden,
-  // and the surrounding panel/drawer is ready for the native overlay. It is NOT
-  // hidden during a drag-resize — the overlay tracks the live bounds (see the
-  // ResizeObserver and layout-sync effects) so it follows the panel smoothly
-  // instead of blanking and flashing. It stays attached when hidden, so
-  // deactivation never reloads it.
   const isViewVisible =
     canShowNativeBrowserView &&
     (canHandleBrowserCommands || supportsNativePaneFocus) &&
@@ -730,11 +679,6 @@ export function BrowserTabContent({
     !hasPageLoadError &&
     isBrowserViewAttached &&
     !isBrowserDimmingModalOpen;
-  // A layout effect (pre-paint) declares visibility so showing/hiding lands in
-  // the same frame as the DOM tab swap — no flash. Ordering across tabs (hide
-  // the previously-visible view BEFORE showing this one) and bounds-before-show
-  // are owned by the deck's coordinator, so two native overlays never overlap
-  // regardless of the order children's effects run in.
   useLayoutEffect(() => {
     if (visibilityCoordinator === null) {
       return;
@@ -874,8 +818,6 @@ export function BrowserTabContent({
 
   const handleFindQueryChange = useCallback(
     (rawQuery: string) => {
-      // The input enforces the same cap; truncate as well so a programmatic
-      // value can never exceed the contract and get rejected silently.
       const query = rawQuery.slice(0, BB_DESKTOP_BROWSER_MAX_FIND_TEXT_LENGTH);
       setFindQuery(query);
       if (query.length === 0) {
@@ -905,7 +847,6 @@ export function BrowserTabContent({
   const handleOpenFind = useCallback((): boolean => {
     if (!canFindInPage) return false;
     setIsFindOpen(true);
-    // Re-opening with the previous query highlights it again, like Chrome.
     if (findQuery.length > 0) {
       runFind({ text: findQuery, forward: true, newSession: true });
     }
@@ -915,8 +856,6 @@ export function BrowserTabContent({
 
   useAppCommandHandler("browser.find", handleOpenFind, 100);
 
-  // Close the bar when the page goes away (tab cleared, load error) so it
-  // never sits above a new-tab screen with nothing to search.
   useEffect(() => {
     if (isFindOpen && !canFindInPage) {
       setIsFindOpen(false);
@@ -966,6 +905,33 @@ export function BrowserTabContent({
         locationShortcut={locationShortcut}
         reloadShortcut={reloadShortcut}
       />
+      {control !== null ? (
+        <div
+          role="status"
+          className="flex shrink-0 items-center gap-3 border-b border-border bg-surface-recessed px-3 py-2 text-xs"
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {control.controllerLabel} is controlling this tab
+          </span>
+          <button
+            type="button"
+            className="rounded px-2 py-1 hover:bg-state-hover"
+            onClick={() => desktopBrowser.releaseControl?.(tabId)}
+          >
+            Stop
+          </button>
+          <button
+            type="button"
+            className="rounded px-2 py-1 hover:bg-state-hover"
+            onClick={() => {
+              desktopBrowser.releaseControl?.(tabId);
+              desktopBrowser.focus?.(tabId);
+            }}
+          >
+            Take over
+          </button>
+        </div>
+      ) : null}
       {isFindOpen ? (
         <BrowserFindBar
           inputRef={findInputRef}
@@ -994,10 +960,6 @@ export function BrowserTabContent({
           />
         )}
         {hasPage && resizeSnapshotUrl !== null ? (
-          // Stand-in for the hidden native view during a window resize. It
-          // stretches with the panel — part of the chrome's surface, so it
-          // stays glued to the panel however far the chrome paint lags the
-          // drag. The live view overlays it again before it is cleared.
           <img
             src={resizeSnapshotUrl}
             alt=""

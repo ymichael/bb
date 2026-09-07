@@ -44,12 +44,6 @@ export function isMarkdownFenceClose(
   );
 }
 
-/**
- * Older authored prompt bodies could store a quote immediately followed by an
- * unprefixed reply line. CommonMark treats that as a lazy blockquote
- * continuation, so make the legacy block boundary explicit before parsing
- * prompt markdown.
- */
 export function normalizePromptBlockquoteBoundaries(markdown: string): string {
   const lines = markdown.split("\n");
   if (lines.length < 2) {

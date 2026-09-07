@@ -1,20 +1,3 @@
-/**
- * Guardrail G2 — contract purity.
- *
- * The provider-agnostic contract (execution options, the handshake, the
- * delta grammar, the client `ProviderInfo` projection, the interaction
- * payloads) must not name a provider: "zero first-party privilege" means a
- * key like `claudeCodePermissionMode` is a bug the design deletes, not a
- * convention. This test walks every object key in those schemas and fails
- * when a key segment names a provider, unless the committed allowlist
- * (`provider-contract-purity.allowlist.json`) names the key AND the
- * workstream that removes it. An allowlist entry that matches nothing fails
- * too, so the list can only shrink.
- *
- * Matching is by camelCase / snake_case segment, not substring: `pi` must
- * not trip on `capabilities` or `expiresAt`, and `acp` must not trip on a
- * future `backpressure`. `providerId` is provider-agnostic and passes.
- */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
@@ -64,7 +47,6 @@ const SCANNED_SCHEMAS: ReadonlyArray<readonly [string, z.ZodType]> = [
   ["interactionRequestPayloadSchema", interactionRequestPayloadSchema],
 ];
 
-/** `claudeCodePermissionMode` → ["claude", "code", "permission", "mode"]. */
 export function keySegments(key: string): string[] {
   return key
     .split(/(?=[A-Z])|[_\-.]/u)
@@ -87,9 +69,7 @@ function loadAllowlist(): Set<string> {
   );
   const parsed = allowlistSchema.parse(JSON.parse(raw));
   const paths = parsed.entries.map((entry) => entry.path);
-  expect(new Set(paths).size, "duplicate allowlist entries").toBe(
-    paths.length,
-  );
+  expect(new Set(paths).size, "duplicate allowlist entries").toBe(paths.length);
   return new Set(paths);
 }
 

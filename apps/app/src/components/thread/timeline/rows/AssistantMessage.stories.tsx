@@ -9,13 +9,6 @@ export default {
   title: "thread/timeline/rows/Assistant Message",
 };
 
-// Match production PageShell: a wide outer scroll area carries
-// `@container/page`, and the inner centered div caps content at 760px.
-// Keeping these on separate elements is what gives MarkdownPreview's
-// `100cqw`-based breakout headroom — collapse them onto one element and
-// 100cqw equals the text column, so tables can't break out.
-// PAGE_SHELL_CONTENT_STYLE on the inner div sets `--md-content-w` so
-// narrow tables anchor flush with the prose, matching production.
 function TimelineStage({ children }: { children: React.ReactNode }) {
   return (
     <div className="@container/page w-full">
@@ -29,11 +22,6 @@ function TimelineStage({ children }: { children: React.ReactNode }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Real assistant messages pulled from live threads in ~/.bb-dev/bb.db.
-// ---------------------------------------------------------------------------
-
-// thr_zzvsfyn7rm — "Investigate User Manual Issue"
 const shortMessage = `Yes. As patched, it keeps the environment runtime entry and workspace watcher around until one of these happens:
 
 - explicit environment destroy
@@ -44,9 +32,6 @@ There is no regular idle sweep in the host daemon, so "forever for the daemon li
 
 I would not keep this patch as-is. The safer shape is to decouple this from provider process exit, but still bound it, for example with an idle watcher TTL or a frontend-driven watch lease. A simpler fallback is to refetch direct environment workspace status on window focus, but that would not be a real push notification.`;
 
-// thr_3vw9r8igrb — "Investigate File List Inconsistency". Real provider
-// merge-readiness report: H1/H2 headers, multiple tables, fenced code blocks
-// (shell, diff, ts), bold, inline code, em-dash separators, emoji markers.
 const longMessage = `# Merge-readiness report
 
 ## Branch / main / merge base
@@ -275,11 +260,6 @@ const overflowStoryPluginActions = [
   },
 ];
 
-/**
- * QA fixtures for the width-tracked action row: the assistant row spans the
- * message column, so its actions collapse into the "⋯" menu only when the
- * column itself is narrower than the full set.
- */
 export function ActionOverflow() {
   return (
     <StoryCard>

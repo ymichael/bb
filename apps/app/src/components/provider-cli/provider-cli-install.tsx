@@ -40,16 +40,6 @@ export function providerCliEntries(
   }));
 }
 
-/**
- * Whether an issue is an *update* rather than a first install.
- *
- * `buildProviderCliIssue` deliberately reports a missing CLI too so install
- * surfaces can offer the action. Settings → Updates is not one of those
- * surfaces: a CLI you never installed has no update, and
- * listing it there put a permanent install prompt on an update page, counted it
- * in "Update all", and made a fresh single-agent install look perpetually
- * behind. The sidebar chips have always drawn this line; this is the same one.
- */
 export function isProviderCliUpdateIssue(issue: ProviderCliIssue): boolean {
   return issue.status.installed;
 }
@@ -131,12 +121,6 @@ export function hasProviderCliAction(
   return issue.action !== null;
 }
 
-/**
- * Mirror the module-level install store into React. The store — not this hook —
- * owns the running job and its queue, so an install started from Settings →
- * Updates keeps running and keeps draining its queue after the user navigates
- * away and this hook unmounts.
- */
 export function useProviderCliInstallRunner() {
   const snapshot = useSyncExternalStore(
     subscribeProviderCliInstalls,
@@ -151,11 +135,6 @@ export function useProviderCliInstallRunner() {
   };
 }
 
-/**
- * Renders the install failure log for whichever install failed, wherever the
- * user happens to be. Mounted once by the app shell because the failing install
- * may well have outlived the page that started it.
- */
 export function ProviderCliInstallLogDialogHost() {
   const snapshot = useSyncExternalStore(
     subscribeProviderCliInstalls,

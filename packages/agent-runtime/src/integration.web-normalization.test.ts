@@ -132,9 +132,7 @@ describe("web normalization integration", () => {
       let threadEvents = getEventsForThread(ctx.events, threadId);
       let webSearchEvents = threadEvents.filter(isWebSearchLifecycleEvent);
       if (
-        !webSearchEvents.some((event) =>
-          matchesExpectedWebQuery(event.item),
-        )
+        !webSearchEvents.some((event) => matchesExpectedWebQuery(event.item))
       ) {
         await ctx.runtime.runTurn({
           threadId,

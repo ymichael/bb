@@ -1,6 +1,6 @@
 ---
 name: share-server-links
-description: Share a local HTTP server with the user over bb connect. Use when an agent has started a local HTTP server (dev server, preview, static server) and wants to hand the user a link they can open — especially remotely ("start the dev server", "let me see it", "preview", "open it on my phone", "share a link"). Prefer this over pasting localhost URLs when bb connect may be paired.
+description: "Expose a local HTTP server through BB Connect and give the user its remotely accessible URL."
 ---
 
 # Share local server links via bb connect

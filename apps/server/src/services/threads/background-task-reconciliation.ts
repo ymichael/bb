@@ -44,19 +44,6 @@ function parseStoredBackgroundTaskItem(
   }
 }
 
-/**
- * Server backstop for the lost-daemon cases of the background-task lifecycle:
- * the adapter settles open tasks on thread/resume and provider process exit,
- * but a daemon crash loses that in-memory state entirely — leaving persisted
- * items nobody will ever complete. Called when a daemon session re-registers
- * with a new instance id, when a host's session lease expires with no active
- * replacement, and when the disconnect grace elapses without a reconnect.
- * Open items whose latest snapshot already reports a finished task status
- * (completed/failed/killed) keep it — only the terminal notification was
- * lost, not the outcome — while genuinely open items are settled as
- * interrupted ("stopped"). Idempotent: items with a completed row are not
- * open, so repeated triggers (grace + lease expiry + re-register) no-op.
- */
 export function settleDanglingBackgroundTasks(
   deps: SettleDanglingBackgroundTasksDeps,
   args: SettleDanglingBackgroundTasksArgs,
@@ -88,12 +75,6 @@ export function settleDanglingBackgroundTasks(
   }
 }
 
-/**
- * Settles tasks whose process was successfully released by thread.stop. This
- * runs inside command-result settlement so the completion rows and the stop
- * result commit atomically; the command's event sink has already flushed any
- * real provider completions, making the query idempotent.
- */
 export function settleDanglingBackgroundTasksForStoppedThreadInTransaction(
   deps: SettleDanglingBackgroundTasksTransactionDeps,
   args: { threadId: string },

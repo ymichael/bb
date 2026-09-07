@@ -67,7 +67,6 @@ const ENVIRONMENT_SETTLED_PULL_REQUEST_STALE_MS = 60 * 60_000;
 const ENVIRONMENT_ACTIVE_PULL_REQUEST_REFETCH_MS = 30_000;
 const MERGE_BASE_BRANCHES_STALE_MS = 30_000;
 const MERGE_BASE_BRANCHES_LIMIT = 50;
-/** Staleness window for the environment diff TOC query. */
 const ENVIRONMENT_DIFF_STALE_MS = 5_000;
 
 function requireEnvironmentId(
@@ -124,8 +123,6 @@ export function useEnvironmentWorkStatus(
         signal,
       }),
     enabled,
-    // Subscriptions can be absent while no UI is listening, so remount must
-    // establish a fresh baseline instead of trusting cached data.
     ...REALTIME_OWNED_MOUNT_BASELINE_QUERY_POLICY,
     staleTime: 0,
     placeholderData: (previousData, previousQuery) =>
@@ -139,11 +136,6 @@ export function useEnvironmentWorkStatus(
   });
 }
 
-/**
- * The PR carried by a lookup response, or `null` when the lookup answered
- * "absent" or could not run ("unavailable" — treated like the active/absent
- * case for freshness so a transient gh failure retries on the short cycle).
- */
 export function getEnvironmentPullRequestFromResponse(
   response: EnvironmentPullRequestResponse | undefined,
 ): ThreadPullRequest | null {
@@ -192,9 +184,6 @@ export function useEnvironmentPullRequest(
       }),
     enabled,
     refetchOnMount: true,
-    // Each lookup spawns `gh pr view` on the host, so refetch on focus only
-    // when the cached PR is stale; a still-fresh PR does not need a re-probe on
-    // every foreground.
     refetchOnWindowFocus: true,
     refetchInterval: (query) =>
       getEnvironmentPullRequestRefetchInterval(
@@ -309,11 +298,6 @@ interface UseEnvironmentPathSuggestionsArgs {
   includeDirectories: boolean;
 }
 
-/**
- * Search a thread environment's workspace for path suggestions. Project-agnostic
- * — the canonical workspace path search once a thread has an environment, used
- * for both file mentions and the new-tab file picker.
- */
 export function useEnvironmentPathSuggestions(
   args: UseEnvironmentPathSuggestionsArgs,
 ) {
@@ -354,11 +338,6 @@ export function useEnvironmentPathSuggestions(
   });
 }
 
-/**
- * Loads the diff tab's table of contents (one {@link DiffFileEntry} per changed
- * file, no patch text). Patches for visible rows are fetched separately and on
- * demand by {@link useEnvironmentDiffPatches}.
- */
 export function useEnvironmentDiffFiles(
   environmentId: string,
   options: UseEnvironmentDiffFilesOptions,
@@ -427,15 +406,6 @@ function buildEnvironmentFilePreviewQuery(
     : { target: "uncommitted", path, side };
 }
 
-/**
- * Build the preview for a `/diff/file` read. Only image and video previews
- * need a browser-loadable `url` (the `<img>` / `<video>` src), so only those
- * pay for a base64 `data:` URL. Text previews carry their content inline and
- * point `url` at the JSON route the bytes came from; building a `data:` URL
- * for them would re-encode the whole file to base64 (a second copy of a
- * multi-megabyte source file on a phone) and then bloat every cache key that
- * embeds the URL.
- */
 export function buildEnvironmentFilePreview({
   contentUrl,
   path,

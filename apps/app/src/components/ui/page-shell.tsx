@@ -19,9 +19,6 @@ interface PageShellBaseProps {
 
 interface PageShellProps extends PageShellBaseProps {
   scrollBehavior?: PageShellScrollBehavior;
-  // Only meaningful with `scrollBehavior="bottom-anchor"`: persists and restores
-  // the timeline scroll position per thread so switching away and back doesn't
-  // snap to the bottom.
   scrollAnchorThreadId?: string;
 }
 

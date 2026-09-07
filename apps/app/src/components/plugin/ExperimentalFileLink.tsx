@@ -37,7 +37,6 @@ function shouldHandleFileClick(
   );
 }
 
-/** Host-rendered live-file anchor shared by plugins and BB-owned surfaces. */
 export function ExperimentalFileLink({
   target,
   location = null,

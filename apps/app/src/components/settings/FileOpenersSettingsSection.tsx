@@ -27,10 +27,6 @@ const DROPDOWN_TRIGGER_CLASS =
 const DROPDOWN_CONTENT_CLASS =
   "min-w-[var(--radix-dropdown-menu-trigger-width)]";
 
-/**
- * Automatic activation is the default for every extension. These controls let
- * the user pin BB's preview or a specific opener on this client.
- */
 export function FileOpenersSettingsSection() {
   const { fileOpeners } = usePluginSlots();
   const [preference, setPreference] = useFileOpenerPreference();
@@ -102,7 +98,6 @@ function ExtensionOpenerControl({
       label: `${opener.title} (${opener.pluginId})`,
     })),
   ];
-  // An unavailable pinned provider renders BB's preview until it returns.
   const selected =
     options.find((option) => option.key === preference) ?? options[1];
   if (selected === undefined) return null;

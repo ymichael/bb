@@ -1,5 +1,3 @@
-/** Provider integration tests for per-thread shell environment isolation. */
-
 import { existsSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";

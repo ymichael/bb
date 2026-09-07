@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { PermissionMode, ProviderInfo } from "@bb/domain";
+import { makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import type { SystemExecutionOptionsResponse } from "@bb/server-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { systemExecutionOptionsQueryKey } from "@/hooks/queries/query-keys";
@@ -44,19 +45,15 @@ function provider(
   id: string,
   permissionModes: ProviderInfo["capabilities"]["permissionModes"],
 ): ProviderInfo {
-  return {
+  return makeProviderInfo({
     id,
-    pluginId: `provider-${id}`,
-    displayName: id,
     logoUrl: null,
-    available: true,
     maintenance: { health: true, usage: true, installation: false },
     strings: {
       signInHint: "Sign in",
       expiredHint: "Sign in again",
       installUrl: "https://example.com/install",
     },
-    composerActions: [],
     capabilities: {
       supportsThreadArchive: true,
       supportsThreadRename: true,
@@ -67,7 +64,7 @@ function provider(
       permissionModes,
       modelCatalogScope: "host",
     },
-  };
+  });
 }
 
 const providers = [

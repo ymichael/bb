@@ -84,9 +84,5 @@ export function useToggleThreadSecondaryPanelSelection(
       return;
     }
     openFixedSecondaryPanel();
-  }, [
-    closeFixedSecondaryPanel,
-    isSecondaryPanelOpen,
-    openFixedSecondaryPanel,
-  ]);
+  }, [closeFixedSecondaryPanel, isSecondaryPanelOpen, openFixedSecondaryPanel]);
 }

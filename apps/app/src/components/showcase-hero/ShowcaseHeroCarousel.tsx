@@ -20,14 +20,6 @@ import { accentInk, accentTint, neutral } from "./showcase-tokens";
 
 const SLIDE_MS = 5000;
 
-/**
- * Where each archetype chip orbits the window.
- *
- * The chips live in the stage's gutters — the frame is capped narrower than the
- * stage, so `left-0`/`right-0` lands them beside the window rather than on top
- * of it at any width. They are decoration plus navigation, so they hide below
- * `lg`, where the gutters are too narrow to hold them.
- */
 const ORBIT_POSITIONS: readonly CSSProperties[] = [
   { top: "2%", left: 0 },
   { top: "38%", left: 0 },
@@ -37,30 +29,19 @@ const ORBIT_POSITIONS: readonly CSSProperties[] = [
   { top: "82%", right: 0 },
 ];
 
-/** Everything the engine says out loud. Each surface supplies its own voice. */
 export interface ShowcaseHeroCopy {
-  /** Names the carousel region for assistive tech. */
   ariaLabel: string;
-  /** Headline lead-in the archetype noun completes, e.g. "Turn bb into". */
   headlineLead: string;
-  /** The noun shown once the composer takes over, e.g. "whatever you need". */
   composingNoun: string;
-  /** Static line under the headline: what this surface is, in one sentence. */
   description: string;
-  /** Names the slide tablist for assistive tech. */
   tablistLabel: string;
-  /** Mini-window title prefix, e.g. "bb — ". */
   frameTitlePrefix: string;
-  /** Mini-window title-bar badge, e.g. "Plugin". */
   frameBadge: string;
 }
 
-/** How the engine seeds bb's real new-thread composer for this surface. */
 export interface ShowcaseHeroComposerConfig {
-  /** The sentence prefix an archetype brief completes. */
   promptPrefix: string;
   placeholder: string;
-  /** Namespaces the composer's saved draft per surface. */
   draftKey: string;
 }
 
@@ -69,40 +50,14 @@ interface ShowcaseHeroCarouselProps {
   scenes: ShowcaseScenes;
   copy: ShowcaseHeroCopy;
   composer: ShowcaseHeroComposerConfig;
-  /** Static rail glyphs for the mini window; omit to render no rail. */
   rail?: readonly IconName[];
-  /** Stories force a slide and disable autoplay to capture a stable frame. */
   initialIndex?: number;
   autoplay?: boolean;
-  /** Stories render the showcase without the thread-creating composer. */
   composerDisabled?: boolean;
-  /**
-   * External request to open (or, with `close`, dismiss) the inline composer —
-   * an example card, the page's create button. A new nonce applies it; `seed`
-   * overrides the default prefix-only seed. The hero owns the composer, so
-   * every create affordance on the page funnels here instead of navigating.
-   */
   openRequest?: { nonce: number; seed?: string; close?: boolean } | null;
-  /** Reports composer open/close so the page can keep the hero region shown. */
   onComposingChange?: (composing: boolean) => void;
 }
 
-/**
- * The shared browse-hero engine behind both the Plugins and Skills surfaces:
- * one mini bb window that transforms through a surface's archetypes, orbited by
- * the archetypes it is cycling through.
- *
- * A browse page has two jobs — show what this thing can do, and make building
- * one feel one step away — so the headline states the outcome in plain words
- * while the window shows it.
- *
- * Composing is a MODE, not an inset panel: activating it swaps the showcase out
- * for bb's real new-thread composer in the same block, so the visitor gets the
- * genuine prompt box (mentions, attachments, model/project/environment pickers)
- * rather than a lookalike that drops their selections on the way to a thread.
- * Both states share one grid cell, so the swap cross-fades in place and the
- * page below never jumps.
- */
 export function ShowcaseHeroCarousel({
   archetypes,
   scenes,
@@ -118,12 +73,6 @@ export function ShowcaseHeroCarousel({
   const reducedMotion = usePrefersReducedMotion();
   const navigate = useNavigate();
   const createThread = useCreateThread();
-  // The composer restores its saved draft on mount and only falls back to
-  // `initialPrompt` when that draft is empty — the right default for a blank
-  // open, but an example card's brief must land even over a leftover draft,
-  // so explicit seeds REPLACE the stored draft before the composer mounts.
-  // Imperative access on purpose: subscribing here would re-render the whole
-  // carousel on every keystroke the mounted composer writes.
   const promptDraft = useMemo(
     () =>
       getPromptDraftAccessor({
@@ -135,8 +84,6 @@ export function ShowcaseHeroCarousel({
   const [activeIndex, setActiveIndex] = useState(initialIndex);
   const [interacting, setInteracting] = useState(false);
   const [documentHidden, setDocumentHidden] = useState(false);
-  // Null while showcasing. Holds the seed prompt for the composer once open,
-  // and remounts it (via `composerKey`) so a new seed always takes effect.
   const [composerSeed, setComposerSeed] = useState<string | null>(null);
   const [composerKey, setComposerKey] = useState(0);
   const tabsRef = useRef<HTMLDivElement>(null);
@@ -154,10 +101,6 @@ export function ShowcaseHeroCarousel({
     return () => document.removeEventListener("visibilitychange", update);
   }, []);
 
-  // Composing-state changes flow from the two events that cause them (open,
-  // close), not from an effect. The transition is tracked in a ref so the
-  // parent callback fires exactly once per real change and the state updater
-  // stays pure (updaters run during render and re-run under StrictMode).
   const composingRef = useRef(false);
   const setSeedAndNotify = useCallback(
     (seed: string | null, options?: { replaceDraft?: boolean }) => {
@@ -165,7 +108,6 @@ export function ShowcaseHeroCarousel({
         promptDraft.setDraft({
           text: seed,
           mentions: [],
-          // A brief replaces what the composer says, not what's attached.
           attachments: promptDraft.getCurrent().attachments,
         });
       }
@@ -180,8 +122,6 @@ export function ShowcaseHeroCarousel({
     [onComposingChange, promptDraft],
   );
 
-  // A repeated nonce is a no-op; each distinct request opens (or re-seeds) the
-  // composer even if it is already open, so a second card click still lands.
   const handledRequestNonce = useRef<number | null>(null);
   useEffect(() => {
     if (composerDisabled) return;
@@ -192,12 +132,6 @@ export function ShowcaseHeroCarousel({
       return;
     }
     handledRequestNonce.current = openRequest.nonce;
-    // The rule's own exception: `openRequest` is an external command channel,
-    // and this effect is the subscription callback that applies it. The
-    // render-phase alternative would call `onComposingChange` — parent
-    // setState — during render. A request carrying a seed is an explicit
-    // choice (a card, a menu example), so it replaces the stored draft; a
-    // seedless request behaves like the blank CTA and restores it.
     // oxlint-disable-next-line react/set-state-in-effect
     setSeedAndNotify(
       openRequest.close === true
@@ -255,7 +189,6 @@ export function ShowcaseHeroCarousel({
       <h2 className="text-center text-2xl font-semibold tracking-tight text-foreground">
         {copy.headlineLead}{" "}
         <span
-          // Keyed so each slide's noun cross-fades in rather than swapping.
           key={composing ? "composing" : active.id}
           className={cn(
             "inline-block",
@@ -275,9 +208,8 @@ export function ShowcaseHeroCarousel({
         {copy.description}
       </p>
 
-      {/* One grid cell holds both states, so the composer cross-fades into the
-          showcase's place instead of pushing the catalog down the page. */}
-      <div className="relative mt-5 grid w-full max-w-[58rem] grid-cols-1 grid-rows-1">
+      {}
+      <div className="@container relative mt-5 grid w-full max-w-[58rem] grid-cols-1 grid-rows-1">
         <div
           className={cn(
             "relative [grid-area:1/1]",
@@ -287,9 +219,6 @@ export function ShowcaseHeroCarousel({
               ? "pointer-events-none scale-[0.97] opacity-0 blur-[2px]"
               : "scale-100 opacity-100 blur-0",
           )}
-          // Hidden from AT while the composer owns the slot. Nothing inside is
-          // focusable — the chips are tabIndex -1 and the tablist lives in the
-          // row below — so aria-hidden here cannot strand keyboard focus.
           aria-hidden={composing}
         >
           {archetypes.map((archetype, index) => {
@@ -321,7 +250,7 @@ export function ShowcaseHeroCarousel({
                 }
                 className={cn(
                   "bb-hero-chip absolute z-10 hidden max-w-[9rem] cursor-pointer items-center gap-1.5",
-                  "rounded-lg border px-2 py-1.5 text-2xs font-medium shadow-sm lg:flex",
+                  "rounded-lg border px-2 py-1.5 text-2xs font-medium shadow-sm @[50rem]:flex",
                   "transition-[opacity,transform,background-color,border-color] duration-500",
                   isActive ? "opacity-100" : "opacity-70 hover:opacity-100",
                 )}
@@ -340,9 +269,7 @@ export function ShowcaseHeroCarousel({
             badge={copy.frameBadge}
             rail={rail}
             reducedMotion={reducedMotion}
-            // 13rem fits the densest scenes (the prototype grid and the inbox
-            // with its handoff line) without a bottom clip.
-            className="mx-auto h-[13rem] w-full max-w-[38rem] lg:w-[66%]"
+            className="mx-auto h-[13rem] w-full max-w-[38rem] @[50rem]:w-[66%]"
           />
         </div>
 
@@ -356,8 +283,6 @@ export function ShowcaseHeroCarousel({
           >
             <div className="mx-auto w-full max-w-[44rem]">
               <PluginNewThreadComposer
-                // Remounting per open re-seeds the prompt; the composer treats
-                // initialPrompt as a mount-time seed, not a controlled value.
                 key={composerKey}
                 initialPrompt={composerSeed ?? undefined}
                 placeholder={composer.placeholder}
@@ -428,7 +353,6 @@ export function ShowcaseHeroCarousel({
                   >
                     {isActive ? (
                       <span
-                        // Keyed by slide so the fill restarts each advance.
                         key={`${archetype.id}-${activeIndex}`}
                         data-paused={paused}
                         className="bb-hero-progress-fill block h-full w-full"

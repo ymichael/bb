@@ -7,11 +7,6 @@ type PromptCommandLike = Pick<
   "name" | "source"
 >;
 
-// Keeps prompt mention pills aligned with surrounding text. The icon in React
-// render paths opts back into vertical centering with `self-center`. The
-// theme-specific surface, label color, and icon color all come from the
-// `prompt-mention-pill` component class in app.css; this string owns layout,
-// radius, border width, and type scale only.
 export const PROMPT_MENTION_PILL_CLASS = cn(
   "prompt-mention-pill inline-flex max-w-full items-baseline gap-0.5 rounded-full border py-0.5 pl-1 pr-1.5 text-xs leading-4",
   "align-baseline",
@@ -41,10 +36,6 @@ export function promptMentionIconLabel(
   return resource.entryKind === "directory" ? "Folder" : "File";
 }
 
-/**
- * Named-icon fallback for a mention. React render paths use
- * `PromptMentionIcon` so plugin mentions can prefer `bb.branding.icon`.
- */
 export function promptMentionIconName(
   resource: PromptMentionResource,
 ): IconName {
@@ -61,8 +52,6 @@ export function promptMentionIconName(
     return promptCommandIconName(resource);
   }
   if (resource.kind === "plugin") {
-    // Matches the plugin slash-command rows so plugin contributions share
-    // one visual identity in the composer.
     return "Zap";
   }
   return resource.entryKind === "directory" ? "Folder" : "File";

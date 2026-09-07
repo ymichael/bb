@@ -75,40 +75,12 @@ type ThreadTimelineTurnMessageDetail = "summary" | "full";
 interface ThreadTimelineFromEventsBaseOptions {
   contextOnlyToolCallIds?: ReadonlySet<string>;
   includeProviderUnhandledOperations: boolean;
-  /**
-   * Tail-only state (`pendingTodos`) is only meaningful on the latest page —
-   * this snapshot describes current head state, not historical state. Caller
-   * passes false on older-page requests so projections can skip extraction work
-   * entirely instead of computing it and discarding.
-   */
   isLatestPage: boolean;
-  /**
-   * Current thread provider. Needed for provider-specific prompt modes that are
-   * encoded in command pills on the accepted request.
-   */
   providerId?: string;
-  /**
-   * Display name for the current provider, supplied by the server for dynamic
-   * providers that are not in thread-view's static provider table.
-   */
   providerDisplayName?: string;
-  /**
-   * The provider's declared `plan` composer command, or null/absent when it
-   * declares none. Plan-mode eligibility and the command syntax both come from
-   * the declaration rather than from a provider id list in this package.
-   */
   planCommand?: PlanCommand | null;
   threadStatus: Thread["status"];
-  /**
-   * Display name of the thread, used by operation rows that describe a
-   * relationship to another thread. Empty string when the thread is unnamed.
-   */
   threadName: string;
-  /**
-   * Absolute path of the thread's workspace root, used to relativize the
-   * absolute file paths persisted by provider file-edit tool calls. Null when
-   * the thread has no environment (the path is then left as-is).
-   */
   workspaceRoot: string | null;
 }
 
@@ -145,9 +117,7 @@ interface BuildThreadTimelineTurnDetailsFromEventsOptions extends ThreadTimeline
   includeProviderUnhandledOperations: boolean;
   providerDisplayName?: string;
   threadStatus: Thread["status"];
-  /** See {@link ThreadTimelineFromEventsBaseOptions.threadName}. */
   threadName: string;
-  /** See {@link ThreadTimelineFromEventsBaseOptions.workspaceRoot}. */
   workspaceRoot: string | null;
 }
 
@@ -231,6 +201,8 @@ type TimelineWorkflowMessage = Extract<
   EventProjectionMessage,
   { kind: "workflow" }
 >;
+/** Every kind that renders as the plain title/detail row — i.e. the ones that
+ * do not carry their own extra fields in the read model. */
 type TimelineGenericSystemOperationKind = Exclude<
   TimelineSystemOperationKind,
   "parent-change"
@@ -249,6 +221,8 @@ function operationKindForMessage(
     case "warning":
     case "deprecation":
       return message.opType;
+    case "provider-environment":
+      return "generic";
     case "operation":
       return parentChange !== null ? "parent-change" : "generic";
     default:
@@ -345,8 +319,6 @@ function buildWorkflowWorkRow(
   message: TimelineWorkflowMessage,
   rowIdPrefix: string,
 ): TimelineWorkflowWorkRow | null {
-  // Ambient/housekeeping tasks stay out of both the inline transcript and the
-  // prompt-stack workflow banner.
   if (message.skipTranscript) {
     return null;
   }
@@ -404,10 +376,6 @@ function toConversationAttachments(
   };
 }
 
-/**
- * The bridge's presentation, spread onto a row only when the item had one so
- * pre-presentation rows keep an absent field rather than an `undefined` key.
- */
 function rowPresentation(message: {
   presentation?: ThreadEventItemPresentation;
 }): { presentation?: ThreadEventItemPresentation } {
@@ -448,15 +416,6 @@ function convertActivityIntent(
   }
 }
 
-/**
- * File-edit tool calls persist the path the provider reported, which is
- * absolute (e.g. `/Users/.../worktrees/env_x/bb/src/app.ts`). The timeline
- * contract promises a workspace-relative path so it matches the repo-relative
- * names produced by `git diff` in the diff panel, lets `open-file-diff` focus
- * the right card, and keeps the inline diff header readable. Relativize once
- * here at the projection boundary so every downstream consumer sees one
- * canonical workspace-relative path.
- */
 function relativizeWorkspacePath(
   path: string,
   workspaceRoot: string | null,
@@ -863,10 +822,6 @@ function convertMessage(
           systemKind: isReconnect ? "reconnect" : "error",
           title: errorDisplay.title,
           detail: errorDisplay.detail,
-          // Reconnect rows are transient informational markers, not in-progress
-          // work, so they carry no lifecycle status. That keeps them from
-          // shimmering or lingering as "pending" once an attempt is superseded
-          // by the next one or by a terminal failure.
           status: isReconnect ? null : "error",
         },
       ];
@@ -1072,8 +1027,6 @@ function appendRows(target: TimelineRow[], rows: readonly TimelineRow[]): void {
       isReconnectSystemRow(previous) &&
       isReconnectSystemRow(row)
     ) {
-      // Reconnect attempts are one transient status, so update the progress row
-      // in place instead of flooding the timeline with every retry attempt.
       target[target.length - 1] = row;
       continue;
     }
@@ -1334,9 +1287,6 @@ function orderRowsAfterExternalUserBoundary(
     return rows;
   }
 
-  // Keep pre-boundary rows in their established projection order. A global
-  // source sort moves thread provisioning under initial turn summaries because
-  // those summaries inherit the accepted request's source range.
   const suffix = rows.slice(suffixStartIndex);
   const orderedSuffix = suffix
     .map((row, index) => ({ index, row }))
@@ -1485,13 +1435,6 @@ export function buildThreadTimelineTurnDetailsFromEvents(
 
   return {
     kind: "ungrouped",
-    // A work item can begin before a steer and complete after it, so the
-    // summary's source range necessarily overlaps the steer. Lazy details do
-    // not include the later turn/completed event and therefore project that
-    // slice as ungrouped rows. External human steers belong to the root
-    // timeline regardless of outcome, just as they do when children are built
-    // eagerly; returning one here would render the same row both inside and
-    // outside the summary.
     rows: nestedRows.filter((row) => !isRootOwnedHumanSteerRow(row)),
   };
 }

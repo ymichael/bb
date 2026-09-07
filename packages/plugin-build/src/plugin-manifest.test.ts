@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { validatePluginBuildManifest } from "./plugin-manifest.js";
 
-const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h4v4z"/></svg>';
-/** An Illustrator export, trimmed to the constructs a strict validator trips on. */
+const SVG =
+  '<svg xmlns="http://www.w3.org/2000/svg"><path d="M0 0h4v4z"/></svg>';
 const ILLUSTRATOR_SVG = `<?xml version="1.0" encoding="utf-8"?>
 <!-- Generator: Adobe Illustrator 16.0.0, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
 <!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
@@ -23,16 +23,19 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
 
   afterEach(async () => {
     await Promise.all(
-      tempDirs.splice(0).map((dir) =>
-        rm(dir, { recursive: true, force: true }),
-      ),
+      tempDirs
+        .splice(0)
+        .map((dir) => rm(dir, { recursive: true, force: true })),
     );
   });
 
   async function fixture(
     icons: Record<string, string>,
     files: Record<string, string> = {},
-    branding: Record<string, unknown> = { icon: "Zap", experimental_icons: icons },
+    branding: Record<string, unknown> = {
+      icon: "Zap",
+      experimental_icons: icons,
+    },
   ): Promise<{ dir: string; manifest: unknown }> {
     const dir = await mkdtemp(join(tmpdir(), "bb-plugin-icons-build-"));
     tempDirs.push(dir);
@@ -83,7 +86,6 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
       /experimental_icons\["receipt"\] points at a missing file/,
     );
 
-    // A directory named like an svg file is not a file.
     const directory = await fixture(
       { receipt: "./icons/receipt.svg" },
       { "icons/receipt.svg/inner.txt": "x" },
@@ -101,7 +103,10 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
     await writeFile(join(outside, "mark.svg"), SVG);
     const escaping = await fixture({ mark: "./icons/mark.svg" });
     await mkdir(join(escaping.dir, "icons"), { recursive: true });
-    await symlink(join(outside, "mark.svg"), join(escaping.dir, "icons", "mark.svg"));
+    await symlink(
+      join(outside, "mark.svg"),
+      join(escaping.dir, "icons", "mark.svg"),
+    );
     await expect(
       validatePluginBuildManifest(
         escaping.manifest,
@@ -168,10 +173,6 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
       /bb\.branding\.logo\.dark \("\.\/logo-dark\.svg"\) must not contain a <path onload> event handler attribute/,
     );
 
-    // bb.branding.icon keeps its document-shape check and nothing more: the
-    // doctype an Illustrator export opens with fails the icon (while the
-    // same file builds as a logo below), and an external reference is the
-    // response headers' business, not the build's.
     const doctypeIcon = await fixture(
       {},
       { "icon.svg": ILLUSTRATOR_SVG },
@@ -183,7 +184,9 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
         doctypeIcon.dir,
         join(doctypeIcon.dir, "package.json"),
       ),
-    ).rejects.toThrow(/bb\.branding\.icon must not contain a doctype declaration/);
+    ).rejects.toThrow(
+      /bb\.branding\.icon must not contain a doctype declaration/,
+    );
     const externalIcon = await fixture(
       {},
       {
@@ -200,9 +203,6 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
       ),
     ).resolves.toMatchObject({ bb: { branding: { icon: "./icon.svg" } } });
 
-    // An Illustrator export (legacy doctype, SaveForWeb metadata, a
-    // switch/foreignObject fallback) builds as a logo, and a raster logo is
-    // taken as declared: its bytes are not parsed as SVG.
     const artwork = await fixture(
       {},
       {
@@ -218,7 +218,9 @@ describe("validatePluginBuildManifest: bb.branding assets", () => {
         join(artwork.dir, "package.json"),
       ),
     ).resolves.toMatchObject({
-      bb: { branding: { logo: { light: "./logo.svg", dark: "./logo-dark.png" } } },
+      bb: {
+        branding: { logo: { light: "./logo.svg", dark: "./logo-dark.png" } },
+      },
     });
   });
 

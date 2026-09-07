@@ -13,10 +13,6 @@ interface Deferred {
   reject: (error: Error) => void;
 }
 
-/**
- * One active timeline query whose fetches only settle when the test says so,
- * so the in-flight/settled transitions that drive the pacing are explicit.
- */
 function setup() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -73,19 +69,16 @@ describe("invalidateTimelineQueryKeyPaced", () => {
     await flushMicrotasks();
     expect(fetches).toHaveLength(1);
 
-    // A burst of appends while the first read is in flight.
     invalidateTimelineQueryKeyPaced(queryClient, queryKey);
     invalidateTimelineQueryKeyPaced(queryClient, queryKey);
     invalidateTimelineQueryKeyPaced(queryClient, queryKey);
     await flushMicrotasks();
-    // Not cancelled, not restarted.
     expect(fetches).toHaveLength(1);
     expect(queryFn).toHaveBeenCalledTimes(1);
 
     vi.advanceTimersByTime(120);
     fetches[0]!.resolve(1);
     await flushMicrotasks();
-    // The trailing refetch waits out the observed duration (120ms here).
     expect(queryFn).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(119);
     await flushMicrotasks();
@@ -95,7 +88,6 @@ describe("invalidateTimelineQueryKeyPaced", () => {
     expect(queryFn).toHaveBeenCalledTimes(2);
     expect(fetches).toHaveLength(2);
 
-    // Only one trailing refetch for the whole burst.
     fetches[1]!.resolve(2);
     await flushMicrotasks();
     vi.advanceTimersByTime(2_000);
@@ -125,13 +117,11 @@ describe("invalidateTimelineQueryKeyPaced", () => {
 
     invalidateTimelineQueryKeyTerminal(queryClient, queryKey);
     await flushMicrotasks();
-    // The first read was aborted and a fresh one started right away.
     expect(queryFn).toHaveBeenCalledTimes(2);
     fetches[1]!.resolve(2);
     await flushMicrotasks();
     vi.advanceTimersByTime(2_000);
     await flushMicrotasks();
-    // The paced trailing refetch was cancelled by the terminal path.
     expect(queryFn).toHaveBeenCalledTimes(2);
     unsubscribe();
   });

@@ -66,7 +66,6 @@ export async function callPluginHostRpc(
     input: unknown;
     hostId: string;
     signal?: AbortSignal;
-    /** The call's own budget; defaults to the common command timeout. */
     timeoutMs?: number;
     artifact: PluginHostArtifactSnapshot;
   },
@@ -132,9 +131,6 @@ export async function callPluginHostRpc(
           );
         });
   const output = await validateValue(method.output, result.output, "output");
-  // The daemon already returned JSON. This second validation is the server
-  // side of the contract and may intentionally transform that wire value into
-  // the schema's typed output (for example, a Date). Return it as-is.
   return output;
 }
 

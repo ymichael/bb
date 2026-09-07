@@ -9,7 +9,6 @@ import { humanizeTransportError } from "../src/humanize.js";
 describe("ReconnectBackoff", () => {
   it("grows exponentially and caps at max", () => {
     const backoff = new ReconnectBackoff();
-    // First close before stable → attempt 1 → 2s
     expect(backoff.nextDelayAfterClose(0)).toBe(
       DEFAULT_RECONNECT_BASE_DELAY_MS * 2,
     );
@@ -19,7 +18,6 @@ describe("ReconnectBackoff", () => {
     expect(backoff.nextDelayAfterClose(0)).toBe(
       DEFAULT_RECONNECT_BASE_DELAY_MS * 8,
     );
-    // Keep going until the cap binds.
     let delay = 0;
     for (let i = 0; i < 20; i++) {
       delay = backoff.nextDelayAfterClose(0);
@@ -30,15 +28,12 @@ describe("ReconnectBackoff", () => {
   it("resets attempt after a stable connection", () => {
     const backoff = new ReconnectBackoff({ stableConnectionMs: 10_000 });
     expect(backoff.nextDelayAfterClose(0)).toBe(2_000);
-    // Stable session: attempt resets to 0 → delay = base * 2^0 = 1s.
     expect(backoff.nextDelayAfterClose(10_001)).toBe(1_000);
   });
 
   it("does not reset at exactly the stable threshold", () => {
     const backoff = new ReconnectBackoff({ stableConnectionMs: 10_000 });
-    // First unstable close → attempt 1 → 2s
     expect(backoff.nextDelayAfterClose(0)).toBe(2_000);
-    // Exactly 10_000ms is not more than the threshold, so attempt advances.
     expect(backoff.nextDelayAfterClose(10_000)).toBe(4_000);
   });
 

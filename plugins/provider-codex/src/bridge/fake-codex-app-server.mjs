@@ -141,6 +141,7 @@ function runScriptedTurn(threadId) {
 const scriptPath = process.argv[2];
 const script = scriptPath ? JSON.parse(readFileSync(scriptPath, "utf8")) : null;
 const scriptedTurns = script?.turns ?? null;
+const requestLogPath = script?.requestLogPath ?? null;
 const modelListFailOnceMarkerPath = script?.modelListFailOnceMarkerPath ?? null;
 /**
  * `archiveStatePath`: a JSON file of archived thread ids shared by every fake
@@ -166,6 +167,7 @@ const archivedThreadIds = new Set();
 const processLogPath = script?.processLogPath ?? null;
 /** `startDelayMs`: answer `thread/start` only after this many milliseconds. */
 const startDelayMs = script?.startDelayMs ?? 0;
+const sigtermDelayMs = script?.sigtermDelayMs ?? 0;
 
 function logProcessStep(step) {
   if (processLogPath === null) {
@@ -175,9 +177,17 @@ function logProcessStep(step) {
 }
 
 logProcessStep("spawn");
-process.on("SIGTERM", () => {
+function exitCleanly() {
   logProcessStep("exit");
   process.exit(0);
+}
+
+process.on("SIGTERM", () => {
+  if (sigtermDelayMs > 0) {
+    setTimeout(exitCleanly, sigtermDelayMs);
+    return;
+  }
+  exitCleanly();
 });
 let scriptedTurnIndex = 0;
 
@@ -309,6 +319,9 @@ function replayLastTurnUsage(threadId) {
 async function handleRequest(message) {
   const { id, method } = message;
   const params = message.params ?? {};
+  if (requestLogPath !== null) {
+    appendFileSync(requestLogPath, `${JSON.stringify({ method, params })}\n`);
+  }
   switch (method) {
     case "initialize":
       respond(id, {});
@@ -552,6 +565,5 @@ stdinLines.on("line", (line) => {
   }
 });
 stdinLines.on("close", () => {
-  logProcessStep("exit");
-  process.exit(0);
+  exitCleanly();
 });

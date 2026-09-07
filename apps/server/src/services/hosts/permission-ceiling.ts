@@ -11,12 +11,6 @@ interface ClampPermissionModeToHostArgs {
   providerId?: string;
 }
 
-/**
- * No permission mode at or below the machine's limit is one the provider can
- * run in, so this pairing cannot execute at all. Its own class so read paths
- * can degrade to "no default execution options" the same way they already do
- * for a provider capability mismatch, while work requests still fail loudly.
- */
 class HostPermissionCeilingConflictError extends ApiError {}
 
 export function isHostPermissionCeilingConflictError(
@@ -25,11 +19,6 @@ export function isHostPermissionCeilingConflictError(
   return error instanceof HostPermissionCeilingConflictError;
 }
 
-/**
- * The machine's permission ceiling. An unknown host reports "full" so a
- * missing row never silently downgrades work; the caller fails later on the
- * real "host not found" path instead.
- */
 export function getHostPermissionCeiling(
   deps: PermissionCeilingDeps,
   hostId: string | null,
@@ -38,7 +27,6 @@ export function getHostPermissionCeiling(
   return getHost(deps.db, hostId)?.maxPermissionMode ?? "full";
 }
 
-/** The machine a thread's work lands on, or null before it has an environment. */
 export function resolveEnvironmentHostId(
   deps: PermissionCeilingDeps,
   environmentId: string | null,
@@ -47,12 +35,6 @@ export function resolveEnvironmentHostId(
   return getEnvironment(deps.db, environmentId)?.hostId ?? null;
 }
 
-/**
- * Resolve a requested mode against the machine's ceiling. Work never fails
- * because someone asked for too much — it runs at the highest mode the machine
- * and the provider both allow — but a provider that supports nothing that low
- * cannot run on the machine at all, and that is an error.
- */
 export function clampPermissionModeToHost(
   deps: Pick<AppDeps, "db" | "providerRegistry">,
   args: ClampPermissionModeToHostArgs,

@@ -3,7 +3,6 @@ import { useTheme } from "@/theme/ThemeProvider";
 
 export interface SpinnerProps {
   size?: ActivityIndicatorProps["size"];
-  /** Defaults to the `muted-foreground` token. */
   color?: string;
   className?: string;
 }

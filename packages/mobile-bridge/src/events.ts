@@ -1,28 +1,16 @@
 import { z } from "zod";
 import { safeAreaInsetsSchema } from "./handshake.js";
 
-/**
- * Shell to page, after the handshake. The shell delivers these by evaluating
- * a small script in the WebView, so the page receives already-parsed values
- * and still validates them: an old page must survive an event it never saw.
- */
-
 const bridgeResponseSchema = z.discriminatedUnion("ok", [
   z.object({ ok: z.literal(true), result: z.unknown() }),
   z.object({ ok: z.literal(false), error: z.string() }),
 ]);
 
 export const shellToPageEventSchema = z.discriminatedUnion("type", [
-  /** Rotation, a keyboard, or a new device changed the insets. */
   z
     .object({ type: z.literal("safe-area"), safeArea: safeAreaInsetsSchema })
     .strict(),
-  /**
-   * The app returned to the foreground. WKWebView suspends timers in the
-   * background, so the page reconnects its socket here.
-   */
   z.object({ type: z.literal("resume") }).strict(),
-  /** The reply to one `request` message. */
   z
     .object({
       type: z.literal("response"),

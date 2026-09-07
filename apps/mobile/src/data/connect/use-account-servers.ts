@@ -12,11 +12,6 @@ export type AccountServersState =
   | { status: "ready"; servers: AccountServerWithUrl[]; selfHandle: string }
   | { status: "error"; failure: EnrollmentFailure };
 
-/**
- * The account's servers as the gate lists them for this machine credential
- * (`GET /api/connect/servers`). Gate data, not bb server data, so it does
- * not live in a profile QueryClient. Null credential → idle.
- */
 export function useAccountServers(credential: ConnectCredential | null): {
   state: AccountServersState;
   reload: () => void;
@@ -25,8 +20,6 @@ export function useAccountServers(credential: ConnectCredential | null): {
   const serverUrl = credential?.serverUrl ?? null;
   const handle = credential?.handle ?? null;
   const secret = credential?.credential ?? null;
-  // The request this result answers; a mismatch means "loading" without a
-  // synchronous setState in the effect.
   const key =
     serverUrl !== null && handle !== null && secret !== null
       ? `${serverUrl} ${handle} ${secret} ${nonce}`

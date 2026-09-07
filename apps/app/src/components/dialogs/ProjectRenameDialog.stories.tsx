@@ -3,10 +3,7 @@ import {
   ProjectRenameDialogContent,
   type ProjectRenameDialogTarget,
 } from "./ProjectRenameDialog";
-import {
-  PROJECT_IDS,
-  PROJECT_NAMES,
-} from "../../../.ladle/story-fixtures";
+import { PROJECT_IDS, PROJECT_NAMES } from "../../../.ladle/story-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import { DialogStage } from "../../../.ladle/story-dialog-stage";
 
@@ -45,7 +42,10 @@ export function Overview() {
           />
         </DialogStage>
       </StoryRow>
-      <StoryRow label="long name" hint="overflows horizontally inside the input">
+      <StoryRow
+        label="long name"
+        hint="overflows horizontally inside the input"
+      >
         <DialogStage>
           <ProjectRenameDialogContent
             target={longTarget}

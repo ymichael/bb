@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { act, renderHook } from "@testing-library/react";
-import type { Thread } from "@bb/domain";
+import { makeThread } from "@bb/test-helpers/domain-fixtures";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { usePromptMentions } from "./usePromptMentions";
 
@@ -31,31 +31,6 @@ vi.mock("./queries/thread-queries", () => ({
   useThreadMentionCandidates: mocks.useThreadMentionCandidates,
 }));
 
-function makeThread(): Thread {
-  return {
-    id: "thr_existing",
-    projectId: "proj_1",
-    environmentId: "env_worktree",
-    providerId: "codex",
-    title: "Only worktree thread",
-    titleFallback: null,
-    sectionId: null,
-    status: "idle",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
-    lastReadAt: null,
-    latestAttentionAt: 1,
-    createdAt: 1,
-    updatedAt: 1,
-  };
-}
-
 beforeEach(() => {
   mocks.usePathSuggestions.mockReturnValue({
     suggestions: [],
@@ -73,7 +48,19 @@ beforeEach(() => {
   });
   mocks.useSidebarNavigation.mockReturnValue({ data: undefined });
   mocks.useThreadMentionCandidates.mockReturnValue({
-    data: [makeThread()],
+    data: [
+      makeThread({
+        id: "thr_existing",
+        projectId: "proj_1",
+        environmentId: "env_worktree",
+        title: "Only worktree thread",
+        titleFallback: null,
+        lastReadAt: null,
+        latestAttentionAt: 1,
+        createdAt: 1,
+        updatedAt: 1,
+      }),
+    ],
     isLoading: false,
     isFetching: false,
     isError: false,
@@ -93,7 +80,7 @@ describe("usePromptMentions thread contexts", () => {
       result.current.setQuery("Only worktree", "@");
     });
 
-    expect(result.current.suggestions).toEqual([
+    expect(result.current.results.suggestions).toEqual([
       expect.objectContaining({
         kind: "thread",
         threadId: "thr_existing",

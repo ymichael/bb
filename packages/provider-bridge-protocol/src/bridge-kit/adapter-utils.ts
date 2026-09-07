@@ -1,10 +1,3 @@
-/**
- * Shared adapter utilities.
- *
- * Functions and constants duplicated across the claude-code, pi, and codex
- * adapters are extracted here so each adapter imports from one place.
- */
-
 import { z } from "zod";
 import type {
   ThreadEventItem,
@@ -22,10 +15,6 @@ const contentWrapperSchema = z
 const shellEnvironmentVariableKeySchema = z
   .string()
   .regex(/^[A-Z_][A-Z0-9_]*$/i);
-
-// ---------------------------------------------------------------------------
-// Diff helpers
-// ---------------------------------------------------------------------------
 
 type LineDiffOperation =
   | { type: "add"; line: string }
@@ -177,10 +166,6 @@ function formatLineDiff(args: {
   return [...args.headers, ...body].join("\n") + "\n";
 }
 
-/**
- * Builds a compact unified-diff-like string from old/new text pairs.
- * Exported so each adapter can call it with its own arg names.
- */
 export function buildEditDiff(
   filePath: string,
   oldString: string | undefined,
@@ -222,10 +207,6 @@ export function buildEditDiff(
   return undefined;
 }
 
-// ---------------------------------------------------------------------------
-// Shared item helpers
-// ---------------------------------------------------------------------------
-
 export function toOptionalString(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
@@ -249,12 +230,6 @@ export function withParentToolCallId<TItem extends ThreadEventItem>(
   };
 }
 
-/**
- * The environment overrides a bridge may hand its provider: the requested
- * variables minus any name a shell would refuse. A rejected name is dropped,
- * never passed through — a provider that inherits an unquotable name can fail
- * its whole session on one bad key.
- */
 export function buildShellEnvOverrides(
   envVars?: Record<string, string>,
 ): Record<string, string> {
@@ -268,10 +243,6 @@ export function buildShellEnvOverrides(
   return overrides;
 }
 
-// ---------------------------------------------------------------------------
-// Numeric helpers
-// ---------------------------------------------------------------------------
-
 export function toNonNegativeNumber(value: unknown): number {
   return typeof value === "number" && Number.isFinite(value) && value >= 0
     ? value
@@ -282,8 +253,6 @@ export function normalizeProviderCommandOutput(args: {
   emptyPlaceholders: readonly string[];
   text: string;
 }): string | undefined {
-  // Compare placeholders against trimmed provider text, but preserve the
-  // original bytes for real process output so downstream rendering stays exact.
   const trimmedText = args.text.trim();
   if (
     args.emptyPlaceholders.some((placeholder) => placeholder === trimmedText)
@@ -293,10 +262,6 @@ export function normalizeProviderCommandOutput(args: {
   return args.text.length > 0 ? args.text : undefined;
 }
 
-/**
- * Extracts text from tool result content.
- * Handles strings, arrays of text blocks, and `{ content: [...] }` wrappers.
- */
 export function extractResultText(content: unknown): string {
   if (content === null || content === undefined) return "";
   if (typeof content === "string") return content;
@@ -380,11 +345,6 @@ function describeResultContentBlock(block: unknown): string | null {
   return `[${type}]`;
 }
 
-// ---------------------------------------------------------------------------
-// Token usage
-// ---------------------------------------------------------------------------
-
-/** The empty breakdown a bridge's per-session usage accumulator starts from. */
 export const ZERO_TOKEN_USAGE: ThreadEventTokenUsageBreakdown = {
   totalTokens: 0,
   inputTokens: 0,
@@ -393,13 +353,6 @@ export const ZERO_TOKEN_USAGE: ThreadEventTokenUsageBreakdown = {
   reasoningOutputTokens: 0,
 };
 
-/**
- * Sum a turn's usage into a running total, field by field. The `usage` delta
- * carries both the turn's usage and the session total; a provider that only
- * reports per-turn usage keeps the total itself with this, starting from
- * {@link ZERO_TOKEN_USAGE} at every session construction (the same boundary
- * as the `session.reset` delta).
- */
 export function addTokenUsage(
   total: ThreadEventTokenUsageBreakdown,
   last: ThreadEventTokenUsageBreakdown,

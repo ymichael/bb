@@ -48,7 +48,6 @@ function getReconnectState(decoded: ThreadEvent): ReconnectState | null {
     return null;
   }
 
-  // Legacy events only carried reconnect progress in the display message.
   return parseLegacyReconnectState(decoded.message);
 }
 

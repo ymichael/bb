@@ -20,33 +20,13 @@ const repoRoot = resolve(import.meta.dirname, "..", "..", "..");
 const appRoot = join(repoRoot, "apps", "app");
 const pluginSdkRoot = join(repoRoot, "packages", "plugin-sdk");
 
-/**
- * #2072: `bb plugin build` resolves the shimmed packages (sonner, vaul, the
- * portal radix families, @pierre/diffs, ...) through an esbuild shim, but a
- * plugin's `tsc` resolves them through node_modules like any other import —
- * so the scaffold must declare every one of them for types, not just the ones
- * its starter components happen to use. This scaffolds a plugin, materialises
- * node_modules the way `npm install --include=dev` would (exactly the packages
- * the manifest declares, linked from this workspace so no network is needed),
- * and runs the scaffold's own tsc over an app that imports each shimmed
- * specifier.
- */
-
-/**
- * Where the workspace keeps an installed package. pnpm lays each dependency
- * out as `node_modules/<name>` (a link into the store) under the package that
- * declares it; `require.resolve` is no use for ESM-only packages with a strict
- * exports map (@pierre/diffs).
- */
 function workspacePackageRoot(name: string): string {
   for (const base of [appRoot, repoRoot, pluginSdkRoot]) {
     const candidate = join(base, "node_modules", name);
     try {
       readFileSync(join(candidate, "package.json"), "utf8");
       return candidate;
-    } catch {
-      // not here
-    }
+    } catch {}
   }
   throw new Error(`package not installed in the workspace: ${name}`);
 }
@@ -63,8 +43,6 @@ async function installDeclaredDependencies(targetDir: string): Promise<void> {
   for (const name of names) {
     const target = join(targetDir, "node_modules", name);
     await mkdir(dirname(target), { recursive: true });
-    // The SDK links to the workspace package (bundled-types/ is built by the
-    // turbo dependency of this test task).
     const source =
       name === "@get-bb/plugin-sdk"
         ? pluginSdkRoot
@@ -93,11 +71,6 @@ async function runTsc(
   }
 }
 
-/**
- * Every shimmed specifier a plugin may import, including subpath exports —
- * the build's table is keyed by specifier, the manifest by package, and a
- * package can declare types for its root but not a subpath.
- */
 const SHIMMED_SPECIFIERS = [
   "react",
   "react-dom",
@@ -129,8 +102,6 @@ describe("scaffold typechecks the runtime-shimmed imports (#2072)", () => {
   it('the documented `import { toast } from "sonner"` and every other shimmed specifier resolve', async () => {
     const appPath = join(targetDir, "app.tsx");
     const app = await readFile(appPath, "utf8");
-    // Add the documented import ahead of the scaffold's own imports so the
-    // test does not depend on which React names the starter page uses.
     const firstImport = app.indexOf("\nimport ");
     expect(firstImport).toBeGreaterThan(-1);
     await writeFile(
@@ -150,9 +121,6 @@ describe("scaffold typechecks the runtime-shimmed imports (#2072)", () => {
 
     const result = await runTsc(targetDir);
 
-    // Before the fix: "error TS2307: Cannot find module 'sonner' or its
-    // corresponding type declarations." for sonner, vaul, @pierre/diffs and
-    // nine radix families — every shim the starter components did not import.
     const missing = [
       ...result.output.matchAll(/Cannot find module '([^']+)'/g),
     ].map((m) => m[1]);

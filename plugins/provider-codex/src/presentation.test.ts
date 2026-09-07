@@ -108,12 +108,6 @@ describe("codex presentation", () => {
   });
 });
 
-/**
- * Grammar v3 invariant: every `item.open` and `item.close` the codex
- * translator emits carries a presentation. One representative item per codex
- * native, driven through the real translator (the synthesized sub-agent spawn
- * included), so a new native cannot ship without a row presentation.
- */
 describe("every codex lifecycle delta carries a presentation", () => {
   const items: Array<
     CodexServerNotification["params"] & { item: { type: string } }

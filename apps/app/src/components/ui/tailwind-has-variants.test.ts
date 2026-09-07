@@ -3,13 +3,6 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Tailwind compiles `group-has-*` and `peer-has-*` variants to selectors
-// like `.x:is(:where(.group):has(ARG) *)`. Blink cannot anchor a `:has()`
-// that sits inside `:is()`/`:where()` with a universal subject, so while one
-// such rule exists in the page, every DOM insertion or removal restyles the
-// whole subtree. On a large thread that cost ~1 s per streaming update.
-// Use a named `@custom-variant` in theme.css that keeps `:has()` on the group
-// element itself (`:where(.group\/x):has(ARG) &`) instead.
 const FORBIDDEN_VARIANT = /\b(?:group|peer)-has-(?:\[|[a-z])/u;
 
 const here = dirname(fileURLToPath(import.meta.url));

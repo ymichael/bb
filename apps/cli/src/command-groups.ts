@@ -1,13 +1,3 @@
-/**
- * The top-level `bb` command groups and the rule for which of them one
- * invocation needs. Every entry is loaded with `import()` so the module that
- * registers it — and everything it pulls in (zod schemas, the SDK, plugin
- * build tooling, scaffold templates) — stays out of the startup graph until a
- * command actually asks for it; the build splits chunks along these
- * `import()` boundaries. This file must therefore contain no value imports: a
- * single static one would pull the whole subtree into the entry chunk and
- * every `bb` invocation would pay for it again.
- */
 import type { Command } from "commander";
 import type { ContextSnapshot } from "./context-env.js";
 
@@ -22,7 +12,6 @@ export type CommandGroupRegistrar = (
 ) => void;
 
 export interface CommandGroup {
-  /** The top-level name commander resolves, e.g. `thread` in `bb thread`. */
   readonly name: string;
   readonly load: () => Promise<CommandGroupRegistrar>;
 }
@@ -35,11 +24,12 @@ function group<Module>(
   return { name, load: () => load().then(register) };
 }
 
-/**
- * In `bb --help` order: commander lists subcommands in registration order,
- * so this array is the help output's order.
- */
 export const CORE_COMMAND_GROUPS: readonly CommandGroup[] = [
+  group(
+    "browser",
+    () => import("./commands/browser.js"),
+    (m) => (program, deps) => m.registerBrowserCommands(program, deps.getUrl),
+  ),
   group(
     "status",
     () => import("./commands/status.js"),
@@ -131,14 +121,6 @@ export const CORE_COMMAND_GROUPS: readonly CommandGroup[] = [
   ),
 ];
 
-/**
- * The groups one invocation must register before commander parses it.
- * `--version` needs none: commander answers it from the program alone. A
- * first token that names a core group needs only that group. Anything else
- * — no arguments, `help`, `--help`, an unknown or plugin-contributed name —
- * needs all of them so help output and "unknown command" suggestions match
- * what a fully registered program would print.
- */
 export function selectCommandGroups(
   firstArg: string | undefined,
 ): readonly CommandGroup[] {
@@ -147,11 +129,6 @@ export function selectCommandGroups(
   return match === undefined ? CORE_COMMAND_GROUPS : [match];
 }
 
-/**
- * The first CLI token is a plugin-proxy candidate only when it looks like a
- * command (not a flag) and no core command claims it. Core commands always
- * win: commander resolved them before this path runs.
- */
 export function pluginProxyCandidate(
   firstArg: string | undefined,
   knownCommandNames: ReadonlySet<string>,

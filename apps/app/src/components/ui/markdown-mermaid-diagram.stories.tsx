@@ -18,9 +18,6 @@ const SEQUENCE = `sequenceDiagram
   U->>S: Request
   S-->>U: Response`;
 
-// Renders inside a rounded-md recessed container with a copy/source/expand
-// toolbar. The expand (Maximize) control opens the full-screen viewer dialog
-// whose surface uses the reduced shadow-sm.
 export function Overview() {
   return (
     <StoryCard>

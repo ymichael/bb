@@ -10,10 +10,6 @@ type HostWriteConnection = DbConnection | DbTransaction;
 export interface UpsertHostInput {
   connectMachineId?: string | null;
   id?: string;
-  /**
-   * Seeds the display name for a new host. Existing display names are
-   * preserved because daemon-reported names are recorded on session rows.
-   */
   name: string;
   type: HostType;
   destroyedAt?: number | null;

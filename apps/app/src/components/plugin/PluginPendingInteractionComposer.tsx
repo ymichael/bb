@@ -7,7 +7,6 @@ import { usePluginSlots } from "@/lib/plugin-slots";
 import { useStopThread } from "@/hooks/mutations/thread-runtime-mutations";
 import { sdk } from "@/lib/sdk";
 
-/** The plugin form to mount: the plugin, its renderer, and the ask. */
 export interface PluginPendingInteractionRequest {
   pluginId: string;
   rendererId: string;
@@ -21,11 +20,6 @@ interface PluginPendingInteractionComposerProps {
     "id" | "threadId" | "createdAt" | "expiresAt"
   >;
   request: PluginPendingInteractionRequest;
-  /**
-   * How the user backs out. A plugin's own request is cancelled and the
-   * plugin hears it; a provider's plugin-defined request has no cancel —
-   * like a provider's question, backing out stops the turn.
-   */
   dismissal: "cancel" | "stop-turn";
 }
 

@@ -2,21 +2,15 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Host, ProjectSource } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { EnvironmentPickerUI } from "./EnvironmentPicker";
 
-const host: Host = {
+const host = makeHost({
   id: "host_test",
   name: "Local host",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: null,
-  maxPermissionMode: "full",
-  lastRejectedProtocolVersion: null,
-  createdAt: 0,
-  updatedAt: 0,
-};
+});
 
 const sources: readonly ProjectSource[] = [
   {
@@ -125,12 +119,10 @@ describe("EnvironmentPickerUI multi-machine menu", () => {
     expect(screen.getByText("this machine")).toBeTruthy();
     expect(screen.getByText("Mac Studio")).toBeTruthy();
 
-    // dev-vm has no source, so only the two set-up machines offer worktrees.
     const worktreeItems = screen.getAllByRole("menuitem", {
       name: /New worktree/u,
     });
     expect(worktreeItems).toHaveLength(2);
-    // Section order is this-machine first, then server order.
     fireEvent.click(worktreeItems[1]!);
     expect(onChange).toHaveBeenCalledWith(`host:${studio.id}:worktree`);
   });
@@ -140,7 +132,6 @@ describe("EnvironmentPickerUI multi-machine menu", () => {
     renderMachineMenu({ onChange });
 
     expect(screen.getByText(/last seen 2h ago/u)).toBeTruthy();
-    // dev-vm has no source, so its section renders the not-set-up placeholder.
     const placeholder = screen.getByRole("menuitem", {
       name: "Not set up for this project",
     });
@@ -257,7 +248,6 @@ describe("EnvironmentPickerUI multi-machine menu", () => {
       button: 0,
     });
 
-    // dev-vm is offline: setup needs its daemon, so no enabled setup row.
     expect(screen.queryByText(/Set up on dev-vm/u)).toBeNull();
     const placeholder = screen.getByRole("menuitem", {
       name: "Not set up for this project",

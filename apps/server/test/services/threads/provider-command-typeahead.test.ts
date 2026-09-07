@@ -16,9 +16,16 @@ function skill(
 }
 
 describe("buildCommandListResponse", () => {
-  it("keeps the built-in compact row when project commands collide", () => {
+  it("keeps canonical built-ins when project commands collide", () => {
     const response = buildCommandListResponse({
       commands: [
+        {
+          name: "clear",
+          source: "command",
+          origin: "project",
+          description: "Project clear command",
+          argumentHint: null,
+        },
         {
           name: "compact",
           source: "command",
@@ -32,6 +39,13 @@ describe("buildCommandListResponse", () => {
     });
 
     expect(response.commands).toEqual([
+      {
+        name: "clear",
+        source: "command",
+        origin: "builtin",
+        description: "Start fresh context in this thread",
+        argumentHint: null,
+      },
       {
         name: "compact",
         source: "command",
@@ -101,6 +115,14 @@ describe("buildCommandListResponse", () => {
       skillCatalog: [],
     });
 
-    expect(response.commands).toEqual([]);
+    expect(response.commands).toEqual([
+      {
+        name: "clear",
+        source: "command",
+        origin: "builtin",
+        description: "Start fresh context in this thread",
+        argumentHint: null,
+      },
+    ]);
   });
 });

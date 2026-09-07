@@ -1,4 +1,3 @@
-// Backend tests for inline-vis path confinement and bb.sdk.files reads.
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";

@@ -11,8 +11,6 @@ import {
 } from "@/components/commands/AppCommandProvider";
 import { useServerDaemonLogsCommand } from "./useServerDaemonLogsCommand";
 
-// The shipped default from apps/server's DEFAULT_APP_KEYBINDINGS. Availability
-// depends on its shape, so the mock mirrors it rather than simplifying it.
 const LOGS_BINDING: AppDefaultKeybinding = {
   command: "logs.openServerDaemon",
   desktopOnly: true,
@@ -70,7 +68,6 @@ function isAvailable(): boolean {
 }
 
 beforeAll(() => {
-  // The shipped binding is macPlatform-scoped, and jsdom reports "".
   Object.defineProperty(navigator, "platform", {
     configurable: true,
     value: "MacIntel",

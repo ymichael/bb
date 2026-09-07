@@ -1,3 +1,4 @@
+import { appendOutput, formatProcessOutput } from "./smoke-output.mjs";
 import { execFile, spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { mkdtemp, readFile, readdir, readlink, rm } from "node:fs/promises";
@@ -5,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
+import { createPackagedAppLaunchArguments } from "./packaged-app-launch.mjs";
 
 const execFileAsync = promisify(execFile);
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
@@ -12,29 +14,8 @@ const desktopPackageRoot = resolve(scriptDirectory, "..");
 const releaseDir = join(desktopPackageRoot, "release");
 const startupTimeoutMs = 60_000;
 const exitTimeoutMs = 10_000;
+const outputFlushTimeoutMs = 2_000;
 const pollIntervalMs = 100;
-const maxCapturedOutputCharacters = 20_000;
-
-function appendOutput(chunks, chunk) {
-  chunks.push(String(chunk));
-  let totalLength = chunks.reduce((total, value) => total + value.length, 0);
-  while (totalLength > maxCapturedOutputCharacters && chunks.length > 1) {
-    const removed = chunks.shift();
-    totalLength -= removed.length;
-  }
-}
-
-function formatProcessOutput({ stdout, stderr }) {
-  const stdoutText = stdout.join("").trim();
-  const stderrText = stderr.join("").trim();
-  return [
-    stdoutText.length > 0 ? `stdout:\n${stdoutText}` : "",
-    stderrText.length > 0 ? `stderr:\n${stderrText}` : "",
-  ]
-    .filter((part) => part.length > 0)
-    .join("\n\n");
-}
-
 async function sleep(delayMs) {
   await new Promise((resolvePromise) => {
     setTimeout(resolvePromise, delayMs);
@@ -69,26 +50,83 @@ async function waitFor({
   throw new Error(`Timed out waiting for ${describe}.${detail}`);
 }
 
-async function allocateTcpPort() {
-  const server = createServer();
-  await new Promise((resolvePromise, rejectPromise) => {
-    server.once("error", rejectPromise);
-    server.listen(0, "127.0.0.1", resolvePromise);
-  });
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    throw new Error("Expected an ephemeral TCP listener");
+function parseEphemeralTcpPortRange(rawRange) {
+  const ports = rawRange.trim().split(/\s+/u).map(Number);
+  const [firstPort, lastPort] = ports;
+  if (
+    ports.length !== 2 ||
+    !Number.isInteger(firstPort) ||
+    !Number.isInteger(lastPort) ||
+    firstPort < 1 ||
+    lastPort > 65_535 ||
+    firstPort > lastPort
+  ) {
+    throw new Error("Invalid Linux ephemeral TCP port range");
   }
-  await new Promise((resolvePromise, rejectPromise) => {
-    server.close((error) => {
-      if (error) {
-        rejectPromise(error);
+  return { firstPort, lastPort };
+}
+
+async function reserveTcpPort(port) {
+  const server = createServer();
+  const reserved = await new Promise((resolvePromise, rejectPromise) => {
+    const handleError = (error) => {
+      if (error.code === "EADDRINUSE") {
+        resolvePromise(null);
         return;
       }
-      resolvePromise();
+      rejectPromise(error);
+    };
+    server.once("error", handleError);
+    server.listen(port, "127.0.0.1", () => {
+      server.off("error", handleError);
+      resolvePromise(server);
     });
   });
-  return address.port;
+  return reserved;
+}
+
+async function allocateNonEphemeralTcpPorts(count) {
+  const range = parseEphemeralTcpPortRange(
+    await readFile("/proc/sys/net/ipv4/ip_local_port_range", "utf8"),
+  );
+  const candidateRanges = [
+    { firstPort: 65_535, lastPort: range.lastPort + 1 },
+    { firstPort: range.firstPort - 1, lastPort: 1_024 },
+  ];
+  const reservations = [];
+  try {
+    for (const candidateRange of candidateRanges) {
+      for (
+        let port = candidateRange.firstPort;
+        port >= candidateRange.lastPort && reservations.length < count;
+        port -= 1
+      ) {
+        const server = await reserveTcpPort(port);
+        if (server !== null) {
+          reservations.push({ port, server });
+        }
+      }
+    }
+    if (reservations.length !== count) {
+      throw new Error(`Unable to reserve ${String(count)} non-ephemeral ports`);
+    }
+    return reservations.map((reservation) => reservation.port);
+  } finally {
+    await Promise.all(
+      reservations.map(
+        (reservation) =>
+          new Promise((resolvePromise, rejectPromise) => {
+            reservation.server.close((error) => {
+              if (error) {
+                rejectPromise(error);
+                return;
+              }
+              resolvePromise();
+            });
+          }),
+      ),
+    );
+  }
 }
 
 async function resolveAppImage() {
@@ -321,6 +359,39 @@ async function serverIsHealthy(serverUrl) {
   }
 }
 
+async function hostDaemonIsReady({ daemonPort, serverUrl }) {
+  try {
+    const response = await fetch(
+      `http://127.0.0.1:${String(daemonPort)}/status`,
+      { signal: AbortSignal.timeout(2_000) },
+    );
+    if (!response.ok) {
+      return false;
+    }
+    const status = await response.json();
+    return (
+      typeof status === "object" &&
+      status !== null &&
+      status.connected === true &&
+      status.serverUrl === serverUrl
+    );
+  } catch {
+    return false;
+  }
+}
+
+async function pluginStartupIsSettled(serverUrl) {
+  try {
+    const response = await fetch(
+      new URL("/api/v1/system/providers", serverUrl),
+      { signal: AbortSignal.timeout(2_000) },
+    );
+    return response.ok;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForChildExit(child, timeoutMs) {
   if (child.exitCode !== null || child.signalCode !== null) {
     return true;
@@ -420,11 +491,7 @@ async function smokeLinuxAppImageLifecycle() {
   let runtime = null;
 
   try {
-    const serverPort = await allocateTcpPort();
-    let daemonPort = await allocateTcpPort();
-    while (serverPort === daemonPort) {
-      daemonPort = await allocateTcpPort();
-    }
+    const [serverPort, daemonPort] = await allocateNonEphemeralTcpPorts(2);
 
     const childEnv = {
       ...process.env,
@@ -440,21 +507,32 @@ async function smokeLinuxAppImageLifecycle() {
     delete childEnv.BB_DESKTOP_NODE_EXEC_PATH;
     delete childEnv.ELECTRON_RUN_AS_NODE;
 
-    child = spawn(appImage, [`--user-data-dir=${userDataDir}`], {
-      detached: true,
-      env: childEnv,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    child = spawn(
+      appImage,
+      createPackagedAppLaunchArguments({
+        platform: process.platform,
+        userDataDir,
+      }),
+      {
+        detached: true,
+        env: childEnv,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
+    );
     if (child.pid === undefined) {
       throw new Error("The AppImage process did not expose a PID");
     }
     child.stdout.on("data", (chunk) => appendOutput(stdout, chunk));
     child.stderr.on("data", (chunk) => appendOutput(stderr, chunk));
+    const childClosed = new Promise((resolveClosed) => {
+      child.once("close", resolveClosed);
+    });
 
     runtime = await waitFor({
       describe: "the desktop-owned runtime PID file",
       predicate: async () => {
         if (child.exitCode !== null || child.signalCode !== null) {
+          await Promise.race([childClosed, sleep(outputFlushTimeoutMs)]);
           throw new Error(
             `AppImage exited before its runtime started: code=${String(
               child.exitCode,
@@ -469,8 +547,34 @@ async function smokeLinuxAppImageLifecycle() {
       retryErrors: false,
     });
     await waitFor({
-      describe: `bb health at ${runtime.serverUrl}`,
-      predicate: async () => await serverIsHealthy(runtime.serverUrl),
+      describe: `bb startup and its host daemon at ${runtime.serverUrl} to settle`,
+      predicate: async () => {
+        if (child.exitCode !== null || child.signalCode !== null) {
+          await Promise.race([childClosed, sleep(outputFlushTimeoutMs)]);
+          throw new Error(
+            `AppImage exited before bb became ready: code=${String(
+              child.exitCode,
+            )} signal=${String(child.signalCode)}.\n${formatProcessOutput({
+              stdout,
+              stderr,
+            })}`,
+          );
+        }
+        if (!(await processIsLive(runtime.pid))) {
+          throw new Error(
+            `The owned runtime exited before bb became ready.\n${formatProcessOutput(
+              { stdout, stderr },
+            )}`,
+          );
+        }
+        return (
+          (await hostDaemonIsReady({
+            daemonPort,
+            serverUrl: runtime.serverUrl,
+          })) && (await pluginStartupIsSettled(runtime.serverUrl))
+        );
+      },
+      retryErrors: false,
     });
 
     const guiProcess = await readProcess(child.pid);

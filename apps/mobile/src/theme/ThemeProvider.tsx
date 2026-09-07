@@ -29,13 +29,9 @@ import {
 } from "./theme.native";
 
 export interface Theme {
-  /** Server-owned palette id (`GET /system/config → appearance.themeId`). */
   palette: BuiltInThemeId;
-  /** Effective light/dark mode after resolving the preference. */
   mode: ThemeMode;
-  /** The persisted preference (`bb.theme`). */
   preference: ThemeModePreference;
-  /** Resolved color tokens for `palette` × `mode`, as RN color strings. */
   tokens: NativeThemeTokens;
   radii: typeof nativeRadii;
   typography: typeof nativeTypography;
@@ -47,7 +43,6 @@ const ThemeContext = createContext<Theme | null>(null);
 
 export interface ThemeProviderProps {
   children: ReactNode;
-  /** Defaults to `default`; the app passes the server's `appearance.themeId`. */
   palette?: BuiltInThemeId;
 }
 
@@ -57,13 +52,6 @@ function getDefaultStorage(): ThemePreferenceStorage {
   return defaultStorage;
 }
 
-/**
- * Supplies bb's theme to the tree: `useTheme()` for token values in JS and
- * NativeWind CSS variables (`--background`, `--border`, …) so utility classes
- * like `bg-background text-foreground border-border` follow the palette and
- * mode. Also forces RN's own color scheme to the effective mode so `dark:`
- * variants, native alerts, and the keyboard match an explicit preference.
- */
 export function ThemeProvider({
   children,
   palette = "default",

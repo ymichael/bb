@@ -1,44 +1,3 @@
-/**
- * The bb extension pi loads with `--extension`: the in-process half of the
- * RPC bridge. It runs where pi's SDK is installed and gives the bridge two
- * things RPC mode has no command for:
- *
- * - **dynamic tools**: the bb tools the runtime injects (`dynamicTools` on a
- *   session construction) are registered with `pi.registerTool`, kept active
- *   across `session_start`, and every `execute` is forwarded to the bridge
- *   over a private pipe (fd 3 child → bridge, fd 4 bridge → child), where the
- *   bridge's pending-tool-call tracker turns it into `item/tool/call`;
- * - **session forks**: `SessionManager.forkFrom` (full) and
- *   `SessionManager.open(...).createBranchedSession(leafId)` (checkpoint)
- *   on request, so a checkpoint fork needs neither an upstream pi change nor
- *   a copy of the on-disk format.
- *
- * The source is embedded in the bridge (`BB_PI_EXTENSION_SOURCE`) and written
- * to the bridge's temp dir at start: a plugin host artifact is one bundled
- * file, and pi's loader resolves `@earendil-works/*` and `typebox` from its
- * own install for any extension path. Plain JavaScript: pi compiles `.ts`
- * extensions with jiti on every load, and this one needs neither the cost nor
- * the TypeScript-version coupling.
- *
- * Wire (LF-delimited JSON, one message per line; `\n` is the only
- * terminator — U+2028/U+2029 appear raw inside pi's JSON strings) —
- * child → bridge on fd 3:
- *   { kind: "ready" }
- *   { kind: "tool-call", id, toolName, arguments }
- *   { kind: "agent-end-leaf", leafId }   in-process, before pi's own
- *                                        `agent_end` reaches stdout
- *   { kind: "reply", id, result } | { kind: "reply", id, error }
- * bridge → child on fd 4:
- *   { kind: "tool-result", id, content, isError }
- *   { kind: "request", id, method: "fork", sourceFile, targetFile, cwd,
- *     sessionDir, checkpointId? }
- *   { kind: "request", id, method: "leaf" }
- *
- * fd 4 is read through a `net.Socket` (non-blocking, libuv-polled): a
- * `fs.createReadStream` read(2) on a threadpool thread would keep pi's
- * `process.exit` from ever finishing. The bridge ends the fd-4 writer on
- * every close path so the reader sees EOF.
- */
 export const BB_PI_EXTENSION_SOURCE = String.raw`
 import { readFileSync, renameSync, writeSync } from "node:fs";
 import { Socket } from "node:net";
@@ -286,6 +245,8 @@ export default function bbExtension(pi) {
       }
       case "leaf":
         return { leafId: currentLeafId() };
+      case "model-scope":
+        return currentModelScope();
       default:
         throw new Error("unknown bridge request " + String(message.method));
     }
@@ -293,6 +254,17 @@ export default function bbExtension(pi) {
 
   function currentLeafId() {
     return sessionContext?.sessionManager?.getLeafId?.() ?? null;
+  }
+
+  function currentModelScope() {
+    return {
+      scopedModelIds: (sessionContext?.scopedModels ?? []).map(
+        ({ model }) => model.provider + "/" + model.id,
+      ),
+      defaultModelId: sessionContext?.model
+        ? sessionContext.model.provider + "/" + sessionContext.model.id
+        : null,
+    };
   }
 
   for (const tool of tools) {
@@ -332,6 +304,10 @@ export default function bbExtension(pi) {
 
   pi.on("session_start", async (_event, ctx) => {
     sessionContext = ctx;
+    writeLine(CHILD_TO_BRIDGE_FD, {
+      kind: "model-scope",
+      ...currentModelScope(),
+    });
     // Pi's active-tool set is session state; a resumed or forked session can
     // predate the bb tools, so make sure every injected tool is active.
     if (tools.length > 0 && typeof pi.setActiveTools === "function") {

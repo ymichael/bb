@@ -12,14 +12,6 @@ import {
 } from "./test/runtime-test-harness.js";
 import type { AgentRuntime } from "./types.js";
 
-/**
- * The ACP bridge kit runs one agent subprocess per live thread. This drives
- * the real kit bridge through the runtime (the way the daemon does) with the
- * scripted fake agent as its child, for the process-lifecycle guarantees the
- * runtime relies on; `runtime.codex-topology.test.ts` pins the same for
- * codex.
- */
-
 const acpBridgeModulePath = fileURLToPath(
   new URL("../../provider-bridge-acp/src/bridge/bridge.ts", import.meta.url),
 );
@@ -44,10 +36,6 @@ describe("acp process topology", () => {
   });
 
   it("releases the thread on the bridge when a construction times out on the runtime's side", async () => {
-    // The fake agent answers session/new after 1.5 s; the runtime gives up at
-    // 300 ms and sends its best-effort thread/stop {release} while the bridge
-    // is still constructing the session. The bridge must reap the agent it
-    // spawned for the thread instead of finishing a session nobody holds.
     const readyFile = join(workspaceDir, "agent-ready");
     const signalFile = join(workspaceDir, "agent-signal");
     const runtime = withBridgeLaunch(
@@ -101,6 +89,6 @@ describe("acp process topology", () => {
       timeoutMs: 10_000,
     });
     expect(readFileSync(signalFile, "utf8")).toContain("SIGTERM");
-    expect(runtime.listRunningProviders()).toEqual(["acp"]);
+    expect(runtime.listRunningProviders()).toEqual([]);
   }, 30_000);
 });

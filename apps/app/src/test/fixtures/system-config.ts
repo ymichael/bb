@@ -7,12 +7,6 @@ import {
 } from "@bb/domain";
 import type { SystemConfigResponse } from "@bb/server-contract";
 
-/**
- * The system-config response a test or story serves: the server's defaults
- * with no registered AI services, no hosts, and no keybinding overrides.
- * The AI-service defaults come from `@bb/config` so a model-id bump never
- * has to be chased through fixtures.
- */
 export function makeSystemConfig(
   overrides: Partial<SystemConfigResponse> = {},
 ): SystemConfigResponse {

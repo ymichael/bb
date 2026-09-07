@@ -20,36 +20,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Real delegation rows pulled from `~/.bb-dev/bb.db`, thread
-// `thr_cfpiech9ui` ("Final review provider turn-id fixes"). The thread
-// dispatched three real Agent subagents (subagent_type = "Explore") in
-// parallel to review a commit range:
-//
-//   1. toolu_01LKp2KK7kaTCi5vi15VZYvw — Correctness review (14 toolCalls,
-//      4 commandExecutions)
-//   2. toolu_012rpTKMPCmiRnZnYXLA5Vy9 — Maintainability and
-//      repo-guidance review (12 toolCalls, 10 commandExecutions)
-//   3. toolu_01VfaFeGbfjGckpp9LZNpd5a — Test quality review (19 toolCalls,
-//      3 commandExecutions)
-//
-// Each child row's command/toolArgs/output/path comes from the events DB.
-// Output strings are truncated to 300 chars with a "... [truncated]" suffix.
-//
-// Lifecycle coverage note: all three dispatches actually completed
-// successfully. The running/error/interrupted variants below re-use real
-// dispatches with the *status* (and completedAt/output) synthesized so we
-// can render the non-completed lifecycle states; their childRows are real.
-// Regenerate via /tmp/build-delegation-fixtures.mjs.
-// ---------------------------------------------------------------------------
-
-// =============================================================================
-// Dispatch 1 — toolu_01LKp2KK7kaTCi5vi15VZYvw, "Correctness review of commit range".
-// Real Agent dispatch with 14 toolCall children (Read/Grep/Glob) and 4
-// commandExecution children. The agent's full report is truncated to ~3KB;
-// each child output is truncated to 300 chars.
-// =============================================================================
-
 const correctnessChild01: TimelineRow = {
   id: "thr_cfpiech9ui:delegation:toolu_01LKp2KK7kaTCi5vi15VZYvw:child:toolu_01TpyeWMqu4G5aCbShDsiv4X",
   threadId: "thr_cfpiech9ui",
@@ -443,13 +413,6 @@ const completedDelegation: TimelineRow = {
     correctnessChild18,
   ],
 };
-
-// =============================================================================
-// Dispatch 2 — toolu_012rpTKMPCmiRnZnYXLA5Vy9, "Maintainability and repo-guidance review".
-// SYNTHESIZED STATUS — real dispatch toolu_012rpTKMPCmiRnZnYXLA5Vy9 completed;
-// lifecycle synthesized for the running variant. childRows are real.
-// startedAt/createdAt use Date.now() so "running for N seconds" stays plausible.
-// =============================================================================
 
 const maintainabilityChild01: TimelineRow = {
   id: "thr_cfpiech9ui:delegation:toolu_012rpTKMPCmiRnZnYXLA5Vy9:child:toolu_015c6YonUcnAaKbMibXaHsvx",
@@ -968,12 +931,6 @@ const runningDelegation: TimelineRow = {
   ],
 };
 
-// =============================================================================
-// Dispatch 3 — toolu_01VfaFeGbfjGckpp9LZNpd5a, "Test quality review of commit range".
-// SYNTHESIZED STATUS — real dispatch toolu_01VfaFeGbfjGckpp9LZNpd5a completed;
-// lifecycle synthesized for the error variant. childRows are real.
-// =============================================================================
-
 const testQualityChild01: TimelineRow = {
   id: "thr_cfpiech9ui:delegation:toolu_01VfaFeGbfjGckpp9LZNpd5a:child:toolu_019aG3TWUimWvWRahTUNouZT",
   threadId: "thr_cfpiech9ui",
@@ -1424,14 +1381,6 @@ const errorDelegation: TimelineRow = {
     testQualityChild22,
   ],
 };
-
-// =============================================================================
-// Interrupted variant — re-uses Dispatch 1 (correctness review,
-// toolu_01LKp2KK7kaTCi5vi15VZYvw) with status synthesized as "interrupted"
-// and empty output. childRows are the same real rows as the completed
-// variant; this is intentional — see header note. The id suffix
-// "-interrupted" keeps the synthesized row distinct from the completed one.
-// =============================================================================
 
 const interruptedDelegation: TimelineRow = {
   id: "thr_cfpiech9ui:delegation:toolu_01LKp2KK7kaTCi5vi15VZYvw-interrupted",

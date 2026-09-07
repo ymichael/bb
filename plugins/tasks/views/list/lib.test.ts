@@ -8,27 +8,19 @@ import {
   partitionLabels,
   selectedLabelIds,
 } from "./lib.js";
+import { makeTask } from "../../test-fixtures.js";
 
 const ULID_A = "01ARZ3NDEKTSV4RRFFQ69G5FAA";
 const ULID_B = "01ARZ3NDEKTSV4RRFFQ69G5FAB";
 const ULID_C = "01ARZ3NDEKTSV4RRFFQ69G5FAC";
 
 function task(overrides: Partial<Task> & Pick<Task, "id" | "status">): Task {
-  return {
+  return makeTask({
     projectId: ULID_A,
-    number: 1,
-    key: "TSK-1",
-    title: "A task",
-    description: "",
-    priority: "none",
-    dueDate: null,
-    parentTaskId: null,
-    position: 0,
     createdAt: "2026-07-01T00:00:00.000Z",
     updatedAt: "2026-07-01T00:00:00.000Z",
-    labelIds: [],
     ...overrides,
-  };
+  });
 }
 
 describe("groupTasksByStatus", () => {

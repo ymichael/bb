@@ -13,12 +13,6 @@ interface WaitForGoalClearArgs {
   timeoutMs: number;
 }
 
-/**
- * Tracks observed provider Goal-clear events so callers can wait for the event
- * that makes the provider response durable in BB's event stream. Revisions
- * close the response-before-notification race without missing a notification
- * that arrives between sending the request and beginning the wait.
- */
 export class RuntimeThreadGoalState {
   private readonly clearRevisionByThreadId = new Map<string, number>();
   private readonly clearWaitersByThreadId = new Map<
@@ -68,7 +62,6 @@ export class RuntimeThreadGoalState {
   }
 
   observe(event: ThreadEvent): void {
-    // The codex plugin's goal state: a `null` snapshot is the cleared goal.
     if (
       event.type !== "thread/extensionState/updated" ||
       event.kind !== LEGACY_CODEX_GOAL_EXTENSION_KIND ||

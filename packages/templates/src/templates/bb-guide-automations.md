@@ -54,5 +54,20 @@ agent preserve omitted fields and accept `--prompt`, `--provider`, `--model`,
 target option. Pass provider, model, reasoning, service tier, and permission
 together when switching providers.
 
-Add `--json` for machine-readable output. Use `runs --output <runId>` to print a
-script run's captured output.
+Add `--json` for machine-readable output. The JSON returned by `list` and
+`show` is a union discriminated by `problem`: canonical records omit it;
+degraded records use `"missing-agent-prompt"` or `"invalid-stored-data"`.
+The missing-prompt variant retains the full readable automation, while the
+invalid-data variant contains only its identity fields and `problem`. Use
+`runs --output <runId>` to print a script run's captured output.
+
+`list` and `show` keep damaged stored records visible as `Prompt required` or
+`Invalid data` instead of failing the whole read. Opening a `Prompt required`
+record in the Automations panel takes you through the standard editor, where
+you can add the prompt while reviewing its other settings. The same repair is
+available through the CLI:
+
+  bb automation update <automationId> --project <id> --prompt "<prompt>"
+
+Writes remain strict. Run, pause, and resume reject damaged records; update
+succeeds only when the resulting complete record is canonical.

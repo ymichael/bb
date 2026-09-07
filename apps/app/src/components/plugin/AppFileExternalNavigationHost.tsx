@@ -24,7 +24,6 @@ interface ExternalFileIntentRequest {
   intent: ExperimentalFileOpenOptions;
 }
 
-/** App-wide preferred-external file dispatcher; discovery starts on activation. */
 export function AppFileExternalNavigationHost({
   children,
 }: {
@@ -42,8 +41,6 @@ export function AppFileExternalNavigationHost({
       if (queueRef.current.length >= MAX_PENDING_EXTERNAL_FILE_INTENTS) {
         return false;
       }
-      // Public SDK callers are parsed by useBbNavigate before capabilities are
-      // invoked; this host only queues that already-normalized internal value.
       const request = { id: nextRequestIdRef.current, intent };
       nextRequestIdRef.current += 1;
       replaceQueue([...queueRef.current, request]);

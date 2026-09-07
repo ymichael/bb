@@ -35,11 +35,6 @@ interface MakeEnvironmentArgs extends Partial<Environment> {
   hostId: string;
 }
 
-/**
- * A provider interaction pairs its payload with the resolution that answers
- * it, so the fixture takes either loosely and pairs them itself: a
- * mismatched pair is a fixture bug and throws.
- */
 type MakePendingInteractionArgs = Partial<
   Omit<ProviderPendingInteraction, "payload" | "resolution">
 > & {
@@ -62,12 +57,6 @@ export function makeTimelineBase(args: TimelineBaseArgs): TimelineRowBase {
   };
 }
 
-/**
- * Mock for the `GET /threads/:id/timeline` endpoint used by `bb thread show`
- * and `bb status` to read `pendingTodos`. Tests should add this alongside
- * their `:id.$get` mock so contract drift on the timeline lane fails loudly
- * instead of silently degrading to `pendingTodos: null`.
- */
 export function makeEmptyTimelineGetMock() {
   return vi.fn(async () => makeTimelineResponse([]));
 }
@@ -77,6 +66,7 @@ export function makeTimelineResponse(
 ): ThreadTimelineResponse {
   return {
     rows,
+    contextBoundarySeq: null,
     activePromptMode: null,
     activeThinking: null,
     activeWorkflows: [],
@@ -159,9 +149,6 @@ export function makeEnvironment(overrides: MakeEnvironmentArgs): Environment {
 export function makePendingInteraction(
   overrides: MakePendingInteractionArgs,
 ): ProviderPendingInteraction {
-  // The provider request/thread/turn ids are incidental to every assertion, so
-  // derive them from the interaction id suffix (`int-foo` -> `request-foo`,
-  // `provider-thread-foo`, `turn-foo`) instead of repeating them per call.
   const suffix = overrides.id.startsWith("int-")
     ? overrides.id.slice("int-".length)
     : overrides.id;

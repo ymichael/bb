@@ -55,10 +55,6 @@ type IdScopedChangedEventName =
 
 type UnscopedChangedEventName = "system:changed" | "system:config-changed";
 
-/**
- * Listener for an entity-changed event that may be scoped to one entity id:
- * a set `selectorId` delivers only messages carrying that id.
- */
 interface IdScopedChangedListenerRecord<
   TEventName extends IdScopedChangedEventName,
 > {
@@ -80,10 +76,14 @@ interface UnscopedChangedListenerRecord<
 
 type ChangedListenerRecord =
   | {
-      [TEventName in IdScopedChangedEventName]: IdScopedChangedListenerRecord<TEventName>;
+      [
+        TEventName in IdScopedChangedEventName
+      ]: IdScopedChangedListenerRecord<TEventName>;
     }[IdScopedChangedEventName]
   | {
-      [TEventName in UnscopedChangedEventName]: UnscopedChangedListenerRecord<TEventName>;
+      [
+        TEventName in UnscopedChangedEventName
+      ]: UnscopedChangedListenerRecord<TEventName>;
     }[UnscopedChangedEventName];
 
 interface ConnectionListenerRecord {
@@ -92,9 +92,7 @@ interface ConnectionListenerRecord {
   event: "realtime:connection";
 }
 
-type RealtimeListenerRecord =
-  | ChangedListenerRecord
-  | ConnectionListenerRecord;
+type RealtimeListenerRecord = ChangedListenerRecord | ConnectionListenerRecord;
 
 function threadRealtimeTarget(
   threadId: string | undefined,
@@ -123,19 +121,13 @@ function environmentRealtimeTarget(
 function hostRealtimeTarget(
   hostId: string | undefined,
 ): RealtimeSubscriptionTarget {
-  return hostId
-    ? { kind: "host-detail", hostId }
-    : { kind: "host-list" };
+  return hostId ? { kind: "host-detail", hostId } : { kind: "host-list" };
 }
 
 function optionalTargetIdMatches(args: OptionalTargetIdMatchesArgs): boolean {
   return args.selectorId === undefined || args.messageId === args.selectorId;
 }
 
-/**
- * Adapts a standard (browser/Node-global) WebSocket to the runtime-agnostic
- * socket shape the realtime client consumes.
- */
 export function wrapStandardWebsocket(socket: WebSocket): BbRealtimeSocket {
   const adapter: BbRealtimeSocket = {
     close: () => socket.close(),
@@ -168,13 +160,6 @@ function isTargetedListener(
   return listener.event !== "realtime:connection";
 }
 
-/**
- * The union parameter is a TypeScript workaround: a predicate against the
- * plain listener union cannot assert the generic record (the generic
- * instantiation is not assignable to any single union member), but narrowing
- * still resolves to exactly `IdScopedChangedListenerRecord<TEventName>`, which
- * keeps the callback/message pairing type-safe in the shared dispatch loop.
- */
 function isIdScopedChangedListenerFor<
   TEventName extends IdScopedChangedEventName,
 >(
@@ -278,8 +263,6 @@ export class BbRealtimeClient implements BbRealtime {
     const unsubscribe = this.activateListener(listener);
     const snapshot = this.lastConnectionEvent;
     if (snapshot) {
-      // Late observers get the current state; skip the snapshot if a live
-      // transition already superseded it (the listener saw that one instead).
       queueMicrotask(() => {
         if (listener.active && this.lastConnectionEvent === snapshot) {
           this.callListener(listener.callback, snapshot);
@@ -363,11 +346,6 @@ export class BbRealtimeClient implements BbRealtime {
       return this.ensureSocketReadyPromise();
     }
 
-    // Anything that can throw synchronously (factory resolution, URL
-    // derivation, socket construction) must happen BEFORE the socket-ready
-    // promise is created — a throw after creation would orphan a pending
-    // promise that no caller holds, turning cleanup's rejection into an
-    // unhandled rejection.
     const websocketFactory =
       this.transport.websocket ?? resolveDefaultWebsocketFactory();
     if (!websocketFactory) {
@@ -379,8 +357,6 @@ export class BbRealtimeClient implements BbRealtime {
       resolveRealtimeUrl({ transport: this.transport }),
     );
 
-    // This connect supersedes any scheduled backoff retry; an orphaned timer
-    // would re-connect needlessly and escalate the delay while connected.
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
@@ -439,10 +415,6 @@ export class BbRealtimeClient implements BbRealtime {
         new Error("bb realtime socket closed before it became ready."),
       );
       if (this.targetSubscriptions.size === 0) {
-        // A socket that was already CLOSING when the last listener
-        // unsubscribed skips closeSocketIfIdle's teardown emit (it only
-        // handles OPEN/CONNECTING), so its close completes here: announce the
-        // terminal disconnect so observers never stay on a stale state.
         if (this.lastConnectionEvent?.state !== "disconnected") {
           this.emitConnection({
             state: "disconnected",
@@ -452,9 +424,6 @@ export class BbRealtimeClient implements BbRealtime {
         }
         return;
       }
-      // Always record the reconnect intent and announce the drop, even if a
-      // stale retry timer is pending — otherwise the next open would skip
-      // the reconnect replay and observers would never see the disconnect.
       this.reconnectingAfterUnexpectedClose = true;
       const reconnectDelayMs = this.reconnectDelayMs;
       this.emitConnection({
@@ -462,11 +431,6 @@ export class BbRealtimeClient implements BbRealtime {
         reconnected: false,
         reconnectDelayMs,
       });
-      // A connection listener may react to the disconnected emit by adding a
-      // listener, which connects a new socket before this timer would be
-      // scheduled. That connect supersedes the retry: scheduling it anyway
-      // would let the orphaned timer escalate reconnectDelayMs while already
-      // connected.
       if (this.reconnectTimer || this.socket) {
         return;
       }
@@ -476,9 +440,6 @@ export class BbRealtimeClient implements BbRealtime {
           reconnectDelayMs * RECONNECT_DELAY_MULTIPLIER,
           MAX_RECONNECT_DELAY_MS,
         );
-        // connectSocket can throw synchronously (e.g. a misconfigured
-        // transport); inside a timer callback nothing above us catches, so
-        // contain it here to keep the process alive.
         try {
           void this.connectSocket().catch((error) => {
             console.error("bb realtime reconnect failed", error);
@@ -529,8 +490,6 @@ export class BbRealtimeClient implements BbRealtime {
       return;
     }
     if (canceledPendingReconnect) {
-      // The last disconnected event promised a retry in N ms; tell observers
-      // that retry was canceled so they don't wait for it forever.
       this.emitConnection({
         state: "disconnected",
         reconnected: false,
@@ -551,10 +510,6 @@ export class BbRealtimeClient implements BbRealtime {
       return;
     }
 
-    // Silently skip message types this client does not consume (e.g. the
-    // app-only "thread-open" layout/panel signal the server broadcasts to every
-    // socket). Like the lenient inbound parsing, tolerate a newer server
-    // adding message types instead of logging each one as an error.
     if (
       typeof parsedMessage === "object" &&
       parsedMessage !== null &&
@@ -699,10 +654,6 @@ export class BbRealtimeClient implements BbRealtime {
     }
   }
 
-  /**
-   * Dispatch iterates a snapshot: a listener registered from inside a
-   * callback must not receive the in-flight event.
-   */
   private listenerSnapshot(): RealtimeListenerRecord[] {
     return [...this.listeners];
   }

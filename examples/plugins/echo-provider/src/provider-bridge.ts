@@ -1,51 +1,3 @@
-/**
- * The echo-agent provider bridge: a complete grammar v3 implementation of
- * the bb Provider Bridge Protocol (docs/provider-bridge-protocol.md) that
- * exercises every timeline capability a provider plugin has — using only
- * `@get-bb/plugin-sdk/provider-bridge` and zod.
- *
- * `bb plugin build` bundles host.ts (which re-exports this module's
- * `experimental_providerBridge`) into a self-contained artifact; the host
- * daemon downloads it by content hash, verifies it, and runs it with its own
- * node through the bridge bootstrap. Transport is line-delimited JSON-RPC
- * 2.0 on stdin/stdout.
- *
- * Every accepted prompt runs the same scripted turn, so a reader (or a test)
- * knows exactly which rows to expect. In `thread/delta` terms:
- *
- *   input.accepted → turn.open
- *   → command        (item.open + item.outputDelta + item.close)
- *   → fileRead       (item.open + item.close)
- *   → search         (item.open + item.close)
- *   → delegation     (item.open, a keyed CHILD TURN linked by parentRef with
- *                     its own streamed message, item.close with a summary)
- *   → planSteps      (item.open + item.close, the full step list each time)
- *   → tool           (a suppressed bookkeeping row: presentation.suppress)
- *   → tool, server "bb" — the plugin's own `echo_stamp` tool, called over
- *                     `item/tool/call`; the row carries the presentation the
- *                     server attached to the tool definition
- *   → extension item `echo-provider/receipt` (payload validated by the
- *                     server against the plugin's declared schema)
- *   → extension.state `echo-provider/mood` (latest snapshot wins)
- *   → the echoed message (item.textDelta + item.textClose), which also
- *     reports the providerOptions the plugin derived from its settings and
- *     the daemon env var the declaration passed through
- *   → usage → turn.boundary
- *
- * EVERY item.open and item.close carries a declarative `presentation`, so
- * each row renders on every client without plugin code.
- *
- * Prompt directives (plain words anywhere in the prompt):
- * - `/noop`: a zero-work turn — accepted and settled without any activity.
- * - `malformed-receipt`: the receipt payload violates the declared schema,
- *   so the server persists a `provider/unhandled` in its place.
- *
- * Protocol hygiene: an unknown method answers METHOD_NOT_FOUND (-32601);
- * invalid params answer INVALID_PARAMS (-32602) with the issues; a non-JSON
- * line and an unsolicited response-shaped line are ignored and the bridge
- * stays alive. The dispatch table is keyed by the protocol package's own
- * method vocabulary, so it cannot drift from the schemas.
- */
 import {
   type ClientTurnRequestId,
   type DeltaPresentation,
@@ -101,14 +53,6 @@ import {
   type EchoReceipt,
 } from "./vocabulary.js";
 
-// ---------------------------------------------------------------------------
-// State: one bridge process serves many threads. Sessions are in-memory only
-// — the echo agent has nothing to persist, and a resume re-adopts whatever
-// provider thread id the runtime hands back, which is why the handshake can
-// honestly report `sessionRestore: true`.
-// ---------------------------------------------------------------------------
-
-/** Per-instance entropy baked into minted provider thread ids. */
 const instanceNonce = randomUUID().replaceAll("-", "").slice(0, 12);
 let threadCounter = 0;
 
@@ -116,42 +60,26 @@ interface Session {
   threadId: string;
   providerThreadId: string;
   cwd: string;
-  /** Turns echoed since this session was constructed (mood state). */
   turnsEchoed: number;
-  /** Running usage total, reset at every session construction. */
   usageTotal: ThreadEventTokenUsageBreakdown;
-  /** The bb tools the runtime injected at construction, by name. */
   tools: ReadonlyMap<string, DynamicTool>;
 }
 
-/** bb threadId → session. */
 const sessions = new Map<string, Session>();
 
 type JsonRpcId = string | number;
 
-/** A message this bridge writes on its own: a notification or a request. */
 type OutboundMessage = { jsonrpc: "2.0" } & Record<string, unknown>;
 
-/**
- * The single stdout writer — protocol traffic only, never stray logs. The
- * kit's `sendResult`/`sendError` answer requests; `send` carries the rest.
- */
 const io = createBridgeIo<OutboundMessage>();
 
 function notify(method: string, params: Record<string, unknown>): void {
   io.send({ jsonrpc: "2.0", method, params });
 }
 
-/** Emit one batched `thread/delta` notification for a thread. */
 function emitDeltas(threadId: string, deltas: ThreadDelta[]): void {
   notify(THREAD_DELTA_NOTIFICATION_METHOD, { threadId, deltas });
 }
-
-// ---------------------------------------------------------------------------
-// Requests the bridge makes of the runtime (item/tool/call) and the replies
-// it waits for. Requests and responses share one id space on the channel;
-// the bridge numbers its own from 1 with a distinctive prefix.
-// ---------------------------------------------------------------------------
 
 let outboundRequestCounter = 0;
 
@@ -168,10 +96,6 @@ function sendRequest(method: string, params: Record<string, unknown>): string {
   return id;
 }
 
-// ---------------------------------------------------------------------------
-// The scripted echo turn
-// ---------------------------------------------------------------------------
-
 function promptText(input: readonly PromptInput[]): string {
   return input
     .filter(
@@ -182,12 +106,6 @@ function promptText(input: readonly PromptInput[]): string {
     .join("");
 }
 
-/**
- * What the plugin derived for this command. A missing or malformed bag reads
- * as the defaults — the conformance kit and the runtime unit suites send
- * none — but a real server always sends one, and the echoed message shows
- * which case this was.
- */
 function parseProviderOptions(options: unknown): {
   source: "server" | "defaults";
   values: EchoProviderOptions;
@@ -204,14 +122,11 @@ function parseProviderOptions(options: unknown): {
 
 interface TurnContext {
   session: Session;
-  /** Session-unique turn ordinal; prefixes every provider item id. */
   ordinal: number;
   prompt: string;
   providerOptions: ReturnType<typeof parseProviderOptions>;
-  /** Items opened before the receipt (the receipt's `itemCount`). */
   itemCount: number;
   malformedReceipt: boolean;
-  /** The bb tool item awaiting its `item/tool/call` reply, if any. */
   stamp: { itemId: string; presentation: DeltaPresentation | undefined } | null;
 }
 
@@ -223,14 +138,11 @@ function runEchoTurn(args: {
   session: Session;
   input: readonly PromptInput[];
   options: unknown;
-  /** Present only for turn/start; thread/start input has no request id. */
   clientRequestId?: ClientTurnRequestId;
 }): void {
   const { session } = args;
   const prompt = promptText(args.input);
   const deltas: ThreadDelta[] = [];
-  // The provider consumed the input. thread/start input carries no
-  // clientRequestId, so a first-turn-on-start emits no acceptance.
   if (args.clientRequestId !== undefined) {
     deltas.push({
       kind: "input.accepted",
@@ -238,9 +150,6 @@ function runEchoTurn(args: {
     });
   }
 
-  // A zero-work turn: accepted and settled with no activity in between. The
-  // boundary claims the turn the pending acceptance opened (`claimIfIdle`)
-  // so the thread never hangs active behind a turn that did nothing.
   if (/(?:^|\s)\/noop(?:\s|$)/u.test(prompt)) {
     deltas.push({
       kind: "turn.boundary",
@@ -269,8 +178,6 @@ function runEchoTurn(args: {
   deltas.push(...planStepsDeltas(turn));
   deltas.push(...suppressedToolDeltas(turn));
 
-  // The bb tool: only when the runtime injected it (a real server always
-  // does once the plugin is installed; the conformance kit never does).
   const stampTool = session.tools.get(ECHO_STAMP_TOOL_NAME);
   if (stampTool !== undefined) {
     const id = itemId(turn, "stamp");
@@ -290,9 +197,6 @@ function runEchoTurn(args: {
         : { presentation: stampTool.presentation }),
     });
     emitDeltas(session.threadId, deltas);
-    // `providerNativeIds`: the runtime maps this call id through the
-    // assembler to the bb item id it minted for the row above, and resolves
-    // the turn from the open one (`turnId: null`).
     const requestId = sendRequest(BRIDGE_INBOUND_REQUEST_METHODS.toolCall, {
       providerThreadId: session.providerThreadId,
       threadId: session.threadId,
@@ -309,7 +213,6 @@ function runEchoTurn(args: {
   finishEchoTurn(turn, null);
 }
 
-/** A shell command with streamed output. */
 function commandDeltas(turn: TurnContext): ThreadDelta[] {
   const id = itemId(turn, "command");
   const command = `echo ${JSON.stringify(turn.prompt)}`;
@@ -392,21 +295,9 @@ function searchDeltas(turn: TurnContext): ThreadDelta[] {
   ];
 }
 
-/**
- * A delegation with a real child turn. The child turn is keyed
- * (`providerTurnId`) and names the delegation as its `parentRef`, so the
- * assembler links its `turn/started` (and every item inside it) to the
- * delegation row through `parentToolCallId` — the one encoding for
- * delegated work in grammar v3.
- */
 function delegationDeltas(turn: TurnContext): ThreadDelta[] {
   const id = itemId(turn, "delegate");
   const childTurnId = `${id}-turn`;
-  // The child's provider-native id. Keyed on the bb thread id, not on the
-  // minted provider thread id: `childRef` is a value (the assembler interns
-  // item and turn ids, not references to a child), so a ref that carried
-  // this process's entropy would differ on every replay of a recorded
-  // session and the parity oracle could never reproduce it.
   const childRef = `${turn.session.threadId}-t${turn.ordinal}-child`;
   const childMessageId = `${id}-message`;
   const label = `Echo "${turn.prompt}" one more time`;
@@ -421,9 +312,6 @@ function delegationDeltas(turn: TurnContext): ThreadDelta[] {
       presentation,
     },
     { kind: "turn.open", providerTurnId: childTurnId, parentRef: id },
-    // The child's message is opened explicitly so it carries a presentation:
-    // a stream that opens itself through `item.textDelta` alone has nowhere
-    // to put one. The close echoes the opened presentation.
     {
       kind: "item.open",
       key: { providerItemId: childMessageId, parentRef: id },
@@ -462,7 +350,6 @@ function delegationDeltas(turn: TurnContext): ThreadDelta[] {
   ];
 }
 
-/** A plan snapshot: the full step list each time, the active step headlined. */
 function planStepsDeltas(turn: TurnContext): ThreadDelta[] {
   const id = itemId(turn, "plan");
   const steps = [
@@ -493,7 +380,6 @@ function planStepsDeltas(turn: TurnContext): ThreadDelta[] {
   ];
 }
 
-/** A generic provider tool whose row is low-value: `presentation.suppress`. */
 function suppressedToolDeltas(turn: TurnContext): ThreadDelta[] {
   const id = itemId(turn, "noop");
   turn.itemCount += 1;
@@ -514,11 +400,6 @@ function suppressedToolDeltas(turn: TurnContext): ThreadDelta[] {
   ];
 }
 
-/**
- * The second half of the turn, after the bb tool answered (or immediately
- * when no bb tool was injected): the tool row's close, the receipt, the mood,
- * the echoed message, usage, and the boundary.
- */
 function finishEchoTurn(
   turn: TurnContext,
   stamp: { content: string; isError: boolean } | null,
@@ -548,9 +429,6 @@ function finishEchoTurn(
     });
   }
 
-  // The extension item. The payload is opaque on the wire; the server
-  // validates it against the schema this plugin declared for
-  // `echo-provider/receipt` and replaces a miss with `provider/unhandled`.
   const receiptId = itemId(turn, "receipt");
   const receipt: EchoReceipt = {
     prompt: turn.prompt,
@@ -585,7 +463,6 @@ function finishEchoTurn(
     },
   );
 
-  // Thread state: the whole snapshot every time, latest wins.
   const mood: EchoMood = {
     mood: session.turnsEchoed > 3 ? "bored" : "cheerful",
     turnsEchoed: session.turnsEchoed,
@@ -596,9 +473,6 @@ function finishEchoTurn(
     payload: mood,
   });
 
-  // The echoed message, with the round-trip evidence: what the plugin's
-  // deriveProviderOptions produced (from its settings) and the daemon env
-  // var the declaration passed through.
   const options = turn.providerOptions.values;
   const echoed = options.shout ? turn.prompt.toUpperCase() : turn.prompt;
   const greeting = process.env[ECHO_GREETING_ENV];
@@ -617,7 +491,6 @@ function finishEchoTurn(
       item: { type: "agentMessage", text: "" },
       presentation: AGENT_MESSAGE_PRESENTATION,
     },
-    // Streamed in two pieces, then settled with the provider-final text.
     {
       kind: "item.textDelta",
       key: messageKey,
@@ -633,7 +506,6 @@ function finishEchoTurn(
     { kind: "item.textClose", key: messageKey, channel: "agentMessage", text },
   );
 
-  // The one usage dialect: this turn's usage plus the running total.
   const last: ThreadEventTokenUsageBreakdown = {
     ...ZERO_TOKEN_USAGE,
     inputTokens: turn.prompt.length,
@@ -660,15 +532,6 @@ function finishEchoTurn(
   emitDeltas(session.threadId, deltas);
 }
 
-// ---------------------------------------------------------------------------
-// Sessions
-// ---------------------------------------------------------------------------
-
-/**
- * Every session construction is a provider id-space boundary: identity
- * precedes traffic, and `session.reset` tells the assembler to drop any
- * assembly state it still holds for the thread from a previous session.
- */
 function openSession(args: {
   threadId: string;
   providerThreadId: string;
@@ -692,16 +555,8 @@ function openSession(args: {
   return session;
 }
 
-// ---------------------------------------------------------------------------
-// Request handlers, keyed by the protocol vocabulary. A vocabulary method
-// with no handler here (thread/fork, thread/archive, …) answers -32601 like
-// any unknown method — the runtime only sends capability-gated methods to
-// bridges that advertised them, and this bridge advertises none of those.
-// ---------------------------------------------------------------------------
-
 type RequestHandler = (id: JsonRpcId, params: unknown) => void;
 
-/** The one answer to `provider/health`: nothing to install, sign in to, or update. */
 const ECHO_HEALTH: ProviderHealthResult = {
   supported: true,
   health: {
@@ -718,7 +573,6 @@ const ECHO_HEALTH: ProviderHealthResult = {
 };
 
 function invalidParams(id: JsonRpcId, method: string, issues: unknown): void {
-  // The issues ride `error.data` as the validator produced them.
   io.send({
     jsonrpc: "2.0",
     id,
@@ -737,23 +591,16 @@ const handlers: Record<string, RequestHandler> = {
       invalidParams(id, BRIDGE_REQUEST_METHODS.initialize, parsed.error.issues);
       return;
     }
-    // Session-behavior facts are REPORTED here, never declared: the code
-    // that implements a feature is the code that says it exists. The grammar
-    // range is stated explicitly — a bridge that says nothing reads as v2
-    // and is refused at the handshake.
     io.sendResult(id, {
       protocolVersion: PROVIDER_BRIDGE_PROTOCOL_VERSION,
       capabilities: {
         grammarVersions: [THREAD_DELTA_GRAMMAR_V3, THREAD_DELTA_GRAMMAR_V3],
-        // Stateless resume: a released session re-attaches from its id.
         sessionRestore: true,
         threadArchive: false,
         threadRename: false,
         threadGoalClear: false,
         fork: "none",
         approvalEnforcedBy: "runtime",
-        // A steer never reaches a live echo turn; it waits for the next
-        // prompt boundary.
         steerMode: "queue",
       },
     });
@@ -765,8 +612,6 @@ const handlers: Record<string, RequestHandler> = {
       invalidParams(id, BRIDGE_REQUEST_METHODS.modelList, parsed.error.issues);
       return;
     }
-    // The live model list replaces the declaration's cold-cache fallback:
-    // the same entry, plus the wire `model` id the list format requires.
     io.sendResult(id, {
       models: [{ ...ECHO_MODEL, model: ECHO_MODEL_ID }],
       selectedOnlyModels: [],
@@ -783,10 +628,6 @@ const handlers: Record<string, RequestHandler> = {
       );
       return;
     }
-    // Sessionless and host-local: the server polls this through the daemon
-    // for every provider whose declaration says `maintenance.health`. An
-    // echo runs in-process, so it is always ready. Usage and installation
-    // are not declared, so the runtime never sends those methods here.
     io.sendResult(id, ECHO_HEALTH);
   },
 
@@ -809,9 +650,6 @@ const handlers: Record<string, RequestHandler> = {
       dynamicTools: parsed.data.dynamicTools,
     });
     io.sendResult(id, { providerThreadId, sessionRestorable: true });
-    // A start that carries input runs its first turn immediately. It has no
-    // clientRequestId (only turn/start and turn/steer carry one), so no
-    // input.accepted delta is emitted for it.
     if (parsed.data.input !== undefined && parsed.data.input.length > 0) {
       runEchoTurn({
         session,
@@ -831,10 +669,6 @@ const handlers: Record<string, RequestHandler> = {
       );
       return;
     }
-    // Stateless resume: re-adopt the caller's provider thread id. The
-    // session.reset inside openSession is what keeps assembler-minted turn
-    // and item ids unique across the resume even though this bridge reuses
-    // its native keys per session.
     openSession({
       threadId: parsed.data.threadId,
       providerThreadId: parsed.data.providerThreadId,
@@ -877,9 +711,6 @@ const handlers: Record<string, RequestHandler> = {
       invalidParams(id, BRIDGE_REQUEST_METHODS.turnSteer, parsed.error.issues);
       return;
     }
-    // Echo turns settle as soon as the bb tool answers, so a steer can never
-    // find its target turn still active. The honest reply is the typed
-    // protocol error; the runtime then starts the steer text as a new turn.
     io.sendError(
       id,
       BRIDGE_JSON_RPC_ERRORS.NO_ACTIVE_TURN,
@@ -893,19 +724,10 @@ const handlers: Record<string, RequestHandler> = {
       invalidParams(id, BRIDGE_REQUEST_METHODS.threadStop, parsed.error.issues);
       return;
     }
-    // Both intents drop the in-memory session. `release` detaches an idle
-    // session and must fabricate nothing; `interrupt` would settle an active
-    // turn, but the only thing an echo turn ever waits on is its bb tool
-    // reply, which the runtime itself answers before it interrupts.
     sessions.delete(parsed.data.threadId);
     io.sendResult(id, {});
   },
 };
-
-// ---------------------------------------------------------------------------
-// Line handling. Exported so tests can drive the bridge in-process — the
-// conformance kit's transport calls handleLine and drains captured stdout.
-// ---------------------------------------------------------------------------
 
 const jsonRpcResponseSchema = z
   .object({
@@ -915,7 +737,6 @@ const jsonRpcResponseSchema = z
   })
   .passthrough();
 
-/** A reply to one of this bridge's own requests (the bb tool call). */
 function handleResponse(message: unknown): void {
   const parsed = jsonRpcResponseSchema.safeParse(message);
   if (!parsed.success || typeof parsed.data.id !== "string") {
@@ -923,7 +744,6 @@ function handleResponse(message: unknown): void {
   }
   const pending = pendingToolCalls.get(parsed.data.id);
   if (pending === undefined) {
-    // An unsolicited response-shaped line: ignored by design.
     return;
   }
   pendingToolCalls.delete(parsed.data.id);
@@ -952,7 +772,6 @@ export function handleLine(line: string): void {
   try {
     message = JSON.parse(line);
   } catch {
-    // A non-JSON line is ignored; the bridge stays alive.
     return;
   }
   if (
@@ -967,14 +786,11 @@ export function handleLine(line: string): void {
     method?: unknown;
     params?: unknown;
   };
-  // Request vs response is discriminated on the presence of `method`, never
-  // on result shape: a response-shaped line is never treated as a request.
   if (typeof method !== "string") {
     handleResponse(message);
     return;
   }
   if (typeof id !== "string" && typeof id !== "number") {
-    // Notification: unknown ones are ignored by design.
     return;
   }
   const handler = handlers[method];
@@ -986,9 +802,6 @@ export function handleLine(line: string): void {
     );
     return;
   }
-  // A handler that throws answers an error instead of taking the bridge
-  // down; a thrown `experimental_BridgeRecoveryError` answers with its typed
-  // hint as `error.data.recovery`.
   runBridgeRequest({
     request: { id, method, params },
     sendError: io.sendError,
@@ -996,17 +809,9 @@ export function handleLine(line: string): void {
   });
 }
 
-/**
- * The bridge surface this plugin's host artifact exports. The daemon-side
- * bootstrap imports the artifact, finds this export, and owns the process:
- * argv, the plugin-scoped directories below, stdin framing, and signals.
- * Importing this module (the tests do) starts nothing.
- */
 export const experimental_providerBridge = experimental_defineProviderBridge({
   handleLine,
   start(context) {
-    // Proof that a bridge really is handed its plugin's own directories: the
-    // echo agent has nothing to persist, so it just records where it booted.
     writeFileSync(
       join(context.dataDir, "last-boot.json"),
       `${JSON.stringify({ pluginId: context.pluginId, tempDir: context.tempDir })}\n`,

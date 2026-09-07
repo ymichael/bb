@@ -2,6 +2,7 @@
 
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import { makeThreadWithRuntime as makeThreadWithRuntimeFixture } from "@bb/test-helpers/domain-fixtures";
 import type {
   SidebarBootstrapResponse,
   ThreadResponse,
@@ -9,6 +10,12 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { sdk } from "@/lib/sdk";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { makeThreadListEntry as makeThreadListEntryFixture } from "@bb/test-helpers/domain-fixtures";
+import { makeThreadResponse as makeThreadResponseFixture } from "@/test/fixtures/thread-responses";
+import {
+  makeProjectWithThreadsResponse,
+  makeSidebarBootstrapResponse,
+} from "@/test/fixtures/projects";
 import {
   sidebarNavigationQueryKey,
   threadListQueryKey,
@@ -26,23 +33,13 @@ vi.mock("@/lib/sdk", () => ({
 function makeThreadWithRuntime(
   thread: Partial<ThreadWithRuntime> = {},
 ): ThreadWithRuntime {
-  return {
+  return makeThreadWithRuntimeFixture({
     id: "thread-1",
     projectId: "project-1",
     environmentId: "env-1",
-    providerId: "codex",
     title: null,
     titleFallback: null,
-    sectionId: null,
     status: "active",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
     lastReadAt: null,
     latestAttentionAt: 50,
     createdAt: 1,
@@ -52,72 +49,45 @@ function makeThreadWithRuntime(
       hostReconnectGraceExpiresAt: null,
     },
     ...thread,
-  };
+  });
 }
 
 function makeThreadResponse(
   thread: Partial<ThreadResponse> = {},
 ): ThreadResponse {
-  return {
+  return makeThreadResponseFixture({
     ...makeThreadWithRuntime(thread),
-    activeBackgroundAgentCount: 0,
-    canSpawnChild: true,
     ...thread,
-  };
+  });
 }
 
 function makeThreadListEntry(
   thread: Partial<ThreadListEntry> = {},
 ): ThreadListEntry {
-  return {
-    ...makeThreadWithRuntime(thread),
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    pinSortKey: null,
-    hasPendingInteraction: false,
+  return makeThreadListEntryFixture({
+    ...makeThreadWithRuntime(),
     environmentHostId: "host-1",
     environmentName: "Environment",
     environmentBranchName: "main",
     environmentWorkspaceDisplayKind: "managed-worktree",
     ...thread,
-  };
+  });
 }
 
 function makeSidebarNavigation(
   threads: ThreadListEntry[],
 ): SidebarBootstrapResponse {
-  return {
-    sections: [],
+  return makeSidebarBootstrapResponse({
     projects: [
-      {
+      makeProjectWithThreadsResponse({
         id: "project-1",
-        kind: "standard",
         name: "Project",
-        gitRemoteUrl: null,
         createdAt: 1,
         updatedAt: 1,
-        sources: [],
         threads,
-        defaultExecutionOptions: null,
-      },
+      }),
     ],
-    personalProject: {
-      id: "proj_personal",
-      kind: "personal",
-      name: "Personal",
-      gitRemoteUrl: null,
-      createdAt: 1,
-      updatedAt: 1,
-      sources: [],
-      threads: [],
-      defaultExecutionOptions: null,
-    },
-  };
+  });
 }
 
 afterEach(() => {

@@ -17,7 +17,6 @@ function PromptStage({ children }: PromptStageProps) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
 
-// The common fields; each story pairs its own payload with its resolution.
 function basePendingInteraction(): Omit<
   ProviderPendingInteraction,
   "payload" | "resolution"

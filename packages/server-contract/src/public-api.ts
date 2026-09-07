@@ -1,3 +1,23 @@
+import {
+  desktopBrowserHostRequestSchema,
+  desktopBrowserScopeSchema,
+  desktopBrowserCreateRequestSchema,
+  desktopBrowserAcquireRequestSchema,
+  desktopBrowserLeaseRequestSchema,
+  desktopBrowserTabRequestSchema,
+  type ExperimentalDesktopBrowserHostRequest,
+  type ExperimentalDesktopBrowserScope,
+  type ExperimentalDesktopBrowserCreateInput,
+  type ExperimentalDesktopBrowserAcquireInput,
+  type ExperimentalDesktopBrowserLeaseRequest,
+  type ExperimentalDesktopBrowserTabRequest,
+  type ExperimentalDesktopBrowserInstances,
+  type ExperimentalDesktopBrowserTabs,
+  type ExperimentalDesktopBrowserCreated,
+  type ExperimentalDesktopBrowserLease,
+  type ExperimentalDesktopBrowserConnection,
+  type ExperimentalDesktopBrowserCapture,
+} from "./api/desktop-browsers.js";
 import type { Hono } from "hono";
 import type {
   AppTheme,
@@ -135,6 +155,8 @@ import type {
   ResolveThreadMentionsResponse,
   RespondPluginInteractionRequest,
   SendMessageRequest,
+  RetryTurnRequest,
+  RetryTurnResponse,
   SendMessageResponse,
   SetQueuedMessageGroupBoundaryRequest,
   SendQueuedMessageRequest,
@@ -174,6 +196,8 @@ import type {
   ThreadFilesRawQuery,
   ThreadGetQuery,
   ThreadHostFileContentQuery,
+  ThreadCountQuery,
+  ThreadCountResponse,
   ThreadListQuery,
   ThreadListResponse,
   ThreadConversationOutlineResponse,
@@ -182,6 +206,8 @@ import type {
   ThreadPaneActionRequest,
   ThreadPaneActionResponse,
   ThreadPendingInteractionsResponse,
+  ThreadRunningResponse,
+  QueuedMessageListQuery,
   ThreadQueuedMessageListResponse,
   ThreadResponse,
   ThreadSearchQuery,
@@ -227,6 +253,7 @@ import {
   createHostJoinCodeRequestSchema,
   createProjectSourceRequestSchema,
   createQueuedMessageRequestSchema,
+  queuedMessageListQuerySchema,
   updateQueuedMessageRequestSchema,
   createThreadRequestSchema,
   forkThreadRequestSchema,
@@ -270,6 +297,7 @@ import {
   resolvePendingInteractionRequestSchema,
   resolveThreadMentionsRequestSchema,
   respondPluginInteractionRequestSchema,
+  retryTurnRequestSchema,
   sendMessageRequestSchema,
   editMessageRequestSchema,
   setQueuedMessageGroupBoundaryRequestSchema,
@@ -283,6 +311,7 @@ import {
   threadFilesRawQuerySchema,
   threadGetQuerySchema,
   threadHostFileContentQuerySchema,
+  threadCountQuerySchema,
   threadListQuerySchema,
   threadOpenRequestSchema,
   threadPaneActionRequestSchema,
@@ -486,6 +515,14 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<ProjectBranchesResponse>(),
     }),
+    branchOptions: defineRoute({
+      path: "/projects/:id/branch-options",
+      method: "get",
+      request: queryRequest<PathProjectId, ProjectBranchesQuery>(
+        projectBranchesQuerySchema,
+      ),
+      response: jsonResponse<ProjectBranchesResponse>(),
+    }),
     uploadAttachment: defineRoute({
       path: "/projects/:id/attachments",
       method: "post",
@@ -583,6 +620,81 @@ export const publicApiRoutes = {
       method: "get",
       request: noRequest<PathPreviewAndFilePath>(),
       response: binaryResponse<Uint8Array>(),
+    }),
+  },
+
+  desktopBrowsers: {
+    listInstances: defineRoute({
+      path: "/desktop-browsers/instances",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserHostRequest>(
+        desktopBrowserHostRequestSchema,
+      ),
+      response: jsonResponse<ExperimentalDesktopBrowserInstances>(),
+    }),
+    listTabs: defineRoute({
+      path: "/desktop-browsers/tabs",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserScope>(
+        desktopBrowserScopeSchema,
+      ),
+      response: jsonResponse<ExperimentalDesktopBrowserTabs>(),
+    }),
+    createTab: defineRoute({
+      path: "/desktop-browsers/create",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserCreateInput>(
+        desktopBrowserCreateRequestSchema,
+      ),
+      response: jsonResponse<ExperimentalDesktopBrowserCreated>(),
+    }),
+    acquireControl: defineRoute({
+      path: "/desktop-browsers/acquire",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserAcquireInput>(
+        desktopBrowserAcquireRequestSchema,
+      ),
+      response: jsonResponse<ExperimentalDesktopBrowserLease>(),
+    }),
+    openConnection: defineRoute({
+      path: "/desktop-browsers/connection",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserLeaseRequest>(
+        desktopBrowserLeaseRequestSchema,
+      ),
+      response: jsonResponse<ExperimentalDesktopBrowserConnection>(),
+    }),
+    releaseControl: defineRoute({
+      path: "/desktop-browsers/release",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserLeaseRequest>(
+        desktopBrowserLeaseRequestSchema,
+      ),
+      response: jsonResponse<{ ok: true }>(),
+    }),
+    closeTab: defineRoute({
+      path: "/desktop-browsers/close",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserTabRequest>(
+        desktopBrowserTabRequestSchema,
+      ),
+      response: jsonResponse<{ ok: true }>(),
+    }),
+    revealTab: defineRoute({
+      path: "/desktop-browsers/reveal",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserTabRequest>(
+        desktopBrowserTabRequestSchema,
+      ),
+      response: jsonResponse<{ ok: true }>(),
+    }),
+    captureTab: defineRoute({
+      path: "/desktop-browsers/capture",
+      method: "post",
+      request: jsonRequest<EmptyInput, ExperimentalDesktopBrowserTabRequest>(
+        desktopBrowserTabRequestSchema,
+      ),
+      response: jsonResponse<ExperimentalDesktopBrowserCapture>(),
     }),
   },
 
@@ -834,10 +946,6 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<WorkspacePathListResponse>(),
     }),
-    /**
-     * Execute an environment action such as commit or squash_merge.
-     * Returns 409 when the action is blocked by environment state.
-     */
     actions: defineRoute({
       path: "/environments/:id/actions",
       method: "post",
@@ -904,6 +1012,31 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<ThreadListResponse>(),
     }),
+    /**
+     * Grouped `SELECT count(*)` over threads. Exists because a plugin gate
+     * that limits concurrency must count without loading: `threads.list`
+     * would page rows into memory and still miscount past its limit.
+     */
+    count: defineRoute({
+      path: "/threads/count",
+      method: "get",
+      request: optionalQueryRequest<EmptyInput, ThreadCountQuery>(
+        threadCountQuerySchema,
+      ),
+      response: jsonResponse<ThreadCountResponse>(),
+    }),
+    /**
+     * The threads occupying capacity right now, as rows rather than a count.
+     * A limiter needs to know *which* threads are running to hold several
+     * pools at once — `threads.count` answers one pool per request and cannot
+     * reconcile a global limit with a per-host one from separate counts.
+     */
+    running: defineRoute({
+      path: "/threads/running",
+      method: "get",
+      request: noRequest(),
+      response: jsonResponse<ThreadRunningResponse>(),
+    }),
     search: defineRoute({
       path: "/threads/search",
       method: "get",
@@ -966,17 +1099,6 @@ export const publicApiRoutes = {
       request: noRequest<PathId>(),
       response: jsonResponse<ThreadChildSummaryResponse>(),
     }),
-    /**
-     * Send a message to a thread.
-     * mode=queue-if-active queues when the thread is active; otherwise it
-     * starts a turn. mode=steer-if-active steers when the thread is active;
-     * otherwise it starts a turn. Legacy mode=auto starts idle threads and
-     * uses the provider's auto target for active turns.
-     * A thread that awaits user interaction cannot take a prompt: every mode
-     * but `start` is then held (`delivery: "deferred"`) and delivered once the
-     * interaction settles; `start` still fails with 409
-     * `awaiting_user_interaction`.
-     */
     send: defineRoute({
       path: "/threads/:id/send",
       method: "post",
@@ -985,10 +1107,6 @@ export const publicApiRoutes = {
       ),
       response: jsonResponse<SendMessageResponse>(),
     }),
-    /**
-     * Replace an accepted root user turn and every later turn. A running
-     * thread is stopped and allowed to settle before history is rewritten.
-     */
     editMessage: defineRoute({
       path: "/threads/:id/edit-message",
       method: "post",
@@ -996,6 +1114,17 @@ export const publicApiRoutes = {
         editMessageRequestSchema,
       ),
       response: jsonResponse<EditMessageResponse>(),
+    }),
+    /**
+     * Retry a failed turn: re-submit it by reference, as an ordinary dispatch
+     * attempt. `turnRequestId` null means the thread's most recent turn, whose
+     * failure is what put the thread in `error`.
+     */
+    retry: defineRoute({
+      path: "/threads/:id/retry",
+      method: "post",
+      request: jsonRequest<PathId, RetryTurnRequest>(retryTurnRequestSchema),
+      response: jsonResponse<RetryTurnResponse>(),
     }),
     queuedMessages: defineRoute({
       path: "/threads/:id/queued-messages",
@@ -1024,10 +1153,6 @@ export const publicApiRoutes = {
       >(updateQueuedMessageRequestSchema),
       response: jsonResponse<ThreadQueuedMessage>(),
     }),
-    /**
-     * Send a previously queued message in the requested mode, then delete the
-     * queued message.
-     */
     sendQueuedMessage: defineRoute({
       path: "/threads/:id/queued-messages/:queuedMessageId/send",
       method: "post",
@@ -1076,6 +1201,12 @@ export const publicApiRoutes = {
     }),
     compact: defineRoute({
       path: "/threads/:id/compact",
+      method: "post",
+      request: noRequest<PathId>(),
+      response: jsonResponse<{ ok: true }>(),
+    }),
+    clearContext: defineRoute({
+      path: "/threads/:id/context/clear",
       method: "post",
       request: noRequest<PathId>(),
       response: jsonResponse<{ ok: true }>(),
@@ -1316,6 +1447,24 @@ export const publicApiRoutes = {
         threadFilesRawQuerySchema,
       ),
       response: binaryResponse<Uint8Array>(),
+    }),
+  },
+
+  queue: {
+    /**
+     * Every live queued row, optionally narrowed to one thread or one
+     * wait holder. Cross-thread because "what is queued right now" is a
+     * whole-workspace question (`bb thread queue list` with no thread, a
+     * limiter plugin's own bookkeeping, a router recovering its rows after a
+     * restart) that no single thread's list can answer.
+     */
+    list: defineRoute({
+      path: "/queued-messages",
+      method: "get",
+      request: optionalQueryRequest<EmptyInput, QueuedMessageListQuery>(
+        queuedMessageListQuerySchema,
+      ),
+      response: jsonResponse<ThreadQueuedMessageListResponse>(),
     }),
   },
 

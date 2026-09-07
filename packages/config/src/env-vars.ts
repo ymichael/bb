@@ -368,16 +368,12 @@ export const DEFAULT_BB_APP_URL = "";
 export const DEFAULT_BB_SERVER_BIND_HOST: ServerBindHost = BB_LOOPBACK_HOST;
 export const DEFAULT_BB_EXTERNAL_URL = "";
 export const DEFAULT_OPENAI_API_KEY = "";
-// Public write-only PostHog ingestion key (these are safe to ship; they can
-// only create events). Telemetry still only activates in production server
-// runs and can always be disabled with BB_TELEMETRY=false.
 export const DEFAULT_BB_POSTHOG_API_KEY =
   "phc_tejoYoNLV6vG8QAd5eYXXvcsENFYnP4brpZDGqG7zvpy";
 export const DEFAULT_BB_TELEMETRY = true;
 export const DEFAULT_BB_DEV_APP_HOST = "";
-/** Published by the registry repository through the getbb.app worker's R2 route. */
 export const DEFAULT_BB_MARKETPLACE_URL =
-  "https://getbb.app/marketplace/v1/marketplace.json";
+  "https://getbb.app/marketplace/v2/marketplace.json";
 export const DEFAULT_BB_INFERENCE = DEFAULTS.inferenceModel;
 export const DEFAULT_BB_INFERENCE_FALLBACK = DEFAULTS.inferenceFallbackModel;
 export const DEFAULT_BB_TRANSCRIPTION = DEFAULTS.transcriptionModel;

@@ -13,7 +13,6 @@ export type PaneContent =
       panelPath: string;
       subPath: string;
     }
-  /** An installed plugin's Extensions detail page. */
   | {
       kind: "plugin-detail";
       pluginId: string;

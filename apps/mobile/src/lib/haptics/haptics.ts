@@ -11,7 +11,6 @@ import {
 
 let store: HapticsPreferenceStore | null = null;
 
-/** App-wide haptics toggle (client-local, `bb.preferences` MMKV). */
 function getHapticsPreferenceStore(): HapticsPreferenceStore {
   store ??= createHapticsPreferenceStore(createMMKV({ id: "bb.preferences" }));
   return store;
@@ -43,18 +42,12 @@ async function performHapticCall(call: HapticCall): Promise<void> {
   }
 }
 
-/**
- * Fire haptic feedback for a semantic event, honoring the Settings toggle.
- * Best-effort and fire-and-forget: the simulator and unsupported hardware
- * reject, which is not an error the caller can act on.
- */
 export function haptic(kind: HapticKind): void {
   const call = resolveHapticCall(getHapticsPreferenceStore().isEnabled(), kind);
   if (call === null) return;
   performHapticCall(call).catch(() => undefined);
 }
 
-/** The toggle as React state plus its setter (Settings → Haptics). */
 export function useHapticsEnabled(): [boolean, (enabled: boolean) => void] {
   const preference = getHapticsPreferenceStore();
   const enabled = useSyncExternalStore(
@@ -65,8 +58,6 @@ export function useHapticsEnabled(): [boolean, (enabled: boolean) => void] {
   const setEnabled = useCallback(
     (next: boolean) => {
       preference.setEnabled(next);
-      // Confirm the change physically while the toggle is still under the
-      // finger — only when turning on (off means off).
       if (next) haptic("impact-light");
     },
     [preference],

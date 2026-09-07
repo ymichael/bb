@@ -16,11 +16,6 @@ export const REGISTRY_SKILL_NAME_PATTERN =
   /^(?!.*--)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/u;
 export const REGISTRY_SOURCE_PATTERN = /^(?!-)\S+$/u;
 
-/**
- * `.` and `..` survive encodeURIComponent, and `new URL` then normalizes them
- * away — so an unguarded `..` segment walks up the authenticated skills.sh API
- * path. Reject them wherever a source becomes part of a URL or an argv.
- */
 export function hasUnsafePathSegment(value: string): boolean {
   return value
     .split("/")
@@ -138,11 +133,6 @@ export function registrySkillUrl(id: string): string {
     .join("/")}`;
 }
 
-/**
- * Parses the skill records embedded in a skills.sh directory page. Both `/`
- * and `/trending` serialize them identically; only the meaning of `installs`
- * differs, which the caller carries as the page's ranking.
- */
 export function parsePublicDirectorySkills(html: string): RegistrySkill[] {
   const byId = new Map<string, RegistrySkill>();
   const pattern =
@@ -340,9 +330,6 @@ export function packageRefForSource(source: string): string {
     : source.includes(".")
       ? `https://${source}`
       : source;
-  // The leading-dash guard runs on the whole source, but stripping the
-  // github.com/ prefix can expose one: "github.com/-x/y" yields "-x/y", which
-  // the skills CLI would read as a flag rather than a package ref.
   if (ref.startsWith("-") || hasUnsafePathSegment(ref)) {
     throw new ApiError(
       400,

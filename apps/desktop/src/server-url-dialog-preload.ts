@@ -5,8 +5,6 @@ import {
   serverUrlDialogSubmitResponseSchema,
 } from "./server-url-dialog-ipc.js";
 
-// The dialog page carries no scripts of its own (CSP default-src 'none');
-// the preload wires the form from the isolated world instead.
 window.addEventListener("DOMContentLoaded", () => {
   const form = document.querySelector("form");
   const input = document.querySelector<HTMLInputElement>("input[name=url]");

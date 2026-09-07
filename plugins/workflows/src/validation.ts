@@ -15,13 +15,6 @@ const MAX_SCHEMA_NODES = 4_096;
 const MAX_SCHEMA_PROPERTIES = 256;
 const MAX_SCHEMA_ENUM_VALUES = 256;
 
-// Schemas are compiled and evaluated by Ajv in the bb server's Node process,
-// outside the interruptible QuickJS VM. Keep this deliberately smaller than
-// full JSON Schema: every supported assertion is bounded by the existing JSON
-// size limits and validates an instance in linear time. In particular, do not
-// admit regular expressions, recursive references, combinators, or assertions
-// such as uniqueItems whose work can grow superlinearly with attacker-selected
-// input.
 const SUPPORTED_SCHEMA_KEYWORDS = new Set([
   "$comment",
   "additionalProperties",

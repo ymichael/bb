@@ -1,9 +1,3 @@
-/**
- * Gruvbox palette (https://github.com/morhetz/gruvbox). Warm retro earth tones;
- * light mode uses the "faded" accent set for contrast on the cream canvas, dark
- * mode uses the "bright" set. See nord.ts for how the minimal override set
- * cascades to the rest of the tokens.
- */
 export const gruvboxThemeCss = `
 :root, .light {
   --canvas: #fbf1c7;

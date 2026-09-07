@@ -1,6 +1,3 @@
-// e2e/dev-only entry (`bb://e2e/reset`): wipe local state and go home, so
-// Maestro flows and developers can return the simulator to first run
-// without reinstalling. Inert in production bundles.
 import { Redirect, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { View } from "react-native";

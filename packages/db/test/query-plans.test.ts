@@ -29,14 +29,21 @@ import {
 import {
   COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS,
   pruneClosedSessions,
+  pruneDestroyedEnvironments,
   truncateCompletedEventItemOutputs,
 } from "../src/data/sweeps.js";
 import { getDatabaseMaintenanceActivity } from "../src/data/maintenance.js";
 import { openSession } from "../src/data/sessions.js";
+import {
+  listDueScheduledQueuedThreadMessages,
+  listQueuedThreadMessagesByWaitHolder,
+} from "../src/data/queued-thread-messages.js";
 import { upsertHost } from "../src/data/hosts.js";
 import { createProject } from "../src/data/projects.js";
+import { createEnvironment } from "../src/data/environments.js";
 import {
   createThread,
+  listRunningThreads,
   listThreadsWithPendingInteractionState,
 } from "../src/data/threads.js";
 
@@ -74,6 +81,7 @@ interface TestDb {
   db: DbConnection;
   host: IdentifiedRow;
   logger: CapturingSlowQueryLogger;
+  project: IdentifiedRow;
   thread: IdentifiedRow;
 }
 
@@ -127,7 +135,7 @@ function setup(): TestDb {
     providerId: "codex",
   });
   logger.clear();
-  return { db, host, logger, thread };
+  return { db, host, logger, project, thread };
 }
 
 function closeSessionAt(args: CloseSessionAtArgs): void {
@@ -159,10 +167,6 @@ interface CapturedStatement {
   sql: string;
 }
 
-// Captures the exact prepared SQL and bindings. The slow-query log is not
-// usable here: it redacts string literals and truncates long SQL, and both
-// would change the plan under EXPLAIN (a redacted literal no longer implies a
-// partial-index predicate, so an INDEXED BY pin stops preparing).
 function captureStatements(
   db: DbConnection,
   run: () => void,
@@ -223,6 +227,70 @@ function assertEmittedQueryPlanUsesIndex(
 }
 
 describe("slow query index plans", () => {
+  // Both queue indexes are PARTIAL. A partial index is only usable when the
+  // query repeats its WHERE clause, so a refactor that drops one liveness
+  // predicate from the query — or adds one to the index — silently degrades
+  // the sweep to a full table scan. Nothing else would notice.
+  it("finds due scheduled queued messages through the partial due index", () => {
+    const { db } = setup();
+
+    const captured = captureStatements(db, () => {
+      expect(listDueScheduledQueuedThreadMessages(db, 1_000)).toEqual([]);
+    });
+    expect(captured).toHaveLength(1);
+    const details = queryPlanDetails({
+      db,
+      params: captured[0]!.params,
+      sql: captured[0]!.sql,
+    });
+    expect(details).toMatch(/USING INDEX queued_thread_messages_due_idx/u);
+    expect(details).not.toMatch(/SCAN queued_thread_messages/u);
+
+    db.$client.close();
+  });
+
+  it("finds a plugin's held queued messages through the partial holder index", () => {
+    const { db } = setup();
+
+    const captured = captureStatements(db, () => {
+      expect(
+        listQueuedThreadMessagesByWaitHolder(db, "plugin:limiter"),
+      ).toEqual([]);
+    });
+    expect(captured).toHaveLength(1);
+    const details = queryPlanDetails({
+      db,
+      params: captured[0]!.params,
+      sql: captured[0]!.sql,
+    });
+    expect(details).toMatch(
+      /USING INDEX queued_thread_messages_wait_holder_idx/u,
+    );
+    expect(details).not.toMatch(/SCAN queued_thread_messages/u);
+
+    db.$client.close();
+  });
+
+  it("finds the occupying threads through the archived/status index", () => {
+    // A dispatch gate calls this on every admission decision, so a plan that
+    // degraded to a table scan would put one on every send in the server.
+    const { db } = setup();
+
+    const captured = captureStatements(db, () => {
+      listRunningThreads(db);
+    });
+    expect(captured).toHaveLength(1);
+    const details = queryPlanDetails({
+      db,
+      params: captured[0]!.params,
+      sql: captured[0]!.sql,
+    });
+    expect(details).toMatch(/USING INDEX threads_archived_status_idx/u);
+    expect(details).not.toMatch(/SCAN threads/u);
+
+    db.$client.close();
+  });
+
   it("uses the thread/type/sequence index for filtered event pages", () => {
     const { db, thread } = setup();
 
@@ -411,10 +479,11 @@ describe("slow query index plans", () => {
   it("uses selective indexes for conversation-outline events", () => {
     const { db, thread } = setup();
 
-    // The slow-query log truncates this union past 1,000 chars; capture the
-    // statement itself.
     const captured = captureStatements(db, () => {
-      listStoredConversationOutlineEventRows(db, { threadId: thread.id });
+      listStoredConversationOutlineEventRows(db, {
+        sequenceStart: 0,
+        threadId: thread.id,
+      });
     });
     const outline = captured.filter((query) =>
       query.sql.includes('from "events"'),
@@ -423,6 +492,7 @@ describe("slow query index plans", () => {
     const [query] = outline;
     expect(query?.params).toEqual([
       thread.id,
+      0,
       "client/turn/requested",
       "turn/input/accepted",
       "turn/started",
@@ -434,31 +504,34 @@ describe("slow query index plans", () => {
       "item/agentMessage/delta",
       "item/plan/delta",
       thread.id,
+      0,
       "item/completed",
       "agentMessage",
       "plan",
       thread.id,
+      0,
       "item/started",
       "item/completed",
       "item/backgroundTask/progress",
       "item/backgroundTask/completed",
       "backgroundTask",
       "toolCall",
+      "item/started",
     ]);
     const details = queryPlanDetails({
       db,
       params: query?.params ?? [],
       sql: query?.sql ?? "",
     });
-    // Each union branch stays on a thread/type index (the lifecycle branch has
-    // no item kind); the superseded-snapshot check on the structural branch
-    // probes the background-task partial index instead of scanning.
     expect(
       details.match(/USING INDEX events_thread_type_sequence_idx/gu),
     ).toHaveLength(1);
     expect(
       details.match(/USING INDEX events_thread_type_item_kind_sequence_idx/gu),
     ).toHaveLength(2);
+    expect(details).toMatch(
+      /USING INDEX events_item_lifecycle_thread_item_sequence_idx/u,
+    );
     expect(details).toMatch(
       /USING COVERING INDEX events_background_task_thread_type_item_sequence_idx/u,
     );
@@ -479,11 +552,9 @@ describe("slow query index plans", () => {
     if (!query) {
       throw new Error("Expected the plan snapshot SQL");
     }
-    // Keyed by item kind (and the legacy notification type), never by a
-    // tool name or a payload parse.
     expect(query.sql).not.toContain("json_extract");
     expect(query.sql).not.toContain("tool_name");
-    expect(query.params).toEqual([thread.id, 1]); // LIMIT 1
+    expect(query.params).toEqual([thread.id, 1]);
     expect(
       queryPlanDetails({ db, params: query.params, sql: query.sql }),
     ).toContain("events_plan_steps_thread_sequence_idx");
@@ -520,11 +591,6 @@ describe("slow query index plans", () => {
       params,
     });
 
-    // This query runs on every latest-page timeline build. Written with
-    // correlated subqueries it re-scanned the thread once per candidate task
-    // row — 154 ms on a real 9,012-event thread with 2,640 task rows — so the
-    // plan must resolve both "newest lifecycle row" and "already completed" as
-    // set membership, evaluated once.
     expect(
       queryPlanDetails({ db, params, sql: debugLog.fields.sql }),
     ).not.toMatch(/CORRELATED/);
@@ -567,6 +633,66 @@ describe("slow query index plans", () => {
       indexName: "host_daemon_sessions_closed_prune_idx",
       params: ["closed", closedBefore, 100],
     });
+    db.$client.close();
+  });
+
+  it("uses the environment index for bounded event detaches", () => {
+    const { db, host, logger, project, thread } = setup();
+    const now = Date.now();
+    const environment = createEnvironment(db, noopNotifier, {
+      hostId: host.id,
+      managed: true,
+      projectId: project.id,
+      status: "destroyed",
+      workspaceProvisionType: "managed-worktree",
+    });
+    insertEvents(db, noopNotifier, [
+      {
+        data: JSON.stringify({ text: "environment prune query plan" }),
+        environmentId: environment.id,
+        itemId: null,
+        itemKind: null,
+        parentToolCallId: null,
+        scope: threadScope(),
+        sequence: 1,
+        threadId: thread.id,
+        type: "system/manager/user_message",
+      },
+    ]);
+    const updatedBefore = now - 5_000;
+    db.$client
+      .prepare("UPDATE environments SET updated_at = ? WHERE id = ?")
+      .run(now - 10_000, environment.id);
+    logger.clear();
+
+    expect(
+      pruneDestroyedEnvironments(db, noopNotifier, {
+        eventBatchSize: 50,
+        limit: 1,
+        updatedBefore,
+      }),
+    ).toEqual({ deleted: 0, detachedEvents: 1 });
+
+    const debugLog = findOnlyDebugLog({
+      logger,
+      predicate: (fields) =>
+        fields.operation === "run" &&
+        fields.sql.startsWith("UPDATE events SET environment_id = NULL"),
+    });
+    assertEmittedQueryPlanUsesIndex({
+      db,
+      debugLog,
+      indexName: "events_environment_idx",
+      params: [environment.id, 50],
+    });
+    expect(
+      queryPlanDetails({
+        db,
+        params: [environment.id, 50],
+        sql: debugLog.fields.sql,
+      }),
+    ).not.toContain("USE TEMP B-TREE");
+
     db.$client.close();
   });
 
@@ -946,11 +1072,6 @@ describe("slow query index plans", () => {
       throw new Error("Expected the latest-thread-state lookup SQL");
     }
 
-    // The #1131 cold stall: with an ORDER BY present, the stats-less planner
-    // served this filter from events_thread_sequence_idx and fetched every
-    // event row of every listed thread. The contract is one probe of the tiny
-    // partial index for the candidate list and one for the per-thread MAX —
-    // never a full-size events index, never a temporary sort.
     const details = queryPlanDetails({
       db,
       params: statement.params,
@@ -988,9 +1109,6 @@ describe("slow query index plans", () => {
     expect(details).toContain(
       "USING COVERING INDEX pending_interactions_thread_status_created_idx",
     );
-    // The correlated EXISTS replaced a pending_interactions join with
-    // GROUP BY threads.id; a reintroduced GROUP BY brings back the temp
-    // B-tree materialization of the whole joined result.
     expect(details).not.toContain("USE TEMP B-TREE FOR GROUP BY");
 
     db.$client.close();
@@ -999,10 +1117,9 @@ describe("slow query index plans", () => {
   it("drops redundant events indexes after creating their consolidated replacement", () => {
     const { db } = setup();
     const indexRows = db.$client
-      .prepare<
-        [],
-        IndexNameRow
-      >("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'")
+      .prepare<[], IndexNameRow>(
+        "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'events'",
+      )
       .all();
     const indexNames = indexRows.map((row) => row.name);
 

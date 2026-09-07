@@ -39,13 +39,9 @@ import { useStickyFooterAvailableHeight } from "./useStickyFooterAvailableHeight
 interface UserQuestionAnswerFormProps {
   className?: string;
   interactionId: string;
-  /**
-   * The interaction has reached `status: "resolving"` — the server is in the
-   * middle of delivering the answer to the provider. Keeps the form chrome on
-   * screen with everything disabled and a spinner in the submit button.
-   */
   isResolving?: boolean;
   questions: readonly PendingInteractionUserQuestionQuestion[];
+  shortcutsEnabled: boolean;
   threadId: string;
 }
 
@@ -72,7 +68,6 @@ interface QuestionInputBlockProps {
   onToggleOption: (optionValue: string) => void;
   onSelectOther: () => void;
   onFreeTextChange: (value: string) => void;
-  /** Cmd/Ctrl+Enter in the free-text box advances/submits (see handleAdvance). */
   onShortcutSubmit: () => void;
   shortcuts: ReadonlyMap<string, AppShortcutPresentation>;
 }
@@ -134,7 +129,9 @@ function QuestionOptionRow({
         {checked ? <Icon name="Check" className="size-3" aria-hidden /> : null}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-medium text-foreground">{label}</span>
+        <span className="block text-sm font-medium text-foreground">
+          {label}
+        </span>
         {description ? (
           <span className="mt-0.5 block text-xs leading-snug text-muted-foreground">
             {description}
@@ -161,9 +158,7 @@ function QuestionTabs({
 }: QuestionTabsProps) {
   return (
     <div className="mb-2 flex shrink-0 items-center gap-2">
-      {/* A plain button group, not an ARIA tablist: these toggle which question
-          is shown but aren't tab/tabpanel widgets, so role="tablist" would be
-          malformed without role="tab" children + panels. */}
+      {}
       <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
         {questions.map((question, index) => {
           const answered = isQuestionAnswered(
@@ -212,18 +207,11 @@ function QuestionInputBlock({
   useLayoutEffect(() => {
     if (!state.otherSelected) return;
     resizeFreeTextArea();
-  }, [
-    question.id,
-    resizeFreeTextArea,
-    state.otherSelected,
-    state.otherText,
-  ]);
+  }, [question.id, resizeFreeTextArea, state.otherSelected, state.otherText]);
 
   const handleFreeTextKeyDown = (
     event: KeyboardEvent<HTMLTextAreaElement>,
   ): void => {
-    // Cmd/Ctrl+Enter submits/advances, but never mid-IME-composition (e.g.
-    // selecting a Japanese candidate with Enter must not submit).
     if (
       event.nativeEvent.isComposing ||
       event.key !== "Enter" ||
@@ -292,6 +280,7 @@ export function UserQuestionAnswerForm({
   interactionId,
   isResolving = false,
   questions,
+  shortcutsEnabled,
   threadId,
 }: UserQuestionAnswerFormProps) {
   const [formState, setFormState] = useState<QuestionFormState>(() =>
@@ -307,11 +296,6 @@ export function UserQuestionAnswerForm({
     QUESTION_SELECT_APP_COMMAND_IDS,
   );
 
-  // Reset the form only when a different interaction takes over. Keyed on the
-  // stable interaction id rather than the `questions` array, whose reference
-  // churns on background refetch/poll — depending on it would wipe in-progress
-  // answers. React's "adjust state during render" pattern always reads the
-  // current `questions`, so no effect (or stale closure) is needed.
   if (activeInteractionId !== interactionId) {
     setActiveInteractionId(interactionId);
     setFormState(createInitialFormState(questions));
@@ -415,12 +399,11 @@ export function UserQuestionAnswerForm({
     stopThread.mutate(threadId);
   };
 
-  // Scope number-key question answers to the focused split pane, so a pending
-  // question in another pane never steals the keypress. Defaults to focused on
-  // standalone/single-pane surfaces (no pane context).
   const isFocusedPane = useOptionalPaneContext()?.isFocused ?? true;
   const selectChoiceAt = (index: number): boolean => {
-    if (!isFocusedPane || disabled || !currentQuestion) return false;
+    if (!isFocusedPane || disabled || !shortcutsEnabled || !currentQuestion) {
+      return false;
+    }
     const choice = resolveQuestionShortcutChoice(currentQuestion, index);
     if (choice?.kind === "option") {
       handleToggleOption(currentQuestion, choice.value);
@@ -433,11 +416,15 @@ export function UserQuestionAnswerForm({
     return false;
   };
 
-  useAppCommandContext("questionOpen", currentQuestion !== null && !disabled);
+  useAppCommandContext(
+    "questionOpen",
+    currentQuestion !== null && !disabled && shortcutsEnabled,
+  );
   useIndexedAppCommandHandlers(
     QUESTION_SELECT_APP_COMMAND_IDS,
     selectChoiceAt,
     100,
+    shortcutsEnabled,
   );
 
   if (!currentQuestion) {
@@ -451,19 +438,13 @@ export function UserQuestionAnswerForm({
       ref={rootRef}
       className={cn(
         "flex min-h-0 flex-col text-xs text-muted-foreground",
-        // Fallback outside a bottom-anchored scroll body (stories, tests). In
-        // the thread view the measured footer space wins: it accounts for the
-        // header, safe-area insets, keyboard, and sibling footer content.
         availableHeight === null && "max-h-[calc(100dvh-6rem)]",
         className,
       )}
       style={
         availableHeight === null
           ? undefined
-          : // No floor: a floor above the measured space pushes the footer
-            // taller than the scroll port again. The tab strip and action row
-            // are `shrink-0`, so they stay visible even when only they fit.
-            { maxHeight: `${availableHeight}px` }
+          : { maxHeight: `${availableHeight}px` }
       }
     >
       {totalQuestions > 1 ? (

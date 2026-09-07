@@ -11,7 +11,7 @@
   "files": [
     {
       "path": "registry/lib/utils.ts",
-      "content": "import { type ClassValue, clsx } from \"clsx\";\nimport { twMerge } from \"tailwind-merge\";\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs));\n}\n\n/**\n * Abbreviate a conventional absolute home directory for display only.\n *\n * Detail surfaces can show paths from remote hosts, so the browser cannot use\n * its own HOME value. Preserve the original path for actions and compact only\n * the standard macOS, Linux, root, and Windows home layouts users recognize.\n */\nexport function formatHomePathForDisplay(pathValue: string): string {\n  const homePrefix =\n    pathValue.match(/^\\/Users\\/[^/]+(?=\\/|$)/)?.[0] ??\n    pathValue.match(/^\\/home\\/[^/]+(?=\\/|$)/)?.[0] ??\n    pathValue.match(/^\\/root(?=\\/|$)/)?.[0] ??\n    pathValue.match(/^[A-Za-z]:[\\\\/]Users[\\\\/][^\\\\/]+(?=[\\\\/]|$)/i)?.[0];\n  return homePrefix === undefined\n    ? pathValue\n    : `~${pathValue.slice(homePrefix.length)}`;\n}\n",
+      "content": "import { type ClassValue, clsx } from \"clsx\";\nimport { twMerge } from \"tailwind-merge\";\n\nexport function cn(...inputs: ClassValue[]) {\n  return twMerge(clsx(inputs));\n}\n\nexport function formatHomePathForDisplay(pathValue: string): string {\n  const homePrefix =\n    pathValue.match(/^\\/Users\\/[^/]+(?=\\/|$)/)?.[0] ??\n    pathValue.match(/^\\/home\\/[^/]+(?=\\/|$)/)?.[0] ??\n    pathValue.match(/^\\/root(?=\\/|$)/)?.[0] ??\n    pathValue.match(/^[A-Za-z]:[\\\\/]Users[\\\\/][^\\\\/]+(?=[\\\\/]|$)/i)?.[0];\n  return homePrefix === undefined\n    ? pathValue\n    : `~${pathValue.slice(homePrefix.length)}`;\n}\n",
       "type": "registry:lib",
       "target": "lib/utils.ts"
     }

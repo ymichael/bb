@@ -6,7 +6,6 @@ import { z } from "zod";
 import { resolveCodexHome } from "../codex-home.js";
 import { AiServiceFailure } from "./failure.js";
 
-/** `JsonValue` narrowed to its object arm. */
 export type JsonObject = { [key: string]: JsonValue };
 
 const CODEX_AUTH_FILE_NAME = "auth.json";
@@ -18,10 +17,6 @@ export interface CodexChatGptAuthCredentials {
   accessToken: string;
   accountId: string;
   accountEmail: string | null;
-  /**
-   * The access token's `exp` claim has passed. Health and usage report it;
-   * the AI services still send the token as-is (codex owns the refresh).
-   */
   expired: boolean;
   isFedrampAccount: boolean;
 }
@@ -35,19 +30,12 @@ export type CodexAuthCredentials =
   | CodexChatGptAuthCredentials
   | CodexOpenAiApiKeyCredentials;
 
-/** Why an `auth.json` that is valid JSON still yields no credentials. */
 export type CodexAuthUnusableReason =
   | "not_object"
   | "api_key"
   | "access_token"
   | "account_id";
 
-/**
- * What `$CODEX_HOME/auth.json` holds, classified once for both readers: the
- * bridge's health/usage probe (missing or unusable reads as "not logged in";
- * an unreadable or unparsable file is the error it reports) and the AI
- * services (every state but `ok` is an `AiServiceFailure`).
- */
 export type CodexAuthFile =
   | { state: "missing"; authPath: string }
   | { state: "unreadable"; authPath: string; error: Error }
@@ -159,7 +147,6 @@ function classifyAuthJson(value: JsonValue): ClassifiedAuthJson {
     return { state: "unusable", reason: "access_token" };
   }
   const claims = chatGptClaims(accessToken);
-  // `id_token` is either a JWT or, in older files, its claims object.
   const idToken = nonEmptyString(tokens.id_token);
   const idTokenClaims =
     idToken === null ? toJsonObject(tokens.id_token) : chatGptClaims(idToken);
@@ -187,7 +174,6 @@ function classifyAuthJson(value: JsonValue): ClassifiedAuthJson {
   };
 }
 
-/** Read `$CODEX_HOME/auth.json` once; never throws. */
 export async function readCodexAuthFile(): Promise<CodexAuthFile> {
   const authPath = codexAuthPath();
   let raw: string;
@@ -221,7 +207,6 @@ const UNUSABLE_AUTH_MESSAGES: Record<
     "Codex auth tokens do not include a ChatGPT account id. Run codex login on this host.",
 };
 
-/** The AI services' reader: credentials, or the `AiServiceFailure` to report. */
 export async function readCodexAuthCredentials(): Promise<CodexAuthCredentials> {
   const auth = await readCodexAuthFile();
   switch (auth.state) {

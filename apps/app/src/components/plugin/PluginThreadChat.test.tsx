@@ -18,7 +18,6 @@ vi.mock("@/lib/sdk", () => ({
   sdk: {
     threads: { get: vi.fn() },
     environments: { get: vi.fn() },
-    // The chat resolves the thread's provider plugin from the roster.
     providers: { list: vi.fn(async () => []) },
   },
   BbHttpError: class BbHttpError extends Error {
@@ -31,6 +30,7 @@ vi.mock("@/lib/sdk", () => ({
 }));
 
 vi.mock("@/hooks/useRealtimeSubscription", () => ({
+  useHostListRealtimeSubscription: vi.fn(),
   useThreadDetailRealtimeSubscription: vi.fn(),
   useThreadListRealtimeSubscription: vi.fn(),
   useEnvironmentDetailRealtimeSubscription: vi.fn(),
@@ -64,11 +64,6 @@ const THREAD_FIXTURE = {
   runtime: { displayStatus: "idle" },
 };
 
-/**
- * A plugin page the way a real plugin would write one: it renders the SDK
- * runtime's ThreadChat (the host implementation registered on
- * pluginSdkAppImplementation), not the adapter import directly.
- */
 function DemoPluginPage({ threadId }: { threadId: string }) {
   const ThreadChat = pluginSdkAppImplementation.ThreadChat;
   return <ThreadChat threadId={threadId} variant="compact" />;
@@ -124,8 +119,6 @@ describe("PluginThreadChat", () => {
       </Wrapper>,
     );
 
-    // The thread loads through the host's real useThread (react-query + sdk),
-    // proving both contexts reach a component mounted inside a plugin slot.
     await waitFor(() =>
       expect(screen.getByTestId("embedded-thread-chat")).toBeTruthy(),
     );
@@ -133,7 +126,6 @@ describe("PluginThreadChat", () => {
       expect.objectContaining({ threadId: "thr_demo" }),
     );
     const props = mocks.embeddedChatProps.at(-1)!;
-    // The engine receives values derived from the thread, not plugin input.
     expect(props.projectId).toBe("proj_demo");
     expect(props.providerId).toBe("provider_demo");
     expect(props.variant).toBe("compact");
@@ -165,9 +157,6 @@ describe("PluginThreadChat", () => {
     await waitFor(() =>
       expect(screen.getByTestId("embedded-thread-chat")).toBeTruthy(),
     );
-    // Opting in is what widens the composer: the default stays pinned to the
-    // thread's resolved mode (asserted above), so a plugin can never hand out
-    // a live Full Access picker by accident.
     expect(mocks.embeddedChatProps.at(-1)!.composer).toEqual(
       expect.objectContaining({ permissionPolicy: "editable" }),
     );
@@ -273,8 +262,6 @@ describe("PluginThreadChat", () => {
     expect(actions[0]).toEqual(
       expect.objectContaining({
         id: "send-to-main",
-        // An explicit icon hint wins over the mounting plugin's branding, so
-        // the action keeps its semantic glyph.
         pluginId: null,
         icon: "ArrowTurnBackward",
         label: "Send to main thread",

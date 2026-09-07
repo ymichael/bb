@@ -1,7 +1,3 @@
-/**
- * The declaration as bb registers it. The fake host runs the same validator
- * the server does, so what this asserts is what a real install carries.
- */
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import { describe, expect, it } from "vitest";
 import echoPlugin from "./server.js";
@@ -21,8 +17,6 @@ function registeredDeclaration() {
 
 describe("the echo provider's native skill root", () => {
   it("registers the one project root, normalized with every option explicit", () => {
-    // The author writes a bare path; the host fills the defaults once at
-    // registration so core never reads an optional field off the wire.
     expect(registeredDeclaration().experimental_nativeSkillRoots).toEqual({
       user: [],
       project: [
@@ -37,7 +31,6 @@ describe("the echo provider's native skill root", () => {
   });
 
   it("declares no command roots and no host-side resolver", () => {
-    // The root above is the whole native-roots surface this canary exercises.
     const declaration = registeredDeclaration();
     expect(declaration.experimental_nativeCommandRoots).toBeUndefined();
     expect(declaration.experimental_resolvesNativeRoots).toBe(false);

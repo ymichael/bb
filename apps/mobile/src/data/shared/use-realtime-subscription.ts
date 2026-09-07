@@ -20,14 +20,6 @@ const HOST_LIST_TARGET = {
 } satisfies RealtimeSubscriptionTarget;
 const SYSTEM_TARGET = { kind: "system" } satisfies RealtimeSubscriptionTarget;
 
-/**
- * Hold a realtime subscription for the active profile while mounted (mirrors
- * apps/app/src/hooks/useRealtimeSubscription.ts). The mobile realtime manager
- * refcounts targets, so several hooks may share one server subscription and
- * the last unmount releases it (which also releases daemon file watching for
- * `thread-detail`). Pass a memoized `target` (or use the typed helpers
- * below): a fresh object every render would bounce the server subscription.
- */
 function useRealtimeSubscription(
   target: RealtimeSubscriptionTarget | null,
   options?: RealtimeSubscriptionOptions,
@@ -66,10 +58,6 @@ export function useProjectDetailRealtimeSubscription(
   useRealtimeSubscription(target, options);
 }
 
-/**
- * Drives host-daemon workspace watching for an environment (work status,
- * git refs) while a banner / git sheet is showing it.
- */
 export function useEnvironmentDetailRealtimeSubscription(
   environmentId: string | null | undefined,
   options?: RealtimeSubscriptionOptions,

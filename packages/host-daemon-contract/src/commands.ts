@@ -1,12 +1,17 @@
 import {
+  desktopBrowserCommandSchemas,
+  desktopBrowserResultSchemas,
+} from "./desktop-browser.js";
+import {
   availableModelSchema,
   discoveredWorkspacePropertiesSchema,
   dynamicToolSchema,
+  gitBranchOptionsSchema,
+  gitSourceInspectionSchema,
   instructionModeSchema,
   pendingInteractionResolutionSchema,
   permissionModeSchema,
   promptInputSchema,
-  projectSourceCheckoutSchema,
   providerForkSchema,
   threadGitDiffResponseSchema,
   workspaceProvisionTypeSchema,
@@ -87,7 +92,6 @@ function isConnectBaseDomain(value: string): boolean {
   }
 }
 
-/** Gate identity derived and assigned by the enrolled host daemon. */
 export const hostDaemonConnectTunnelIdentitySchema = z
   .object({
     label: z
@@ -150,21 +154,8 @@ export type HostDaemonInjectedSkillSource = z.infer<
   typeof hostDaemonInjectedSkillSourceSchema
 >;
 
-/**
- * How the daemon obtains the provider bridge for a provider. Every provider is
- * plugin-declared, so every command that reaches a bridge carries one of these
- * — the source names the delivery path explicitly rather than leaving the
- * daemon to infer it from an absent field. There is one: `"artifact"` —
- * download the plugin's content-addressed host artifact from the server by
- * digest, verify the bytes, cache it under the daemon data dir, and run it
- * with the daemon's node through the bridge bootstrap.
- */
 const hostDaemonBridgeLaunchSchema = z
   .object({
-    // The plugin that ships this bridge. It names the artifact to fetch, and
-    // it scopes the bridge process's own directories on the host — a bridge is
-    // a `bb.host` artifact like any other, so it gets the same plugin-scoped
-    // data directory a host worker does.
     pluginId: z.string().min(1),
     source: z
       .object({
@@ -173,12 +164,6 @@ const hostDaemonBridgeLaunchSchema = z
         byteLength: z.number().int().positive().max(HOST_ARTIFACT_MAX_BYTES),
       })
       .strict(),
-    // The provider's server-validated capabilities, exactly the facts the
-    // runtime enforces before a command reaches the bridge: which execution
-    // options it accepts (permission modes, service tier) and which thread
-    // operations it offers (archive, rename, fork). The daemon has no
-    // registry, so without these it would have to guess a baseline and reject
-    // work the server already accepted.
     capabilities: z
       .object({
         providerInstallation: z.boolean(),
@@ -190,17 +175,27 @@ const hostDaemonBridgeLaunchSchema = z
       })
       .strict(),
     providerOptions: jsonObjectSchema,
-    /**
-     * Daemon environment variable names the bridge may read (the provider's
-     * declared `env.passthrough`). The daemon strips every
-     * inherited `BB_*` variable from provider processes and forwards exactly
-     * these. Always present; empty when the provider declared none.
-     */
     envPassthrough: z.array(z.string().min(1)),
   })
   .strict();
 export type HostDaemonBridgeLaunch = z.infer<
   typeof hostDaemonBridgeLaunchSchema
+>;
+
+export const hostDaemonContributedEnvEntrySchema = z
+  .object({
+    name: z.string().regex(/^[A-Z_][A-Z0-9_]*$/u),
+    value: z.union([
+      z.string(),
+      z.object({ serverPath: z.string().startsWith("/") }).strict(),
+    ]),
+    source: z.object({ plugin: z.string().min(1) }).strict(),
+    reason: z.string(),
+    secret: z.boolean(),
+  })
+  .strict();
+export type HostDaemonContributedEnvEntry = z.infer<
+  typeof hostDaemonContributedEnvEntrySchema
 >;
 
 const hostDaemonThreadRuntimeContextSchema = z
@@ -212,6 +207,7 @@ const hostDaemonThreadRuntimeContextSchema = z
     options: runtimeThreadExecutionOptionsSchema,
     instructions: z.string().min(1),
     dynamicTools: z.array(dynamicToolSchema),
+    contributedEnv: z.array(hostDaemonContributedEnvEntrySchema).default([]),
     injectedSkillSources: z.array(hostDaemonInjectedSkillSourceSchema),
     disallowedTools: z.array(z.string()).optional(),
     instructionMode: instructionModeSchema,
@@ -285,17 +281,9 @@ const threadStartCommandSchema = hostDaemonThreadTargetSchema
   .extend({
     type: z.literal("thread.start"),
     requestId: clientTurnRequestIdSchema,
-    // A fork start establishes the cloned provider session with an empty
-    // timeline (the runtime's no-input-no-turn guard leaves it idle), so it
-    // carries no input. A non-fork start always runs a first turn and requires
-    // at least one input, enforced by the refinement below.
     input: z.array(promptInputSchema),
     inputGroups: z.array(z.array(promptInputSchema).min(1)).min(1).optional(),
     threadStoragePath: z.string().min(1).optional(),
-    /** Present means fork the new thread from this source provider session
-     *  instead of starting fresh; absent means a normal start. The clone
-     *  retains the source history through `sourceProviderCheckpointId`; an
-     *  absent checkpoint clones the session tip. */
     fork: z
       .object({
         sourceProviderThreadId: z.string().min(1),
@@ -319,7 +307,6 @@ const threadRewindPrepareCommandSchema = hostDaemonThreadTargetSchema
   .merge(hostDaemonThreadRuntimeContextSchema)
   .extend({
     type: z.literal("thread.rewind.prepare"),
-    /** Server-minted per-attempt staging id; each lease owns one staged fork. */
     leaseId: z.string().min(1),
     sourceProviderThreadId: z.string().min(1),
     retainThroughProviderCheckpoint: z.string().min(1),
@@ -348,14 +335,6 @@ const turnSubmitTargetSchema = z.discriminatedUnion("mode", [
 ]);
 export type TurnSubmitTarget = z.infer<typeof turnSubmitTargetSchema>;
 
-/**
- * Submit input for an existing provider thread. The daemon chooses whether
- * auto-targeted input steers the live active turn or starts a new turn. The
- * nullable expected id is the server's snapshot; the daemon rechecks its
- * runtime so input sent while turn/started is still in flight is not mistaken
- * for a competing turn, and rejects instead of starting another turn if the
- * pending start does not produce an id within its bounded wait.
- */
 const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
   .extend({
     type: z.literal("turn.submit"),
@@ -370,12 +349,6 @@ const turnSubmitCommandSchema = hostDaemonThreadTargetSchema
   .strict()
   .superRefine(refineGroupedInputMatchesFlatInput);
 
-/**
- * `interrupt` stops a live turn: the daemon waits for the runtime to learn the
- * active turn so the provider stop carries the right turn id. `release` only
- * unloads a runtime the server already knows is idle, so the daemon skips that
- * wait and the server leaves thread lifecycle state alone.
- */
 const threadStopIntentSchema = z.enum(["interrupt", "release"]);
 
 export type ThreadStopIntent = z.infer<typeof threadStopIntentSchema>;
@@ -419,10 +392,6 @@ const threadArchiveCommandSchema = hostDaemonThreadWorkspaceTargetSchema
   })
   .strict();
 
-// Carries environmentId (not just threadId) so the host daemon can serialize
-// it in the same per-environment write lane as thread.archive; otherwise a
-// slower archive can land after a later unarchive and leave the provider
-// session archived against the user's intent.
 const threadUnarchiveCommandSchema = hostDaemonThreadTargetSchema
   .extend({
     type: z.literal("thread.unarchive"),
@@ -443,19 +412,6 @@ const interactiveResolveCommandSchema = hostDaemonThreadTargetSchema
   })
   .strict();
 
-/**
- * Read a file from an absolute host path. When `rootPath` is provided, the
- * daemon enforces that the resolved file stays under that declared absolute
- * root. When `rootPath` is omitted, the daemon reads the explicit absolute
- * disk path without containment-root checks.
- *
- * When `ref` is set, the file is read from git history at that ref instead of
- * from disk. `rootPath` is then interpreted as the repo root, the path becomes
- * a `<repo>/<rel>` join, and the daemon shells `git -C <rootPath> cat-file`.
- * Same caps, same encoding detection, same `file_too_large` behavior — the
- * only difference is the source of bytes. A missing object at `ref` (e.g.
- * the file did not exist at that ref) returns empty content, not an error.
- */
 const hostReadFileCommandSchema = z
   .object({
     type: z.literal("host.read_file"),
@@ -478,11 +434,6 @@ export type HostReadFileRelativeDotfilePolicy = z.infer<
   typeof hostReadFileRelativeDotfilePolicySchema
 >;
 
-/**
- * Read a file beneath an absolute root by POSIX-style relative path. The daemon
- * resolves the root and target with realpath, rejects symlink escapes, and can
- * make dot-prefixed path segments indistinguishable from missing files.
- */
 const hostReadFileRelativeCommandSchema = z
   .object({
     type: z.literal("host.read_file_relative"),
@@ -500,20 +451,6 @@ const hostFileMetadataCommandSchema = z
   })
   .strict();
 
-/**
- * Write a file at an absolute host path. Mirrors `host.read_file`'s
- * containment contract: when `rootPath` is provided, the daemon enforces that
- * the resolved target stays under that declared absolute root (following
- * symlinks on the nearest existing ancestor).
- *
- * `expectedSha256` is the optimistic-concurrency guard for read-modify-write
- * callers (editors saving over files agents may also touch):
- * - omitted → unconditional write
- * - a hash  → write only when the current content hashes to it
- * - null    → write only when the file does not exist yet (create)
- * A failed guard is the `conflict` result, not an error, so the caller gets
- * the current hash to re-read against.
- */
 const hostWriteFileCommandSchema = z
   .object({
     type: z.literal("host.write_file"),
@@ -586,14 +523,8 @@ const hostRemovePathCommandSchema = z
   })
   .strict();
 
-// Single-level directory listing for the interactive path browser. Unlike
-// `host.list_paths` (a recursive fuzzy-search walk over relative paths), this
-// reads exactly one directory and returns absolute child paths so the UI can
-// navigate step by step.
 const hostBrowseDirectoryCommandSchema = z.object({
   type: z.literal("host.browse_directory"),
-  // Absolute directory to list. Omitted means the host's home directory, which
-  // the daemon resolves — a remote caller has no way to know the host's home.
   path: z.string().min(1).optional(),
 });
 
@@ -685,9 +616,7 @@ const directoryEntrySchema = z.object({
 export type DirectoryEntry = z.infer<typeof directoryEntrySchema>;
 
 const directoryListingSchema = z.object({
-  // Resolved absolute directory that was listed (symlinks already followed).
   directory: z.string(),
-  // Absolute parent directory, or null at the filesystem root.
   parent: z.string().nullable(),
   entries: z.array(directoryEntrySchema),
 });
@@ -698,13 +627,6 @@ export type HostCommandSource = z.infer<typeof hostCommandSourceSchema>;
 const hostCommandOriginSchema = z.enum(["project", "user"]);
 export type HostCommandOrigin = z.infer<typeof hostCommandOriginSchema>;
 
-/**
- * A discovered provider skill or legacy slash command. The daemon returns the
- * raw parsed records; server policy (merge/de-dup/sort) is applied on
- * top. Mirrors `@bb/server-contract`'s `ProviderCommand` shape (the contract
- * packages intentionally define matching record shapes independently, like
- * `hostPathEntrySchema` / `workspacePathEntrySchema`).
- */
 const hostProviderCommandSchema = z.object({
   name: z.string(),
   source: hostCommandSourceSchema,
@@ -714,14 +636,6 @@ const hostProviderCommandSchema = z.object({
 });
 export type HostProviderCommand = z.infer<typeof hostProviderCommandSchema>;
 
-/**
- * List the provider's discoverable skills / legacy slash commands. The daemon
- * scans exactly `nativeRoots`: the provider's declared skill and command roots
- * (relative roots resolved against the host home or `cwd`; `cwd: null` skips
- * project roots) and the roots the provider's plugin resolved for this host
- * and workspace. The daemon names no provider. bb-managed skills are resolved
- * by the server's canonical skill catalog and never cross this boundary.
- */
 const hostListCommandsCommandSchema = z
   .object({
     type: z.literal("host.list_commands"),
@@ -731,13 +645,6 @@ const hostListCommandsCommandSchema = z
   })
   .strict();
 
-/**
- * Which scan root a discovered skill came from, as raw root identity — not a
- * product scope. The server maps `(providerId, rootKind)` to the user-facing
- * scope (e.g. `provider-user` under `claude-code` → `claude-user`, under
- * `codex` → `codex`) and decides `manageable`. Kept here, not derived on the
- * daemon, because only the server knows which provider it queried.
- */
 const skillRootKindSchema = z.enum([
   "bb-project",
   "bb-data-dir",
@@ -750,28 +657,16 @@ const skillRootKindSchema = z.enum([
 ]);
 export type SkillRootKind = z.infer<typeof skillRootKindSchema>;
 
-/**
- * A discovered skill for the Skills management page. Unlike
- * `hostProviderCommandSchema` (typeahead) this carries the absolute `filePath`
- * (backs View / Delete) and the originating `rootKind`. Skill-only — legacy
- * `command`-source entries are not surfaced here.
- */
 const discoveredSkillSchema = z.object({
   id: z.string().regex(/^skill_[a-f0-9]{64}$/u),
   name: z.string(),
   description: z.string().nullable(),
   filePath: z.string(),
   rootKind: skillRootKindSchema,
-  /** True when discovery followed either the skill directory or SKILL.md symlink. */
   linked: z.boolean(),
 });
 export type DiscoveredSkill = z.infer<typeof discoveredSkillSchema>;
 
-/**
- * List discoverable skills (not legacy commands) for a provider, classified by
- * originating root. Same root-resolution rules as `host.list_commands`:
- * `cwd: null` skips the project roots and returns only user-home/bb scopes.
- */
 const hostListSkillsCommandSchema = z
   .object({
     type: z.literal("host.list_skills"),
@@ -781,23 +676,13 @@ const hostListSkillsCommandSchema = z
   })
   .strict();
 
-/** User-owned local skill scopes that can be deleted after path confinement. */
 export const deletableSkillScopeSchema = z.enum([
   "bb-user",
   "bb-project",
-  // The daemon only distinguishes bb roots (derived locally) from provider
-  // roots (an explicit `rootPath` from server-side discovery), so naming the
-  // provider here bought nothing and closed the vocabulary to plugins.
   "provider-user",
   "provider-project",
 ]);
 
-/**
- * Delete a local user-owned skill directory. bb roots are derived from scope;
- * provider roots are resolved from authoritative discovery by the server and
- * supplied explicitly. The daemon realpath-confines the target to the named
- * direct child of that root and refuses symlink escapes.
- */
 const hostDeleteSkillCommandSchema = z
   .object({
     type: z.literal("host.delete_skill"),
@@ -833,13 +718,6 @@ const hostDeleteSkillCommandSchema = z
     }
   });
 
-/**
- * Overwrite an existing bb skill's SKILL.md. Same confinement as delete: the
- * path is built host-side from `(scope, name, cwd)` (never a client path), the
- * name must be a single safe segment, and the resolved target must be exactly
- * `<bb-root>/<name>/SKILL.md` of an already-existing skill. Edits only — it
- * never creates new skills (creation is via prompt).
- */
 const writableBbSkillScopeSchema = z.enum(["bb-user", "bb-project"]);
 
 const hostWriteSkillCommandSchema = z
@@ -862,12 +740,6 @@ const hostWriteSkillCommandSchema = z
     }
   });
 
-/**
- * Copy server-owned skill trees into the host's global agent skill roots
- * (`~/.agents/skills` and `~/.claude/skills`) so agents running outside bb can
- * load them. The server picks which skills to publish and supplies their tree
- * hashes; the daemon pulls each tree and owns the home-relative destinations.
- */
 const hostInstallGlobalSkillSchema = z
   .object({
     name: z.string().max(64).regex(INJECTED_SKILL_NAME_PATTERN),
@@ -886,12 +758,6 @@ const hostInstallGlobalSkillsCommandSchema = z
   })
   .strict();
 
-/**
- * Read what is currently installed in this host's global agent skill roots.
- * The daemon returns the raw content hash of each installed copy (hashed like a
- * skill tree, so it is comparable to a tree hash); the server decides whether
- * that means installed, out of date, or missing.
- */
 const hostGlobalSkillsStatusCommandSchema = z
   .object({
     type: z.literal("host.global_skills_status"),
@@ -902,23 +768,14 @@ const hostGlobalSkillsStatusCommandSchema = z
   })
   .strict();
 
-/**
- * List a bounded page of git branches at an absolute host path. Path-only
- * sibling of `host.list_files`. Does not require an environment row, does not
- * provision anything, and does not create daemon-side workspace state.
- */
-const hostListBranchesCommandSchema = z.object({
-  type: z.literal("host.list_branches"),
-  path: z.string().min(1),
-  query: z.string().max(BRANCH_LIST_QUERY_MAX_LENGTH).optional(),
-  selectedBranch: gitBranchNameSchema.optional(),
-  limit: z.number().int().positive().max(BRANCH_LIST_LIMIT_MAX),
-});
+const hostInspectGitSourceCommandSchema = z
+  .object({
+    type: z.literal("host.inspect_git_source"),
+    path: z.string().min(1),
+    remoteRefresh: z.enum(["background", "blocking"]),
+  })
+  .strict();
 
-/**
- * List cached branch options without coupling picker latency to a remote
- * refresh or to the checkout metadata needed by project/worktree flows.
- */
 const hostListBranchOptionsCommandSchema = z
   .object({
     type: z.literal("host.list_branch_options"),
@@ -929,14 +786,6 @@ const hostListBranchOptionsCommandSchema = z
     remoteRefresh: z.enum(["background", "none"]),
   })
   .strict();
-
-const hostBranchOptionsResultSchema = projectSourceCheckoutSchema.pick({
-  branches: true,
-  branchesTruncated: true,
-  remoteBranches: true,
-  remoteBranchesTruncated: true,
-  selectedBranch: true,
-});
 
 const providerListModelsCommandSchema = z.object({
   type: z.literal("provider.list_models"),
@@ -974,7 +823,6 @@ const providerInstallationRunCommandSchema = z
   })
   .strict();
 
-/** Host-local readiness returned by a provider bridge (the bridge protocol's shape). */
 export { providerHealthSchema };
 export type {
   ProviderHealth,
@@ -983,9 +831,7 @@ export type {
 
 const provisionInitiatorSchema = z
   .object({
-    /** Thread that initiated provisioning. Used to stream progress events. */
     threadId: z.string().min(1),
-    /** Stable provisioning lifecycle rendered by streamed progress events. */
     provisioningId: z.string().min(1),
   })
   .strict();
@@ -993,15 +839,9 @@ const provisionInitiatorSchema = z
 const environmentProvisionCommandBaseSchema =
   hostDaemonEnvironmentTargetSchema.extend({
     type: z.literal("environment.provision"),
-    /** Initiating thread for live progress streaming. Null when no thread is associated (e.g., project source provisioning). */
     initiator: provisionInitiatorSchema.nullable(),
   });
 
-/**
- * Pre-provision checkout for unmanaged workspaces. The server resolves the
- * branch name (including server-minted names for the `new` case) and base
- * branch before sending — daemon just runs the corresponding git checkout.
- */
 const unmanagedCheckoutSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -1022,26 +862,16 @@ const unmanagedEnvironmentProvisionCommandSchema =
   environmentProvisionCommandBaseSchema
     .extend({
       workspaceProvisionType: z.literal("unmanaged"),
-      /** Path to validate */
       path: z.string().min(1),
-      /** When set, the daemon checks out this branch before opening the workspace. */
       checkout: unmanagedCheckoutSchema.optional(),
     })
     .strict();
 
 const managedEnvironmentProvisionFieldsSchema = z.object({
-  /** Source repo path */
   sourcePath: z.string().min(1),
-  /** Target path for worktree/clone creation */
   targetPath: z.string().min(1),
-  /** Name of the new branch the daemon should create for this environment. */
   branchName: gitBranchNameSchema,
-  /**
-   * Branch on the source repo that the new branch should be based on. Pass
-   * `null` to use the source's default branch (resolved by the daemon).
-   */
   baseBranch: gitBranchNameSchema.nullable(),
-  /** Maximum time in ms to wait for the setup script */
   setupTimeoutMs: z.number().int().positive(),
 });
 
@@ -1055,29 +885,10 @@ const personalEnvironmentProvisionCommandSchema =
   environmentProvisionCommandBaseSchema
     .extend({
       workspaceProvisionType: z.literal("personal"),
-      /** Target directory under the host data dir for the personal workspace. */
       targetPath: z.string().min(1),
     })
     .strict();
 
-/**
- * Provision a workspace for an environment.
- *
- * Discriminated by `workspaceProvisionType`:
- * - `unmanaged`: validates `path`, discovers git properties (isGitRepo,
- *   isWorktree, branchName). Does NOT create anything.
- * - `managed-worktree`: creates a git worktree at `targetPath` from
- *   `sourcePath`, runs setup script if present.
- * - `personal`: creates or opens a scratch directory at `targetPath`.
- *
- * Idempotent — if path already exists and is valid, reports success.
- * Rolls back partial state on failure.
- *
- * Result: `{ path, isGitRepo, isWorktree, branchName, transcript }`.
- *
- * Lane-serialized per environmentId. Git worktree metadata mutations are
- * protected by the workspace implementation.
- */
 const environmentProvisionCommandSchema = z.discriminatedUnion(
   "workspaceProvisionType",
   [
@@ -1100,6 +911,8 @@ const environmentProvisionCancelCommandSchema =
 const environmentDestroyCommandSchema = hostDaemonWorkspaceTargetSchema
   .extend({
     type: z.literal("environment.destroy"),
+    /** Maximum time in ms to wait for the teardown script. */
+    teardownTimeoutMs: z.number().int().positive(),
   })
   .strict();
 
@@ -1131,8 +944,6 @@ const workspaceDiffPatchCommandSchema = hostDaemonWorkspaceTargetSchema.extend({
   maxBytesPerFile: z.number().int().positive(),
 });
 
-// The daemon derives the branch from the workspace HEAD, so the command needs
-// no fields beyond the workspace target.
 const workspacePullRequestCommandSchema =
   hostDaemonWorkspaceTargetSchema.extend({
     type: z.literal("workspace.pull_request"),
@@ -1178,14 +989,6 @@ const workspaceCommitCommandSchema = hostDaemonWorkspaceTargetSchema
   })
   .strict();
 
-const workspaceSquashMergeCommandSchema = hostDaemonWorkspaceTargetSchema
-  .extend({
-    type: z.literal("workspace.squash_merge"),
-    targetBranch: gitBranchNameSchema,
-    commitMessage: z.string().min(1),
-  })
-  .strict();
-
 const fileReadResultSchema = z.object({
   path: z.string(),
   content: z.string(),
@@ -1193,8 +996,6 @@ const fileReadResultSchema = z.object({
   mimeType: z.string().optional(),
   sizeBytes: z.number().int().nonnegative(),
   modifiedAtMs: z.number().nonnegative().optional(),
-  // Hash of the returned bytes, so editors can do compare-and-swap saves via
-  // `host.write_file`'s `expectedSha256`.
   sha256: z.string(),
 });
 
@@ -1209,8 +1010,6 @@ const fileWriteResultSchema = z.discriminatedUnion("outcome", [
   z
     .object({
       outcome: z.literal("conflict"),
-      // Hash of the content currently on disk; null when the file does not
-      // exist (the caller expected it to).
       currentSha256: z.string().nullable(),
     })
     .strict(),
@@ -1293,10 +1092,6 @@ const workspaceDiffPatchResultSchema = z.discriminatedUnion("outcome", [
     .strict(),
 ]);
 
-// "absent" is a real answer (gh ran and reported no PR for the branch, or a
-// detached HEAD has no branch); "unavailable" means the lookup itself failed
-// (gh missing / not authed / timeout / malformed output / unresolvable
-// workspace) and must not be treated as "no PR exists".
 const workspacePullRequestResultSchema = z.discriminatedUnion("outcome", [
   z
     .object({
@@ -1337,14 +1132,10 @@ const pluginHostDisposeResultSchema = z
   .object({ disposed: z.boolean() })
   .strict();
 
-// No `truncated` here, unlike `pathListResultSchema`: the daemon returns the
-// full raw set across all roots and the server owns de-dup/sort/limit.
 const commandListResultSchema = z.object({
   commands: z.array(hostProviderCommandSchema),
 });
 
-// Like `commandListResultSchema`: the daemon returns the full raw set across
-// all roots; the server owns scope-mapping, de-dup, and sort.
 const skillListResultSchema = z.object({
   skills: z.array(discoveredSkillSchema),
 });
@@ -1368,13 +1159,11 @@ const installGlobalSkillsResultSchema = z
 
 const globalSkillsStatusResultSchema = z
   .object({
-    /** One entry per (skill name, global skill root) pair on this host. */
     entries: z.array(
       z
         .object({
           name: z.string(),
           path: z.string(),
-          /** Tree hash of the installed copy, or null when nothing is there. */
           treeHash: z
             .string()
             .regex(/^[a-f0-9]{64}$/u)
@@ -1432,48 +1221,25 @@ const environmentProvisionResultSchema =
 const environmentProvisionCancelResultSchema = z.object({
   aborted: z.boolean(),
 });
+const environmentDestroyResultSchema = z
+  .object({
+    transcript: z.array(provisioningTranscriptEntrySchema),
+  })
+  .strict();
 const workspaceCommitResultSchema = z.object({
   commitSha: z.string().min(1),
   commitSubject: z.string().min(1),
 });
-const workspaceSquashMergeResultSchema = workspaceCommitResultSchema.extend({
-  merged: z.boolean(),
-});
 const workspacePullRequestActionResultSchema = z.object({}).strict();
-// ---------------------------------------------------------------------------
-// Provider usage limits (live read from the host's provider credentials)
-// ---------------------------------------------------------------------------
 
-/**
- * One usage window for a provider subscription, e.g. the rolling 5h session
- * limit or the weekly limit. `usedPercent` is normalized to 0-100,
- * `resetsAt` is an ISO-8601 timestamp (or null when the provider omits it),
- * and `cost` carries optional Cursor on-demand spend in USD cents.
- */
 export { providerUsageWindowSchema };
 export type { ProviderUsageWindow } from "@bb/provider-bridge-protocol";
 
-/**
- * Live usage snapshot for a single provider. Discriminated on `status` so the
- * UI can render the windows, prompt the user to sign in, or surface an error
- * without inventing placeholder numbers.
- *
- * - `ok` — usage was read; `accountEmail` is null when the provider's local
- *   auth state does not expose it, and `windows` may be empty if the plan
- *   exposes none.
- * - `not_installed` — the provider CLI is not installed on this host.
- * - `unauthenticated` — no local credentials (the CLI is not logged in).
- * - `expired` — credentials exist but the token expired; the CLI must refresh
- *   it (we never refresh another tool's tokens here).
- * - `error` — network/HTTP/parse failure; `message` is user-facing. Carries
- *   `planLabel`/`accountEmail` when they were known locally before the call.
- */
 export type {
   ProviderUsage,
   ProviderUsageResult,
 } from "@bb/provider-bridge-protocol";
 
-/** Provider-id keyed usage returned by the public server aggregation route. */
 export const providerUsageResponseSchema = z.record(
   z.string().min(1),
   providerUsageSchema,
@@ -1540,6 +1306,90 @@ function defineHostDaemonCommandDescriptor<
 }
 
 export const hostDaemonCommandRegistry = {
+  "desktop.browser.list_instances": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.list_instances",
+    schema: desktopBrowserCommandSchemas["desktop.browser.list_instances"],
+    resultSchema: desktopBrowserResultSchemas["desktop.browser.list_instances"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.list_tabs": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.list_tabs",
+    schema: desktopBrowserCommandSchemas["desktop.browser.list_tabs"],
+    resultSchema: desktopBrowserResultSchemas["desktop.browser.list_tabs"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.create_tab": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.create_tab",
+    schema: desktopBrowserCommandSchemas["desktop.browser.create_tab"],
+    resultSchema: desktopBrowserResultSchemas["desktop.browser.create_tab"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.reveal_tab": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.reveal_tab",
+    schema: desktopBrowserCommandSchemas["desktop.browser.reveal_tab"],
+    resultSchema: desktopBrowserResultSchemas["desktop.browser.reveal_tab"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.close_tab": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.close_tab",
+    schema: desktopBrowserCommandSchemas["desktop.browser.close_tab"],
+    resultSchema: desktopBrowserResultSchemas["desktop.browser.close_tab"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.capture_tab": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.capture_tab",
+    schema: desktopBrowserCommandSchemas["desktop.browser.capture_tab"],
+    resultSchema: desktopBrowserResultSchemas["desktop.browser.capture_tab"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.acquire_control": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.acquire_control",
+    schema: desktopBrowserCommandSchemas["desktop.browser.acquire_control"],
+    resultSchema:
+      desktopBrowserResultSchemas["desktop.browser.acquire_control"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.open_connection": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.open_connection",
+    schema: desktopBrowserCommandSchemas["desktop.browser.open_connection"],
+    resultSchema:
+      desktopBrowserResultSchemas["desktop.browser.open_connection"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
+  "desktop.browser.release_control": defineHostDaemonCommandDescriptor({
+    type: "desktop.browser.release_control",
+    schema: desktopBrowserCommandSchemas["desktop.browser.release_control"],
+    resultSchema:
+      desktopBrowserResultSchemas["desktop.browser.release_control"],
+    transport: "onlineRpc",
+    retryable: false,
+    flushEventsBeforeResult: false,
+    envLane: null,
+  }),
   "thread.rewind.discard": defineHostDaemonCommandDescriptor({
     type: "thread.rewind.discard",
     schema: threadRewindDiscardCommandSchema,
@@ -1669,7 +1519,7 @@ export const hostDaemonCommandRegistry = {
   "environment.destroy": defineHostDaemonCommandDescriptor({
     type: "environment.destroy",
     schema: environmentDestroyCommandSchema,
-    resultSchema: emptyCommandResultSchema,
+    resultSchema: environmentDestroyResultSchema,
     transport: "settled",
     retryable: false,
     flushEventsBeforeResult: false,
@@ -1679,15 +1529,6 @@ export const hostDaemonCommandRegistry = {
     type: "workspace.commit",
     schema: workspaceCommitCommandSchema,
     resultSchema: workspaceCommitResultSchema,
-    transport: "settled",
-    retryable: false,
-    flushEventsBeforeResult: false,
-    envLane: "write",
-  }),
-  "workspace.squash_merge": defineHostDaemonCommandDescriptor({
-    type: "workspace.squash_merge",
-    schema: workspaceSquashMergeCommandSchema,
-    resultSchema: workspaceSquashMergeResultSchema,
     transport: "settled",
     retryable: false,
     flushEventsBeforeResult: false,
@@ -1846,9 +1687,6 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: false,
     envLane: null,
   }),
-  // Destructive host-local FS write (the second after `host.run_script`). Not
-  // env-scoped, so `envLane: null`; non-retryable so a transient failure never
-  // silently re-issues a delete.
   "host.delete_skill": defineHostDaemonCommandDescriptor({
     type: "host.delete_skill",
     schema: hostDeleteSkillCommandSchema,
@@ -1858,8 +1696,6 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: false,
     envLane: null,
   }),
-  // Host-local FS write (edit an existing bb skill's SKILL.md). Not env-scoped;
-  // non-retryable so a transient failure never silently re-issues the write.
   "host.write_skill": defineHostDaemonCommandDescriptor({
     type: "host.write_skill",
     schema: hostWriteSkillCommandSchema,
@@ -1869,9 +1705,6 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: false,
     envLane: null,
   }),
-  // Host-local FS write into the user's global agent skill roots. Replacing an
-  // installed copy is idempotent, but it is still a destructive overwrite, so
-  // it never silently retries.
   "host.install_global_skills": defineHostDaemonCommandDescriptor({
     type: "host.install_global_skills",
     schema: hostInstallGlobalSkillsCommandSchema,
@@ -1881,7 +1714,6 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: false,
     envLane: null,
   }),
-  // Read-only inspection of the global skill roots; safe to retry.
   "host.global_skills_status": defineHostDaemonCommandDescriptor({
     type: "host.global_skills_status",
     schema: hostGlobalSkillsStatusCommandSchema,
@@ -1891,10 +1723,10 @@ export const hostDaemonCommandRegistry = {
     flushEventsBeforeResult: false,
     envLane: null,
   }),
-  "host.list_branches": defineHostDaemonCommandDescriptor({
-    type: "host.list_branches",
-    schema: hostListBranchesCommandSchema,
-    resultSchema: projectSourceCheckoutSchema,
+  "host.inspect_git_source": defineHostDaemonCommandDescriptor({
+    type: "host.inspect_git_source",
+    schema: hostInspectGitSourceCommandSchema,
+    resultSchema: gitSourceInspectionSchema,
     transport: "onlineRpc",
     retryable: true,
     flushEventsBeforeResult: false,
@@ -1903,7 +1735,7 @@ export const hostDaemonCommandRegistry = {
   "host.list_branch_options": defineHostDaemonCommandDescriptor({
     type: "host.list_branch_options",
     schema: hostListBranchOptionsCommandSchema,
-    resultSchema: hostBranchOptionsResultSchema,
+    resultSchema: gitBranchOptionsSchema,
     transport: "onlineRpc",
     retryable: true,
     flushEventsBeforeResult: false,
@@ -2059,7 +1891,9 @@ type HostDaemonRetryableOnlineRpcCommandSchema =
 type HostDaemonResultSchemaMapForTransport<
   Transport extends HostDaemonCommandTransport,
 > = {
-  [Descriptor in HostDaemonCommandDescriptorForTransport<Transport> as Descriptor["type"]]: Descriptor["resultSchema"];
+  [
+    Descriptor in HostDaemonCommandDescriptorForTransport<Transport> as Descriptor["type"]
+  ]: Descriptor["resultSchema"];
 };
 
 type HostDaemonCommandResultSchemaMap =

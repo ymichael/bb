@@ -23,6 +23,7 @@ function makeResponse(rowCount: number): ThreadTimelineResponse {
       detail: null,
       status: null,
     })),
+    contextBoundarySeq: null,
     activePromptMode: null,
     activeThinking: null,
     activeWorkflows: [],
@@ -95,15 +96,15 @@ describe("createThreadTimelineCache", () => {
     const cache = createThreadTimelineCache({ maxEntries: 2 });
     const build = vi.fn(() => makeResponse(1));
 
-    cache.getOrBuild("a", build); // [a]
-    cache.getOrBuild("b", build); // [a,b]
-    cache.getOrBuild("a", build); // touch a -> [b,a]
-    cache.getOrBuild("c", build); // evict b -> [a,c]
+    cache.getOrBuild("a", build);
+    cache.getOrBuild("b", build);
+    cache.getOrBuild("a", build);
+    cache.getOrBuild("c", build);
 
     expect(cache.size).toBe(2);
     const buildAgain = vi.fn(() => makeResponse(1));
-    cache.getOrBuild("a", buildAgain); // still cached
-    cache.getOrBuild("b", buildAgain); // evicted -> rebuild
+    cache.getOrBuild("a", buildAgain);
+    cache.getOrBuild("b", buildAgain);
     expect(buildAgain).toHaveBeenCalledTimes(1);
   });
 });

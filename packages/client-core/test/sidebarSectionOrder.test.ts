@@ -43,6 +43,18 @@ describe("normalizeSidebarSectionOrder", () => {
     ).toEqual(["pinned", "threads", projectB, projectA, projectC]);
   });
 
+  it("drops a stored Threads section when it is not available", () => {
+    expect(
+      normalizeSidebarSectionOrder({
+        storedOrder: [projectA, "threads", projectB],
+        entitySectionIds: [projectA, projectB],
+        legacyEntityAnchor: "projects",
+        hasPinnedSection: true,
+        hasThreadsSection: false,
+      }),
+    ).toEqual(["pinned", projectA, projectB]);
+  });
+
   it("uses the same reconciliation for sections", () => {
     const section = buildSidebarEntitySectionId("section", "work");
     expect(

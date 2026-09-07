@@ -53,11 +53,6 @@ interface ExistingThreadExecutionInputRequestSources {
 
 interface ResolveExistingThreadExecutionPlanArgs {
   executionSource: ThreadExecutionSource;
-  /**
-   * Machine the resolved execution runs on. Omitted means "read it from the
-   * thread's environment"; thread creation passes it because the environment
-   * is still being provisioned.
-   */
   hostId?: string | null;
   input: ExistingThreadExecutionInput;
   projectDefaults?: ProjectExecutionDefaults | null;
@@ -265,8 +260,6 @@ export async function resolveExistingThreadExecutionPlan(
   if (!thread) {
     throw new ApiError(404, "thread_not_found", "Thread not found");
   }
-  // Omitted project defaults means "load current project policy"; callers pass
-  // null only when they need to prove project defaults are intentionally absent.
   const rawProjectExecution =
     args.projectDefaults === undefined
       ? getProjectExecutionDefaults(deps.db, {
@@ -295,8 +288,6 @@ export async function resolveExistingThreadExecutionPlan(
     throw createMissingThreadExecutionModelError(args.threadId);
   }
 
-  // The machine's ceiling wins over every other source, including an explicit
-  // request, so a capped machine cannot be talked into privileged work.
   const permissionMode = clampPermissionModeToHost(deps, {
     hostId:
       args.hostId === undefined

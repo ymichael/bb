@@ -1,11 +1,3 @@
-/**
- * The runtime → bridge-adapter command vocabulary: what the runtime asks the
- * bridge-protocol adapter to build a request for, and the execution context
- * every session/turn command carries. The adapter contract itself is
- * `BridgeProtocolAdapter` in bridge-protocol-adapter.ts — every provider
- * speaks the Provider Bridge Protocol, so there is one adapter and no
- * provider-specific implementations behind an interface.
- */
 import type {
   ClientTurnRequestId,
   DynamicTool,
@@ -22,38 +14,19 @@ import type {
   AgentRuntimeSkillRoot,
 } from "./types.js";
 
-/**
- * What the runtime knows when it builds the adapter for a provider process:
- * the plugin's bridge launch (its artifact, carrying the provider options the
- * owning plugin declared), host-local write roots, and the node/bundle
- * locations a packaged daemon runs bridges from.
- */
 export interface CreateBridgeAdapterOptions {
   additionalWorkspaceWriteRoots: readonly string[];
-  /**
-   * The plugin-delivered bridge artifact, resolved to a verified local path
-   * by the host daemon. Every provider runs from one.
-   */
   bridgeLaunch: AgentRuntimeBridgeLaunch;
   bridgeBundleDir?: string;
   bridgeNodeEnv?: Record<string, string>;
   bridgeNodeExecutablePath?: string;
 }
 
-// ---------------------------------------------------------------------------
-// AdapterCommand — what the runtime asks the adapter to build
-// ---------------------------------------------------------------------------
-
 export type ProviderExecutionContext = {
   model?: string;
   serviceTier?: ServiceTier;
   reasoningLevel?: ReasoningLevel;
-  /** BB prompt mode, present only when the prompt entered one. */
   promptMode?: PromptMode;
-  /**
-   * Plugin-derived, provider-scoped options from the server. Opaque here;
-   * merged over the bridge's static options onto the wire `providerOptions`.
-   */
   providerOptions: JsonObject;
   instructions?: string;
   envVars?: Record<string, string>;
@@ -131,11 +104,6 @@ export type AdapterCommand =
       type: "thread/stop";
       threadId: string;
       providerThreadId: string;
-      /**
-       * Non-null means the stop interrupted an active provider turn. Adapters
-       * may treat that provider session as poisoned for future resume. Null
-       * means idle/no-active-turn stop and should not invalidate the session.
-       */
       activeTurnId: string | null;
     }
   | {

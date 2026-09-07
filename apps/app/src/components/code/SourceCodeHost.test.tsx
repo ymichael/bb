@@ -11,6 +11,7 @@ import { resetAllCrashedPluginSlotsForTest } from "@/components/plugin/PluginSlo
 import { resetDeprecatedAliasWarningsForTests } from "@/lib/plugin-sdk-deprecated-aliases";
 import { PluginSourceCode } from "@/components/plugin/PluginSourceCode";
 import { SourceCodeHost } from "./SourceCodeHost";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
 const bbSourceCode = vi.hoisted(() => ({
   loaded: false,
@@ -38,16 +39,12 @@ const received: PluginSourceCodeRendererProps[] = [];
 function registerSourceCodeRenderer(
   component: (props: PluginSourceCodeRendererProps) => React.ReactNode,
 ) {
-  setPluginSlotRegistrations("demo", {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    sourceCodeRenderers: [{ id: "source", title: "Demo source", component }],
-  });
+  setPluginSlotRegistrations(
+    "demo",
+    makePluginRegistrationSet({
+      sourceCodeRenderers: [{ id: "source", title: "Demo source", component }],
+    }),
+  );
 }
 
 beforeEach(() => {
@@ -126,7 +123,6 @@ describe("SourceCodeHost", () => {
 
     expect(await screen.findByTestId("bb-source-code")).toBeDefined();
     expect(bbSourceCode.loaded).toBe(true);
-    // Delegation keeps the host-only inputs BB's own file preview depends on.
     expect(bbSourceCode.lastProps?.cacheKey).toBe("rev-2:src/app.ts");
     expect(bbSourceCode.lastProps?.scrollToHighlightedLines).toBe(true);
   });
@@ -168,10 +164,6 @@ describe("experimental_SourceCode", () => {
   });
 });
 
-/**
- * A bundle built against an SDK before 0.4.16 reads `experimental_Original`
- * (renamed `Original` in 0.4.16). The host passes both for one release.
- */
 describe("SourceCodeHost experimental_Original alias", () => {
   it("delegates to BB's renderer through the alias and warns once across renders", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

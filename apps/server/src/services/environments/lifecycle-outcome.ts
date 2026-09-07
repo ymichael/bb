@@ -46,11 +46,6 @@ function isDbConnection(db: DbQueryConnection): db is DbConnection {
   return "$client" in db;
 }
 
-/**
- * Applies an environment lifecycle event, reusing an existing transaction when
- * the caller is already inside one. Logs every non-applied outcome so stale
- * events are observable instead of silently swallowed.
- */
 export function applyLoggedEnvironmentLifecycleEvent(
   deps: ApplyLoggedEnvironmentLifecycleEventDeps,
   args: ApplyEnvironmentLifecycleEventArgs,
@@ -65,11 +60,6 @@ export function applyLoggedEnvironmentLifecycleEvent(
   return outcome;
 }
 
-/**
- * In-transaction variant: applies the event inside the caller's transaction
- * and logs non-applied outcomes. The caller owns notification — typically
- * `hub.notifyEnvironment(id, outcome.changes)` gated on `outcome.applied`.
- */
 export function applyLoggedEnvironmentLifecycleEventInTransaction(
   deps: ApplyLoggedEnvironmentLifecycleEventTransactionDeps,
   args: ApplyEnvironmentLifecycleEventArgs,

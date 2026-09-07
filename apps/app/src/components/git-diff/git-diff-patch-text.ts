@@ -4,17 +4,6 @@ import {
   type ParsedGitDiffFile,
 } from "./git-diff-parsing";
 
-/**
- * Unified-patch text reconstruction for one parsed diff file.
- *
- * Two callers need it and neither can read the original patch bytes: the
- * line-selection "add to chat" action, which must emit exactly the lines the
- * user highlighted (including the DOM fallback for selections Pierre reports
- * only as shadow-DOM state), and the host diff boundary, which hands a plugin
- * replacement a complete single-file patch even when the caller only had a
- * parsed file in hand.
- */
-
 type DiffPatchDisplayStyle = "unified" | "split";
 type DiffPatchLinePrefix = " " | "+" | "-";
 
@@ -320,11 +309,6 @@ function buildUnifiedDiffPatchText({
   return patchTextLines.join("\n");
 }
 
-/**
- * Reconstruct a complete single-file unified patch from a parsed diff. The
- * host diff boundary uses it to hand a plugin replacement real patch text when
- * the caller no longer has the bytes the file was parsed from.
- */
 export function buildFileDiffPatchText(fileDiff: ParsedGitDiffFile): string {
   return buildUnifiedDiffPatchText({
     fileDiff,

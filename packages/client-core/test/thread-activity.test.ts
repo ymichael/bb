@@ -53,6 +53,7 @@ const idleIndicatorState: ThreadListIndicatorState = {
   isBackgroundAgentActive: false,
   isBackgroundCommandActive: false,
   isGoalActive: false,
+  queuedWork: "none",
   isPlanModeActive: false,
   isRuntimeActive: false,
   isWorkflowActive: false,
@@ -101,9 +102,6 @@ describe("thread-activity", () => {
       ["isPlanModeActive", "plan-mode"],
       ["isGoalActive", "goal"],
     ] as const)("shows %s as %s over the runtime spinner", (flag, kind) => {
-      // The runtime stays active for as long as a question or approval is open,
-      // so the spinner must not mask it. Plan and goal describe the running turn
-      // and shimmer on their own, so they outrank it too.
       expect(
         resolveThreadListIndicator({
           ...idleIndicatorState,
@@ -142,6 +140,62 @@ describe("thread-activity", () => {
           [flag]: true,
         }),
       ).toBe("working-draft");
+    });
+
+    it("shows the queued clock over a draft, and never over active work", () => {
+      expect(
+        resolveThreadListIndicator({
+          ...idleIndicatorState,
+          hasUnsubmittedDraft: true,
+          queuedWork: "waiting",
+        }),
+      ).toBe("queued-waiting");
+      // Queued work does not mean the thread is idle — a running thread can
+      // hold a queued follow-up — and what it is DOING outranks what is
+      // waiting behind it.
+      expect(
+        resolveThreadListIndicator({
+          ...idleIndicatorState,
+          queuedWork: "waiting",
+          isRuntimeActive: true,
+        }),
+      ).toBe("runtime");
+      expect(
+        resolveThreadListIndicator({
+          ...idleIndicatorState,
+          hasPendingInteraction: true,
+          queuedWork: "waiting",
+        }),
+      ).toBe("waiting-for-input");
+    });
+
+    it("promotes a failed queued row over a waiting one, but not over work", () => {
+      // Precedence inside the queue fact: a row that failed to go out is the
+      // one the reader has to act on, and a thread can hold both at once.
+      expect(
+        resolveThreadListIndicator({
+          ...idleIndicatorState,
+          queuedWork: "failed",
+        }),
+      ).toBe("queued-failed");
+      // Still below every working arm: the failure is about a message that has
+      // not gone, not about the turn currently running.
+      expect(
+        resolveThreadListIndicator({
+          ...idleIndicatorState,
+          queuedWork: "failed",
+          isBackgroundCommandActive: true,
+        }),
+      ).toBe("background-command");
+      // And below the thread's own unread failure, which is the same glyph
+      // reporting the bigger fact.
+      expect(
+        resolveThreadListIndicator({
+          ...idleIndicatorState,
+          hasUnreadError: true,
+          queuedWork: "failed",
+        }),
+      ).toBe("unread-error");
     });
 
     it("keeps Plan and Goal independent and applies Plan precedence", () => {

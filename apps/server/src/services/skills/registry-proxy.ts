@@ -27,12 +27,6 @@ import {
 const MAX_SEARCH_RESULTS = 200;
 const GITHUB_SKILL_PATH_CACHE_TTL_MS = 30 * 60 * 1000;
 const GITHUB_REPOSITORY_STARS_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
-/**
- * Failures are cached too, on a short TTL. Unauthenticated api.github.com
- * allows 60 requests/hour/IP; without this, one exhausted budget makes every
- * subsequent browse re-issue the whole burst, which keeps the budget
- * exhausted. A short TTL still lets a transient failure recover quickly.
- */
 const GITHUB_REPOSITORY_STARS_FAILURE_TTL_MS = 5 * 60 * 1000;
 const REGISTRY_ENTRY_CACHE_TTL_MS = 30 * 60 * 1000;
 const REGISTRY_DETAIL_CACHE_TTL_MS = 30 * 60 * 1000;
@@ -102,9 +96,6 @@ async function fetchAuthenticatedRegistryDetail(
 ): Promise<RegistrySkillDetail | null> {
   const token = process.env.VERCEL_OIDC_TOKEN;
   if (!token) return null;
-  // Guarded here rather than only at the route: this builds an authenticated
-  // URL, and `encodeURIComponent` leaves `..` intact for `new URL` to then
-  // normalize away — which would walk the bearer token to another path.
   if (hasUnsafePathSegment(source) || hasUnsafePathSegment(skillId)) {
     throw new ApiError(
       400,
@@ -346,14 +337,6 @@ export async function fetchRegistrySkillDetail(
   return detail;
 }
 
-/**
- * Fetches one skills.sh directory page and returns the records it embeds, or
- * null if it could not produce any — whether the request failed, timed out, or
- * the page loaded but parsed to nothing because its markup moved. All three
- * are the same thing to a caller: this page is unusable right now. Reporting
- * them alike is what lets the caller try the other directory page instead of
- * failing the request on whichever one it asked for first.
- */
 async function fetchPublicDirectoryRecords(
   directoryPath: string,
 ): Promise<RegistrySkill[] | null> {
@@ -373,18 +356,10 @@ async function fetchPublicDirectorySkills(
   perPage: number,
   ranking: RegistryRanking,
 ): Promise<RegistrySkillsPage> {
-  // Browsing shows what's trending now; searching still filters the all-time
-  // directory so long-standing skills stay findable. Both pages embed records
-  // in the same shape, with `installs` scoped to the page's ranking window.
   const trending = ranking === "trending";
   let servedRanking = ranking;
   let skills = await fetchPublicDirectoryRecords(trending ? "/trending" : "/");
   if (skills === null && trending) {
-    // A parse miss means the page's markup moved, not that skills.sh is empty.
-    // The all-time directory is the older, more stable of the two, so browse
-    // degrades to it rather than rendering a catalog that looks deserted — and
-    // reports the ranking it fell back to, since these are lifetime counts and
-    // labelling them "Trending" would make the response lie about its own data.
     skills = await fetchPublicDirectoryRecords("/");
     if (skills !== null) servedRanking = "all-time";
   }
@@ -404,10 +379,6 @@ async function fetchPublicDirectorySkills(
             skill.name.toLowerCase().includes(normalizedQuery) ||
             skill.source.toLowerCase().includes(normalizedQuery),
         );
-  // Each directory page already arrives in its own ranked order, so only a
-  // filtered result needs re-ranking. Sorting an unfiltered page would replace
-  // skills.sh's ordering within ties with an alphabetical one — invisible on
-  // the first pages, and wrong wherever the ranking is not raw install count.
   const ranked =
     normalizedQuery.length === 0
       ? filtered
@@ -416,9 +387,6 @@ async function fetchPublicDirectorySkills(
             right.installs - left.installs ||
             left.name.localeCompare(right.name),
         );
-  // The public directory includes package hosts that only its authenticated
-  // API can resolve. Exclude those records before deriving page boundaries;
-  // filtering them after slicing produced sparse middle pages and false totals.
   const supported = ranked.filter(
     (skill) => githubRepoForSource(skill.source) !== null,
   );
@@ -441,10 +409,6 @@ export async function listRegistrySkills(
   perPage: number,
 ): Promise<RegistrySkillsPage> {
   const normalizedQuery = query.trim();
-  // The one place the ranking is decided. Someone browsing has told us nothing
-  // about what they want, so lead with what the ecosystem is picking up now; a
-  // search is a stated intent, and the all-time directory answers it better.
-  // Both fetch paths and the response label read this, so they cannot drift.
   const ranking: RegistryRanking =
     normalizedQuery.length > 0 ? "all-time" : "trending";
   const apiUrl = new URL(
@@ -498,9 +462,6 @@ export async function listRegistrySkills(
           ? start + perPage < fetchedTotal
           : (apiPage?.hasMore ?? false),
     } satisfies RegistryPagination);
-  // The public path can degrade from trending to the all-time directory, and
-  // it reports which one it ended up serving. Trust that over what was asked
-  // for, or the label goes back to describing the request instead of the data.
   return { skills, pagination, ranking: publicPage?.ranking ?? ranking };
 }
 
@@ -543,11 +504,6 @@ export async function resolveRegistrySkillById(
     });
     return entry;
   })();
-  // Register the cleanup *after* the map write rather than in a `finally`
-  // inside the promise. Anything that throws synchronously before the first
-  // await — `encodeURIComponent` on a lone surrogate, say — would otherwise run
-  // the cleanup before the entry existed, stranding a rejected promise in the
-  // map forever under a raw query param. Ordering can no longer matter.
   registryEntryRequests.set(id, request);
   void request.finally(() => registryEntryRequests.delete(id)).catch(() => {});
   return request;

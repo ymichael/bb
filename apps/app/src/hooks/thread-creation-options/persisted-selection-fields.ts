@@ -159,11 +159,6 @@ const reasoningLevelAtomFamily = atomFamily((providerId: string) =>
     { getOnInit: true },
   ),
 );
-// Legacy preference migration: "workspace-write" maps onto the same workspace
-// sandbox as "accept-edits", so the user's stored intent carries forward.
-// Legacy "readonly" (and any other unknown value) is dropped rather than
-// reinterpreted — localStorage is untrusted, and a read-only preference must
-// never silently become a writable mode.
 const permissionModePreferenceStorage =
   createLocalStorageSyncStorage<StoredPermissionMode>({
     parse: (storedValue, initialValue) => {
@@ -203,9 +198,6 @@ export function usePromptBoxProviderPreference(): PersistedStringSelectionField 
   const setValue = useCallback(
     (nextValue: string) => {
       if (nextValue !== value && typeof window !== "undefined") {
-        // Once the provider changes, the legacy unscoped values no longer have
-        // a trustworthy owner. The caller saves the current pair under its
-        // provider-scoped keys before changing this value.
         window.localStorage.removeItem(MODEL_STORAGE_KEY);
         window.localStorage.removeItem(REASONING_STORAGE_KEY);
       }

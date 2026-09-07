@@ -1,6 +1,3 @@
-// Address-bar / new-tab search input parsing for the browser surface. Kept pure
-// so the URL-vs-search heuristic can be unit tested directly.
-
 import { isLoopbackHostname } from "./loopback-hostname";
 
 const SEARCH_ENGINE_URL = "https://www.google.com/search";
@@ -153,11 +150,6 @@ function normalizeUrl(input: string): string | null {
   return null;
 }
 
-/**
- * Resolve an address-bar input to a navigable `http(s)` URL, or a default
- * search-engine query URL when it does not look like a URL. Returns `null` for
- * blank input (nothing to navigate to).
- */
 export function resolveBrowserAddressInput(rawInput: string): string | null {
   const input = rawInput.trim();
   if (input.length === 0) {
@@ -166,7 +158,6 @@ export function resolveBrowserAddressInput(rawInput: string): string | null {
   return normalizeUrl(input) ?? buildSearchUrl(input);
 }
 
-/** Security posture of a loaded URL, for the address-bar indicator. */
 type BrowserUrlSecurity = "secure" | "insecure" | "none";
 
 export function getBrowserUrlSecurity(url: string): BrowserUrlSecurity {
@@ -187,7 +178,6 @@ export function getBrowserUrlSecurity(url: string): BrowserUrlSecurity {
   return "none";
 }
 
-/** A compact label for a URL — the hostname when parseable, else the raw URL. */
 export function getBrowserUrlHost(url: string): string {
   if (url.length === 0) {
     return "";

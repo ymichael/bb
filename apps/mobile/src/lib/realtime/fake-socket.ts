@@ -5,7 +5,6 @@ import type {
   RealtimeSocketOptions,
 } from "./socket";
 
-/** Test double for the realtime socket. Not shipped in the app. */
 export class FakeSocket implements RealtimeSocketLike {
   static readonly CONNECTING = 0;
   static readonly OPEN = 1;
@@ -34,29 +33,21 @@ export class FakeSocket implements RealtimeSocketLike {
     this.readyState = FakeSocket.CLOSED;
   }
 
-  /** Server accepted the upgrade. */
   open(): void {
     this.readyState = FakeSocket.OPEN;
     this.onopen?.();
   }
 
-  /** Server sent a frame. */
   receive(data: unknown): void {
     this.onmessage?.({ data });
   }
 
-  /** Connection dropped (server restart, network loss). */
   drop(code = 1006, reason = ""): void {
     this.readyState = FakeSocket.CLOSED;
     this.onerror?.({ message: null });
     this.onclose?.({ code, reason });
   }
 
-  /**
-   * The upgrade was refused. Like React Native ≥ 0.86, the platform's reason
-   * rides on the close event; `viaErrorMessage` mimics the older shape where
-   * the error event carries it instead.
-   */
   reject(message: string, viaErrorMessage = false): void {
     this.readyState = FakeSocket.CLOSED;
     this.onerror?.({ message: viaErrorMessage ? message : null });

@@ -9,7 +9,6 @@ import {
   useOptionalPluginComposerView,
 } from "./plugin-composer-host";
 
-/** All preservable banner rows for one Composer instance. */
 export function ComposerBannersSlot({
   view,
   children,

@@ -55,9 +55,9 @@ talks to a server over the same HTTP + WebSocket contract as the web app.
 - Distribution: developer builds from source (Xcode 26.2, iOS 26 simulator
   runtime) today; TestFlight / Play builds go through EAS once the Expo
   account exists (see `apps/mobile/README.md`). No store release yet.
-- Push notifications arrive in a later PR; they will need an EAS project,
-  APNs / FCM credentials, a physical device, and a server that can reach
-  `exp.host`.
+- The built-in Push notifications plugin works on iOS when the bb server can
+  reach `exp.host`. The server needs no Apple or Google keys. Android push
+  support remains untested.
 
 Not available on the phone (use the web app or desktop for these):
 
@@ -83,7 +83,8 @@ Not available on the phone (use the web app or desktop for these):
 
 - `npx bb-app`
 - `npx --package bb-app bb ...`
-- source checkout package startup with `pnpm start` or `pnpm start:worktree`
+- source checkout package startup with `pnpm start`, `pnpm start:worktree`, or
+  `pnpm start:worktree-remote`
 - source checkout validation with `pnpm install`, `pnpm build`,
   `pnpm exec turbo run typecheck`, and `pnpm exec turbo run test`
 - app + server + host-daemon startup on supported persistent-host OSes
@@ -172,6 +173,7 @@ rebuild the native dependency, for example `npm rebuild better-sqlite3`.
 ## Setup Hook Policy
 
 - The supported setup hook is POSIX `.bb-env-setup.sh`.
+- The supported teardown hook is POSIX `.bb-env-teardown.sh`.
 - The same shell-based hook contract is used across macOS, Linux, and WSL2.
 - No parallel `.bb-env-setup.ts` product-path mechanism is supported.
 - The `.worktreeinclude` copy step runs no shell. It works on every platform,

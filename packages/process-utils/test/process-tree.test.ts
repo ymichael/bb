@@ -54,9 +54,7 @@ posixOnly("process tree helpers", () => {
     for (const pid of cleanupPids) {
       try {
         process.kill(pid, "SIGKILL");
-      } catch {
-        // already gone
-      }
+      } catch {}
     }
     cleanupPids.length = 0;
     for (const dir of cleanupDirs) {
@@ -85,7 +83,6 @@ posixOnly("process tree helpers", () => {
   it("finds and kills processes whose cwd is inside a directory", async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "bb-cwd-sweep-")));
     cleanupDirs.push(dir);
-    // A detached session leader: not reachable by any process-group kill.
     const child = spawn("sh", ["-c", "sleep 300 & echo $!; wait"], {
       cwd: dir,
       detached: true,
@@ -110,7 +107,6 @@ posixOnly("process tree helpers", () => {
     );
     await waitFor(() => !isAlive(grandchildPid) && !isAlive(child.pid ?? 0));
 
-    // A sibling directory with a shared prefix must not match.
     expect(
       await listProcessesWithCwdUnder({ directory: `${dir}-other` }),
     ).toEqual([]);
@@ -134,9 +130,6 @@ posixOnly("process tree helpers", () => {
   it("rescans and kills processes that appear while the first targets shut down", async () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "bb-cwd-respawn-")));
     cleanupDirs.push(dir);
-    // On SIGTERM the target starts a new-session child and exits. Use Node's
-    // portable detached spawn instead of Linux-only `setsid` so the POSIX
-    // contract is exercised on both Linux and macOS.
     const respawnerPath = join(dir, "respawner.cjs");
     writeFileSync(
       respawnerPath,
@@ -195,9 +188,6 @@ posixOnly("process tree helpers", () => {
     const dir = realpathSync(mkdtempSync(join(tmpdir(), "bb-leader-first-")));
     cleanupDirs.push(dir);
     const log = join(dir, "log");
-    // The child logs every signal in arrival order and exits only on
-    // SIGUSR1, which the leader sends from its own SIGTERM handler. A
-    // group-wide SIGTERM would reach the child first and log "child-term".
     writeFileSync(
       join(dir, "child.cjs"),
       [
@@ -247,8 +237,6 @@ posixOnly("process tree helpers", () => {
   });
 
   it("escalates to the group when a member outlives the leader", async () => {
-    // The leader exits on SIGTERM; its child ignores SIGTERM and only dies
-    // from the SIGKILL escalation.
     const child = spawnPortablePipedProcess({
       command: "sh",
       args: [
@@ -267,7 +255,6 @@ posixOnly("process tree helpers", () => {
       killGraceMs: 5000,
     });
 
-    // Resolves once the group is gone, not at the SIGKILL grace timer.
     expect(Date.now() - startedAt).toBeLessThan(2000);
     expect(child.exitCode).toBe(0);
     await waitFor(() => !isAlive(memberPid));

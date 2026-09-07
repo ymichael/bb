@@ -17,11 +17,6 @@ interface PaletteContextValue {
 
 const PaletteContext = createContext<PaletteContextValue | null>(null);
 
-/**
- * Holds the palette id above the theme provider so a component under the
- * active profile's QueryClient can push the server's `appearance.themeId`
- * up. Custom/plugin palettes fall back to `default` (plan: built-ins only).
- */
 export function PaletteProvider({
   children,
 }: {
@@ -58,7 +53,6 @@ function ActiveServerPaletteSync() {
   return null;
 }
 
-/** Mount once under `ProfilesProvider`: mirrors the server palette. */
 export function ServerPaletteSync() {
   const { connection } = useProfiles();
   return connection ? <ActiveServerPaletteSync /> : null;

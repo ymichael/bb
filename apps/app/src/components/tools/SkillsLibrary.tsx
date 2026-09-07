@@ -57,11 +57,6 @@ import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
 
 const EMPTY_SKILLS: readonly SkillSummary[] = [];
 
-/**
- * Skill rows carry only a provider id, and provider ids are open-ended (every
- * custom ACP agent is one), so the server roster is what turns them into names
- * a user can tell apart.
- */
 function useProviderRoster(): ProviderRoster {
   const providers = useSystemProviders().data;
   return useMemo(
@@ -71,11 +66,6 @@ function useProviderRoster(): ProviderRoster {
 }
 const REGISTRY_LIST_STALE_TIME_MS = 30 * 60_000;
 
-/**
- * View a skill's SKILL.md. Writable user-owned local skills can start an edit
- * thread or be deleted. Connected — owns the content/delete queries and renders
- * {@link SkillDetailDialogView}.
- */
 function SkillDetailPage({
   projectId,
   skill,
@@ -95,8 +85,6 @@ function SkillDetailPage({
   const filesQuery = useSkillFiles(projectId, skill);
   const contentQuery = useSkillContent(projectId, skill, selectedPath);
   const deleteSkill = useDeleteSkill(projectId);
-  // Skills live on the local host (personal project), so the SKILL.md is a real
-  // local file we can hand to the user's editor.
   const { canOpenPreferredFileTarget, openPathInPreferredFileTarget } =
     useLocalOpenTargets({ enabled: skill !== null });
 
@@ -183,11 +171,6 @@ export function SkillsLibrary() {
     refetchOnWindowFocus: false,
     staleTime: REGISTRY_LIST_STALE_TIME_MS,
   });
-  // Loaded pages accumulate for infinite scroll; a new search starts a fresh
-  // accumulation, and so does a ranking change — the server can fall back from
-  // trending to all-time mid-scroll, and the two rankings' `installs` count
-  // different windows, so their pages must never mix in one grid. Dedupe by id
-  // so a refetched page cannot double its rows.
   const trimmedRegistrySearch = registrySearch.trim();
   const [loadedRegistry, setLoadedRegistry] = useState<{
     ranking: RegistryRanking;
@@ -248,17 +231,8 @@ export function SkillsLibrary() {
       enabled: isRegistryBrowseRoute,
       staleTime: 6 * 60 * 60_000,
       retry: false,
-      // staleTime only protects successes: an errored query has no
-      // dataUpdatedAt, so it is permanently stale and the app-wide
-      // refetch-on-focus default re-fires every failed lookup on every focus,
-      // against a 60-request/hour GitHub budget. This also stops successful
-      // results refreshing on focus, which is fine — star counts and
-      // descriptions move slowly and still refresh on remount.
       refetchOnWindowFocus: false,
     })),
-    // `combine` results are structurally shared, so this Map is referentially
-    // stable across renders. That lets the enrichment memo below list honest
-    // dependencies instead of hashing query data by hand.
     combine: (results) => ({
       values: new Map(
         registryRepositorySources.flatMap(({ repositoryKey }, index) => {
@@ -273,19 +247,7 @@ export function SkillsLibrary() {
       ),
     }),
   });
-  // The meaning of a displayed row's `installs` follows the accumulated
-  // ranking — the one those rows were actually served under — not whatever the
-  // latest response happens to report.
   const registryRanking = loadedRegistry.ranking;
-  /**
-   * Skills needing an entry lookup. A missing description is the usual reason,
-   * but on the trending ranking the entry is also the only source of a
-   * lifetime install count — so ask for every card there rather than letting
-   * install correctness depend on whether the list happened to carry a summary.
-   * The lookups travel as one batch request per loaded set, not one per card;
-   * `keepPreviousData` keeps already-resolved entries rendered while a newly
-   * loaded page's batch is in flight.
-   */
   const registryDescriptionSkillIds = useMemo(
     () =>
       loadedRegistrySkills
@@ -329,11 +291,6 @@ export function SkillsLibrary() {
     () =>
       loadedRegistrySkills.map((skill) => {
         const entry = registryDescriptions.values.get(skill.id);
-        // Only the trending ranking needs the override: there the list's
-        // `installs` counts a 24h window, and the entry carries the lifetime
-        // count. On the all-time ranking the list value is already the
-        // lifetime one and is the authoritative number, so taking the scraped
-        // detail-page figure instead would mix two sources in one grid.
         const describedSkill =
           entry === undefined
             ? skill
@@ -360,13 +317,6 @@ export function SkillsLibrary() {
       registryRanking,
     ],
   );
-  /**
-   * Cards whose lifetime install count could not be resolved. Only possible on
-   * the trending ranking, where the list number means something else entirely
-   * — a card here would otherwise show a 24h figure formatted exactly like its
-   * neighbours' lifetime totals, understating by up to two orders of
-   * magnitude. Showing nothing is the honest reading of "we don't know yet".
-   */
   const unknownInstallSkillIds = useMemo(
     () =>
       new Set(
@@ -489,8 +439,6 @@ export function SkillsLibrary() {
   const closeSkillDetail = useCallback(() => {
     navigate(getToolsOwnedCollectionRoutePath("skills"));
   }, [navigate]);
-  // Create via prompt: open the composer seeded with the bb-skill prompt; the
-  // spawned thread authors the SKILL.md.
   const handleCreateSkill = useCallback(
     (prompt?: string) => {
       navigate(getRootComposeRoutePath(), {

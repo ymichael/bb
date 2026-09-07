@@ -116,8 +116,6 @@ const composerWithoutModal = {
   none: ["modalOpen", "terminalFocus", "browserFocus"],
 } as const;
 
-// The model picker's popover is itself modal, so chords that must survive it
-// carry a second copy scoped to the open picker alone.
 const pickerOpenOnly = {
   all: ["mainSurface", "modelPickerOpen"],
   none: [],
@@ -134,44 +132,54 @@ const splitWithoutModal = {
 } as const;
 
 export const DEFAULT_APP_KEYBINDINGS: AppDefaultKeybindings = [
-  // Mod+K opens the quick palette in thread mode. Mod+Shift+P opens the same
-  // palette with the command prefix, following the editor convention.
   binding("palette.open", "p", { mod: true, shift: true }, mainWithoutModal),
-  // Browsers reserve Mod+N before the page receives a key event. Keep the
-  // t3code-style alias available in web clients while desktop retains Mod+N.
   binding("thread.new", "o", { mod: true, shift: true }, mainWithoutModal),
-  binding("thread.new", "n", { mod: true }, {
-    ...mainWithoutModal,
-    desktopOnly: true,
-  }),
+  binding(
+    "thread.new",
+    "n",
+    { mod: true },
+    {
+      ...mainWithoutModal,
+      desktopOnly: true,
+    },
+  ),
   binding("thread.search", "k", { mod: true }, mainWithoutModal),
   unassignedBinding("thread.rename", mainWithoutModal),
   unassignedBinding("thread.archive", mainWithoutModal),
+  binding("app.back", "Escape", {}, mainWithoutModal),
   binding("settings.open", ",", { mod: true }, mainWithoutModal),
   binding("sidebar.toggle", "\\", { mod: true }, mainWithoutModal),
+  unassignedBinding("notifications.open", mainWithoutModal),
   binding(
     "thread.previous",
     "[",
     { control: true, shift: true },
     webMainWithoutModal,
   ),
-  binding("thread.previous", "[", { mod: true, shift: true }, {
-    ...mainWithoutModal,
-    desktopOnly: true,
-  }),
+  binding(
+    "thread.previous",
+    "[",
+    { mod: true, shift: true },
+    {
+      ...mainWithoutModal,
+      desktopOnly: true,
+    },
+  ),
   binding(
     "thread.next",
     "]",
     { control: true, shift: true },
     webMainWithoutModal,
   ),
-  binding("thread.next", "]", { mod: true, shift: true }, {
-    ...mainWithoutModal,
-    desktopOnly: true,
-  }),
-  // Browsers reserve Mod+1…9 for native tab switching. Match Slack's web
-  // navigation convention: Control+N on macOS and Ctrl+Shift+N elsewhere,
-  // while keeping the shorter Mod chord on desktop.
+  binding(
+    "thread.next",
+    "]",
+    { mod: true, shift: true },
+    {
+      ...mainWithoutModal,
+      desktopOnly: true,
+    },
+  ),
   ...numberedChatBindings(THREAD_JUMP_APP_COMMAND_IDS, mainWithoutModal),
   unassignedBinding("pane.focus.previous", splitWithoutModal),
   unassignedBinding("pane.focus.next", splitWithoutModal),
@@ -182,38 +190,53 @@ export const DEFAULT_APP_KEYBINDINGS: AppDefaultKeybindings = [
     { mod: true, shift: true },
     splitWithoutModal,
   ),
-  binding(
-    "pane.close",
-    "x",
-    { mod: true, shift: true },
-    splitWithoutModal,
-  ),
+  binding("pane.close", "x", { mod: true, shift: true }, splitWithoutModal),
   binding("panel.newTab", "t", { mod: true }, mainWithoutModal),
+  binding(
+    "panel.reopenClosedTab",
+    "t",
+    { mod: true, shift: true },
+    {
+      ...mainWithoutModal,
+      desktopOnly: true,
+    },
+  ),
   binding("panel.close", "w", { mod: true }, mainWithoutModal),
   binding("panel.toggle", "j", { mod: true }, mainWithoutModal),
   binding("file.quickOpen", "p", { mod: true }, mainWithoutModal),
-  binding("diff.toggle", "d", { mod: true }, {
-    ...mainWithoutModal,
-    none: ["modalOpen", "editableFocus", "terminalFocus", "browserFocus"],
-  }),
-  // Browsers reserve Mod+Shift+T for reopening a closed tab before the page
-  // receives the event. Use Enter as the web alias and retain T on desktop.
-  binding("terminal.open", "Enter", { mod: true, shift: true }, mainWithoutModal),
-  binding("terminal.open", "t", { mod: true, shift: true }, {
-    ...mainWithoutModal,
-    desktopOnly: true,
-  }),
-  binding("composer.focus", "c", { mod: true, shift: true }, composerWithoutModal),
-  binding("modelPicker.toggle", "m", { mod: true, shift: true }, composerWithoutModal),
-  // This later, scoped binding lets the same chord close the picker while the
-  // general binding remains blocked by unrelated dialogs.
-  binding("modelPicker.toggle", "m", { mod: true, shift: true }, pickerOpenOnly),
-  // Rotate the composer's provider, model, and reasoning level in either
-  // direction without opening the picker, scoped exactly like
-  // `modelPicker.toggle` above. Alt is otherwise unused by bb, the browser, and
-  // both desktop menus, so these chords conflict with no app shortcut. macOS
-  // composes Option+<letter> into another character, so they match on the
-  // physical key — see `normalizeAppShortcutInputKey` in @bb/domain.
+  binding(
+    "diff.toggle",
+    "d",
+    { mod: true },
+    {
+      ...mainWithoutModal,
+      none: ["modalOpen", "editableFocus", "terminalFocus", "browserFocus"],
+    },
+  ),
+  binding(
+    "terminal.open",
+    "Enter",
+    { mod: true, shift: true },
+    mainWithoutModal,
+  ),
+  binding(
+    "composer.focus",
+    "c",
+    { mod: true, shift: true },
+    composerWithoutModal,
+  ),
+  binding(
+    "modelPicker.toggle",
+    "m",
+    { mod: true, shift: true },
+    composerWithoutModal,
+  ),
+  binding(
+    "modelPicker.toggle",
+    "m",
+    { mod: true, shift: true },
+    pickerOpenOnly,
+  ),
   binding("modelPicker.cycleModel", "m", { alt: true }, composerWithoutModal),
   binding(
     "modelPicker.cycleModelBackward",
@@ -221,23 +244,30 @@ export const DEFAULT_APP_KEYBINDINGS: AppDefaultKeybindings = [
     { alt: true, shift: true },
     composerWithoutModal,
   ),
-  binding("modelPicker.cycleProvider", "p", { alt: true }, composerWithoutModal),
+  binding(
+    "modelPicker.cycleProvider",
+    "p",
+    { alt: true },
+    composerWithoutModal,
+  ),
   binding(
     "modelPicker.cycleProviderBackward",
     "p",
     { alt: true, shift: true },
     composerWithoutModal,
   ),
-  binding("modelPicker.cycleReasoning", "t", { alt: true }, composerWithoutModal),
+  binding(
+    "modelPicker.cycleReasoning",
+    "t",
+    { alt: true },
+    composerWithoutModal,
+  ),
   binding(
     "modelPicker.cycleReasoningBackward",
     "t",
     { alt: true, shift: true },
     composerWithoutModal,
   ),
-  // The cycle bindings above stop the moment the popover opens. These later,
-  // scoped copies keep cycling available while it is open — the same escape
-  // hatch `modelPicker.toggle` uses to close itself.
   binding("modelPicker.cycleModel", "m", { alt: true }, pickerOpenOnly),
   binding(
     "modelPicker.cycleModelBackward",
@@ -259,35 +289,57 @@ export const DEFAULT_APP_KEYBINDINGS: AppDefaultKeybindings = [
     { alt: true, shift: true },
     pickerOpenOnly,
   ),
-  binding("browser.focusLocation", "l", { mod: true }, {
-    all: ["mainSurface", "browserFocus"],
-    desktopOnly: true,
-    none: ["modalOpen"],
-  }),
-  binding("browser.reload", "r", { mod: true }, {
-    all: ["mainSurface", "browserFocus"],
-    desktopOnly: true,
-    none: ["modalOpen"],
-  }),
-  binding("browser.find", "f", { mod: true }, {
-    all: ["mainSurface", "browserFocus"],
-    desktopOnly: true,
-    none: ["modalOpen"],
-  }),
+  binding(
+    "browser.focusLocation",
+    "l",
+    { mod: true },
+    {
+      all: ["mainSurface", "browserFocus"],
+      desktopOnly: true,
+      none: ["modalOpen"],
+    },
+  ),
+  binding(
+    "browser.reload",
+    "r",
+    { mod: true },
+    {
+      all: ["mainSurface", "browserFocus"],
+      desktopOnly: true,
+      none: ["modalOpen"],
+    },
+  ),
+  binding(
+    "browser.find",
+    "f",
+    { mod: true },
+    {
+      all: ["mainSurface", "browserFocus"],
+      desktopOnly: true,
+      none: ["modalOpen"],
+    },
+  ),
   binding("workspace.openPreferred", "o", { mod: true }, mainWithoutModal),
   ...QUESTION_SELECT_APP_COMMAND_IDS.map((command, index) =>
-    binding(command, String(index + 1), {}, {
-      all: ["mainSurface", "questionOpen"],
-      none: ["modalOpen", "editableFocus"],
-    }),
+    binding(
+      command,
+      String(index + 1),
+      {},
+      {
+        all: ["mainSurface", "questionOpen"],
+        none: ["modalOpen", "editableFocus"],
+      },
+    ),
   ),
-  binding("window.new", "n", { mod: true, shift: true }, {
-    ...mainWithoutModal,
-    desktopOnly: true,
-  }),
-  // A diagnostics action, so it ships unbound: discoverable in the palette,
-  // assignable in Settings → Keyboard. macOS-only because that is where the
-  // desktop shell offers the log viewer.
+  binding(
+    "window.new",
+    "n",
+    { mod: true, shift: true },
+    {
+      ...mainWithoutModal,
+      desktopOnly: true,
+    },
+  ),
   unassignedBinding("logs.openServerDaemon", {
     all: ["mainSurface", "macPlatform"],
     desktopOnly: true,

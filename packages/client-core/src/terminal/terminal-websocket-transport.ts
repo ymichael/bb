@@ -19,11 +19,6 @@ export type TerminalSocketConnectionState =
   | "closed";
 
 export interface TerminalBrowserSocket {
-  /**
-   * Bytes queued but not yet flushed to the network. Browser sockets always
-   * report it; React Native's WebSocket never sets it, so it may be
-   * `undefined` — treated as "nothing buffered".
-   */
   bufferedAmount?: number;
   close(code?: number, reason?: string): void;
   onclose: ((event: CloseEvent) => void) | null;
@@ -115,7 +110,6 @@ export class TerminalWebSocketTransport {
     if (this.disposed || this.socket !== null) {
       return;
     }
-    // Record the intent even while suspended so {@link resume} connects.
     this.started = true;
     if (this.suspended) {
       return;
@@ -123,12 +117,6 @@ export class TerminalWebSocketTransport {
     this.connect("connecting");
   }
 
-  /**
-   * Close the socket without reconnecting (a mobile app going to the
-   * background). Queued input and the last resize are kept; `nextOutputSeq`
-   * is kept so {@link resume} reattaches with `sinceSeq` at the last chunk
-   * seen and the server replays only what was missed.
-   */
   suspend(): void {
     if (this.disposed || this.suspended) {
       return;
@@ -149,7 +137,6 @@ export class TerminalWebSocketTransport {
     this.options.onConnectionState?.("closed");
   }
 
-  /** Reconnect after {@link suspend}; a no-op when not suspended. */
   resume(): void {
     if (this.disposed || !this.suspended) {
       return;

@@ -73,8 +73,6 @@ function makeParentThread(
 
 describe("resolveCreateThreadExecutionDefaults", () => {
   it("uses the picker's first provider without pinning a model", () => {
-    // No user default: the picker's first entry (install order) is the
-    // default — codex, because the bundled plugin list installs it first.
     expect(registry.list()[0]?.info.id).toBe("codex");
 
     expect(
@@ -97,7 +95,6 @@ describe("resolveCreateThreadExecutionDefaults", () => {
     });
     await registerFirstPartyProviders(userRegistry);
 
-    // Pinned ids lead in the user's order; the rest follow install order.
     expect(userRegistry.list().map((entry) => entry.info.id)).toEqual([
       "pi",
       "claude-code",
@@ -114,8 +111,6 @@ describe("resolveCreateThreadExecutionDefaults", () => {
       }).providerId,
     ).toBe("pi");
 
-    // An explicit default wins over the order; one that names nothing
-    // registered falls back to the order's head.
     preferences.defaultProviderId = "codex";
     expect(
       resolveCreateThreadExecutionDefaults(userRegistry, {
@@ -347,8 +342,6 @@ describe("resolveThreadDefaultPermissionMode", () => {
     ).toBe("full");
   });
 
-  // ACP agents declare accept-edits and full, so the Auto default a child
-  // thread would otherwise inherit resolves to full.
   it("uses full for ACP threads when the Auto default is unsupported", () => {
     expect(
       resolveThreadDefaultPermissionMode(registry, {
@@ -433,8 +426,6 @@ describe("resolveThreadExecutionPermissionMode", () => {
   });
 
   it("never upgrades an inherited mode past the parent for provider support", () => {
-    // Pi only supports full; the parent's mode stays the ceiling so provider
-    // validation rejects the pairing instead of silently granting full.
     expect(
       resolveThreadExecutionPermissionMode(registry, {
         parentThread: makeParentThread(),

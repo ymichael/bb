@@ -107,11 +107,6 @@ function readThemeManifestDeclaration(
   return declaration;
 }
 
-/**
- * Load a custom UI theme's optional Pierre / VS Code theme files.
- * `theme.json` `{ codeTheme: { dark, light } }` wins; otherwise
- * `pierre-dark.json` / `pierre-light.json` are used when present.
- */
 export function readCustomThemeCodeTheme(
   themeRoot: string,
   name: string,
@@ -128,10 +123,6 @@ export function readCustomThemeCodeTheme(
   return declared.dark || declared.light ? declared : null;
 }
 
-/**
- * Resolve a plugin theme's `codeTheme` field. Bundled names stay as names;
- * relative `.json` paths are loaded and registered under a stable `bb:` id.
- */
 export function readPluginThemeCodeTheme(
   sourceId: string,
   declaration: UiCodeThemeDeclaration | undefined,
@@ -146,7 +137,10 @@ export function readPluginThemeCodeTheme(
         file,
       };
     }
-  } else if (declaration?.dark !== undefined && !isCodeThemeFilePath(declaration.dark)) {
+  } else if (
+    declaration?.dark !== undefined &&
+    !isCodeThemeFilePath(declaration.dark)
+  ) {
     const name = codeThemeNameSchema.safeParse(declaration.dark);
     if (name.success) declared.dark = { name: name.data };
   }

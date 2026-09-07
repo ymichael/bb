@@ -53,8 +53,6 @@ export function onClientSocketMessage(
       deps.watchInterests.unsubscribe(socket, parsed.target);
       break;
     case "ping":
-      // Liveness probe (browsers cannot send WebSocket-level pings). Answered
-      // on this socket only; nothing is broadcast and no state is touched.
       socket.send(JSON.stringify(PONG_MESSAGE));
       break;
     default: {

@@ -22,11 +22,6 @@ import {
 
 const IS_IOS = process.env.EXPO_OS === "ios";
 
-/**
- * Saved servers: tap to switch, long-press for the row's action sheet
- * (sign-in again, remove) on both platforms — a native context menu would
- * hide the row from VoiceOver — and "+" in the header to add one.
- */
 export function ServersScreen() {
   const router = useRouter();
   const { profiles, activeProfile, setActiveProfile, removeProfile } =
@@ -140,7 +135,6 @@ export function ServersScreen() {
             title="Saved servers"
             separatorInset={ICON_ROW_SEPARATOR_INSET}
             footnote={
-              // iOS footers stay free of gesture hints.
               IS_IOS
                 ? "Tap a server to make it active."
                 : "Tap a server to make it active. Long-press for more."

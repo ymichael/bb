@@ -8,360 +8,453 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as PrivacyRouteImport } from './routes/privacy'
-import { Route as DashboardRouteImport } from './routes/dashboard'
-import { Route as ChangelogRouteImport } from './routes/changelog'
-import { Route as BlogRouteImport } from './routes/blog'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as DownloadMacosRouteImport } from './routes/download.macos'
-import { Route as BlogSlugRouteImport } from './routes/blog_.$slug'
-import { Route as ApiSubscribeRouteImport } from './routes/api.subscribe'
-import { Route as DotwellKnownAssetlinksDotjsonRouteImport } from './routes/[.]well-known.assetlinks[.]json'
-import { Route as DotwellKnownAppleAppSiteAssociationRouteImport } from './routes/[.]well-known.apple-app-site-association'
-import { Route as MarketplaceV1SplatRouteImport } from './routes/marketplace.v1.$'
-import { Route as ApiConnectRevokeMachineRouteImport } from './routes/api.connect.revoke-machine'
-import { Route as ApiConnectRedeemMachineRouteImport } from './routes/api.connect.redeem-machine'
-import { Route as ApiConnectRedeemRouteImport } from './routes/api.connect.redeem'
-import { Route as ApiConnectMachineCodeRouteImport } from './routes/api.connect.machine-code'
-import { Route as ApiAuthSplatRouteImport } from './routes/api.auth.$'
+import { Route as rootRouteImport } from "./routes/__root";
+import { Route as PrivacyRouteImport } from "./routes/privacy";
+import { Route as MarketplaceRouteImport } from "./routes/marketplace_";
+import { Route as DashboardRouteImport } from "./routes/dashboard";
+import { Route as ChangelogRouteImport } from "./routes/changelog";
+import { Route as BlogRouteImport } from "./routes/blog";
+import { Route as IndexRouteImport } from "./routes/index";
+import { Route as MarketplacePluginIdRouteImport } from "./routes/marketplace_.$pluginId";
+import { Route as DownloadMacosRouteImport } from "./routes/download.macos";
+import { Route as BlogSlugRouteImport } from "./routes/blog_.$slug";
+import { Route as ApiSubscribeRouteImport } from "./routes/api.subscribe";
+import { Route as DotwellKnownAssetlinksDotjsonRouteImport } from "./routes/[.]well-known.assetlinks[.]json";
+import { Route as DotwellKnownAppleAppSiteAssociationRouteImport } from "./routes/[.]well-known.apple-app-site-association";
+import { Route as MarketplaceAuthorGithubRouteImport } from "./routes/marketplace_.author.$github";
+import { Route as MarketplaceV2SplatRouteImport } from "./routes/marketplace.v2.$";
+import { Route as MarketplaceV1SplatRouteImport } from "./routes/marketplace.v1.$";
+import { Route as ApiConnectRevokeMachineRouteImport } from "./routes/api.connect.revoke-machine";
+import { Route as ApiConnectRedeemMachineRouteImport } from "./routes/api.connect.redeem-machine";
+import { Route as ApiConnectRedeemRouteImport } from "./routes/api.connect.redeem";
+import { Route as ApiConnectMachineCodeRouteImport } from "./routes/api.connect.machine-code";
+import { Route as ApiAuthSplatRouteImport } from "./routes/api.auth.$";
 
 const PrivacyRoute = PrivacyRouteImport.update({
-  id: '/privacy',
-  path: '/privacy',
+  id: "/privacy",
+  path: "/privacy",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+const MarketplaceRoute = MarketplaceRouteImport.update({
+  id: "/marketplace_",
+  path: "/marketplace",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+  id: "/dashboard",
+  path: "/dashboard",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ChangelogRoute = ChangelogRouteImport.update({
-  id: '/changelog',
-  path: '/changelog',
+  id: "/changelog",
+  path: "/changelog",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const BlogRoute = BlogRouteImport.update({
-  id: '/blog',
-  path: '/blog',
+  id: "/blog",
+  path: "/blog",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const IndexRoute = IndexRouteImport.update({
-  id: '/',
-  path: '/',
+  id: "/",
+  path: "/",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
+const MarketplacePluginIdRoute = MarketplacePluginIdRouteImport.update({
+  id: "/$pluginId",
+  path: "/$pluginId",
+  getParentRoute: () => MarketplaceRoute,
+} as any);
 const DownloadMacosRoute = DownloadMacosRouteImport.update({
-  id: '/download/macos',
-  path: '/download/macos',
+  id: "/download/macos",
+  path: "/download/macos",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const BlogSlugRoute = BlogSlugRouteImport.update({
-  id: '/blog_/$slug',
-  path: '/blog/$slug',
+  id: "/blog_/$slug",
+  path: "/blog/$slug",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiSubscribeRoute = ApiSubscribeRouteImport.update({
-  id: '/api/subscribe',
-  path: '/api/subscribe',
+  id: "/api/subscribe",
+  path: "/api/subscribe",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const DotwellKnownAssetlinksDotjsonRoute =
   DotwellKnownAssetlinksDotjsonRouteImport.update({
-    id: '/.well-known/assetlinks.json',
-    path: '/.well-known/assetlinks.json',
+    id: "/.well-known/assetlinks.json",
+    path: "/.well-known/assetlinks.json",
     getParentRoute: () => rootRouteImport,
-  } as any)
+  } as any);
 const DotwellKnownAppleAppSiteAssociationRoute =
   DotwellKnownAppleAppSiteAssociationRouteImport.update({
-    id: '/.well-known/apple-app-site-association',
-    path: '/.well-known/apple-app-site-association',
+    id: "/.well-known/apple-app-site-association",
+    path: "/.well-known/apple-app-site-association",
     getParentRoute: () => rootRouteImport,
-  } as any)
+  } as any);
+const MarketplaceAuthorGithubRoute = MarketplaceAuthorGithubRouteImport.update({
+  id: "/author/$github",
+  path: "/author/$github",
+  getParentRoute: () => MarketplaceRoute,
+} as any);
+const MarketplaceV2SplatRoute = MarketplaceV2SplatRouteImport.update({
+  id: "/marketplace/v2/$",
+  path: "/marketplace/v2/$",
+  getParentRoute: () => rootRouteImport,
+} as any);
 const MarketplaceV1SplatRoute = MarketplaceV1SplatRouteImport.update({
-  id: '/marketplace/v1/$',
-  path: '/marketplace/v1/$',
+  id: "/marketplace/v1/$",
+  path: "/marketplace/v1/$",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiConnectRevokeMachineRoute = ApiConnectRevokeMachineRouteImport.update({
-  id: '/api/connect/revoke-machine',
-  path: '/api/connect/revoke-machine',
+  id: "/api/connect/revoke-machine",
+  path: "/api/connect/revoke-machine",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiConnectRedeemMachineRoute = ApiConnectRedeemMachineRouteImport.update({
-  id: '/api/connect/redeem-machine',
-  path: '/api/connect/redeem-machine',
+  id: "/api/connect/redeem-machine",
+  path: "/api/connect/redeem-machine",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiConnectRedeemRoute = ApiConnectRedeemRouteImport.update({
-  id: '/api/connect/redeem',
-  path: '/api/connect/redeem',
+  id: "/api/connect/redeem",
+  path: "/api/connect/redeem",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiConnectMachineCodeRoute = ApiConnectMachineCodeRouteImport.update({
-  id: '/api/connect/machine-code',
-  path: '/api/connect/machine-code',
+  id: "/api/connect/machine-code",
+  path: "/api/connect/machine-code",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
-  id: '/api/auth/$',
-  path: '/api/auth/$',
+  id: "/api/auth/$",
+  path: "/api/auth/$",
   getParentRoute: () => rootRouteImport,
-} as any)
+} as any);
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/blog': typeof BlogRoute
-  '/changelog': typeof ChangelogRoute
-  '/dashboard': typeof DashboardRoute
-  '/privacy': typeof PrivacyRoute
-  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
-  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
-  '/api/subscribe': typeof ApiSubscribeRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/download/macos': typeof DownloadMacosRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/connect/machine-code': typeof ApiConnectMachineCodeRoute
-  '/api/connect/redeem': typeof ApiConnectRedeemRoute
-  '/api/connect/redeem-machine': typeof ApiConnectRedeemMachineRoute
-  '/api/connect/revoke-machine': typeof ApiConnectRevokeMachineRoute
-  '/marketplace/v1/$': typeof MarketplaceV1SplatRoute
+  "/": typeof IndexRoute;
+  "/blog": typeof BlogRoute;
+  "/changelog": typeof ChangelogRoute;
+  "/dashboard": typeof DashboardRoute;
+  "/marketplace": typeof MarketplaceRouteWithChildren;
+  "/privacy": typeof PrivacyRoute;
+  "/.well-known/apple-app-site-association": typeof DotwellKnownAppleAppSiteAssociationRoute;
+  "/.well-known/assetlinks.json": typeof DotwellKnownAssetlinksDotjsonRoute;
+  "/api/subscribe": typeof ApiSubscribeRoute;
+  "/blog/$slug": typeof BlogSlugRoute;
+  "/download/macos": typeof DownloadMacosRoute;
+  "/marketplace/$pluginId": typeof MarketplacePluginIdRoute;
+  "/api/auth/$": typeof ApiAuthSplatRoute;
+  "/api/connect/machine-code": typeof ApiConnectMachineCodeRoute;
+  "/api/connect/redeem": typeof ApiConnectRedeemRoute;
+  "/api/connect/redeem-machine": typeof ApiConnectRedeemMachineRoute;
+  "/api/connect/revoke-machine": typeof ApiConnectRevokeMachineRoute;
+  "/marketplace/v1/$": typeof MarketplaceV1SplatRoute;
+  "/marketplace/v2/$": typeof MarketplaceV2SplatRoute;
+  "/marketplace/author/$github": typeof MarketplaceAuthorGithubRoute;
 }
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/blog': typeof BlogRoute
-  '/changelog': typeof ChangelogRoute
-  '/dashboard': typeof DashboardRoute
-  '/privacy': typeof PrivacyRoute
-  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
-  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
-  '/api/subscribe': typeof ApiSubscribeRoute
-  '/blog/$slug': typeof BlogSlugRoute
-  '/download/macos': typeof DownloadMacosRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/connect/machine-code': typeof ApiConnectMachineCodeRoute
-  '/api/connect/redeem': typeof ApiConnectRedeemRoute
-  '/api/connect/redeem-machine': typeof ApiConnectRedeemMachineRoute
-  '/api/connect/revoke-machine': typeof ApiConnectRevokeMachineRoute
-  '/marketplace/v1/$': typeof MarketplaceV1SplatRoute
+  "/": typeof IndexRoute;
+  "/blog": typeof BlogRoute;
+  "/changelog": typeof ChangelogRoute;
+  "/dashboard": typeof DashboardRoute;
+  "/marketplace": typeof MarketplaceRouteWithChildren;
+  "/privacy": typeof PrivacyRoute;
+  "/.well-known/apple-app-site-association": typeof DotwellKnownAppleAppSiteAssociationRoute;
+  "/.well-known/assetlinks.json": typeof DotwellKnownAssetlinksDotjsonRoute;
+  "/api/subscribe": typeof ApiSubscribeRoute;
+  "/blog/$slug": typeof BlogSlugRoute;
+  "/download/macos": typeof DownloadMacosRoute;
+  "/marketplace/$pluginId": typeof MarketplacePluginIdRoute;
+  "/api/auth/$": typeof ApiAuthSplatRoute;
+  "/api/connect/machine-code": typeof ApiConnectMachineCodeRoute;
+  "/api/connect/redeem": typeof ApiConnectRedeemRoute;
+  "/api/connect/redeem-machine": typeof ApiConnectRedeemMachineRoute;
+  "/api/connect/revoke-machine": typeof ApiConnectRevokeMachineRoute;
+  "/marketplace/v1/$": typeof MarketplaceV1SplatRoute;
+  "/marketplace/v2/$": typeof MarketplaceV2SplatRoute;
+  "/marketplace/author/$github": typeof MarketplaceAuthorGithubRoute;
 }
 export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/blog': typeof BlogRoute
-  '/changelog': typeof ChangelogRoute
-  '/dashboard': typeof DashboardRoute
-  '/privacy': typeof PrivacyRoute
-  '/.well-known/apple-app-site-association': typeof DotwellKnownAppleAppSiteAssociationRoute
-  '/.well-known/assetlinks.json': typeof DotwellKnownAssetlinksDotjsonRoute
-  '/api/subscribe': typeof ApiSubscribeRoute
-  '/blog_/$slug': typeof BlogSlugRoute
-  '/download/macos': typeof DownloadMacosRoute
-  '/api/auth/$': typeof ApiAuthSplatRoute
-  '/api/connect/machine-code': typeof ApiConnectMachineCodeRoute
-  '/api/connect/redeem': typeof ApiConnectRedeemRoute
-  '/api/connect/redeem-machine': typeof ApiConnectRedeemMachineRoute
-  '/api/connect/revoke-machine': typeof ApiConnectRevokeMachineRoute
-  '/marketplace/v1/$': typeof MarketplaceV1SplatRoute
+  __root__: typeof rootRouteImport;
+  "/": typeof IndexRoute;
+  "/blog": typeof BlogRoute;
+  "/changelog": typeof ChangelogRoute;
+  "/dashboard": typeof DashboardRoute;
+  "/marketplace_": typeof MarketplaceRouteWithChildren;
+  "/privacy": typeof PrivacyRoute;
+  "/.well-known/apple-app-site-association": typeof DotwellKnownAppleAppSiteAssociationRoute;
+  "/.well-known/assetlinks.json": typeof DotwellKnownAssetlinksDotjsonRoute;
+  "/api/subscribe": typeof ApiSubscribeRoute;
+  "/blog_/$slug": typeof BlogSlugRoute;
+  "/download/macos": typeof DownloadMacosRoute;
+  "/marketplace_/$pluginId": typeof MarketplacePluginIdRoute;
+  "/api/auth/$": typeof ApiAuthSplatRoute;
+  "/api/connect/machine-code": typeof ApiConnectMachineCodeRoute;
+  "/api/connect/redeem": typeof ApiConnectRedeemRoute;
+  "/api/connect/redeem-machine": typeof ApiConnectRedeemMachineRoute;
+  "/api/connect/revoke-machine": typeof ApiConnectRevokeMachineRoute;
+  "/marketplace/v1/$": typeof MarketplaceV1SplatRoute;
+  "/marketplace/v2/$": typeof MarketplaceV2SplatRoute;
+  "/marketplace_/author/$github": typeof MarketplaceAuthorGithubRoute;
 }
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
+  fileRoutesByFullPath: FileRoutesByFullPath;
   fullPaths:
-    | '/'
-    | '/blog'
-    | '/changelog'
-    | '/dashboard'
-    | '/privacy'
-    | '/.well-known/apple-app-site-association'
-    | '/.well-known/assetlinks.json'
-    | '/api/subscribe'
-    | '/blog/$slug'
-    | '/download/macos'
-    | '/api/auth/$'
-    | '/api/connect/machine-code'
-    | '/api/connect/redeem'
-    | '/api/connect/redeem-machine'
-    | '/api/connect/revoke-machine'
-    | '/marketplace/v1/$'
-  fileRoutesByTo: FileRoutesByTo
+    | "/"
+    | "/blog"
+    | "/changelog"
+    | "/dashboard"
+    | "/marketplace"
+    | "/privacy"
+    | "/.well-known/apple-app-site-association"
+    | "/.well-known/assetlinks.json"
+    | "/api/subscribe"
+    | "/blog/$slug"
+    | "/download/macos"
+    | "/marketplace/$pluginId"
+    | "/api/auth/$"
+    | "/api/connect/machine-code"
+    | "/api/connect/redeem"
+    | "/api/connect/redeem-machine"
+    | "/api/connect/revoke-machine"
+    | "/marketplace/v1/$"
+    | "/marketplace/v2/$"
+    | "/marketplace/author/$github";
+  fileRoutesByTo: FileRoutesByTo;
   to:
-    | '/'
-    | '/blog'
-    | '/changelog'
-    | '/dashboard'
-    | '/privacy'
-    | '/.well-known/apple-app-site-association'
-    | '/.well-known/assetlinks.json'
-    | '/api/subscribe'
-    | '/blog/$slug'
-    | '/download/macos'
-    | '/api/auth/$'
-    | '/api/connect/machine-code'
-    | '/api/connect/redeem'
-    | '/api/connect/redeem-machine'
-    | '/api/connect/revoke-machine'
-    | '/marketplace/v1/$'
+    | "/"
+    | "/blog"
+    | "/changelog"
+    | "/dashboard"
+    | "/marketplace"
+    | "/privacy"
+    | "/.well-known/apple-app-site-association"
+    | "/.well-known/assetlinks.json"
+    | "/api/subscribe"
+    | "/blog/$slug"
+    | "/download/macos"
+    | "/marketplace/$pluginId"
+    | "/api/auth/$"
+    | "/api/connect/machine-code"
+    | "/api/connect/redeem"
+    | "/api/connect/redeem-machine"
+    | "/api/connect/revoke-machine"
+    | "/marketplace/v1/$"
+    | "/marketplace/v2/$"
+    | "/marketplace/author/$github";
   id:
-    | '__root__'
-    | '/'
-    | '/blog'
-    | '/changelog'
-    | '/dashboard'
-    | '/privacy'
-    | '/.well-known/apple-app-site-association'
-    | '/.well-known/assetlinks.json'
-    | '/api/subscribe'
-    | '/blog_/$slug'
-    | '/download/macos'
-    | '/api/auth/$'
-    | '/api/connect/machine-code'
-    | '/api/connect/redeem'
-    | '/api/connect/redeem-machine'
-    | '/api/connect/revoke-machine'
-    | '/marketplace/v1/$'
-  fileRoutesById: FileRoutesById
+    | "__root__"
+    | "/"
+    | "/blog"
+    | "/changelog"
+    | "/dashboard"
+    | "/marketplace_"
+    | "/privacy"
+    | "/.well-known/apple-app-site-association"
+    | "/.well-known/assetlinks.json"
+    | "/api/subscribe"
+    | "/blog_/$slug"
+    | "/download/macos"
+    | "/marketplace_/$pluginId"
+    | "/api/auth/$"
+    | "/api/connect/machine-code"
+    | "/api/connect/redeem"
+    | "/api/connect/redeem-machine"
+    | "/api/connect/revoke-machine"
+    | "/marketplace/v1/$"
+    | "/marketplace/v2/$"
+    | "/marketplace_/author/$github";
+  fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  BlogRoute: typeof BlogRoute
-  ChangelogRoute: typeof ChangelogRoute
-  DashboardRoute: typeof DashboardRoute
-  PrivacyRoute: typeof PrivacyRoute
-  DotwellKnownAppleAppSiteAssociationRoute: typeof DotwellKnownAppleAppSiteAssociationRoute
-  DotwellKnownAssetlinksDotjsonRoute: typeof DotwellKnownAssetlinksDotjsonRoute
-  ApiSubscribeRoute: typeof ApiSubscribeRoute
-  BlogSlugRoute: typeof BlogSlugRoute
-  DownloadMacosRoute: typeof DownloadMacosRoute
-  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
-  ApiConnectMachineCodeRoute: typeof ApiConnectMachineCodeRoute
-  ApiConnectRedeemRoute: typeof ApiConnectRedeemRoute
-  ApiConnectRedeemMachineRoute: typeof ApiConnectRedeemMachineRoute
-  ApiConnectRevokeMachineRoute: typeof ApiConnectRevokeMachineRoute
-  MarketplaceV1SplatRoute: typeof MarketplaceV1SplatRoute
+  IndexRoute: typeof IndexRoute;
+  BlogRoute: typeof BlogRoute;
+  ChangelogRoute: typeof ChangelogRoute;
+  DashboardRoute: typeof DashboardRoute;
+  MarketplaceRoute: typeof MarketplaceRouteWithChildren;
+  PrivacyRoute: typeof PrivacyRoute;
+  DotwellKnownAppleAppSiteAssociationRoute: typeof DotwellKnownAppleAppSiteAssociationRoute;
+  DotwellKnownAssetlinksDotjsonRoute: typeof DotwellKnownAssetlinksDotjsonRoute;
+  ApiSubscribeRoute: typeof ApiSubscribeRoute;
+  BlogSlugRoute: typeof BlogSlugRoute;
+  DownloadMacosRoute: typeof DownloadMacosRoute;
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute;
+  ApiConnectMachineCodeRoute: typeof ApiConnectMachineCodeRoute;
+  ApiConnectRedeemRoute: typeof ApiConnectRedeemRoute;
+  ApiConnectRedeemMachineRoute: typeof ApiConnectRedeemMachineRoute;
+  ApiConnectRevokeMachineRoute: typeof ApiConnectRevokeMachineRoute;
+  MarketplaceV1SplatRoute: typeof MarketplaceV1SplatRoute;
+  MarketplaceV2SplatRoute: typeof MarketplaceV2SplatRoute;
 }
 
-declare module '@tanstack/react-router' {
+declare module "@tanstack/react-router" {
   interface FileRoutesByPath {
-    '/privacy': {
-      id: '/privacy'
-      path: '/privacy'
-      fullPath: '/privacy'
-      preLoaderRoute: typeof PrivacyRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/changelog': {
-      id: '/changelog'
-      path: '/changelog'
-      fullPath: '/changelog'
-      preLoaderRoute: typeof ChangelogRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/blog': {
-      id: '/blog'
-      path: '/blog'
-      fullPath: '/blog'
-      preLoaderRoute: typeof BlogRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/download/macos': {
-      id: '/download/macos'
-      path: '/download/macos'
-      fullPath: '/download/macos'
-      preLoaderRoute: typeof DownloadMacosRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/blog_/$slug': {
-      id: '/blog_/$slug'
-      path: '/blog/$slug'
-      fullPath: '/blog/$slug'
-      preLoaderRoute: typeof BlogSlugRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/subscribe': {
-      id: '/api/subscribe'
-      path: '/api/subscribe'
-      fullPath: '/api/subscribe'
-      preLoaderRoute: typeof ApiSubscribeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.well-known/assetlinks.json': {
-      id: '/.well-known/assetlinks.json'
-      path: '/.well-known/assetlinks.json'
-      fullPath: '/.well-known/assetlinks.json'
-      preLoaderRoute: typeof DotwellKnownAssetlinksDotjsonRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/.well-known/apple-app-site-association': {
-      id: '/.well-known/apple-app-site-association'
-      path: '/.well-known/apple-app-site-association'
-      fullPath: '/.well-known/apple-app-site-association'
-      preLoaderRoute: typeof DotwellKnownAppleAppSiteAssociationRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/marketplace/v1/$': {
-      id: '/marketplace/v1/$'
-      path: '/marketplace/v1/$'
-      fullPath: '/marketplace/v1/$'
-      preLoaderRoute: typeof MarketplaceV1SplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/connect/revoke-machine': {
-      id: '/api/connect/revoke-machine'
-      path: '/api/connect/revoke-machine'
-      fullPath: '/api/connect/revoke-machine'
-      preLoaderRoute: typeof ApiConnectRevokeMachineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/connect/redeem-machine': {
-      id: '/api/connect/redeem-machine'
-      path: '/api/connect/redeem-machine'
-      fullPath: '/api/connect/redeem-machine'
-      preLoaderRoute: typeof ApiConnectRedeemMachineRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/connect/redeem': {
-      id: '/api/connect/redeem'
-      path: '/api/connect/redeem'
-      fullPath: '/api/connect/redeem'
-      preLoaderRoute: typeof ApiConnectRedeemRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/connect/machine-code': {
-      id: '/api/connect/machine-code'
-      path: '/api/connect/machine-code'
-      fullPath: '/api/connect/machine-code'
-      preLoaderRoute: typeof ApiConnectMachineCodeRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/api/auth/$': {
-      id: '/api/auth/$'
-      path: '/api/auth/$'
-      fullPath: '/api/auth/$'
-      preLoaderRoute: typeof ApiAuthSplatRouteImport
-      parentRoute: typeof rootRouteImport
-    }
+    "/privacy": {
+      id: "/privacy";
+      path: "/privacy";
+      fullPath: "/privacy";
+      preLoaderRoute: typeof PrivacyRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/marketplace_": {
+      id: "/marketplace_";
+      path: "/marketplace";
+      fullPath: "/marketplace";
+      preLoaderRoute: typeof MarketplaceRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/dashboard": {
+      id: "/dashboard";
+      path: "/dashboard";
+      fullPath: "/dashboard";
+      preLoaderRoute: typeof DashboardRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/changelog": {
+      id: "/changelog";
+      path: "/changelog";
+      fullPath: "/changelog";
+      preLoaderRoute: typeof ChangelogRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/blog": {
+      id: "/blog";
+      path: "/blog";
+      fullPath: "/blog";
+      preLoaderRoute: typeof BlogRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/": {
+      id: "/";
+      path: "/";
+      fullPath: "/";
+      preLoaderRoute: typeof IndexRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/marketplace_/$pluginId": {
+      id: "/marketplace_/$pluginId";
+      path: "/$pluginId";
+      fullPath: "/marketplace/$pluginId";
+      preLoaderRoute: typeof MarketplacePluginIdRouteImport;
+      parentRoute: typeof MarketplaceRoute;
+    };
+    "/download/macos": {
+      id: "/download/macos";
+      path: "/download/macos";
+      fullPath: "/download/macos";
+      preLoaderRoute: typeof DownloadMacosRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/blog_/$slug": {
+      id: "/blog_/$slug";
+      path: "/blog/$slug";
+      fullPath: "/blog/$slug";
+      preLoaderRoute: typeof BlogSlugRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/subscribe": {
+      id: "/api/subscribe";
+      path: "/api/subscribe";
+      fullPath: "/api/subscribe";
+      preLoaderRoute: typeof ApiSubscribeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/.well-known/assetlinks.json": {
+      id: "/.well-known/assetlinks.json";
+      path: "/.well-known/assetlinks.json";
+      fullPath: "/.well-known/assetlinks.json";
+      preLoaderRoute: typeof DotwellKnownAssetlinksDotjsonRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/.well-known/apple-app-site-association": {
+      id: "/.well-known/apple-app-site-association";
+      path: "/.well-known/apple-app-site-association";
+      fullPath: "/.well-known/apple-app-site-association";
+      preLoaderRoute: typeof DotwellKnownAppleAppSiteAssociationRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/marketplace_/author/$github": {
+      id: "/marketplace_/author/$github";
+      path: "/author/$github";
+      fullPath: "/marketplace/author/$github";
+      preLoaderRoute: typeof MarketplaceAuthorGithubRouteImport;
+      parentRoute: typeof MarketplaceRoute;
+    };
+    "/marketplace/v2/$": {
+      id: "/marketplace/v2/$";
+      path: "/marketplace/v2/$";
+      fullPath: "/marketplace/v2/$";
+      preLoaderRoute: typeof MarketplaceV2SplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/marketplace/v1/$": {
+      id: "/marketplace/v1/$";
+      path: "/marketplace/v1/$";
+      fullPath: "/marketplace/v1/$";
+      preLoaderRoute: typeof MarketplaceV1SplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/connect/revoke-machine": {
+      id: "/api/connect/revoke-machine";
+      path: "/api/connect/revoke-machine";
+      fullPath: "/api/connect/revoke-machine";
+      preLoaderRoute: typeof ApiConnectRevokeMachineRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/connect/redeem-machine": {
+      id: "/api/connect/redeem-machine";
+      path: "/api/connect/redeem-machine";
+      fullPath: "/api/connect/redeem-machine";
+      preLoaderRoute: typeof ApiConnectRedeemMachineRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/connect/redeem": {
+      id: "/api/connect/redeem";
+      path: "/api/connect/redeem";
+      fullPath: "/api/connect/redeem";
+      preLoaderRoute: typeof ApiConnectRedeemRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/connect/machine-code": {
+      id: "/api/connect/machine-code";
+      path: "/api/connect/machine-code";
+      fullPath: "/api/connect/machine-code";
+      preLoaderRoute: typeof ApiConnectMachineCodeRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
+    "/api/auth/$": {
+      id: "/api/auth/$";
+      path: "/api/auth/$";
+      fullPath: "/api/auth/$";
+      preLoaderRoute: typeof ApiAuthSplatRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
+
+interface MarketplaceRouteChildren {
+  MarketplacePluginIdRoute: typeof MarketplacePluginIdRoute;
+  MarketplaceAuthorGithubRoute: typeof MarketplaceAuthorGithubRoute;
+}
+
+const MarketplaceRouteChildren: MarketplaceRouteChildren = {
+  MarketplacePluginIdRoute: MarketplacePluginIdRoute,
+  MarketplaceAuthorGithubRoute: MarketplaceAuthorGithubRoute,
+};
+
+const MarketplaceRouteWithChildren = MarketplaceRoute._addFileChildren(
+  MarketplaceRouteChildren,
+);
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   BlogRoute: BlogRoute,
   ChangelogRoute: ChangelogRoute,
   DashboardRoute: DashboardRoute,
+  MarketplaceRoute: MarketplaceRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
   DotwellKnownAppleAppSiteAssociationRoute:
     DotwellKnownAppleAppSiteAssociationRoute,
@@ -375,16 +468,17 @@ const rootRouteChildren: RootRouteChildren = {
   ApiConnectRedeemMachineRoute: ApiConnectRedeemMachineRoute,
   ApiConnectRevokeMachineRoute: ApiConnectRevokeMachineRoute,
   MarketplaceV1SplatRoute: MarketplaceV1SplatRoute,
-}
+  MarketplaceV2SplatRoute: MarketplaceV2SplatRoute,
+};
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+  ._addFileTypes<FileRouteTypes>();
 
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
+import type { getRouter } from "./router.tsx";
+import type { createStart } from "@tanstack/react-start";
+declare module "@tanstack/react-start" {
   interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
+    ssr: true;
+    router: Awaited<ReturnType<typeof getRouter>>;
   }
 }

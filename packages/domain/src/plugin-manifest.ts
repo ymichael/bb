@@ -10,13 +10,6 @@ import {
 
 const requiredManifestString = z.string().trim().min(1);
 
-/**
- * `bb.branding.experimental_icons`: the plugin's own icon vocabulary, a map
- * of declared name → plugin-relative SVG path. Rows and provider branding
- * reference an entry by the namespaced glyph `"<pluginId>/<name>"`. Only the
- * grammar is checked here; the manifest readers (build and load) check the
- * filesystem, the byte cap and the SVG contents.
- */
 const pluginBrandingIconsSchema = z
   .record(
     z
@@ -30,7 +23,8 @@ const pluginBrandingIconsSchema = z
         'icon names use lowercase letters, digits and "-", starting with a letter or digit',
       ),
     requiredManifestString.refine(
-      (path) => isPluginOwnedIconPath(path) && path.toLowerCase().endsWith(".svg"),
+      (path) =>
+        isPluginOwnedIconPath(path) && path.toLowerCase().endsWith(".svg"),
       {
         message:
           'icon paths are plugin-relative .svg files starting with "./" (for example "./icons/receipt.svg")',
@@ -67,13 +61,6 @@ const pluginBrandingSchema = z
           'plugin-owned branding.icon paths must point at an .svg file (for example "./assets/icon.svg")',
       });
     }
-    // `bb.branding.icon` takes exactly two forms: a host glyph name or a
-    // plugin-relative SVG path. The namespaced `"<pluginId>/<name>"` form is
-    // how a tool presentation or a provider declaration names one of the
-    // plugin's declared icons; branding.icon is the plugin's own mark, so a
-    // self-reference would only restate the path already in the map, and no
-    // reader of branding.icon resolves the map. Refused rather than silently
-    // carried as a glyph name that resolves nowhere.
     if (branding.icon !== undefined && isNamespacedGlyph(branding.icon)) {
       context.addIssue({
         code: "custom",

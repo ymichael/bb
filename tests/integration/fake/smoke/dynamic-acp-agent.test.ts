@@ -19,10 +19,6 @@ import {
   TURN_TIMEOUT_MS,
 } from "./shared.js";
 
-// This smoke performs two provider starts, two follow-up turns, and a daemon
-// restart. Keep the outer Vitest deadline above the sum of the operation-level
-// deadlines so a loaded full-workspace run reports the operation that stalled
-// instead of racing the generic per-test timeout.
 const DYNAMIC_ACP_TEST_TIMEOUT_MS = scaleTimeoutMs(120_000);
 
 const fixturePath = path.resolve(
@@ -35,8 +31,6 @@ async function registerDynamicAcpAgents(
   harness: IntegrationHarness,
 ): Promise<void> {
   const registry = harness.server.providerRegistry;
-  // Exactly what a user puts in the ACP plugin's `customAgents` setting: the
-  // plugin turns each entry into the registration under test.
   await registerConfiguredAcpProvider(registry, {
     id: "smoke",
     displayName: "Smoke ACP",

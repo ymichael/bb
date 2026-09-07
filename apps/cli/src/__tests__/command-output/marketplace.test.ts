@@ -30,6 +30,15 @@ const official = {
   entryCount: 5,
 };
 
+const bundled = {
+  ...official,
+  name: "bb-official",
+  displayName: "BB Official",
+  sourceKind: "path" as const,
+  source: "/app/builtin-plugins",
+  entryCount: 25,
+};
+
 function json(value: object, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,
@@ -80,12 +89,13 @@ describe("bb marketplace", () => {
 
   it("lists marketplaces with their source and entry count", async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
-      json({ marketplaces: [official, acme] }),
+      json({ marketplaces: [bundled, official, acme] }),
     );
 
     await runCommand(["marketplace", "list"], register);
 
     const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
+    expect(output).toContain("bb-official (official)");
     expect(output).toContain("bb-community (official)");
     expect(output).toContain("acme-plugins");
     expect(output).toContain("https://acme.test/marketplace.json");
@@ -95,7 +105,12 @@ describe("bb marketplace", () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       json({
         results: [
-          { name: "bb-community", ok: true, error: null, marketplace: official },
+          {
+            name: "bb-community",
+            ok: true,
+            error: null,
+            marketplace: official,
+          },
           {
             name: "acme-plugins",
             ok: false,
@@ -106,9 +121,9 @@ describe("bb marketplace", () => {
       }),
     );
 
-    await expect(runCommand(["marketplace", "refresh"], register)).rejects.toThrow(
-      "process.exit:1",
-    );
+    await expect(
+      runCommand(["marketplace", "refresh"], register),
+    ).rejects.toThrow("process.exit:1");
 
     const output = collectLogPayloads(vi.mocked(console.log)).join("\n");
     expect(output).toContain("bb-community: 5 entries");

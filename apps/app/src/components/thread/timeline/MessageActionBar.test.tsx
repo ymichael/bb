@@ -25,11 +25,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-/**
- * Replaces the setup polyfill's inert ResizeObserver with one whose
- * observations the test can drive. Entries carry only `contentRect`, matching
- * the fallback path the component reads when box sizes are absent.
- */
 function installControlledResizeObserver() {
   const observations: { callback: ResizeObserverCallback; node: Element }[] =
     [];
@@ -306,6 +301,19 @@ describe("MessageActionBar", () => {
     expect(onAddToChat).toHaveBeenCalledWith("", [attachment]);
   });
 
+  it("renders copy for an image-only message", () => {
+    render(
+      <MessageActionBar
+        messageText=""
+        copyImageUrl="/attachments/screenshot.png"
+        alignment="end"
+        mobileActionDisplay="overflow"
+      />,
+    );
+
+    expect(screen.getByRole("button", { name: "Copy message" })).toBeTruthy();
+  });
+
   it("omits the send-to-main action when no handler is supplied", () => {
     render(
       <MessageActionBar
@@ -424,8 +432,6 @@ describe("MessageActionBar", () => {
       />,
     );
 
-    // Radix TooltipTrigger stamps `data-state` on its child; the mobile branch
-    // must render plain buttons (no tooltip tree per action).
     const fork = screen.getByRole("button", { name: "Fork into new thread" });
     expect(fork.hasAttribute("data-state")).toBe(false);
     expect(
@@ -450,8 +456,6 @@ describe("MessageActionBar", () => {
         onFork={vi.fn()}
       />,
     );
-    // Three 20px actions with 8px gaps need 76px; a 44px slot fits one action
-    // plus the 20px "⋯" trigger at its tighter 4px gap (20 + 4 + 20).
     resizeObserver.reportWidth(44);
 
     expect(screen.getByRole("button", { name: "Copy message" })).toBeTruthy();
@@ -501,8 +505,6 @@ describe("MessageActionBar", () => {
         onFork={onFork}
       />,
     );
-    // Three 28px touch actions with 8px gaps need 100px; a 60px slot fits one
-    // action plus the 28px popover trigger at its 4px gap (28 + 4 + 28).
     resizeObserver.reportWidth(60);
 
     expect(screen.getByRole("button", { name: "Copy message" })).toBeTruthy();
@@ -540,7 +542,6 @@ describe("MessageActionBar", () => {
         />
       </div>,
     );
-    // Bubble fits nothing; the 358px column fits all three 28px actions.
     resizeObserver.reportWidths({ slot: 54, column: 358 });
 
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
@@ -552,7 +553,6 @@ describe("MessageActionBar", () => {
     ).toEqual(["Copy message", "Add to chat", "Fork into new thread"]);
     expect(document.body.querySelector('[data-side="top"]')).toBeNull();
 
-    // Choosing an action runs it and collapses the row again.
     fireEvent.click(screen.getByRole("button", { name: "Add to chat" }));
     expect(onAddToChat).toHaveBeenCalledWith("An answer.");
     expect(
@@ -576,8 +576,6 @@ describe("MessageActionBar", () => {
         />
       </div>,
     );
-    // Nothing fits the bubble, so the row is just the trigger; the column has
-    // room, so tapping it reveals the actions in place.
     resizeObserver.reportWidths({ slot: 54, column: 358 });
 
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
@@ -586,8 +584,6 @@ describe("MessageActionBar", () => {
     await waitFor(() =>
       expect(writeText).toHaveBeenCalledWith("Copy this answer."),
     );
-    // The row collapsed on the tap, so the check has to land on the trigger
-    // that replaced it — otherwise the copy is silent.
     const trigger = await screen.findByRole("button", {
       name: "Message actions",
     });
@@ -610,7 +606,6 @@ describe("MessageActionBar", () => {
         />
       </div>,
     );
-    // Three actions need 100px; 110px leaves less than the comfort margin.
     resizeObserver.reportWidths({ slot: 54, column: 110 });
 
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
@@ -640,7 +635,6 @@ describe("MessageActionBar", () => {
 });
 
 describe("MessageActionBar observer budget", () => {
-  /** Counts `ResizeObserver` constructions without ever delivering entries. */
   function spyResizeObserverConstructions(): () => number {
     let constructions = 0;
     class CountingResizeObserver {
@@ -669,8 +663,6 @@ describe("MessageActionBar observer budget", () => {
       </div>,
     );
 
-    // The overflow branch renders a constant layout, so the slot-width
-    // observer is skipped; only the column fallback remains.
     expect(constructionCount()).toBe(1);
   });
 
@@ -690,8 +682,6 @@ describe("MessageActionBar observer budget", () => {
     );
     expect(constructionCount()).toBe(0);
 
-    // The shared width is what admits the in-place expansion: three 28px
-    // touch actions (100px with gaps) fit the 358px column comfortably.
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
     expect(
       screen
@@ -718,12 +708,6 @@ describe("MessageActionBar observer budget", () => {
 });
 
 describe("MessageActionBar shared column width", () => {
-  /**
-   * Mounts a mobile bar with three 28px touch actions (a 100px row, so the
-   * in-place expansion needs a 116px column with its 16px comfort margin)
-   * under the shared list width, taps "⋯", and reports whether the actions
-   * expanded in place rather than opening the popover.
-   */
   function expandsInPlaceAt({
     alignment,
     listWidth,
@@ -743,8 +727,6 @@ describe("MessageActionBar shared column width", () => {
       </MessageColumnWidthContext.Provider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Message actions" }));
-    // The popover portals its items outside the container, so only a button
-    // inside the bar's own tree is the in-place row.
     const popover = document.body.querySelector('[data-side="top"]');
     const inPlaceRow = within(container).queryByRole("button", {
       name: "Fork into new thread",
@@ -760,15 +742,10 @@ describe("MessageActionBar shared column width", () => {
 
   it("reads the assistant column as the shared list width minus its px-2 padding", () => {
     mockMobileCoarsePointer();
-    // The bar's own column observer reports the padded assistant column's
-    // content box: 16px narrower than the list root the shared measurement
-    // observes. The shared path has to land on the same threshold.
     expect(expandsInPlaceAt({ alignment: "start", listWidth: 131 })).toBe(
       false,
     );
-    expect(expandsInPlaceAt({ alignment: "start", listWidth: 132 })).toBe(
-      true,
-    );
+    expect(expandsInPlaceAt({ alignment: "start", listWidth: 132 })).toBe(true);
   });
 
   it("reads the unpadded user column at the full shared list width", () => {
@@ -792,7 +769,6 @@ describe("computeMessageActionRowLayout", () => {
   });
 
   it("keeps all actions inline when they exactly fit", () => {
-    // 3 × 20px + 2 × 8px gaps = 76px.
     expect(
       computeMessageActionRowLayout({
         actionCount: 3,
@@ -803,8 +779,6 @@ describe("computeMessageActionRowLayout", () => {
   });
 
   it("collapses the tail once the full row would overflow", () => {
-    // One pixel short of fitting all three (76px): two actions plus the
-    // trigger at its 4px gap need 20 + 8 + 20 + 4 + 20 = 72px and fit.
     expect(
       computeMessageActionRowLayout({
         actionCount: 3,
@@ -812,7 +786,6 @@ describe("computeMessageActionRowLayout", () => {
         ...metrics,
       }),
     ).toEqual({ inlineCount: 2, overflowCount: 1 });
-    // Below 72px the second action also collapses.
     expect(
       computeMessageActionRowLayout({
         actionCount: 3,

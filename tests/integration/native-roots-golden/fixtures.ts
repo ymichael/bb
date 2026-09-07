@@ -1,24 +1,3 @@
-/**
- * Fixture homes and workspaces for the native-roots golden proof.
- *
- * One fixture variant per (provider, environment). Each variant populates
- * every root the discovery pipeline scans for that provider (declared roots,
- * static vendor roots, ancestor directories, vendor plugin installs,
- * config-file entries, env-moved config directories) with a distinct skill or
- * command name per root, so the golden shows which root produced each entry.
- *
- * Layout under the temp root:
- *   <root>/home                 fake HOME (`homeDir` for the daemon)
- *   <root>/ws                   workspace root (has `.git`)
- *   <root>/ws/packages/app      cwd, two levels below the repo root, so the
- *                               ancestor walk yields three directories
- *   <root>/<dir>/skills         above the repository root: the ancestor walk
- *                               stops at `.git`, so a skill here is never
- *                               listed (`above-root-*` in every `absent`)
- *
- * The daemon never reads `HOME`; it receives `homeDir` explicitly. The env
- * vars below are the ones the daemon does read from `process.env`.
- */
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -35,7 +14,6 @@ export const PROVIDER_IDS = [
 ] as const;
 export type ProviderId = (typeof PROVIDER_IDS)[number];
 
-/** Every env var the current daemon root resolution reads. */
 export const NATIVE_ROOT_ENV_KEYS = [
   "CLAUDE_CONFIG_DIR",
   "CODEX_HOME",
@@ -61,9 +39,7 @@ export interface FixturePaths {
 }
 
 export interface ExpectedNames {
-  /** One name per populated root; the capture refuses a golden missing any. */
   present: readonly string[];
-  /** Names the current code must not list (disabled, out of scope, ...). */
   absent: readonly string[];
 }
 
@@ -109,7 +85,6 @@ function skillFileContent(args: {
   return `---\n${nameLine}description: ${args.description}\n---\n# Skill body\n`;
 }
 
-/** `<skillsDir>/<name>/SKILL.md` with frontmatter `name` and `description`. */
 async function writeSkill(
   skillsDir: string,
   name: string,
@@ -121,7 +96,6 @@ async function writeSkill(
   );
 }
 
-/** A `*.md` command file with optional `description` / `argument-hint`. */
 async function writeCommand(
   commandsDir: string,
   relativeFile: string,
@@ -141,12 +115,6 @@ async function symlinkDir(target: string, linkPath: string): Promise<void> {
   await fs.symlink(target, linkPath, "dir");
 }
 
-/**
- * `<linkPath>` becomes a symlink to a fresh skills directory at `targetDir`
- * holding one skill `name`. Used for the symlink-boundary variants: whether
- * the skill is listed depends on where `targetDir` sits relative to the
- * scan boundary.
- */
 async function writeLinkedSkillsRoot(
   linkPath: string,
   targetDir: string,
@@ -156,7 +124,6 @@ async function writeLinkedSkillsRoot(
   await symlinkDir(targetDir, linkPath);
 }
 
-/** A user-origin skill whose directory is a symlink (discovery reports `linked`). */
 async function writeLinkedSkill(
   paths: FixturePaths,
   skillsDir: string,
@@ -166,10 +133,6 @@ async function writeLinkedSkill(
   await writeSkill(path.join(paths.root, "linked-skills"), name);
   await symlinkDir(target, path.join(skillsDir, name));
 }
-
-// ---------------------------------------------------------------------------
-// Claude plugin install (shared by claude-code, omp, and grok compat)
-// ---------------------------------------------------------------------------
 
 const CLAUDE_PLUGIN_MANIFEST = path.join(".claude-plugin", "plugin.json");
 
@@ -193,14 +156,6 @@ async function writeSimpleClaudePlugin(
   }
 }
 
-/**
- * Installed Claude plugins in every scope the daemon handles, plus a
- * skills-directory plugin in the project and user skills roots.
- *
- * `claudeDir` is the `claudeDir` the SDK's `experimental_resolveClaudePluginRoots`
- * answers (`$CLAUDE_CONFIG_DIR` or `~/.claude`): the registry, user
- * settings, and the cache live there.
- */
 async function writeClaudePluginInstall(
   paths: FixturePaths,
   claudeDir: string,
@@ -247,7 +202,6 @@ async function writeClaudePluginInstall(
       "user-plugin@golden-market": [
         { scope: "user", installPath: userPluginRoot },
       ],
-      // installPath does not exist; resolved through the cache by commit sha.
       "cache-plugin@golden-market": [
         {
           scope: "user",
@@ -277,8 +231,6 @@ async function writeClaudePluginInstall(
       "local-plugin@golden-market": [
         { scope: "local", installPath: localPluginRoot },
       ],
-      // Project scope, installed above cwd: the daemon keeps only project
-      // plugins whose installPath is inside cwd.
       "outside-plugin@golden-market": [
         { scope: "project", installPath: outsidePluginRoot },
       ],
@@ -302,9 +254,6 @@ async function writeClaudePluginInstall(
     enabledPlugins: { "local-plugin@golden-market": true },
   });
 
-  // Manifest `skills` / `commands` entries: a directory, a single SKILL.md
-  // file, a command directory, a single command file; plus the defaults
-  // (root SKILL.md, `skills/`, `commands/`).
   await writeJson(path.join(userPluginRoot, CLAUDE_PLUGIN_MANIFEST), {
     name: "user-plugin",
     skills: ["skills", "extra-skill/SKILL.md"],
@@ -357,7 +306,6 @@ async function writeClaudePluginInstall(
   await writeSimpleClaudePlugin(localPluginRoot, "local-plugin");
   await writeSimpleClaudePlugin(outsidePluginRoot, "outside-plugin");
 
-  // Skills-directory plugins: a plugin living inside a skills root.
   for (const [skillsRoot, name] of [
     [path.join(cwd, ".claude", "skills"), "cwd-skills-dir-plugin"],
     [path.join(claudeDir, "skills"), "home-skills-dir-plugin"],
@@ -404,17 +352,11 @@ const CLAUDE_PLUGIN_ABSENT = [
   "outside-plugin:outside-plugin-skill",
 ] as const;
 
-// ---------------------------------------------------------------------------
-// claude-code
-// ---------------------------------------------------------------------------
-
 async function buildClaudeCode(
   paths: FixturePaths,
   claudeDir: string,
 ): Promise<void> {
   const { root, home, workspace, cwd } = paths;
-  // Declared project root + ancestor walk (.claude/skills in every ancestor
-  // up to the repository root; the directory above `.git` is out).
   await writeSkill(path.join(cwd, ".claude", "skills"), "cwd-claude-skill");
   await writeSkill(
     path.join(workspace, ".claude", "skills"),
@@ -428,8 +370,6 @@ async function buildClaudeCode(
     path.join(root, ".claude", "skills"),
     "above-root-claude-skill",
   );
-  // Declared user root (`~/.claude/skills`, scanned even when the config dir
-  // moves) and the config-dir root.
   await writeSkill(path.join(home, ".claude", "skills"), "home-claude-skill");
   await writeLinkedSkill(
     paths,
@@ -439,8 +379,6 @@ async function buildClaudeCode(
   if (claudeDir !== path.join(home, ".claude")) {
     await writeSkill(path.join(claudeDir, "skills"), "configdir-claude-skill");
   }
-  // Commands: project (namespaced + argument hint) and user. Commands are not
-  // walked up through ancestors.
   await writeCommand(
     path.join(cwd, ".claude", "commands"),
     "cwd-review.md",
@@ -515,10 +453,6 @@ function claudeCodeVariant(
   };
 }
 
-// ---------------------------------------------------------------------------
-// codex
-// ---------------------------------------------------------------------------
-
 async function writeCodexPlugin(
   pluginRoot: string,
   manifest: Record<string, unknown>,
@@ -534,8 +468,6 @@ async function buildCodex(
   codexHome: string,
 ): Promise<void> {
   const { root, home, workspace, cwd } = paths;
-  // Declared project roots; only `.agents/skills` walks the ancestors (and
-  // stops at the repository root).
   await writeSkill(path.join(cwd, ".codex", "skills"), "cwd-codex-skill");
   await writeSkill(path.join(cwd, ".agents", "skills"), "cwd-agents-skill");
   await writeSkill(
@@ -551,7 +483,6 @@ async function buildCodex(
     "above-root-agents-skill",
   );
   await writeSkill(path.join(workspace, ".codex", "skills"), "ws-codex-skill");
-  // Declared user roots.
   await writeSkill(path.join(home, ".codex", "skills"), "home-codex-skill");
   await writeSkill(path.join(home, ".agents", "skills"), "home-agents-skill");
   await writeLinkedSkill(
@@ -559,7 +490,6 @@ async function buildCodex(
     path.join(home, ".agents", "skills"),
     "linked-agents-skill",
   );
-  // $CODEX_HOME roots: skills, skills/.system, plugins.
   await writeSkill(
     path.join(codexHome, "skills", ".system"),
     "system-codex-skill",
@@ -601,7 +531,6 @@ async function buildCodex(
     path.join(cache("disabled-plugin"), "skills"),
     "disabled-plugin-skill",
   );
-  // Not mentioned in config.toml: enabled unless explicitly disabled.
   await writeCodexPlugin(cache("unlisted-plugin"), { name: "unlisted-plugin" });
   await writeSkill(
     path.join(cache("unlisted-plugin"), "skills"),
@@ -659,29 +588,10 @@ function codexVariant(
   };
 }
 
-// ---------------------------------------------------------------------------
-// pi
-// ---------------------------------------------------------------------------
-
-/**
- * Pi: the declared roots (`.pi/skills` and `.agents/skills` in the workspace,
- * no ancestor walk; `~/.pi/agent/skills` and `~/.agents/skills` at home) plus
- * what the resolver reads from `<agentDir>/settings.json` on this host. The
- * settings file names one declared directory again (`~/.pi/agent/skills`),
- * so the golden pins the dedupe rule: that skill is listed once, under the
- * declared root. The moved agent dir's own `skills` directory is populated in
- * every variant and listed only where `PI_CODING_AGENT_DIR` points at it.
- *
- * Captured from this pipeline when pi converged on `resolveNativeRoots`, and
- * checked equal to the same fixtures run through the path it replaced (the
- * per-host probe re-registered as the declaration's `absolute` side): the
- * listing is byte-identical either way.
- */
 async function buildPi(paths: FixturePaths, agentDir: string): Promise<void> {
   const { root, home, workspace, cwd } = paths;
   await writeSkill(path.join(cwd, ".pi", "skills"), "cwd-pi-skill");
   await writeSkill(path.join(cwd, ".agents", "skills"), "cwd-agents-skill");
-  // No ancestor walk: a skill at the repository root stays out.
   await writeSkill(path.join(workspace, ".pi", "skills"), "ws-pi-skill");
   await writeSkill(
     path.join(home, ".pi", "agent", "skills"),
@@ -689,9 +599,6 @@ async function buildPi(paths: FixturePaths, agentDir: string): Promise<void> {
   );
   await writeSkill(path.join(home, ".agents", "skills"), "home-agents-skill");
   await writeSkill(path.join(root, "pi-agent", "skills"), "moved-agent-skill");
-  // settings.json: a `~` path, an absolute path, a path relative to the agent
-  // dir, a declared directory named again, a single-file entry (no root to
-  // scan), a package source and a disable pattern (not paths).
   await writeJson(path.join(agentDir, "settings.json"), {
     skills: [
       "~/pi-settings-user",
@@ -737,7 +644,9 @@ function piVariant(
   const userNames = movedAgentDir
     ? [...PI_USER_NAMES, "moved-agent-skill"]
     : PI_USER_NAMES;
-  const absent = movedAgentDir ? PI_ABSENT : [...PI_ABSENT, "moved-agent-skill"];
+  const absent = movedAgentDir
+    ? PI_ABSENT
+    : [...PI_ABSENT, "moved-agent-skill"];
   return {
     providerId: "pi",
     variant,
@@ -753,15 +662,10 @@ function piVariant(
   };
 }
 
-// ---------------------------------------------------------------------------
-// acp-cursor
-// ---------------------------------------------------------------------------
-
 const CURSOR_DIRS = [".cursor", ".agents", ".claude", ".codex"] as const;
 
 async function buildCursor(paths: FixturePaths): Promise<void> {
   const { home, workspace, cwd } = paths;
-  // `.cursor/skills` is a symlink to `.agents/skills` (a common setup).
   await writeSkill(path.join(cwd, ".agents", "skills"), "cwd-agents-skill");
   await symlinkDir(
     path.join("..", ".agents", "skills"),
@@ -769,12 +673,10 @@ async function buildCursor(paths: FixturePaths): Promise<void> {
   );
   await writeSkill(path.join(cwd, ".claude", "skills"), "cwd-claude-skill");
   await writeSkill(path.join(cwd, ".codex", "skills"), "cwd-codex-skill");
-  // Nested (category folder) skills: cursor-agent reads them recursively.
   await writeSkill(
     path.join(cwd, ".agents", "skills", "team"),
     "nested-agents-skill",
   );
-  // Cursor has no ancestor walk.
   await writeSkill(
     path.join(workspace, ".cursor", "skills"),
     "ws-cursor-skill",
@@ -794,11 +696,6 @@ async function buildCursor(paths: FixturePaths): Promise<void> {
 const CURSOR_USER_NAMES = CURSOR_DIRS.map(
   (dir) => `home-${dir.slice(1)}-skill`,
 );
-// Cursor scans its skill directories recursively. Before S5 the declared
-// (flat) roots shadowed the daemon's recursive cursor roots and the nested
-// skills were lost; S5's `recursive: true` on the declared roots restores
-// them (stabilization review, S1 item 9), so this golden was re-captured
-// with the post-S5 pipeline on purpose.
 const CURSOR_PROJECT_NAMES = [
   "cwd-agents-skill",
   "cwd-claude-skill",
@@ -806,10 +703,6 @@ const CURSOR_PROJECT_NAMES = [
   "nested-agents-skill",
 ];
 const CURSOR_USER_NAMES_NESTED = ["home-nested-cursor-skill"];
-// Cursor declares no ancestor walk: a skill at the repository root stays out.
-// S6c: cursor's project roots walk ancestors (cursor-agent discovers the
-// trees anywhere inside the repository), so the repository-root skill is
-// listed; this golden was re-captured with the post-S5 pipeline on purpose.
 const CURSOR_REPO_ROOT_NAMES = ["ws-cursor-skill"];
 const CURSOR_ABSENT: string[] = [];
 
@@ -839,14 +732,8 @@ const CURSOR_VARIANT: FixtureVariant = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// acp-opencode
-// ---------------------------------------------------------------------------
-
 interface OpenCodeDirs {
-  /** `resolveOpenCodeConfigDir`: `$XDG_CONFIG_HOME/opencode` or `~/.config/opencode`. */
   configDir: string;
-  /** `$OPENCODE_CONFIG_DIR` (the `custom-config` root), when set. */
   customConfigDir: string | null;
 }
 
@@ -858,8 +745,6 @@ async function buildOpenCode(
   await writeSkill(path.join(cwd, ".opencode", "skills"), "cwd-opencode-skill");
   await writeSkill(path.join(cwd, ".claude", "skills"), "cwd-claude-skill");
   await writeSkill(path.join(cwd, ".agents", "skills"), "cwd-agents-skill");
-  // Ancestor walk covers all three project directories up to the repository
-  // root; the directory above `.git` is out.
   await writeSkill(
     path.join(workspace, ".opencode", "skills"),
     "ws-opencode-skill",
@@ -933,10 +818,6 @@ function openCodeVariant(
   };
 }
 
-// ---------------------------------------------------------------------------
-// acp-omp
-// ---------------------------------------------------------------------------
-
 const OMP_PROJECT_DIRS = [
   ".omp",
   ".pi",
@@ -948,9 +829,7 @@ const OMP_PROJECT_DIRS = [
 ] as const;
 
 interface OmpDirs {
-  /** `resolveOmpAgentDir`: profile dir, `$PI_CODING_AGENT_DIR`, or `~/.omp/agent`. */
   agentDir: string;
-  /** `resolvePiAgentDir`: `$PI_CODING_AGENT_DIR` or `~/.pi/agent`. */
   piAgentDir: string;
 }
 
@@ -967,10 +846,7 @@ async function buildOmp(paths: FixturePaths, dirs: OmpDirs): Promise<void> {
     path.join(workspace, "packages", ".pi", "skills"),
     "pkg-pi-skill",
   );
-  // The ancestor walk stops at the repository root.
   await writeSkill(path.join(root, ".omp", "skills"), "above-root-omp-skill");
-  // omp agent dir (skills + managed-skills), pi agent dir, shared user dirs,
-  // codex home skills, opencode config dir skills.
   await writeSkill(path.join(dirs.agentDir, "skills"), "omp-agent-skill");
   await writeSkill(
     path.join(dirs.agentDir, "managed-skills"),
@@ -985,8 +861,6 @@ async function buildOmp(paths: FixturePaths, dirs: OmpDirs): Promise<void> {
     path.join(home, ".config", "opencode", "skills"),
     "opencode-config-skill",
   );
-  // Config `skills.customDirectories`: user config (tilde path) and project
-  // config (relative to cwd). The project config replaces the user list.
   await writeText(
     path.join(dirs.agentDir, "config.yml"),
     "skills:\n  customDirectories:\n    - ~/omp-custom-user\n",
@@ -1000,7 +874,6 @@ async function buildOmp(paths: FixturePaths, dirs: OmpDirs): Promise<void> {
     path.join(workspace, "omp-custom-project"),
     "omp-custom-project-skill",
   );
-  // omp also lists Claude plugin skills (never their commands).
   await writeClaudePluginInstall(paths, path.join(home, ".claude"));
 }
 
@@ -1042,7 +915,6 @@ function ompVariant(
     expected: {
       workspace: {
         present: [...OMP_PROJECT_NAMES, ...OMP_USER_NAMES],
-        // The project config's customDirectories replace the user list.
         absent: [...OMP_ABSENT, "omp-custom-user-skill"],
       },
       userOnly: {
@@ -1053,14 +925,8 @@ function ompVariant(
   };
 }
 
-// ---------------------------------------------------------------------------
-// acp-grok
-// ---------------------------------------------------------------------------
-
 interface GrokOptions {
-  /** `resolveGrokDir`: `$GROK_HOME` or `~/.grok`. */
   grokDir: string;
-  /** `[compat.claude] skills` / `[compat.cursor] skills` in config.toml; omitted when undefined. */
   compat: { claude?: boolean; cursor?: boolean };
 }
 
@@ -1084,8 +950,6 @@ async function buildGrok(
 ): Promise<void> {
   const { root, home, workspace, cwd } = paths;
   const { grokDir } = options;
-  // Project roots are recursive and walk the ancestors up to the repository
-  // root; the directory above `.git` is out.
   await writeSkill(path.join(cwd, ".grok", "skills"), "cwd-grok-skill");
   await writeSkill(path.join(root, ".grok", "skills"), "above-root-grok-skill");
   await writeSkill(
@@ -1104,7 +968,6 @@ async function buildGrok(
     path.join(workspace, "packages", ".cursor", "skills"),
     "pkg-cursor-skill",
   );
-  // User roots.
   await writeSkill(path.join(grokDir, "skills"), "grok-home-skill");
   await writeSkill(
     path.join(grokDir, "skills", "team"),
@@ -1114,8 +977,6 @@ async function buildGrok(
   await writeSkill(path.join(home, ".claude", "skills"), "home-claude-skill");
   await writeSkill(path.join(home, ".cursor", "skills"), "home-cursor-skill");
 
-  // config.toml: skills.paths (tilde user path + absolute project path),
-  // plugins.enabled / plugins.paths, compat flags.
   const compatLines = [
     ...(options.compat.claude === undefined
       ? []
@@ -1145,9 +1006,6 @@ async function buildGrok(
     "grok-project-paths-skill",
   );
 
-  // Plugins: <grokDir>/plugins (needs plugins.enabled), <ancestor>/.grok/plugins
-  // and <ancestor>/.claude/plugins (project), plugins.paths (auto-enabled),
-  // installed-plugins/registry.json. Manifest file names vary on purpose.
   await writeGrokPlugin(
     path.join(grokDir, "plugins", "enabled-grok-plugin"),
     "enabled-grok-plugin",
@@ -1191,7 +1049,6 @@ async function buildGrok(
     "registry-grok-plugin",
     "plugin.json",
   );
-  // Claude plugin skills are listed when Claude compat is on.
   await writeClaudePluginInstall(paths, path.join(home, ".claude"));
 }
 
@@ -1203,8 +1060,6 @@ const GROK_ALWAYS_PROJECT = [
   "project-grok-plugin:project-grok-plugin-skill",
   "claude-dir-grok-plugin:claude-dir-grok-plugin-skill",
 ];
-// An absolute `skills.paths` entry is scanned with or without a cwd; it is
-// project-origin only when it sits inside the repository root.
 const GROK_ALWAYS_USER = [
   "grok-home-skill",
   "nested-grok-home-skill",
@@ -1279,30 +1134,6 @@ function grokVariant(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Symlink boundary for recursive project roots (acp-grok, acp-cursor)
-// ---------------------------------------------------------------------------
-//
-// A recursive project root that is itself a symlink is scanned only when its
-// target stays inside the root's boundary. The boundary is pinned here:
-//
-//   - a declared project root that walks ancestors (grok `.grok/skills`,
-//     `.agents/skills`) and a project root the plugin resolved (grok's
-//     compat `.claude/skills` / `.cursor/skills`): the REPOSITORY ROOT at
-//     every ancestor level, cwd included. Pre-S5 the daemon's static
-//     cwd-level root (boundary cwd) shadowed the walked one (boundary
-//     repository root), so only a cwd-level link out of cwd changes; see
-//     `symlink-cwd` below.
-//   - a declared project root without an ancestor walk: cwd. Cursor's four
-//     roots walked no ancestors until S6c (pre-S5 they were flat and had no
-//     boundary at all; S5's `recursive: true` brought the cwd boundary with
-//     it); since S6c they walk ancestors and share the repository-root rule;
-//     see the cursor `symlink-boundary` variant.
-//   - a link out of the repository is never followed, on either side.
-//
-// Each variant keeps two real skills (one project, one user) so a variant
-// whose links are all rejected still proves the rest of the listing.
-
 const GROK_SYMLINK_CONTROL_PROJECT = ["ws-grok-skill"];
 const GROK_SYMLINK_CONTROL_USER = ["grok-home-skill"];
 
@@ -1314,7 +1145,6 @@ async function writeGrokSymlinkControls(paths: FixturePaths): Promise<void> {
   await writeSkill(path.join(paths.home, ".grok", "skills"), "grok-home-skill");
 }
 
-/** Ancestor-level roots linked to directories elsewhere inside the repository: followed. */
 async function buildGrokSymlinkAncestor(paths: FixturePaths): Promise<void> {
   const { workspace } = paths;
   const shared = path.join(workspace, "shared");
@@ -1329,7 +1159,6 @@ async function buildGrokSymlinkAncestor(paths: FixturePaths): Promise<void> {
     path.join(shared, "pkg-agents-skills"),
     "linked-pkg-agents-skill",
   );
-  // Compat tree (resolved root with an ancestor walk).
   await writeLinkedSkillsRoot(
     path.join(workspace, "packages", ".cursor", "skills"),
     path.join(shared, "pkg-cursor-skills"),
@@ -1342,7 +1171,6 @@ const GROK_SYMLINK_ANCESTOR_PROJECT = [
   "linked-pkg-cursor-skill",
 ];
 
-/** Roots at every level linked to directories outside the repository: never followed. */
 async function buildGrokSymlinkOutside(paths: FixturePaths): Promise<void> {
   const { root, workspace, cwd } = paths;
   const outside = path.join(root, "outside");
@@ -1375,19 +1203,10 @@ const GROK_SYMLINK_OUTSIDE_ABSENT = [
   "escaped-cwd-cursor-skill",
 ];
 
-/**
- * cwd-level roots linked to directories elsewhere inside the repository
- * (outside cwd). Post-S5 the boundary is the repository root, so they are
- * followed. Pre-S5 the daemon's static cwd-level root carried a cwd
- * boundary and won the per-path dedup over the walked root, so none of
- * these was listed: this golden is captured from the post-S5 pipeline on
- * purpose (the widening is the intended boundary above).
- */
 async function buildGrokSymlinkCwd(paths: FixturePaths): Promise<void> {
   const { workspace, cwd } = paths;
   const shared = path.join(workspace, "shared");
   await writeGrokSymlinkControls(paths);
-  // Declared roots with an ancestor walk.
   await writeLinkedSkillsRoot(
     path.join(cwd, ".grok", "skills"),
     path.join(shared, "cwd-grok-skills"),
@@ -1398,7 +1217,6 @@ async function buildGrokSymlinkCwd(paths: FixturePaths): Promise<void> {
     path.join(shared, "cwd-agents-skills"),
     "linked-cwd-agents-skill",
   );
-  // Resolved compat roots with an ancestor walk.
   await writeLinkedSkillsRoot(
     path.join(cwd, ".claude", "skills"),
     path.join(shared, "cwd-claude-skills"),
@@ -1441,15 +1259,6 @@ function grokSymlinkVariant(
   };
 }
 
-/**
- * Cursor's declared roots (no ancestor walk): boundary cwd. A link inside
- * cwd is followed; a link elsewhere in the repository or outside it is not.
- * Pre-S5 the declared roots were flat and unbounded, so every link was
- * opened; S5's `recursive: true` (see `CURSOR_VARIANT`) brought the cwd
- * boundary, so this golden is captured from the post-S5 pipeline on
- * purpose. The repository-root boundary above applies to walked and
- * resolved roots only; cursor declares neither.
- */
 async function buildCursorSymlinkBoundary(paths: FixturePaths): Promise<void> {
   const { root, home, workspace, cwd } = paths;
   await writeSkill(path.join(cwd, ".codex", "skills"), "cwd-codex-skill");
@@ -1470,10 +1279,6 @@ async function buildCursorSymlinkBoundary(paths: FixturePaths): Promise<void> {
     "escaped-claude-skill",
   );
 }
-// S6c: cursor's project roots walk ancestors and are bound at the repository
-// root, so a link to a directory elsewhere inside the repository is followed
-// (`linked-repo-agents-skill`); a link out of the repository still is not.
-// Re-captured with the post-S5 pipeline on purpose.
 const CURSOR_SYMLINK_PROJECT = [
   "cwd-codex-skill",
   "linked-cwd-cursor-skill",
@@ -1499,10 +1304,6 @@ const CURSOR_SYMLINK_VARIANT: FixtureVariant = {
   },
 };
 
-// ---------------------------------------------------------------------------
-// acp-hermes-agent
-// ---------------------------------------------------------------------------
-
 async function buildHermes(
   paths: FixturePaths,
   hermesDir: string,
@@ -1523,7 +1324,6 @@ async function buildHermes(
     path.join(hermesDir, "relative-external"),
     "hermes-relative-skill",
   );
-  // Hermes has no project roots today.
   await writeSkill(path.join(cwd, ".hermes", "skills"), "cwd-hermes-skill");
 }
 
@@ -1547,10 +1347,6 @@ function hermesVariant(
     expected: { workspace: names, userOnly: names },
   };
 }
-
-// ---------------------------------------------------------------------------
-// Variants
-// ---------------------------------------------------------------------------
 
 const defaultClaudeDir = (paths: FixturePaths): string =>
   path.join(paths.home, ".claude");
@@ -1625,7 +1421,6 @@ export const FIXTURE_VARIANTS: readonly FixtureVariant[] = [
     }),
     () => ({ OMP_PROFILE: "work" }),
   ),
-  // PI_CODING_AGENT_DIR moves both the omp agent dir and the pi agent dir.
   ompVariant(
     "pi-agent-dir",
     (paths) => ({
@@ -1649,7 +1444,6 @@ export const FIXTURE_VARIANTS: readonly FixtureVariant[] = [
     () => ({}),
     { claude: false, cursor: false },
   ),
-  // Env overrides config in both directions.
   grokVariant(
     "env-compat",
     (paths) => ({
@@ -1698,7 +1492,6 @@ export const FIXTURE_VARIANTS: readonly FixtureVariant[] = [
     "hermes-home",
     (paths) => path.join(paths.root, "hermes-home"),
     (paths) => ({ HERMES_HOME: path.join(paths.root, "hermes-home") }),
-    // String form of external_dirs.
     (paths) =>
       `skills:\n  external_dirs: ${path.join(paths.root, "hermes-external")}\n`,
     ["top-hermes-skill", "nested-hermes-skill", "hermes-external-skill"],

@@ -43,8 +43,6 @@ vi.mock("@earendil-works/pi-ai/providers/all", () => ({
   builtinModels: () => ({
     complete: piAiMocks.complete,
     getModel: piAiMocks.getModel,
-    // No builtin provider ids: the `test/*` models these tests configure
-    // are neither server-direct nor plugin-served, so they reach getModel.
     getProviders: () => [],
   }),
 }));
@@ -256,32 +254,38 @@ describe("commit message generation", () => {
   });
 
   it("returns null for Codex inference setup failures", async () => {
-    await withTestHarness({
-      inferenceModel: "codex/gpt-5.6-luna",
-    }, async (harness) => {
-      await expect(
-        generateCommitMessage(harness.deps, commitMessageArgs),
-      ).resolves.toBeNull();
-    });
+    await withTestHarness(
+      {
+        inferenceModel: "codex/gpt-5.6-luna",
+      },
+      async (harness) => {
+        await expect(
+          generateCommitMessage(harness.deps, commitMessageArgs),
+        ).resolves.toBeNull();
+      },
+    );
   });
 
   it("returns null for a failed plugin-served inference", async () => {
-    await withTestHarness({
-      inferenceModel: "codex/gpt-5.6-luna",
-    }, async (harness) => {
-      seedHostSession(harness.deps);
-      registerFakeAiService(harness.deps.aiServices, {
-        completeInference: () => ({
-          ok: false,
-          code: "request_failed",
-          message: "Codex request failed",
-        }),
-      });
+    await withTestHarness(
+      {
+        inferenceModel: "codex/gpt-5.6-luna",
+      },
+      async (harness) => {
+        seedHostSession(harness.deps);
+        registerFakeAiService(harness.deps.aiServices, {
+          completeInference: () => ({
+            ok: false,
+            code: "request_failed",
+            message: "Codex request failed",
+          }),
+        });
 
-      await expect(
-        generateCommitMessage(harness.deps, commitMessageArgs),
-      ).resolves.toBeNull();
-    });
+        await expect(
+          generateCommitMessage(harness.deps, commitMessageArgs),
+        ).resolves.toBeNull();
+      },
+    );
   });
 
   it("uses the route fallback message only after commit message timeout retries are exhausted", async () => {
@@ -384,99 +388,102 @@ describe("commit message generation", () => {
   });
 
   it("uses the route fallback message when Codex commit-message inference fails", async () => {
-    await withTestHarness({
-      inferenceModel: "codex/gpt-5.6-luna",
-    }, async (harness) => {
-      const { host } = seedHostSession(harness.deps);
-      const { project } = seedProjectWithSource(harness.deps, {
-        hostId: host.id,
-      });
-      const environment = seedEnvironment(harness.deps, {
-        hostId: host.id,
-        projectId: project.id,
-      });
+    await withTestHarness(
+      {
+        inferenceModel: "codex/gpt-5.6-luna",
+      },
+      async (harness) => {
+        const { host } = seedHostSession(harness.deps);
+        const { project } = seedProjectWithSource(harness.deps, {
+          hostId: host.id,
+        });
+        const environment = seedEnvironment(harness.deps, {
+          hostId: host.id,
+          projectId: project.id,
+        });
 
-      const responsePromise = harness.app.request(
-        `/api/v1/environments/${environment.id}/actions`,
-        {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
+        const responsePromise = harness.app.request(
+          `/api/v1/environments/${environment.id}/actions`,
+          {
+            method: "POST",
+            headers: {
+              "content-type": "application/json",
+            },
+            body: JSON.stringify({
+              action: "commit",
+            }),
           },
-          body: JSON.stringify({
-            action: "commit",
-          }),
-        },
-      );
+        );
 
-      const statusCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.status" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, statusCommand, {
-        outcome: "available",
-        workspaceStatus: {
-          branch: {
-            currentBranch: "feature",
-            defaultBranch: "main",
+        const statusCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.status" &&
+            command.environmentId === environment.id,
+        );
+        await reportQueuedCommandSuccess(harness, statusCommand, {
+          outcome: "available",
+          workspaceStatus: {
+            branch: {
+              currentBranch: "feature",
+              defaultBranch: "main",
+            },
+            checkout: {
+              kind: "branch",
+              branchName: "feature",
+              headSha: null,
+            },
+            mergeBase: null,
+            workingTree: {
+              deletions: 0,
+              files: [],
+              hasUncommittedChanges: true,
+              insertions: 1,
+              lineStatsComplete: true,
+              state: "dirty_uncommitted",
+            },
           },
-          checkout: {
-            kind: "branch",
-            branchName: "feature",
-            headSha: null,
+        });
+
+        const diffCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.diff" &&
+            command.environmentId === environment.id,
+        );
+        await reportQueuedCommandSuccess(harness, diffCommand, {
+          outcome: "available",
+          diff: {
+            diff: commitMessageArgs.patch,
+            files: commitMessageArgs.files,
+            mergeBaseRef: null,
+            shortstat: commitMessageArgs.shortstat,
+            truncated: false,
           },
-          mergeBase: null,
-          workingTree: {
-            deletions: 0,
-            files: [],
-            hasUncommittedChanges: true,
-            insertions: 1,
-            lineStatsComplete: true,
-            state: "dirty_uncommitted",
-          },
-        },
-      });
+        });
 
-      const diffCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.diff" &&
-          command.environmentId === environment.id,
-      );
-      await reportQueuedCommandSuccess(harness, diffCommand, {
-        outcome: "available",
-        diff: {
-          diff: commitMessageArgs.patch,
-          files: commitMessageArgs.files,
-          mergeBaseRef: null,
-          shortstat: commitMessageArgs.shortstat,
-          truncated: false,
-        },
-      });
+        const commitCommand = await waitForQueuedCommand(
+          harness,
+          ({ command }) =>
+            command.type === "workspace.commit" &&
+            command.environmentId === environment.id,
+        );
+        expect(commitCommand.command).toMatchObject({
+          message: "bb: automated commit",
+        });
+        await reportQueuedCommandSuccess(harness, commitCommand, {
+          commitSha: "abc123",
+          commitSubject: "bb: automated commit",
+        });
 
-      const commitCommand = await waitForQueuedCommand(
-        harness,
-        ({ command }) =>
-          command.type === "workspace.commit" &&
-          command.environmentId === environment.id,
-      );
-      expect(commitCommand.command).toMatchObject({
-        message: "bb: automated commit",
-      });
-      await reportQueuedCommandSuccess(harness, commitCommand, {
-        commitSha: "abc123",
-        commitSubject: "bb: automated commit",
-      });
-
-      const response = await responsePromise;
-      expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toMatchObject({
-        action: "commit",
-        commitSubject: "bb: automated commit",
-        ok: true,
-      });
-    });
+        const response = await responsePromise;
+        expect(response.status).toBe(200);
+        await expect(readJson(response)).resolves.toMatchObject({
+          action: "commit",
+          commitSubject: "bb: automated commit",
+          ok: true,
+        });
+      },
+    );
   });
 });

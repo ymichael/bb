@@ -59,8 +59,6 @@ export function useSidebarModeSectionOrder({
     setStoredOrder,
     entitySectionIds,
     legacyEntityAnchor: config.legacyEntityAnchor,
-    // Keep hidden Pinned sections in persisted order so their placement
-    // survives while the user has no pinned threads.
     hasPinnedSection: true,
     ...(hasThreadsSection === undefined ? {} : { hasThreadsSection }),
     isReady,

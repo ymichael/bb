@@ -73,10 +73,8 @@ describe("shouldShowFaviconAttentionDot", () => {
     expect(
       shouldShowFaviconAttentionDot({
         ...BASE_ARGS,
-        // Viewing an unrelated, already-read thread...
         isThreadView: true,
         thread: { lastReadAt: 30, latestAttentionAt: 20 },
-        // ...while a read background thread is blocked on the user.
         sidebarThreads: [
           makeSidebarThread({
             lastReadAt: 30,
@@ -108,7 +106,6 @@ describe("shouldShowFaviconAttentionDot", () => {
       shouldShowFaviconAttentionDot({
         ...BASE_ARGS,
         isThreadView: true,
-        // Already read, and not represented in the sidebar list.
         thread: { lastReadAt: 30, latestAttentionAt: 20 },
         sidebarThreads: [],
         currentThreadHasPendingInteraction: true,

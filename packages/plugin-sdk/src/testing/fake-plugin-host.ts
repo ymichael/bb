@@ -1,16 +1,17 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "better-sqlite3";
 import { CronExpressionParser } from "cron-parser";
 import { Hono } from "hono";
-import { z } from "zod";
 import { PLUGIN_INTERACTION_MAX_TITLE_LENGTH } from "@bb/domain/plugin-interaction-limits";
 import {
   adoptHttpRouteResponse,
   AGENT_TOOL_NAME_PATTERN,
   agentToolIconRefusalMessage,
   aiServiceAlreadyRegisteredMessage,
+  pluginHookAlreadyRegisteredMessage,
   assertAiServiceRegistrable,
   assertNoRecursiveJsonSchemaReferences,
   BACKGROUND_NAME_PATTERN,
@@ -18,6 +19,7 @@ import {
   enforcePluginCliOutputLimit,
   isStandardSchema,
   isZodSchemaLike,
+  storePluginHook,
   KV_VALUE_MAX_BYTES,
   MENTION_PROVIDER_ID_PATTERN,
   normalizeMentionProviderTriggers,
@@ -40,7 +42,9 @@ import {
   undeclaredIconProblem,
   validatePluginAiServiceDeclaration,
   validatePluginProviderDeclaration,
+  validatePluginProviderEnvEntries,
   validateSettingsUpdate,
+  zodSchemaToJsonSchema,
   type NormalizedPluginProviderDeclaration,
 } from "../internal/host-policy.js";
 import type {
@@ -57,6 +61,9 @@ import type {
   PluginCliContext,
   PluginCliExecutionResult,
   PluginCliResult,
+  PluginHookHandler,
+  PluginHookName,
+  PluginHooks,
   PluginEvents,
   PluginHttp,
   PluginHttpAuthMode,
@@ -73,6 +80,13 @@ import type {
   PluginAiServiceDeclaration,
   PluginAiServices,
   PluginProviderDeclaration,
+  ExperimentalPluginProviderEnvContext,
+  ExperimentalPluginProviderEnvEntry,
+  ExperimentalPluginProviderEnvHealth,
+  ExperimentalPluginProviderEnvHealthContext,
+  ExperimentalPluginWebSocket,
+  ExperimentalPluginWebSocketHandler,
+  ExperimentalPluginWebSocketHandlers,
   PluginProviders,
   PluginRealtime,
   PluginRpc,
@@ -99,6 +113,12 @@ import {
   type FakeSdkHarness,
   type FakeSdkOverrides,
 } from "./fake-sdk.js";
+
+const LEGACY_UNKNOWN_MIGRATION_HASH = "legacy-unknown";
+
+function migrationStatementHash(statement: string): string {
+  return createHash("sha256").update(statement).digest("hex");
+}
 
 /**
  * `createFakePluginHost` — an in-process stand-in for the BB server's plugin
@@ -150,6 +170,24 @@ export interface FakeHttpRouteRecord {
   path: string;
   auth: PluginHttpAuthMode;
   handler: PluginHttpHandler;
+}
+
+export interface ExperimentalFakeWebSocketRouteRecord {
+  path: string;
+  auth: PluginHttpAuthMode;
+  handler: ExperimentalPluginWebSocketHandler;
+}
+
+export interface ExperimentalFakeWebSocketSession {
+  readonly sent: readonly (string | Uint8Array)[];
+  readonly closeCalls: readonly {
+    code: number | null;
+    reason: string | null;
+  }[];
+  readonly readyState: number;
+  receive(data: string | Uint8Array): Promise<void>;
+  close(code?: number, reason?: string): Promise<void>;
+  error(error: Error): Promise<void>;
 }
 
 export interface FakeScheduleRecord {
@@ -224,6 +262,7 @@ export interface ExperimentalFakeHostRpcCall {
 export interface FakePluginRegistrations {
   settingsDescriptors: PluginSettingDescriptors;
   httpRoutes: FakeHttpRouteRecord[];
+  websocketRoutes: ExperimentalFakeWebSocketRouteRecord[];
   rpcMethods: string[];
   services: FakeServiceRecord[];
   schedules: FakeScheduleRecord[];
@@ -238,10 +277,31 @@ export interface FakePluginRegistrations {
     | ((ctx: { threadId: string; projectId: string }) => string | null)
     | null;
   threadEventHandlers: Record<PluginThreadEventName, number>;
+  /** The handler registered per hook by `bb.experimental_hooks.on`. */
+  hooks: {
+    [K in PluginHookName]: PluginHookHandler<K> | null;
+  };
   mentionProviders: FakeMentionProviderRecord[];
   /** Live provider registrations from `bb.providers.register`
    * (normalized declarations, registration order; dispose removes). */
   providerRegistrations: NormalizedPluginProviderDeclaration[];
+  providerEnvResolvers: ReadonlyMap<
+    string,
+    (
+      context: ExperimentalPluginProviderEnvContext,
+    ) =>
+      | Promise<readonly ExperimentalPluginProviderEnvEntry[]>
+      | readonly ExperimentalPluginProviderEnvEntry[]
+  >;
+  providerEnvHealthResolvers: ReadonlyMap<
+    string,
+    (
+      context: ExperimentalPluginProviderEnvHealthContext,
+    ) =>
+      | ExperimentalPluginProviderEnvHealth
+      | null
+      | Promise<ExperimentalPluginProviderEnvHealth | null>
+  >;
   /** Live AI-service registrations from `experimental_aiServices.register`
    * (normalized declarations, registration order; dispose removes). */
   aiServiceRegistrations: PluginAiServiceDeclaration[];
@@ -256,6 +316,12 @@ export interface FakePluginInspectionState {
   readonly realtimeSignals: FakeRealtimeSignal[];
   /** Every `bb.status.needsConfiguration` message, in order. */
   readonly needsConfigurationMessages: string[];
+  /**
+   * How many times the plugin called
+   * `bb.experimental_hooks.recheck()` — the wake it asks core for when a
+   * condition its own waits depend on has changed.
+   */
+  readonly recheckCount: number;
   /** Recorded `bb.sdk` calls + stub control. */
   readonly sdk: FakeSdkHarness;
   readonly registrations: FakePluginRegistrations;
@@ -315,6 +381,11 @@ export interface FakePluginBehaviorDrivers {
     path: string,
     init?: RequestInit,
   ): Promise<Response>;
+  /** Open and drive an exact-match `bb.http.experimental_websocket` route. */
+  experimental_openWebSocket(
+    path: string,
+    init?: RequestInit,
+  ): Promise<ExperimentalFakeWebSocketSession>;
   /**
    * Start a registered background service once, deterministically. `done`
    * settles when `start` returns; abort `controller` to signal shutdown.
@@ -356,6 +427,14 @@ export interface FakePluginBehaviorDrivers {
     skills: string[];
     instructions: string | null;
   }>;
+  resolveProviderEnv(
+    providerId: string,
+    context: ExperimentalPluginProviderEnvContext,
+  ): Promise<ExperimentalPluginProviderEnvEntry[]>;
+  resolveProviderEnvHealth(
+    providerId: string,
+    context: ExperimentalPluginProviderEnvHealthContext,
+  ): Promise<ExperimentalPluginProviderEnvHealth | null>;
 }
 
 /** Reload/shutdown controls, kept separate from behavior and inspection. */
@@ -394,6 +473,10 @@ export interface FakePluginHarness
 export interface CreateFakePluginHostOptions {
   /** Defaults to "test-plugin". */
   pluginId?: string;
+  /**
+   * Value served by `bb.server.experimental_appUrl`. Defaults to `null`.
+   */
+  appUrl?: string | null;
   /**
    * Value served by `bb.server.loopbackBaseUrl` (always bound here, like
    * `bb.sdk`). Defaults to "http://127.0.0.1:38886".
@@ -454,7 +537,26 @@ function readSettingsValues(
   const values: Record<string, PluginSettingValue | undefined> = {};
   for (const [key, descriptor] of Object.entries(descriptors)) {
     let value = stored.get(key);
-    const expected = descriptor.type === "boolean" ? "boolean" : "string";
+    if (descriptor.type === "number" && typeof value === "string") {
+      const legacyNumber = Number(value.trim());
+      value =
+        value.trim().length > 0 && Number.isFinite(legacyNumber)
+          ? legacyNumber
+          : undefined;
+    }
+    if (
+      descriptor.type === "number" &&
+      typeof value === "number" &&
+      !Number.isFinite(value)
+    ) {
+      value = undefined;
+    }
+    const expected =
+      descriptor.type === "boolean"
+        ? "boolean"
+        : descriptor.type === "number"
+          ? "number"
+          : "string";
     if (typeof value !== expected) value = undefined;
     if (
       descriptor.type === "select" &&
@@ -871,7 +973,9 @@ function createFakePluginHostInternal(
       ),
     } satisfies FakePluginPersistentState);
   const pluginId = options.pluginId ?? "test-plugin";
-  const declaredIconNames = new Set(options.experimental_declaredIconNames ?? []);
+  const declaredIconNames = new Set(
+    options.experimental_declaredIconNames ?? [],
+  );
   const agentSkillIds = [...(options.agentSkillIds ?? [])];
   if (new Set(agentSkillIds).size !== agentSkillIds.length) {
     throw new Error("agentSkillIds must not contain duplicates");
@@ -950,23 +1054,56 @@ function createFakePluginHostInternal(
     migrate(database, statements) {
       assertLive();
       database.exec(
-        "CREATE TABLE IF NOT EXISTS _bb_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL)",
+        "CREATE TABLE IF NOT EXISTS _bb_migrations (id INTEGER PRIMARY KEY, applied_at INTEGER NOT NULL, statement_hash TEXT)",
       );
-      const applied = new Set(
-        (
-          database.prepare("SELECT id FROM _bb_migrations").all() as Array<{
-            id: number;
-          }>
-        ).map((row) => row.id),
+      const migrationColumns = database
+        .prepare<[], { name: string }>("PRAGMA table_info(_bb_migrations)")
+        .all();
+      if (
+        !migrationColumns.some((column) => column.name === "statement_hash")
+      ) {
+        database.exec(
+          "ALTER TABLE _bb_migrations ADD COLUMN statement_hash TEXT",
+        );
+      }
+      const rows = database
+        .prepare<[], { id: number; statement_hash: string | null }>(
+          "SELECT id, statement_hash FROM _bb_migrations ORDER BY id",
+        )
+        .all();
+      const applied = new Map<number, string | null>();
+      for (const row of rows) applied.set(row.id, row.statement_hash);
+      const statementHashes = statements.map(migrationStatementHash);
+      statementHashes.forEach((statementHash, index) => {
+        const recordedHash = applied.get(index);
+        if (
+          recordedHash !== undefined &&
+          recordedHash !== null &&
+          recordedHash !== statementHash
+        ) {
+          throw new Error(
+            `migration ${index} does not match the recorded statement; append a new migration instead of changing or reusing an index`,
+          );
+        }
+      });
+      const adopt = database.prepare(
+        "UPDATE _bb_migrations SET statement_hash = ? WHERE id = ? AND statement_hash IS NULL",
       );
       const record = database.prepare(
-        "INSERT INTO _bb_migrations (id, applied_at) VALUES (?, ?)",
+        "INSERT INTO _bb_migrations (id, applied_at, statement_hash) VALUES (?, ?, ?)",
       );
       database.transaction(() => {
+        for (const row of rows) {
+          if (row.statement_hash !== null) continue;
+          adopt.run(
+            statementHashes[row.id] ?? LEGACY_UNKNOWN_MIGRATION_HASH,
+            row.id,
+          );
+        }
         statements.forEach((statement, index) => {
           if (applied.has(index)) return;
           database.exec(statement);
-          record.run(index, Date.now());
+          record.run(index, Date.now(), statementHashes[index]);
         });
       })();
     },
@@ -982,10 +1119,44 @@ function createFakePluginHostInternal(
   > = [];
   const storedSettings = persistentState.storedSettings;
 
+  async function setSettingsValues(
+    values: Record<string, unknown>,
+  ): Promise<void> {
+    const errors = validateSettingsUpdate(settingsDescriptors, values);
+    if (errors.length > 0) {
+      throw new Error(errors.join("; "));
+    }
+    const prev = readSettingsValues(settingsDescriptors, storedSettings);
+    for (const [key, value] of Object.entries(values)) {
+      if (value === null) storedSettings.delete(key);
+      else if (
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean"
+      ) {
+        storedSettings.set(key, value);
+      } else {
+        throw new Error(`setting "${key}" has an unsupported value`);
+      }
+    }
+    const next = readSettingsValues(settingsDescriptors, storedSettings);
+    if (JSON.stringify(next) === JSON.stringify(prev)) return;
+    for (const listener of settingsListeners) {
+      try {
+        listener(next, prev);
+      } catch (error) {
+        emitLog(
+          "warn",
+          `settings onChange listener failed: ${errorMessage(error)}`,
+        );
+      }
+    }
+  }
+
   const settings: PluginSettings = {
     define(descriptors) {
       assertLive();
-      registerSettingDescriptors(
+      const validated = registerSettingDescriptors(
         settingsDescriptors,
         descriptors as Record<string, unknown>,
       );
@@ -993,10 +1164,20 @@ function createFakePluginHostInternal(
       return {
         async get() {
           assertLive();
-          return readSettingsValues(
-            settingsDescriptors,
-            storedSettings,
-          ) as Values;
+          return readSettingsValues(validated, storedSettings) as Values;
+        },
+        async experimental_set(values) {
+          assertLive();
+          const rawValues: Record<string, unknown> = {};
+          for (const [key, value] of Object.entries(values)) {
+            rawValues[key] = value;
+          }
+          const errors = validateSettingsUpdate(validated, rawValues);
+          if (errors.length > 0) {
+            throw new Error(errors.join("; "));
+          }
+          await setSettingsValues(rawValues);
+          return readSettingsValues(validated, storedSettings) as Values;
         },
         onChange(listener) {
           assertLive();
@@ -1010,6 +1191,10 @@ function createFakePluginHostInternal(
 
   // --- http ---
   const httpRoutes: FakeHttpRouteRecord[] = [];
+  const websocketRoutes: ExperimentalFakeWebSocketRouteRecord[] = [];
+  const websocketSessions = new Set<{
+    closeForReload(): Promise<void>;
+  }>();
   const http: PluginHttp = {
     route(method, path, handler, opts) {
       assertLive();
@@ -1046,6 +1231,29 @@ function createFakePluginHostInternal(
       }
       httpRoutes.push({ method: normalizedMethod, path, auth, handler });
     },
+    experimental_websocket(path, handler, opts) {
+      assertLive();
+      if (typeof path !== "string" || !path.startsWith("/")) {
+        throw new Error(
+          `websocket route path must be a string starting with "/", got ${JSON.stringify(path)}`,
+        );
+      }
+      if (typeof handler !== "function") {
+        throw new Error(
+          `websocket route handler for ${path} must be a function`,
+        );
+      }
+      const auth = opts?.auth ?? "local";
+      if (auth !== "local" && auth !== "token" && auth !== "none") {
+        throw new Error(
+          `invalid auth mode "${String(auth)}" for websocket ${path} — use "local", "token", or "none"`,
+        );
+      }
+      if (websocketRoutes.some((route) => route.path === path)) {
+        throw new Error(`websocket route ${path} is already registered`);
+      }
+      websocketRoutes.push({ path, auth, handler });
+    },
   };
 
   // --- rpc ---
@@ -1080,7 +1288,7 @@ function createFakePluginHostInternal(
       for (const [name, contractValue] of contractEntries) {
         if (!RPC_METHOD_PATTERN.test(name)) {
           throw new Error(
-            `invalid rpc method name "${name}" — use letters, digits, "-" and "_"`,
+            `invalid rpc method name "${name}" — use dot-separated segments with letters, digits, "-" and "_"`,
           );
         }
         const methodContract = readRpcMethodContract(name, contractValue);
@@ -1234,6 +1442,23 @@ function createFakePluginHostInternal(
   // --- agents ---
   const agentTools: FakeAgentToolRecord[] = [];
   const providerRegistrations: NormalizedPluginProviderDeclaration[] = [];
+  const providerEnvResolvers = new Map<
+    string,
+    (
+      context: ExperimentalPluginProviderEnvContext,
+    ) =>
+      | readonly ExperimentalPluginProviderEnvEntry[]
+      | Promise<readonly ExperimentalPluginProviderEnvEntry[]>
+  >();
+  const providerEnvHealthResolvers = new Map<
+    string,
+    (
+      context: ExperimentalPluginProviderEnvHealthContext,
+    ) =>
+      | ExperimentalPluginProviderEnvHealth
+      | null
+      | Promise<ExperimentalPluginProviderEnvHealth | null>
+  >();
   let agentConfigurationProvider:
     | ((context: PluginAgentConfigurationContext) => PluginAgentConfiguration)
     | null = null;
@@ -1286,10 +1511,13 @@ function createFakePluginHostInternal(
       // host builds no artifact; the declared entry stands in for it.
       assertAiServiceRegistrable({
         id: normalized.id,
-        hostArtifact: options.experimental_hostEntry === false ? null : "declared",
+        hostArtifact:
+          options.experimental_hostEntry === false ? null : "declared",
         hostArtifactProblem: null,
       });
-      if (aiServiceRegistrations.some((existing) => existing.id === normalized.id)) {
+      if (
+        aiServiceRegistrations.some((existing) => existing.id === normalized.id)
+      ) {
         throw new Error(aiServiceAlreadyRegisteredMessage(normalized.id));
       }
       aiServiceRegistrations.push(normalized);
@@ -1400,16 +1628,14 @@ function createFakePluginHostInternal(
       let parse: FakeAgentToolRecord["parse"];
       if (isZodSchemaLike(parameters)) {
         try {
-          inputSchema = z.toJSONSchema(parameters as z.ZodType, {
-            io: "input",
-          });
+          inputSchema = zodSchemaToJsonSchema(parameters);
         } catch (error) {
           throw new Error(
             `tool "${name}" parameters look like a zod schema but could not be converted to JSON Schema (${errorMessage(error)}) — use zod 4, or pass a plain JSON-schema object`,
           );
         }
         parse = (input) => {
-          const result = (parameters as z.ZodType).safeParse(input);
+          const result = parameters.safeParse(input);
           if (result.success) return { ok: true, value: result.data };
           return { ok: false, error: summarizeParseIssues(result.error) };
         };
@@ -1500,6 +1726,10 @@ function createFakePluginHostInternal(
     },
   };
 
+  // --- hooks ---
+  /** How many times `bb.experimental_hooks.recheck()` was called. */
+  let requestedDrains = 0;
+
   // --- status ---
   const needsConfigurationMessages: string[] = [];
   const status: PluginStatusApi = {
@@ -1514,9 +1744,14 @@ function createFakePluginHostInternal(
   };
 
   // --- server ---
+  const appUrl = options.appUrl ?? null;
   const loopbackBaseUrl = options.loopbackBaseUrl ?? "http://127.0.0.1:38886";
   const dataDir = options.dataDir ?? "/tmp/bb-fake-data-dir";
   const server: PluginServerApi = {
+    get experimental_appUrl(): string | null {
+      assertLive();
+      return appUrl;
+    },
     get loopbackBaseUrl(): string {
       assertLive();
       return loopbackBaseUrl;
@@ -1543,6 +1778,15 @@ function createFakePluginHostInternal(
     "thread.failed": [],
     "thread.archived": [],
     "thread.deleted": [],
+    "interaction.pending": [],
+    "message.queued": [],
+    "message.dispatched": [],
+    "turn.failed": [],
+  };
+  const hooks: {
+    [K in PluginHookName]: PluginHookHandler<K> | null;
+  } = {
+    "message.dispatch": null,
   };
   const disposeHooks: Array<() => void | Promise<void>> = [];
   const serviceControllers: AbortController[] = [];
@@ -1797,6 +2041,61 @@ function createFakePluginHostInternal(
     register(declaration) {
       return registerProviderDeclaration(declaration);
     },
+    experimental_contributeEnv(providerId, resolve) {
+      assertLive();
+      if (typeof providerId !== "string" || providerId.trim().length === 0) {
+        throw new Error(
+          "provider environment contribution requires a provider id",
+        );
+      }
+      if (providerEnvResolvers.has(providerId)) {
+        throw new Error(
+          `provider environment contribution for "${providerId}" is already registered`,
+        );
+      }
+      if (typeof resolve !== "function") {
+        throw new Error(
+          "provider environment contribution requires a resolver function",
+        );
+      }
+      providerEnvResolvers.set(providerId, resolve);
+    },
+    experimental_contributeEnvHealth(providerId, resolve) {
+      assertLive();
+      if (typeof providerId !== "string" || providerId.trim().length === 0) {
+        throw new Error(
+          "provider environment health contribution requires a provider id",
+        );
+      }
+      if (providerEnvHealthResolvers.has(providerId)) {
+        throw new Error(
+          `provider environment health contribution for "${providerId}" is already registered`,
+        );
+      }
+      if (typeof resolve !== "function") {
+        throw new Error(
+          "provider environment health contribution requires a resolver function",
+        );
+      }
+      providerEnvHealthResolvers.set(providerId, resolve);
+    },
+  };
+
+  const experimental_hooks: PluginHooks = {
+    on(hook, handler) {
+      if (hooks[hook] !== null) {
+        throw new Error(pluginHookAlreadyRegisteredMessage(hook));
+      }
+      storePluginHook(hooks, hook, handler);
+    },
+    async recheck(_hook) {
+      assertLive();
+      // The real host schedules a background walk and resolves; there is no
+      // queue here to walk, so the fake records the ask. Asserting on the
+      // count is how a test pins the wake path — the condition the plugin
+      // watches changed, so it told core to re-ask.
+      requestedDrains += 1;
+    },
   };
 
   const bb: BbPluginApi = {
@@ -1813,6 +2112,7 @@ function createFakePluginHostInternal(
     providers,
     ui,
     events,
+    experimental_hooks,
     status,
     server,
     hosts,
@@ -1834,6 +2134,9 @@ function createFakePluginHostInternal(
       clearTimeout(pending.timer);
       pendingInteractions.delete(id);
       pending.resolve({ outcome: "cancelled", reason: "plugin-disposed" });
+    }
+    for (const session of [...websocketSessions]) {
+      await session.closeForReload();
     }
     // Host order (§3): services first, then hooks LIFO (isolated), then
     // vended database handles, then handle invalidation.
@@ -1874,12 +2177,16 @@ function createFakePluginHostInternal(
     logEntries,
     realtimeSignals,
     needsConfigurationMessages,
+    get recheckCount() {
+      return requestedDrains;
+    },
     sharedPortDeclarations,
     experimental_hostRpcCalls: hostRpcCalls,
     sdk: sdkHarness,
     registrations: {
       settingsDescriptors,
       httpRoutes,
+      websocketRoutes,
       get rpcMethods() {
         return [...rpcHandlers.keys()];
       },
@@ -1903,10 +2210,21 @@ function createFakePluginHostInternal(
           "thread.failed": threadEventHandlers["thread.failed"].length,
           "thread.archived": threadEventHandlers["thread.archived"].length,
           "thread.deleted": threadEventHandlers["thread.deleted"].length,
+          "interaction.pending":
+            threadEventHandlers["interaction.pending"].length,
+          "message.queued": threadEventHandlers["message.queued"].length,
+          "message.dispatched":
+            threadEventHandlers["message.dispatched"].length,
+          "turn.failed": threadEventHandlers["turn.failed"].length,
         };
+      },
+      get hooks() {
+        return { ...hooks };
       },
       mentionProviders,
       providerRegistrations,
+      providerEnvResolvers,
+      providerEnvHealthResolvers,
       aiServiceRegistrations,
     },
     get pendingInteractions() {
@@ -1922,6 +2240,43 @@ function createFakePluginHostInternal(
       }
       for (const handler of [...hostWorkerExitSubscriptions]) {
         await handler({ hostId });
+      }
+    },
+    async resolveProviderEnv(providerId, context) {
+      assertLive();
+      const resolve = providerEnvResolvers.get(providerId);
+      if (resolve === undefined) return [];
+      try {
+        return validatePluginProviderEnvEntries(await resolve(context));
+      } catch (error) {
+        emitLog(
+          "warn",
+          `provider environment contribution failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return [];
+      }
+    },
+    async resolveProviderEnvHealth(providerId, context) {
+      assertLive();
+      if (!providerEnvResolvers.has(providerId)) return null;
+      const resolve = providerEnvHealthResolvers.get(providerId);
+      if (resolve === undefined) return null;
+      try {
+        const value = await resolve(context);
+        if (value === null) return null;
+        if (value.label.trim().length === 0) {
+          throw new Error("label must not be empty");
+        }
+        if (value.statusMessage.trim().length === 0) {
+          throw new Error("statusMessage must not be empty");
+        }
+        return value;
+      } catch (error) {
+        emitLog(
+          "warn",
+          `provider environment health contribution failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+        return null;
       }
     },
     async experimental_emitHostSignal(hostId, signal, payload) {
@@ -1960,27 +2315,7 @@ function createFakePluginHostInternal(
     },
 
     async setSettings(values) {
-      const errors = validateSettingsUpdate(settingsDescriptors, values);
-      if (errors.length > 0) {
-        throw new Error(errors.join("; "));
-      }
-      const prev = readSettingsValues(settingsDescriptors, storedSettings);
-      for (const [key, value] of Object.entries(values)) {
-        if (value === null) storedSettings.delete(key);
-        else storedSettings.set(key, value);
-      }
-      const next = readSettingsValues(settingsDescriptors, storedSettings);
-      if (JSON.stringify(next) === JSON.stringify(prev)) return;
-      for (const listener of settingsListeners) {
-        try {
-          listener(next, prev);
-        } catch (error) {
-          emitLog(
-            "warn",
-            `settings onChange listener failed: ${errorMessage(error)}`,
-          );
-        }
-      }
+      await setSettingsValues(values);
     },
 
     async callRpc(method, input) {
@@ -2082,6 +2417,146 @@ function createFakePluginHostInternal(
         }
       });
       return app.request(path, { ...init, method: normalizedMethod });
+    },
+
+    async experimental_openWebSocket(path, init) {
+      assertLive();
+      const url = new URL(path, "http://plugin.test");
+      const route = websocketRoutes.find(
+        (candidate) => candidate.path === url.pathname,
+      );
+      if (!route) {
+        throw new Error(
+          `no websocket route ${url.pathname} is registered — registered: ${
+            websocketRoutes.map((candidate) => candidate.path).join(", ") ||
+            "(none)"
+          }`,
+        );
+      }
+      const request = new Request(url, { ...init, method: "GET" });
+      let handlers: ExperimentalPluginWebSocketHandlers;
+      try {
+        handlers = route.handler({
+          request,
+          url,
+          headers: request.headers,
+        });
+        if (
+          typeof handlers !== "object" ||
+          handlers === null ||
+          Array.isArray(handlers)
+        ) {
+          throw new Error("websocket route handler must return an object");
+        }
+        for (const name of [
+          "onOpen",
+          "onMessage",
+          "onClose",
+          "onError",
+        ] as const) {
+          const callback = handlers[name];
+          if (callback !== undefined && typeof callback !== "function") {
+            throw new Error(
+              `websocket route handler ${name} must be a function`,
+            );
+          }
+        }
+      } catch (error) {
+        emitLog(
+          "warn",
+          `websocket ${route.path} connect failed: ${errorMessage(error)}`,
+        );
+        throw error;
+      }
+
+      const sent: Array<string | Uint8Array> = [];
+      const closeCalls: Array<{
+        code: number | null;
+        reason: string | null;
+      }> = [];
+      let readyState = 0;
+      let closeNotified = false;
+      let eventQueue = Promise.resolve();
+      const invoke = async (
+        event: "open" | "message" | "close" | "error",
+        run: () => void | Promise<void>,
+      ): Promise<void> => {
+        eventQueue = eventQueue.then(async () => {
+          try {
+            await run();
+          } catch (error) {
+            emitLog(
+              "warn",
+              `websocket ${route.path} ${event} failed: ${errorMessage(error)}`,
+            );
+          }
+        });
+        await eventQueue;
+      };
+      const socket: ExperimentalPluginWebSocket = {
+        send(data) {
+          sent.push(typeof data === "string" ? data : new Uint8Array(data));
+        },
+        close(code, reason) {
+          closeCalls.push({ code: code ?? null, reason: reason ?? null });
+          if (readyState < 2) readyState = 2;
+        },
+        get readyState() {
+          return readyState;
+        },
+      };
+      const notifyClose = async (
+        code: number,
+        reason: string,
+      ): Promise<void> => {
+        if (closeNotified) return;
+        closeNotified = true;
+        readyState = 3;
+        websocketSessions.delete(session);
+        if (handlers.onClose !== undefined) {
+          await invoke("close", () =>
+            handlers.onClose?.(socket, { code, reason }),
+          );
+        }
+      };
+      const session: ExperimentalFakeWebSocketSession & {
+        closeForReload(): Promise<void>;
+      } = {
+        sent,
+        closeCalls,
+        get readyState() {
+          return readyState;
+        },
+        async receive(data) {
+          if (readyState !== 1) {
+            throw new Error(
+              "cannot receive a websocket message while not open",
+            );
+          }
+          if (handlers.onMessage !== undefined) {
+            await invoke("message", () => handlers.onMessage?.(socket, data));
+          }
+        },
+        async close(code = 1000, reason = "") {
+          if (readyState < 2) socket.close(code, reason);
+          await notifyClose(code, reason);
+        },
+        async error(error) {
+          if (handlers.onError !== undefined) {
+            await invoke("error", () => handlers.onError?.(socket, error));
+          }
+        },
+        async closeForReload() {
+          socket.close(1012, "Plugin reloaded or disabled");
+          await notifyClose(1012, "Plugin reloaded or disabled");
+        },
+      };
+      websocketSessions.add(session);
+      readyState = 1;
+      if (handlers.onOpen !== undefined) {
+        await invoke("open", () => handlers.onOpen?.(socket));
+      }
+      return session;
     },
 
     runService(name) {

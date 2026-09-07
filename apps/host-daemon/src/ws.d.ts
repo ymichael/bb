@@ -40,7 +40,7 @@ declare module "ws" {
 
   export class WebSocketServer extends EventEmitter {
     clients: Set<WebSocket>;
-    constructor(options?: { noServer?: boolean });
+    constructor(options?: { noServer?: boolean; maxPayload?: number });
     handleUpgrade(
       request: IncomingMessage,
       socket: Duplex,

@@ -1,23 +1,4 @@
 #!/usr/bin/env node
-// Add one TestFlight build to an external beta group through the App Store
-// Connect API.
-//
-// Apple only offers "Automatically distribute builds" for internal groups.
-// An external group needs each build added by hand, and the first build of a
-// new marketing version goes to Beta App Review at that moment. This script
-// is the automatic path: the EAS workflow runs it after `eas submit` so every
-// nightly reaches the external group without a click in App Store Connect.
-//
-// Usage (from apps/mobile):
-//   node scripts/testflight-distribute.mjs --version 0.39.0 --build 5 \
-//     [--group "External testers"] [--key-path ./asc-api-key.p8] \
-//     [--timeout-minutes 45]
-//
-// The key id, issuer id, and app id come from eas.json
-// (submit.production.ios). The private key is the gitignored .p8 file that
-// the submit profile also reads. No npm dependencies: the JWT is signed with
-// node:crypto.
-
 import { readFileSync } from "node:fs";
 import { createSign } from "node:crypto";
 import { setTimeout as sleep } from "node:timers/promises";
@@ -98,7 +79,7 @@ function signJwt({ keyId, issuerId, privateKey }) {
   const payload = base64url({
     iss: issuerId,
     iat: now,
-    // Apple rejects tokens that live longer than 20 minutes.
+
     exp: now + 15 * 60,
     aud: "appstoreconnect-v1",
   });
@@ -230,9 +211,6 @@ async function main() {
     return;
   }
 
-  // An external group needs a Beta App Review submission. Apple usually
-  // approves a later build of an approved marketing version in minutes. An
-  // internal group has no review, so it skips this step.
   if (!group.isInternal && build.reviewState === null) {
     await request("POST", "/v1/betaAppReviewSubmissions", {
       data: {

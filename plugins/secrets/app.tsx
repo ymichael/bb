@@ -71,9 +71,7 @@ function SecretRequestInteraction({
       try {
         await submit({ values });
         setValues({});
-      } catch {
-        // The host renders the submission error outside this plugin form.
-      }
+      } catch {}
     } finally {
       setBusy(false);
     }
@@ -81,9 +79,7 @@ function SecretRequestInteraction({
   const cancelRequest = async () => {
     try {
       await cancel();
-    } catch {
-      // The host renders the cancellation error outside this plugin form.
-    }
+    } catch {}
   };
 
   return (

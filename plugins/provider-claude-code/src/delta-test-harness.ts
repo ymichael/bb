@@ -1,13 +1,3 @@
-/**
- * Shared equivalence harness for the ported claude translation suites: the
- * SAME claude SDK fixtures drive the new pipeline — claude dialect events →
- * semantic deltas → a real runtime delta assembler → canonical ThreadEvents.
- * Ids are asserted by shape and via the assembler's provider↔bb maps because
- * minting moved from the bridge to the assembler (thread/provider thread ids
- * are stamped downstream by the runtime, so events leave with empty ids).
- *
- * Test-only: not part of the plugin build (imported by *.test.ts only).
- */
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -49,11 +39,6 @@ export function loadSessionFixture(name: string): Record<string, unknown>[] {
     });
 }
 
-/**
- * The assistant `tool_use` block that spawns a background task. The CLI
- * streams it before the task's `task_started`, and the translator only
- * materializes a task whose spawning call it saw open.
- */
 export function spawningToolUseMessage(args: {
   toolUseId: string;
   toolName: string;
@@ -78,7 +63,6 @@ export function spawningToolUseMessage(args: {
   };
 }
 
-/** The spawning `tool_use` for a `task_started` fixture or literal. */
 export function spawningToolUseFor(
   taskStarted: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -129,20 +113,20 @@ interface ClaudeDeltaHarness {
     context?: ClaudeDeltaTranslationContext,
   ): ThreadEvent[];
   acceptInput(clientRequestId: string, threadId?: string): ThreadEvent[];
-  /** The bridge's session-death settlement (interrupt/replace/exit). */
   settleSession(threadId?: string): ThreadEvent[];
-  /** bb item id minted for a claude-native id (empty when never seen). */
   itemId(providerItemId: string, threadId?: string): string;
 }
 
-export function createClaudeDeltaHarness(): ClaudeDeltaHarness {
-  // Every production session has a cwd: a Bash result whose call was never
-  // seen still reads as a command run there.
-  const translator = createClaudeDeltaTranslator({ cwd: "/workspace" });
+export function createClaudeDeltaHarness(
+  options: { sandboxEnabled?: boolean } = {},
+): ClaudeDeltaHarness {
+  const translator = createClaudeDeltaTranslator({
+    cwd: "/workspace",
+    sandboxEnabled: options.sandboxEnabled ?? false,
+  });
   const assembler = createDeltaAssembler({
     providerId: "claude-code",
     entropyPrefix: CLAUDE_TEST_ENTROPY,
-    // Equivalence suites pin per-delta translation fidelity: no coalescing.
     textDeltaFlushMs: 0,
   });
   return {

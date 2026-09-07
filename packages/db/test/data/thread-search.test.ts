@@ -284,8 +284,6 @@ describe("thread search data", () => {
       expect(assistantResults.active.results[0]?.matches[0]).toMatchObject({
         sourceKind: "assistant_message",
         text: "assistantwriterneedle",
-        // Message matches carry their event sequence so the UI can deep-link to
-        // the matched message in the conversation.
         sourceSeq: expect.any(Number),
       });
 
@@ -404,8 +402,6 @@ describe("thread search data", () => {
 
       expect(results.active.total).toBe(1);
       const matches = results.active.results[0]?.matches ?? [];
-      // Both title kinds survive so the sidebar can pair the display title with
-      // its highlight; message kinds collapse to the single best-ranked one.
       expect(
         matches
           .filter((match) => match.sourceSeq === null)
@@ -506,7 +502,6 @@ describe("thread search data", () => {
       for (const range of match.highlightRanges) {
         expect(match.text.slice(range.start, range.end)).toBe("snippetneedle");
       }
-      // The lead context is trimmed to a word boundary, not cut mid-word.
       expect(match.text.slice(1)).toMatch(/^word\d+ /u);
     } finally {
       closeConnection(db);
@@ -572,8 +567,6 @@ describe("thread search data", () => {
         providerId: "codex",
         title: "Emoji thread",
       });
-      // No whitespace anywhere, so both cuts land on hard character offsets
-      // that fall inside astral code points unless the snippet snaps them.
       const emoji = "\u{1F600}".repeat(100);
       upsertThreadSearchSegments(db, {
         segments: [
@@ -597,8 +590,6 @@ describe("thread search data", () => {
       if (match === undefined) {
         return;
       }
-      // With the `u` flag a surrogate range only matches lone surrogates, so
-      // this fails if a cut landed inside an emoji.
       expect(match.text).not.toMatch(/[\uD800-\uDFFF]/u);
       expect(match.text.startsWith("…")).toBe(true);
       expect(match.text.endsWith("…")).toBe(true);
@@ -678,7 +669,6 @@ describe("thread search data", () => {
       expect(results.active.results[0]?.matches[0]).toMatchObject({
         text: "café planning",
         highlightRanges: [{ start: 0, end: 4 }],
-        // Title matches have no message to anchor a deep-link to.
         sourceSeq: null,
       });
     } finally {

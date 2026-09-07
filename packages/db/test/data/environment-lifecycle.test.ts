@@ -149,7 +149,6 @@ describe("applyEnvironmentLifecycleEvent", () => {
       const environment = seedEnvironment({ status: "ready" });
 
       vi.setSystemTime(2_000);
-      // ready has no provision.succeeded cell.
       const outcome = applyEnvironmentLifecycleEvent(db, spy, {
         environmentId: environment.id,
         event: { type: "provision.succeeded" },
@@ -254,7 +253,6 @@ describe("applyEnvironmentLifecycleEvent", () => {
       detail: "state changed while applying provision.requested from status ready",
       reason: "cas-conflict",
     });
-    // The interleaved writer's value survives; the event's target does not.
     expect(getEnvironment(db, environment.id)?.status).toBe("error");
   });
 
@@ -282,7 +280,6 @@ describe("applyEnvironmentLifecycleEvent", () => {
     });
     expect(getEnvironment(db, environment.id)?.status).toBe("retiring");
 
-    // A stopping thread blocks the claim even after deletion intent.
     requireThreadLifecycleEventApplied(
       applyThreadLifecycleEvent(db, {
         event: { type: "stop.requested" },

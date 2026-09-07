@@ -1,0 +1,74 @@
+name: Approve Contributor
+on:
+  issue_comment:
+    types:
+      - created
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+jobs:
+  approve:
+    name: Add contributor to allow list
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    if: startsWith(github.event.comment.body, '/approve @')
+    steps:
+      - name: Check maintainer rank
+        env:
+          COMMENT_AUTHOR_ASSOC: ${{ github.event.comment.author_association }}
+        run: |
+          if [ "$COMMENT_AUTHOR_ASSOC" = "OWNER" ] || [ "$COMMENT_AUTHOR_ASSOC" = "MEMBER" ] || [ "$COMMENT_AUTHOR_ASSOC" = "COLLABORATOR" ]; then
+            exit 0
+          fi
+          exit 1
+      - name: Checkout main branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: main
+      - name: Add name and push
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: |
+          target=""
+          if [[ "$COMMENT_BODY" =~ ^/approve\ @([A-Za-z0-9]+(-[A-Za-z0-9]+)*)(\[bot\])?$ ]] && [ "${#BASH_REMATCH[1]}" -le 39 ]; then
+            target="${BASH_REMATCH[1]}${BASH_REMATCH[3]}"
+          fi
+          if [ -z "$target" ]; then
+            exit 1
+          fi
+          list_path=".github/APPROVED_CONTRIBUTORS"
+          if [ ! -f "$list_path" ]; then
+            printf '%s\n' "$target" > "$list_path"
+          else
+            lowered_target="$(printf '%s' "$target" | tr '[:upper:]' '[:lower:]')"
+            found=""
+            while IFS= read -r entry || [ -n "$entry" ]; do
+              trimmed="$(printf '%s' "$entry" | tr -d '[:space:]')"
+              if [ -z "$trimmed" ]; then
+                continue
+              fi
+              lowered_entry="$(printf '%s' "$trimmed" | tr '[:upper:]' '[:lower:]')"
+              if [ "$lowered_entry" = "$lowered_target" ]; then
+                found="yes"
+                break
+              fi
+            done < "$list_path"
+            if [ -z "$found" ]; then
+              printf '%s\n' "$target" >> "$list_path"
+            fi
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$list_path"
+          if git diff --cached --quiet; then
+            msg="Approved @$target for PRs. The name stays on the allow list. The author can open a PR now."
+            gh issue comment "$ISSUE_NUMBER" --body "$msg" --repo "$GITHUB_REPOSITORY"
+            exit 0
+          fi
+          git commit -m "Add @$target to allow list"
+          git push origin HEAD:main
+          msg="Approved @$target for PRs. The name now stays on the allow list. The author can open a PR now."
+          gh issue comment "$ISSUE_NUMBER" --body "$msg" --repo "$GITHUB_REPOSITORY"

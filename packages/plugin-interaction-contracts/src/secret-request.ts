@@ -1,12 +1,5 @@
 import { z } from "zod";
 
-/**
- * Pending-interaction contract of the bundled `secrets` plugin
- * (`plugins/secrets`): the payload its `bb secret request` CLI puts on
- * `bb.ui.requestInput({ rendererId: "secret-request", payload })` and the
- * `{ values }` response the form submits back (one single-line value per
- * requested variable; the plugin writes them to the dotenv destination).
- */
 export const SECRET_REQUEST_RENDERER_ID = "secret-request";
 
 const SECRET_VALUE_MAX_LENGTH = 16 * 1024;

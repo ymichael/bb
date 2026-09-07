@@ -93,7 +93,6 @@ describe("isDeveloperRoutePath", () => {
     expect(isDeveloperRoutePath("/dev/webview-spike")).toBe(true);
     expect(isDeveloperRoutePath("/e2e/reset?wipe=1")).toBe(true);
     expect(isDeveloperRoutePath("/webview")).toBe(false);
-    // A prefix must match a whole segment, not a substring.
     expect(isDeveloperRoutePath("/development")).toBe(false);
   });
 });

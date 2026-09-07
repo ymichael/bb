@@ -65,19 +65,21 @@ describe("capitalize", () => {
 describe("getFirstStringField", () => {
   it("returns the first non-empty string field", () => {
     expect(
-      getFirstStringField(
-        { first: "", second: "value", third: "ignored" },
-        ["first", "second", "third"],
-      ),
+      getFirstStringField({ first: "", second: "value", third: "ignored" }, [
+        "first",
+        "second",
+        "third",
+      ]),
     ).toBe("value");
   });
 
   it("ignores missing, empty, and non-string values", () => {
     expect(
-      getFirstStringField(
-        { first: 1, second: "", third: null },
-        ["first", "second", "third"],
-      ),
+      getFirstStringField({ first: 1, second: "", third: null }, [
+        "first",
+        "second",
+        "third",
+      ]),
     ).toBeUndefined();
     expect(getFirstStringField(null, ["first"])).toBeUndefined();
   });

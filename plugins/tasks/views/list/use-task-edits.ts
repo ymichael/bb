@@ -12,22 +12,11 @@ import {
 } from "./optimistic.js";
 
 interface ListTaskEditController {
-  /** Current optimistic entries, applied via `editedTasks`. */
   entries: TaskEntries;
-  /** Task ids with an in-flight mutation (for loading affordances). */
   pending: ReadonlySet<string>;
-  /** Optimistically apply an edit and persist it, rolling back on failure. */
   edit: (task: Task, patch: TaskEdit) => void;
 }
 
-/**
- * Owns the list's optimistic edit state: applies edits instantly, persists them
- * through `updateTask`, reconciles against server refetches, and rolls back the
- * exact failed field on error. Each write carries a monotonic generation so
- * concurrent edits to the same task (e.g. toggling several labels) settle
- * independently — an out-of-order failure only reverts fields it still owns,
- * and the pending flag clears only when the last in-flight write completes.
- */
 export function useListTaskEdits(
   serverTasks: readonly Task[] | undefined,
   onError: (message: string) => void,

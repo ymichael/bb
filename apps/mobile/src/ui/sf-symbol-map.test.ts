@@ -20,15 +20,8 @@ const SELF_FILES = new Set([
   "sf-symbol-map.test.ts",
 ]);
 
-/** Brand marks have no SF Symbol; `Icon.ios.tsx` keeps Hugeicons for them. */
-/** Icons with no SF Symbol equivalent; they render the hugeicons glyph. */
 const BRAND_MARKS: readonly IconName[] = ["Discord", "Github"];
 
-/**
- * The app's iOS deployment target is 16.4 (`ios/Podfile`), which ships SF
- * Symbols 4.2. A newer symbol renders as nothing on older devices
- * (`UIImage(systemName:)` returns nil), so every mapping must exist by then.
- */
 const MAX_SF_SYMBOLS_VERSION = "4.2";
 
 function listSourceFiles(dir: string, out: string[]): string[] {
@@ -41,13 +34,6 @@ function listSourceFiles(dir: string, out: string[]): string[] {
   return out;
 }
 
-/**
- * Every icon name referenced under src/ and app/: JSX `name="X"` /
- * `icon="X"` / `leading="X"` props, `icon: "X"` object fields (models,
- * action lists), and — in files that work with the `IconName` type — any
- * PascalCase string literal that is an icon name, which catches the names
- * returned from switch/ternary helpers.
- */
 function usedIconNames(): Map<IconName, string[]> {
   const used = new Map<IconName, string[]>();
   const record = (candidate: string, location: string) => {
@@ -80,7 +66,6 @@ function usedIconNames(): Map<IconName, string[]> {
   return used;
 }
 
-/** Symbol name → the SF Symbols release that introduced it, from the catalog. */
 function sfSymbolCatalog(): Map<string, string> {
   const require = createRequire(import.meta.url);
   const packageJson = require.resolve("sf-symbols-typescript/package.json");
@@ -128,9 +113,6 @@ describe("SF_SYMBOL_MAP", () => {
 
   it("covers every icon name the app renders", () => {
     const used = usedIconNames();
-    // A scan that stops finding names would pass vacuously; pin the floor.
-    // The shell renders a handful of screens, so the floor is small — it
-    // guards the scan, not the size of the app.
     expect(used.size).toBeGreaterThan(12);
     const missing = [...used]
       .filter(
@@ -139,10 +121,6 @@ describe("SF_SYMBOL_MAP", () => {
       )
       .map(([name, locations]) => `${name} (${locations[0]})`);
     expect(missing).toEqual([]);
-    // There is deliberately no "every brand mark is rendered" check. The icon
-    // map mirrors the web vocabulary (icon-map.test.ts pins that), so it holds
-    // names this app never renders — since the WebView shell replaced the
-    // native screens, Discord and GitHub are among them.
   });
 
   it("uses bare symbol names that exist by the deployment target's SF Symbols release", () => {

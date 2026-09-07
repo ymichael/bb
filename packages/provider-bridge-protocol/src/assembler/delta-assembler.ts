@@ -1,31 +1,3 @@
-/**
- * The delta assembler.
- *
- * One per bridge-protocol adapter in the runtime (and one per conformance or
- * calibration run in the testing kit): it consumes `thread/delta` notifications
- * (parsed semantic deltas from a bridge) and constructs every canonical
- * `ThreadEvent`. The bridge knows the dialect; this module knows the
- * timeline — it mints turn/item ids (entropy+serial, #1224 discipline held
- * centrally), correlates accepted input with the queue-until-turn-opens and
- * claim-if-idle terminal rules, synthesizes `item/started` for delta-first
- * streams, pairs item opens with closes (echoing started fields), diffs
- * cumulative command-output snapshots, settles turns and items on session
- * end, and coalesces streamed-text events per
- * flush window (`textDeltaFlushMs`, the same trailing-edge no-timer
- * discipline as the progress throttle) so chatty providers stop producing
- * one timeline event per token.
- *
- * Turn-opening rule: only `turn.open`, a claiming `turn.boundary`, and
- * accepted-input lifecycle settlement (`provider.error`/`session.ended` with
- * pending accepted input) ever open a turn. Item and stream deltas never do —
- * a turn-scoped delta with no turn to attach to surfaces its `noTurnFallback`
- * raw payload as a thread-scoped `provider/unhandled` (the old bridges'
- * "no active turn" guard, applied centrally) or is dropped when the bridge
- * attached none.
- *
- * Events leave with UNSTAMPED_THREAD_ID; the runtime stamps thread identity
- * downstream before any event leaves agent-runtime.
- */
 import { randomUUID } from "node:crypto";
 import type {
   ClientTurnRequestId,
@@ -47,15 +19,6 @@ import type {
 import { THREAD_DELTA_KEY_SEPARATOR } from "../thread-delta.js";
 import { THREAD_DELTA_GRAMMAR_V3 } from "../version.js";
 
-/**
- * The `thread/delta` grammar range this assembler speaks, reported to every
- * bridge in the `initialize` params so the two sides negotiate a version
- * (see `negotiateGrammarVersion` in the protocol). `[3, 3]`: the v2 dialects
- * (`message.*`, `usage.turn`/`usage.exact`) are deleted, so a bridge whose
- * range lacks 3 — including one that predates `grammarVersions` and reads as
- * `[2, 2]` — is refused at the handshake with a legible error instead of
- * connecting to an assembler that would drop its every stream.
- */
 export const ASSEMBLER_GRAMMAR_VERSIONS: BridgeGrammarVersions = [
   THREAD_DELTA_GRAMMAR_V3,
   THREAD_DELTA_GRAMMAR_V3,
@@ -72,15 +35,7 @@ type UnstampedThreadId = string & {
   readonly [unstampedThreadIdBrand]: "runtime-stamped-thread-id";
 };
 
-/**
- * Assembled events are emitted before the runtime resolves the bb thread.
- * Runtime stamping must replace this before events leave agent-runtime.
- */
 const UNSTAMPED_THREAD_ID = "" as UnstampedThreadId;
-
-// ---------------------------------------------------------------------------
-// Cumulative-text diffing (absorbed from the pi bridge's diff-cumulative-text)
-// ---------------------------------------------------------------------------
 
 export interface DiffCumulativeTextArgs {
   nextText: string;
@@ -93,11 +48,6 @@ export interface DiffCumulativeTextResult {
   reset: boolean;
 }
 
-/**
- * Diffs a cumulative text snapshot against the previous one: emits only the
- * appended suffix when the provider keeps appending, or the full text with
- * `reset: true` when the snapshot restarted.
- */
 export function diffCumulativeText(
   args: DiffCumulativeTextArgs,
 ): DiffCumulativeTextResult | null {
@@ -117,47 +67,24 @@ export function diffCumulativeText(
   return { delta: args.nextText, nextText: args.nextText, reset: true };
 }
 
-// ---------------------------------------------------------------------------
-// Assembler state
-// ---------------------------------------------------------------------------
-
 const MAX_THREAD_STATES = 256;
 const MAX_ID_MAP_ENTRIES = 1024;
-/** Mirrors the codex bridge's per-session settled-id bound. */
 const MAX_SETTLED_ITEM_KEYS = 512;
 
 interface OpenItemState {
   bbItemId: string;
   key: DeltaItemKey;
   item: ThreadEventItem;
-  /**
-   * Thread-attached items (backgroundTask, background delegation) outlive
-   * turns by design: turn settlement never clears or completes them, and
-   * while one is open its thread is pinned against LRU eviction.
-   */
   threadAttached: boolean;
-  /**
-   * Accumulated stream text for text items (`item.textDelta`): the item's
-   * primary text (agentMessage/plan text, reasoning content) and, for
-   * reasoning, its summary. An `item.textClose` without a provider-final
-   * text settles from these.
-   */
   text: string;
   summaryText: string;
 }
 
-/** A throttled progress emission awaiting its trailing-edge flush. */
 interface PendingProgressState {
   event: ThreadEvent;
-  /** Turn-scoped pending progress dies with its turn. */
   turnScoped: boolean;
 }
 
-/**
- * The streamed-text event family the assembler coalesces: consecutive events
- * for one stream (event type + item id) concatenate into a single event per
- * flush window. Everything else is an ordering barrier.
- */
 type TextDeltaThreadEvent = Extract<
   ThreadEvent,
   {
@@ -187,19 +114,11 @@ function asTextDeltaEvent(
   }
 }
 
-/** A coalesced run of streamed-text deltas awaiting its trailing-edge flush. */
 interface PendingTextState {
-  /** The first suppressed event; the flush re-emits it with the joined text. */
   event: TextDeltaThreadEvent;
   text: string;
 }
 
-/**
- * What delta handlers emit into. `assemble()` wraps the returned event array
- * in a sink that applies the text-delta coalescing policy: streamed-text
- * events may be buffered per stream, and every other event flushes the
- * thread's buffers first (the ordering barrier).
- */
 interface EventSink {
   push(...newEvents: ThreadEvent[]): void;
 }
@@ -208,72 +127,24 @@ interface ThreadAssemblyState {
   currentTurnId: string | undefined;
   lastTurnId: string | undefined;
   pendingAccepted: ClientTurnRequestId[];
-  /** Open (started, unsettled) items keyed by their provider join key. */
   openItemsByKey: Map<string, OpenItemState>;
-  /** Last cumulative command-output snapshot per item key. */
   commandSnapshotsByKey: Map<string, string>;
-  /** Both-way provider↔bb item id maps for command-plane reverse lookup. */
   bbItemIdByProviderItemId: Map<string, string>;
   providerItemIdByBbItemId: Map<string, string>;
-  /** Both-way provider↔bb turn id maps (vouched provider-turn keys). */
   bbTurnIdByProviderTurnId: Map<string, string>;
   providerTurnIdByBbTurnId: Map<string, string>;
-  /**
-   * Provider-identified item keys already settled: a repeated `item.close`
-   * for one of these is a provider retry and is dropped; an explicit
-   * `item.open` reopens the key (codex's settle/reopen rule, held generically
-   * for every provider-id space; channel-keyed items are exempt — bridge-local
-   * families like acp fs-writes legitimately close the same key repeatedly).
-   */
   settledItemKeys: Set<string>;
-  /**
-   * Central progress throttling (one emission per item key per policy
-   * interval): last emission time per key — seeded by `item.open`, so a
-   * provider's first progress inside the open's window is already throttled —
-   * and the newest suppressed emission awaiting its trailing-edge flush.
-   */
   progressLastEmitByKey: Map<string, number>;
   pendingProgressByKey: Map<string, PendingProgressState>;
-  /**
-   * Text-delta coalescing (one emitted event per stream per flush window):
-   * last emission time per stream — absent means a fresh stream, whose first
-   * delta emits immediately so time-to-first-token is unchanged — and the
-   * coalesced text awaiting its trailing-edge flush.
-   */
   textLastEmitByStream: Map<string, number>;
   pendingTextByStream: Map<string, PendingTextState>;
 }
 
 export interface CreateDeltaAssemblerOptions {
-  /** Provider id stamped onto provider/unhandled events. */
   providerId: string;
-  /**
-   * Entropy prefix for minted turn/item ids. Defaults to fresh per-assembler
-   * entropy so ids never collide across assembler (process) restarts; tests
-   * inject a fixed prefix for determinism.
-   */
   entropyPrefix?: string;
-  /**
-   * Minimum gap between emitted `item.progress` events per item key
-   * (`flush: true` bypasses it; `item.close` always emits). 500ms default —
-   * the cadence the claude bridge hand-rolled for background-task snapshots,
-   * now the central policy for every provider's progress stream.
-   */
   progressThrottleMs?: number;
-  /**
-   * Coalescing window for streamed-text events (assistant/reasoning/plan
-   * deltas and command/fileChange output deltas) per stream. Within the
-   * window consecutive deltas concatenate into one emitted event of the same
-   * type; the buffer flushes trailing-edge with no timers — on the thread's
-   * next traffic once the window elapsed, on stream close, and before ANY
-   * non-batchable event for the thread (the ordering barrier: coalescing
-   * never reorders text relative to item opens/closes, turn events, errors,
-   * or other streams' flushes). The first delta of a fresh stream always
-   * emits immediately, keeping time-to-first-token unchanged. 100ms default;
-   * 0 disables batching (one event per delta).
-   */
   textDeltaFlushMs?: number;
-  /** Clock override for tests. */
   now?: () => number;
 }
 
@@ -284,23 +155,13 @@ export interface AssembleDeltasArgs {
 
 export interface DeltaAssembler {
   assemble(args: AssembleDeltasArgs): ThreadEvent[];
-  /** bb item id minted for a provider item id (command-plane lookup). */
   getBbItemId(threadId: string, providerItemId: string): string | undefined;
-  /** Provider item id behind a bb item id (reverse command-plane lookup). */
   getProviderItemId(threadId: string, bbItemId: string): string | undefined;
-  /** bb turn id minted for a vouched provider turn id. */
   getBbTurnId(threadId: string, providerTurnId: string): string | undefined;
-  /** Provider turn id behind a bb turn id (steer/interrupt reverse lookup). */
   getProviderTurnId(threadId: string, bbTurnId: string): string | undefined;
   getOpenTurnId(threadId: string): string | undefined;
 }
 
-/**
- * Composite-key separator. Provider key parts can never contain it — the
- * protocol schema rejects them (thread-delta.ts) — so distinct key tuples
- * never join to the same string. A visible escape sequence rather than a raw
- * control byte keeps this file text for git and greps.
- */
 const SEP = THREAD_DELTA_KEY_SEPARATOR;
 
 function itemKeyString(key: DeltaItemKey): string {
@@ -311,11 +172,6 @@ function itemKeyString(key: DeltaItemKey): string {
   ].join(SEP);
 }
 
-/**
- * Grammar v3 presentation rides the lifecycle delta, not the shape, and is
- * persisted on the canonical item so the row renders after the plugin is
- * gone. `userMessage` is bb-authored and carries none.
- */
 function withPresentation<TItem extends ThreadEventItem>(
   item: TItem,
   presentation: ThreadEventItemPresentation | undefined,
@@ -352,8 +208,6 @@ export function createDeltaAssembler(
   const progressThrottleMs = options.progressThrottleMs ?? 500;
   const textDeltaFlushMs = options.textDeltaFlushMs ?? 100;
   const now = options.now ?? Date.now;
-  // Monotonic per-assembler counters: ids stay unique across every thread,
-  // turn, and session this assembler ever sees.
   let turnCounter = 0;
   let itemCounter = 0;
   const states = new Map<string, ThreadAssemblyState>();
@@ -371,7 +225,6 @@ export function createDeltaAssembler(
   function stateFor(threadId: string): ThreadAssemblyState {
     const existing = states.get(threadId);
     if (existing) {
-      // Refresh LRU position.
       states.delete(threadId);
       states.set(threadId, existing);
       return existing;
@@ -401,12 +254,6 @@ export function createDeltaAssembler(
     while (states.size > MAX_THREAD_STATES) {
       let removed = false;
       for (const [threadId, state] of states) {
-        // Eviction guard: a thread with an open turn, open items (notably
-        // thread-attached background tasks awaiting their terminal event), or
-        // queued accepted input must keep its state — evicting it would
-        // orphan the open work's ids, and a dropped input.accepted would
-        // strand the terminal-turn invariant (the acceptance could never
-        // drain into its turn).
         if (
           state.currentTurnId !== undefined ||
           state.openItemsByKey.size > 0 ||
@@ -436,12 +283,6 @@ export function createDeltaAssembler(
     trimOldestEntries(state.providerItemIdByBbItemId, MAX_ID_MAP_ENTRIES);
   }
 
-  /**
-   * The bb turn id for a provider-vouched turn key, minted on first sight.
-   * Never emits `turn/started` — the provider named the turn, and the old
-   * bridges' deterministic id stamping likewise scoped events to turns they
-   * had not necessarily seen open.
-   */
   function resolveVouchedTurnId(
     state: ThreadAssemblyState,
     providerTurnId: string,
@@ -463,12 +304,6 @@ export function createDeltaAssembler(
     trimOldestEntries(state.progressLastEmitByKey, MAX_ID_MAP_ENTRIES);
   }
 
-  /**
-   * Trailing-edge flush: the newest suppressed progress per key lands on the
-   * thread's next traffic once its throttle window has elapsed (an
-   * `item.close` for the key supersedes it, and a settled turn drops its
-   * turn-scoped pending progress).
-   */
   function flushElapsedPendingProgress(
     state: ThreadAssemblyState,
     events: EventSink,
@@ -479,8 +314,6 @@ export function createDeltaAssembler(
     }
     const nowMs = now();
     for (const [key, pending] of [...state.pendingProgressByKey]) {
-      // A progress delta for the key rides in this very batch: the newer
-      // snapshot supersedes the pending one, so let the handler emit it.
       if (skipKeys.has(key)) {
         continue;
       }
@@ -494,12 +327,6 @@ export function createDeltaAssembler(
     }
   }
 
-  /**
-   * Flushes EVERY coalesced text buffer for the thread, in arrival order.
-   * All-or-nothing on purpose: any flush — like any non-batchable emission —
-   * is an ordering barrier, so buffered text can never be overtaken by (or
-   * overtake) later traffic.
-   */
   function flushPendingText(
     state: ThreadAssemblyState,
     out: ThreadEvent[],
@@ -516,10 +343,6 @@ export function createDeltaAssembler(
     trimOldestEntries(state.textLastEmitByStream, MAX_ID_MAP_ENTRIES);
   }
 
-  /**
-   * Trailing-edge text flush on the thread's next traffic: one buffer whose
-   * window elapsed flushes ALL buffers (a flush is itself a barrier).
-   */
   function flushElapsedPendingText(
     state: ThreadAssemblyState,
     out: ThreadEvent[],
@@ -534,15 +357,12 @@ export function createDeltaAssembler(
     }
   }
 
-  /** The text-delta coalescing policy for one batchable event. */
   function bufferTextDelta(
     state: ThreadAssemblyState,
     event: TextDeltaThreadEvent,
     out: ThreadEvent[],
   ): void {
     const streamKey = `${event.type}${SEP}${event.itemId}`;
-    // A reset can never be absorbed into a concatenation: flush what came
-    // before it, then emit the reset itself immediately.
     if (
       event.type === "item/commandExecution/outputDelta" &&
       event.reset === true
@@ -555,8 +375,6 @@ export function createDeltaAssembler(
     }
     const last = state.textLastEmitByStream.get(streamKey);
     if (last === undefined) {
-      // First delta of a fresh stream: emit immediately (behind any pending
-      // older text — the barrier) so streaming starts with no added latency.
       flushPendingText(state, out);
       out.push(event);
       state.textLastEmitByStream.set(streamKey, now());
@@ -565,7 +383,6 @@ export function createDeltaAssembler(
     }
     const pending = state.pendingTextByStream.get(streamKey);
     if (now() - last >= textDeltaFlushMs) {
-      // Window elapsed: this delta rides out now, joined with the buffer.
       if (pending === undefined) {
         state.pendingTextByStream.set(streamKey, { event, text: event.delta });
       } else {
@@ -592,16 +409,6 @@ export function createDeltaAssembler(
     }
   }
 
-  /**
-   * Provider-native parent ref → the bb id minted for that parent item. A
-   * child-first arrival (the parent's own open has not been seen yet) mints
-   * the parent's bb id NOW and registers the mapping, so the emitted event
-   * never carries the raw provider id and the parent's later open/close
-   * lands under this same minted id. This matches the old translators:
-   * their parent ids were deterministic functions of the provider id (raw
-   * for pi/acp, prefix-stamped for codex), so parent references resolved to
-   * the id the parent item itself would carry regardless of arrival order.
-   */
   function mapParentRef(
     state: ThreadAssemblyState,
     parentRef: string | undefined,
@@ -652,8 +459,6 @@ export function createDeltaAssembler(
   function finishTurn(state: ThreadAssemblyState): void {
     state.lastTurnId = state.currentTurnId ?? state.lastTurnId;
     state.currentTurnId = undefined;
-    // Thread-attached items (background tasks) outlive the turn that spawned
-    // them; everything turn-scoped is abandoned with the turn.
     for (const [key, open] of [...state.openItemsByKey]) {
       if (!open.threadAttached) {
         state.openItemsByKey.delete(key);
@@ -671,15 +476,10 @@ export function createDeltaAssembler(
     return state.currentTurnId ?? state.lastTurnId;
   }
 
-  // -------------------------------------------------------------------------
-  // Item construction
-  // -------------------------------------------------------------------------
-
   function buildFileChanges(
     shape: Extract<DeltaItemShape, { type: "fileChange" }>,
   ): Extract<ThreadEventItem, { type: "fileChange" }>["changes"] {
     return shape.changes.map((change: DeltaFileChange) => {
-      // A provider-supplied diff wins; old/new text is the fallback source.
       const diff =
         change.diff ??
         (change.newText === undefined
@@ -694,7 +494,6 @@ export function createDeltaAssembler(
     });
   }
 
-  /** Does the opened canonical item carry the same classification as a shape? */
   function shapeMatchesItem(
     shape: DeltaItemShape,
     item: ThreadEventItem,
@@ -721,17 +520,10 @@ export function createDeltaAssembler(
       case "planSteps":
         return item.type === shape.type;
       case "extension":
-        // Two extension kinds are two classifications: a close that names a
-        // different kind than the open settles both (dual-settle).
         return item.type === "extension" && item.kind === shape.kind;
     }
   }
 
-  /**
-   * The full snapshot the bridge re-embeds per background-task event, as the
-   * canonical item. `status` travels inside the shape — the bridge derives it
-   * from the provider's task status.
-   */
   function buildBackgroundTaskItem(
     bbItemId: string,
     shape: Extract<DeltaItemShape, { type: "backgroundTask" }>,
@@ -762,11 +554,6 @@ export function createDeltaAssembler(
     );
   }
 
-  /**
-   * Grammar v3 status-bearing core kinds. One builder per kind serves open
-   * (`status: "pending"`), close (the terminal status) and close-echo: the
-   * shape carries every field but the status, exactly like `command`.
-   */
   function buildFileReadItem(
     bbItemId: string,
     shape: Extract<DeltaItemShape, { type: "fileRead" }>,
@@ -805,12 +592,6 @@ export function createDeltaAssembler(
     );
   }
 
-  /**
-   * A delegation's `summary` is the child's terminal summary: the close's
-   * shape carries it, and a close without one keeps what the open (or the
-   * last progress snapshot) said, so a bare terminal snapshot never erases
-   * the summary a provider reported earlier.
-   */
   function buildDelegationItem(
     bbItemId: string,
     shape: Extract<DeltaItemShape, { type: "delegation" }>,
@@ -833,12 +614,6 @@ export function createDeltaAssembler(
     );
   }
 
-  /**
-   * A plugin-defined item: opaque payload plus the mandatory presentation the
-   * lifecycle delta carries (an extension item has no core renderer, so the
-   * declarative base is the whole row). The server validates the payload
-   * against the plugin's declared schema at ingest.
-   */
   function buildExtensionItem(
     bbItemId: string,
     shape: Extract<DeltaItemShape, { type: "extension" }>,
@@ -847,10 +622,6 @@ export function createDeltaAssembler(
     presentation: ThreadEventItemPresentation | undefined,
   ): Extract<ThreadEventItem, { type: "extension" }> {
     if (presentation === undefined) {
-      // Unreachable for a parsed delta: the protocol schema refuses an
-      // `item.open`/`item.close` whose shape is `extension` and that carries
-      // no presentation (requireExtensionPresentation). Stated here because
-      // the TypeScript delta type does not encode that refinement.
       throw new Error(
         `extension item "${shape.kind}" reached the assembler without a presentation`,
       );
@@ -888,12 +659,6 @@ export function createDeltaAssembler(
     );
   }
 
-  /**
-   * Work that outlives its turn: background tasks, and delegations the bridge
-   * marked `background`. Their progress and terminal state ride the
-   * thread-scoped `item/<kind>/progress|completed` events, and turn
-   * settlement never clears or completes them.
-   */
   function isThreadAttachedShape(shape: DeltaItemShape): boolean {
     switch (shape.type) {
       case "backgroundTask":
@@ -918,11 +683,6 @@ export function createDeltaAssembler(
     }
   }
 
-  /**
-   * The opened (pending) canonical item for a shape. `presentation` is the
-   * lifecycle delta's (grammar v3): persisted on every kind that carries one,
-   * required for `extension`, absent on v2 traffic.
-   */
   function buildOpenedItem(
     bbItemId: string,
     shape: DeltaItemShape,
@@ -1077,11 +837,9 @@ export function createDeltaAssembler(
     resultText?: string;
     approvalStatus?: "denied";
     status: ThreadEventItemStatus;
-    /** The opened delegation's last known summary (close-echo fallback). */
     delegationSummary?: string;
   }
 
-  /** Close-echo: started-item fields survive onto the completed item. */
   function completeStartedItem(
     started: ThreadEventItem,
     close: CloseFields,
@@ -1156,16 +914,10 @@ export function createDeltaAssembler(
           started.presentation,
         );
       default:
-        // Message-ish started items never travel item.close; settle generically.
         return started;
     }
   }
 
-  /**
-   * Build the completed item from the close delta's terminal shape.
-   * `presentation` is the close-echo result (the close's own, else the opened
-   * item's); required for `extension`.
-   */
   function buildClosedItemFromShape(
     bbItemId: string,
     shape: DeltaItemShape,
@@ -1194,7 +946,6 @@ export function createDeltaAssembler(
   ): ThreadEventItem {
     switch (shape.type) {
       case "command": {
-        // Generic close fields win over the shape's own output fields.
         const aggregatedOutput =
           close.aggregatedOutput ?? shape.aggregatedOutput;
         const exitCode = close.exitCode ?? shape.exitCode;
@@ -1311,7 +1062,6 @@ export function createDeltaAssembler(
       case "reasoning":
       case "plan":
       case "imageView":
-        // Status-less canonical items: the terminal shape is the whole item.
         return buildOpenedItemShape(
           bbItemId,
           shape,
@@ -1321,16 +1071,6 @@ export function createDeltaAssembler(
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Delta handlers
-  // -------------------------------------------------------------------------
-
-  /**
-   * A turn-scoped delta arrived with no turn to attach to: surface the
-   * bridge's raw payload exactly as the old translators' "no active turn"
-   * guards did — a thread-scoped provider/unhandled — or drop it silently
-   * when the bridge attached no fallback.
-   */
   function pushNoTurnFallback(
     state: ThreadAssemblyState,
     fallback: DeltaNoTurnFallback | undefined,
@@ -1353,13 +1093,6 @@ export function createDeltaAssembler(
     });
   }
 
-  /**
-   * A tool call ends the assistant text in its scope: anonymous (channel-
-   * keyed) agentMessage items under the same parentRef are released so later
-   * text mints a fresh item instead of appending to pre-tool content. Items
-   * the provider named by id (codex) keep their own lifecycle — the provider
-   * closes them itself.
-   */
   function detachAssistantStreams(
     state: ThreadAssemblyState,
     parentRef: string | undefined,
@@ -1375,11 +1108,6 @@ export function createDeltaAssembler(
     }
   }
 
-  /**
-   * The settled form of a streamed text item from what the stream carried:
-   * the accumulated text (or a provider-final one) on the item's text field,
-   * a reasoning item's summary and content each from their own channel.
-   */
   function settleTextItem(
     open: OpenItemState,
     finalText: string | undefined,
@@ -1426,7 +1154,6 @@ export function createDeltaAssembler(
     }
   }
 
-  /** The empty text item a bare `item.textClose` mints for its channel. */
   function buildTextItemForChannel(
     bbItemId: string,
     channel: DeltaTextChannel,
@@ -1465,8 +1192,6 @@ export function createDeltaAssembler(
     switch (delta.kind) {
       case "input.accepted": {
         if (delta.providerTurnId !== undefined) {
-          // Vouched acceptance: the provider named the turn that consumed the
-          // input (codex FIFO drain, steer against the active native turn).
           events.push({
             type: "turn/input/accepted",
             threadId: UNSTAMPED_THREAD_ID,
@@ -1512,9 +1237,6 @@ export function createDeltaAssembler(
 
       case "turn.open": {
         if (delta.providerTurnId !== undefined) {
-          // Keyed turn space: several provider turns may be open at once
-          // (codex multiplexes child turns); the current-turn machinery and
-          // the accepted-input queue are never touched.
           const parentToolCallId = mapParentRef(state, delta.parentRef);
           events.push({
             type: "turn/started",
@@ -1531,9 +1253,6 @@ export function createDeltaAssembler(
 
       case "turn.boundary": {
         if (delta.providerTurnId !== undefined) {
-          // A keyed boundary always emits — the provider named the turn —
-          // and settles only that turn; open items and streams belong to
-          // their own provider ids, not to the closing turn.
           events.push({
             type: "turn/completed",
             threadId: UNSTAMPED_THREAD_ID,
@@ -1587,16 +1306,10 @@ export function createDeltaAssembler(
           return;
         }
         const keyStr = itemKeyString(delta.key);
-        // An explicit open reopens a settled provider id (codex's
-        // settle/reopen rule) …
         state.settledItemKeys.delete(keyStr);
         if (delta.item.type !== "compaction") {
-          // A tool call ends the current assistant stream: later text must
-          // mint a fresh item instead of appending to pre-tool content.
           detachAssistantStreams(state, delta.key.parentRef);
         }
-        // … and a known provider id keeps its minted bb id, so the reopened
-        // incarnation updates the same timeline item.
         const bbItemId =
           (delta.key.providerItemId !== undefined
             ? state.bbItemIdByProviderItemId.get(delta.key.providerItemId)
@@ -1619,8 +1332,6 @@ export function createDeltaAssembler(
           text: "",
           summaryText: "",
         });
-        // The open seeds the progress throttle window: a provider's first
-        // progress right after the open is already inside the interval.
         rememberProgressEmit(state, keyStr);
         events.push({
           type: "item/started",
@@ -1633,10 +1344,6 @@ export function createDeltaAssembler(
       }
 
       case "item.close": {
-        // A background-task or background-delegation close is structurally
-        // thread-scoped (item/backgroundTask/completed,
-        // item/delegation/completed) and needs no open turn — terminal state
-        // can arrive turns after the spawning turn settled.
         const threadScoped = isThreadAttachedShape(delta.item);
         const turnId = threadScoped
           ? undefined
@@ -1653,10 +1360,6 @@ export function createDeltaAssembler(
           return;
         }
         const keyStr = itemKeyString(delta.key);
-        // Settle/reopen dedup for provider-identified items: a repeated close
-        // for a settled id is a provider retry of the same lifecycle edge.
-        // Channel-keyed families (acp fs-writes, compactions) are exempt —
-        // they legitimately close the same key repeatedly.
         if (
           delta.key.providerItemId !== undefined &&
           state.settledItemKeys.has(keyStr)
@@ -1683,11 +1386,6 @@ export function createDeltaAssembler(
             ? {}
             : { delegationSummary: openDelegationSummary }),
         };
-        // Uniform close rule: the delta's `item` is ALWAYS the full terminal
-        // shape and the completed item is built from it. An open item under
-        // the key contributes its minted id (and its parent as fallback);
-        // when the open item is differently shaped it is settled first and
-        // the terminal shape follows (ACP's dual-complete, both under one id).
         if (
           open !== undefined &&
           turnId !== undefined &&
@@ -1713,8 +1411,6 @@ export function createDeltaAssembler(
         if (delta.key.providerItemId !== undefined) {
           registerItemId(state, delta.key.providerItemId, bbItemId);
         }
-        // Close-echo for presentation: the close's value wins; when the close
-        // carries none the opened item's survives onto the completed item.
         const presentation = delta.presentation ?? presentationOf(open?.item);
         const item = buildClosedItemFromShape(
           bbItemId,
@@ -1725,15 +1421,11 @@ export function createDeltaAssembler(
         );
         state.openItemsByKey.delete(keyStr);
         state.commandSnapshotsByKey.delete(keyStr);
-        // The close supersedes any suppressed progress: the terminal event
-        // always carries the final state.
         state.pendingProgressByKey.delete(keyStr);
         state.progressLastEmitByKey.delete(keyStr);
         if (delta.key.providerItemId !== undefined) {
           rememberSettledKey(state, keyStr);
         }
-        // Thread-attached work settles on its own thread-scoped terminal
-        // event; `item` is already the full terminal item for it.
         if (item.type === "backgroundTask") {
           events.push({
             type: "item/backgroundTask/completed",
@@ -1779,10 +1471,6 @@ export function createDeltaAssembler(
         const parentToolCallId = mapParentRef(state, delta.key.parentRef);
         let event: ThreadEvent;
         if (delta.snapshot?.type === "delegation") {
-          // A background-delegation snapshot is structurally thread-scoped
-          // (item/delegation/progress) like a background task's; the child
-          // is still running, so the item stays pending and keeps the last
-          // summary the provider reported.
           event = {
             type: "item/delegation/progress",
             threadId: UNSTAMPED_THREAD_ID,
@@ -1802,8 +1490,6 @@ export function createDeltaAssembler(
             ),
           };
         } else if (delta.snapshot !== undefined) {
-          // Background-task snapshot progress is structurally thread-scoped by
-          // the domain grammar; it needs no open turn.
           event = {
             type: "item/backgroundTask/progress",
             threadId: UNSTAMPED_THREAD_ID,
@@ -1839,9 +1525,6 @@ export function createDeltaAssembler(
             ...(parentToolCallId === undefined ? {} : { parentToolCallId }),
           };
         }
-        // Central throttle: one emission per key per interval; flush bypasses;
-        // a suppressed emission becomes the key's pending trailing-edge event
-        // (the newest snapshot wins, so replacing pending loses nothing).
         const lastEmit = state.progressLastEmitByKey.get(keyStr);
         if (
           delta.flush !== true &&
@@ -1883,8 +1566,6 @@ export function createDeltaAssembler(
             ? state.bbItemIdByProviderItemId.get(delta.key.providerItemId)
             : undefined);
         if (bbItemId === undefined) {
-          // Delta-first open: synthesize the channel's empty item/started —
-          // every item's first event must be item/started.
           bbItemId = mintItemId();
           if (delta.key.providerItemId !== undefined) {
             registerItemId(state, delta.key.providerItemId, bbItemId);
@@ -1964,13 +1645,9 @@ export function createDeltaAssembler(
           delta.key.providerItemId !== undefined &&
           state.settledItemKeys.has(keyStr)
         ) {
-          // A repeated close for a settled provider id is a retry (the
-          // item.close dedup rule, held for text closes too).
           return;
         }
         const open = state.openItemsByKey.get(keyStr);
-        // Settling always releases the key: later text mints a fresh item
-        // even when the settle emits nothing (whitespace-only accumulation).
         state.openItemsByKey.delete(keyStr);
         const accumulated =
           open === undefined
@@ -1982,10 +1659,6 @@ export function createDeltaAssembler(
         if (finalText === undefined || finalText.length === 0) {
           return;
         }
-        // Empty-after-trim suppression for accumulated settles (the ACP
-        // translators' rule, held centrally): a stream that only ever
-        // received whitespace completes no item. Provider-final text is
-        // emitted as given.
         if (delta.text === undefined && finalText.trim().length === 0) {
           return;
         }
@@ -2037,9 +1710,6 @@ export function createDeltaAssembler(
           );
           return;
         }
-        // NEVER synthesize an open here: fabricating a commandExecution
-        // without its command would be worse than the anomaly. The id is
-        // still minted and mapped so a later open/close correlates.
         const open = state.openItemsByKey.get(itemKeyString(delta.key));
         let bbItemId =
           open?.bbItemId ??
@@ -2106,8 +1776,6 @@ export function createDeltaAssembler(
       }
 
       case "usage": {
-        // The provider (or its bridge) owns the totals: forward verbatim to
-        // the vouched turn, else the turn that is open or just closed.
         const turnId =
           delta.providerTurnId !== undefined
             ? resolveVouchedTurnId(state, delta.providerTurnId)
@@ -2183,11 +1851,6 @@ export function createDeltaAssembler(
       }
 
       case "provider.error": {
-        // An error owns a turn when the provider vouched one, or when one is
-        // open / accepted input proves pending work (the terminal-turn rule);
-        // otherwise it stays a thread-scoped diagnostic and settles nothing.
-        // `threadScoped` pins thread scope: a provider that names its turns
-        // must not have a turnless error adopted by whatever turn is open.
         const turnId =
           delta.providerTurnId !== undefined
             ? resolveVouchedTurnId(state, delta.providerTurnId)
@@ -2225,8 +1888,6 @@ export function createDeltaAssembler(
       }
 
       case "provider.modelFallback": {
-        // The claude translator's currentOrLast rule: the fallback belongs to
-        // the turn that is open or just closed; thread scope otherwise.
         const turnId = currentOrLastTurnId(state);
         events.push({
           type: "provider/modelFallback",
@@ -2340,10 +2001,6 @@ export function createDeltaAssembler(
       }
 
       case "extension.state": {
-        // Plugin-declared thread state: thread-scoped like goals and rate
-        // limits, latest snapshot per kind wins downstream. The payload is
-        // opaque here; the server validates it against the plugin's declared
-        // `state` schema at ingest.
         events.push({
           type: "thread/extensionState/updated",
           threadId: UNSTAMPED_THREAD_ID,
@@ -2356,7 +2013,6 @@ export function createDeltaAssembler(
       }
 
       case "session.reset": {
-        // Handled in assemble() — the reset drops the whole thread state.
         return;
       }
 
@@ -2370,16 +2026,9 @@ export function createDeltaAssembler(
           return;
         }
         for (const open of state.openItemsByKey.values()) {
-          // Thread-attached items (background tasks, background delegations)
-          // have a provider-owned lifecycle that outlives sessions; bridges
-          // drain them with explicit item.close deltas when the backing
-          // session dies.
           if (open.threadAttached) {
             continue;
           }
-          // A text item that streamed settles with what it received so far;
-          // one that never streamed keeps its opened shape, and status-bearing
-          // items settle as interrupted.
           const streamed = open.text.length > 0 || open.summaryText.length > 0;
           const item =
             (streamed
@@ -2414,11 +2063,6 @@ export function createDeltaAssembler(
   return {
     assemble(args: AssembleDeltasArgs): ThreadEvent[] {
       const events: ThreadEvent[] = [];
-      // The coalescing sink every handler emits through: a streamed-text
-      // event may buffer per stream; anything else flushes the thread's text
-      // buffers first — the ordering barrier that keeps coalescing from ever
-      // reordering text relative to item opens/closes, turn events, errors,
-      // or other streams' flushes. Flushing never creates thread state.
       const sink: EventSink = {
         push: (...newEvents: ThreadEvent[]): void => {
           for (const event of newEvents) {
@@ -2436,13 +2080,6 @@ export function createDeltaAssembler(
           }
         },
       };
-      // Trailing-edge flushes: coalesced text and suppressed progress
-      // snapshots whose windows have elapsed land ahead of this batch
-      // (existing state only — flushing must not create thread state). A
-      // batch that OPENS with session.reset skips the progress flush:
-      // everything suppressed belongs to the session being replaced, and the
-      // reset is about to drop it (its text buffers still flush below —
-      // their events were fully assembled against the old session's ids).
       const existing =
         args.deltas[0]?.kind === "session.reset"
           ? undefined
@@ -2459,12 +2096,6 @@ export function createDeltaAssembler(
       }
       for (const delta of args.deltas) {
         if (delta.kind === "session.reset") {
-          // Provider-native id-space boundary: a fresh provider session may
-          // reuse native turn/item ids, so the whole thread state (maps,
-          // settled sets, open items and streams) starts over. Coalesced
-          // text FLUSHES first (unlike suppressed progress, which the
-          // terminal event supersedes, dropped text would be lost for good;
-          // the buffered events carry the old session's still-valid ids).
           const state = states.get(args.threadId);
           if (state !== undefined) {
             flushPendingText(state, events);
@@ -2477,9 +2108,6 @@ export function createDeltaAssembler(
           delta.kind === "item.close" ||
           delta.kind === "session.ended"
         ) {
-          // A settling stream (or session) flushes its coalesced text even
-          // when the delta itself emits nothing (deduped provider retry,
-          // session end on an idle thread).
           const state = states.get(args.threadId);
           if (state !== undefined) {
             flushPendingText(state, events);

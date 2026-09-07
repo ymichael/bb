@@ -985,10 +985,6 @@ export class TerminalSessionLifecycle {
     try {
       return toTerminalSession(await pending.promise);
     } catch (error) {
-      // The close-failure hook may already have finalized the daemon-owned row
-      // after the acknowledgement window elapsed. Return that converged state
-      // so clients remove the tab instead of surfacing a failure for a close
-      // the server has now made authoritative.
       const finalized = getTerminalById(this.options.db, current.id);
       if (
         finalized?.status === "exited" &&
@@ -1225,9 +1221,6 @@ export class TerminalSessionLifecycle {
   expireDisconnectedHostTerminals(
     args: ExpireDisconnectedHostTerminalsArgs,
   ): void {
-    // Terminal v1 does not preserve PTYs across daemon websocket replacement.
-    // Any terminal owned by the disconnected session is expired and the new
-    // daemon is asked to close a stale PTY if it still exists locally.
     const exitedSessions = updateTerminalSessions(this.options.db, {
       scope: {
         hostId: args.hostId,
@@ -1767,12 +1760,6 @@ export class TerminalSessionLifecycle {
     ) {
       return;
     }
-    // A normal daemon close force-kills after two seconds; the server waits
-    // five seconds for terminal.exited. If that acknowledgement never arrives,
-    // keeping the row daemon-owned makes every client rediscover an unclosable
-    // terminal forever. Honor the completed force-close window and converge
-    // server state even when the daemon response was lost or the daemon forgot
-    // the PTY before receiving the request.
     const exited = updateTerminalSession(this.options.db, {
       scope: {
         daemonSessionId: pending.daemonSessionId,
@@ -1837,9 +1824,6 @@ export class TerminalSessionLifecycle {
       return;
     }
 
-    // Register only after the daemon's replay boundary has arrived. Registering
-    // on socket open lets live output overtake `attached`, then the same bytes
-    // arrive again in replay and are rendered twice.
     this.options.hub.registerTerminalClient(current.id, pending.socket);
     this.options.hub.sendTerminalSocketMessage(pending.socket, {
       type: "attached",

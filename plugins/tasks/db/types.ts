@@ -125,12 +125,6 @@ export interface UpdateFolderInput {
   parentFolderId?: string | null;
 }
 
-/**
- * Result of deleting a folder. `deleted` is false when no row matched (the
- * folder was already gone); the moved IDs name the projects and subfolders
- * that the delete unfiled to the top level, read in the same transaction as
- * the delete so they cannot drift from what actually moved.
- */
 export interface DeleteFolderResult {
   deleted: boolean;
   movedProjectIds: string[];
@@ -194,9 +188,7 @@ export interface ListTasksPage {
 
 export interface UpdateTaskPositionInput {
   status: TaskStatus;
-  /** The task immediately before this task in the destination column. */
   beforeTaskId?: string | null;
-  /** The task immediately after this task in the destination column. */
   afterTaskId?: string | null;
 }
 

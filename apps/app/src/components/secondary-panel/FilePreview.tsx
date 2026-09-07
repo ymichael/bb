@@ -1,3 +1,4 @@
+import { SourceLoadingSkeleton } from "@/components/code/code-loading-skeletons";
 import {
   type CSSProperties,
   useEffect,
@@ -18,7 +19,6 @@ import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider"
 import { AppCommandShortcutHint } from "@/components/commands/AppCommandShortcutHint";
 import type { MarkdownLinkRouting } from "@/components/ui/markdown-link-routing.js";
 import { MarkdownPreview } from "@/components/ui/markdown-preview.js";
-import { Skeleton } from "@bb/shared-ui/skeleton";
 import {
   Tooltip,
   TooltipContent,
@@ -188,20 +188,9 @@ type IframeLoadState = "loading" | "loaded" | "error";
 
 const CSV_PREVIEW_MAX_COLUMNS = 100;
 const CSV_PREVIEW_MAX_ROWS = 500;
-/**
- * Every CSV body row is one truncated `leading-5` line with `py-1` and a
- * bottom border, so this estimate is exact; `measureElement` still corrects
- * it for zoom or font changes.
- */
 const CSV_PREVIEW_ROW_HEIGHT_PX = 29;
 const CSV_PREVIEW_OVERSCAN_ROWS = 8;
 
-/**
- * Code previews above either budget render only a leading prefix until the
- * user asks for the whole file. Tokenizing and laying out a 20k-line source
- * file is what stalls iOS Safari; the prefix keeps the first paint bounded and
- * the full file stays one tap away.
- */
 const FILE_PREVIEW_WRAPPER_STYLE = {
   "--md-content-w": "100cqi",
 } as CSSProperties;
@@ -214,14 +203,9 @@ const HTML_FILE_PREVIEW_IFRAME_STYLE = {
 const IFRAME_LOADING_INDICATOR_DELAY_MS = 160;
 const FILE_PREVIEW_HEADER_ICON_BUTTON_CLASS =
   "h-5 w-5 rounded-sm p-0 [&_svg]:size-3 max-md:pointer-coarse:h-9 max-md:pointer-coarse:w-9 max-md:pointer-coarse:[&_svg]:size-5";
-// The toggle adds 2px padding and a 1px border around these buttons. Keep its
-// coarse-pointer tabs at 30px so the complete control fits the 36px header.
 const FILE_PREVIEW_VIEW_MODE_BUTTON_CLASS =
   "h-5 rounded-sm px-2 text-muted-foreground max-md:pointer-coarse:h-[30px]";
 
-// The rendered HTML previews (a plain iframe target, or the html kind whose
-// preview tab wraps one) are the only states with a page a browser can open on
-// its own. Everything else is text we render ourselves.
 function getFilePreviewExternalUrl(state: FilePreviewState): string | null {
   if (state.kind === "iframe") {
     return state.url;
@@ -232,8 +216,6 @@ function getFilePreviewExternalUrl(state: FilePreviewState): string | null {
   return null;
 }
 
-// The preview URL is a same-origin app path; the external browser needs the
-// whole address.
 function toAbsolutePreviewUrl(url: string): string {
   if (typeof window === "undefined") {
     return url;
@@ -331,8 +313,6 @@ interface ParsedCsvRows {
   truncatedRows: boolean;
 }
 
-// Stops scanning once `maxRows` rows are collected, so a multi-megabyte CSV
-// only pays for the previewed prefix.
 function parseCsvRows(contents: string, maxRows: number): ParsedCsvRows {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -405,13 +385,10 @@ function parseCsvRows(contents: string, maxRows: number): ParsedCsvRows {
 }
 
 export function buildCsvPreviewData(contents: string): CsvPreviewData {
-  // +1: the first parsed row is the header, so the cap counts data rows.
   const { rows, truncatedRows } = parseCsvRows(
     contents,
     CSV_PREVIEW_MAX_ROWS + 1,
   );
-  // Column stats only consider the previewed rows; a wider row past the row
-  // cap won't flag truncatedColumns. Fine for a preview.
   const columnCount = rows.reduce(
     (maximum, row) => Math.max(maximum, row.length),
     0,
@@ -467,8 +444,6 @@ export function FilePreview({
   const [lineOverflowMode, setLineOverflowMode] = useState<CodeOverflowMode>(
     DEFAULT_CODE_OVERFLOW_MODE,
   );
-  // Each new file opens in the appropriate default mode; the user re-toggles
-  // per file rather than carrying their last choice across unrelated files.
   useEffect(() => {
     setViewMode(
       getInitialFilePreviewViewMode({
@@ -485,33 +460,18 @@ export function FilePreview({
     toggleKind === null ? "preview" : viewMode;
   const usesCodeLayout = usesCodeViewLayout(state, bodyViewMode);
   const showLineOverflowToggle = usesCodeLayout;
-  // The markdown preview renders on a raised "paper" surface that should fill
-  // the panel to the bottom even for short documents. `min-h-full` (vs the
-  // iframe layout's `h-full min-h-0`) keeps the column growable, so long
-  // documents still scroll the outer panel rather than an inner box.
   const usesMarkdownPreviewLayout =
     state.kind === "ready" &&
     state.textPreviewKind === "markdown" &&
     bodyViewMode === "preview";
-  // The CSV table needs one scroller that owns both axes: its sticky header
-  // row and row-number gutter only stick against their own scrollport, and
-  // splitting the axes (panel scrolls vertically, inner box horizontally)
-  // strands the horizontal scrollbar at the bottom of the full-height table
-  // and lets the sticky gutter paint over the panel header. So fill the panel
-  // like the iframe layout and let CsvFilePreview scroll internally.
   const usesCsvPreviewLayout =
     state.kind === "ready" &&
     state.textPreviewKind === "csv" &&
     bodyViewMode === "preview";
-  // The code view owns its own scroller too: pierre's virtualizer needs the
-  // scroll container to be the code viewport so it can render only the rows
-  // near it, which the outer panel scroller (shared with the header) cannot be.
   const usesFullHeightLayout =
     usesIframeLayout || usesCsvPreviewLayout || usesCodeLayout;
   const usesContentHeightLayout = usesMarkdownPreviewLayout;
 
-  // Establish a `@container/page` scope so MarkdownPreview's `100cqw`-based
-  // table breakout sizes against this panel, not the viewport.
   return (
     <div
       className={
@@ -562,7 +522,7 @@ function FilePreviewBody({
   onSelectionAddToChat,
 }: FilePreviewBodyProps) {
   if (state.kind === "loading") {
-    return <FilePreviewLoading />;
+    return <SourceLoadingSkeleton />;
   }
   if (state.kind === "empty") {
     return <FilePreviewMessage message="Empty file." />;
@@ -653,9 +613,6 @@ function FilePreviewHeader({
   const copyFileContentsLabel = getFileContentsCopyLabel(toggleKind);
 
   return (
-    // The wrapper carries an opaque panel-surface base so the translucent
-    // `bg-surface-recessed` tint on the bar composites to a solid tone — without
-    // it, body content scrolling under the sticky header would bleed through.
     <div className="sticky top-0 z-10 bg-sidebar">
       <div className="flex h-9 items-center gap-2 bg-surface-raised px-4">
         <div className="flex min-w-0 flex-1 items-center gap-1.5">
@@ -710,7 +667,10 @@ function FilePreviewHeader({
                   <CopyButton
                     text={rawContents}
                     label={copyFileContentsLabel}
-                    className="shrink-0 rounded-md hover:bg-state-hover hover:text-foreground"
+                    className={cn(
+                      FILE_PREVIEW_HEADER_ICON_BUTTON_CLASS,
+                      "shrink-0 rounded-md hover:bg-state-hover hover:text-foreground",
+                    )}
                   />
                 </TooltipTrigger>
                 <TooltipContent side="bottom">
@@ -736,9 +696,7 @@ function FilePreviewHeader({
                     }}
                     aria-label="Open in external browser"
                   >
-                    {/* Globe, not ExternalLink: the neighbouring
-                        OpenInEditorButton already spends ExternalLink on a
-                        different destination. */}
+                    {}
                     <Icon name="Globe" aria-hidden />
                   </Button>
                 </TooltipTrigger>
@@ -753,6 +711,7 @@ function FilePreviewHeader({
                   <TooltipTrigger asChild>
                     <OpenInEditorButton
                       onClick={() => onOpenInEditor(path)}
+                      className={FILE_PREVIEW_HEADER_ICON_BUTTON_CLASS}
                       label={
                         openShortcut
                           ? `Open in editor (${openShortcut.label})`
@@ -909,10 +868,6 @@ function HtmlFilePreviewBody({
         aria-hidden={isPreviewVisible ? undefined : true}
       >
         <IframeFilePreview
-          // The raw HTML route is stable across file revisions. Remount the
-          // frame when the fetched source changes so it navigates again and
-          // renders the updated document, while unrelated parent renders keep
-          // the current frame (and its in-document state) intact.
           key={state.file.cacheKey}
           sandbox={state.iframe.sandbox}
           title={state.iframe.title}
@@ -942,9 +897,6 @@ function MarkdownFilePreview({
   markdownLinkRouting,
 }: MarkdownFilePreviewProps) {
   return (
-    // Keep rendered Markdown on the ordinary document background. Its parent
-    // owns the boundary, so another raised "paper" layer would make nested
-    // file viewers feel like cards stacked inside cards.
     <SecondaryPanelSelectionActions onSelectionAddToChat={onSelectionAddToChat}>
       <div className="flex-auto bg-background px-4 py-4">
         <MarkdownPreview
@@ -972,11 +924,6 @@ function CsvFilePreview({ file, onSelectionAddToChat }: CsvFilePreviewProps) {
   const tableWidth = `max(100%, ${3 + columns.length * 18}rem)`;
   const truncationNote = getCsvTruncationNote(preview, bodyRows.length);
 
-  // The parse cap still allows 500 x 100 = 50,000 cells, and a scroll box only
-  // clips painting, not DOM: mounting every row blocked the main thread for
-  // seconds and cost ~150k nodes (#1615). Mount only the rows near the
-  // viewport; spacer rows keep the table's natural height so the scrollbar,
-  // sticky header and sticky row-number gutter behave as before.
   const scrollRef = useRef<HTMLDivElement>(null);
   const rowVirtualizer = useVirtualizer({
     count: bodyRows.length,
@@ -996,14 +943,9 @@ function CsvFilePreview({ file, onSelectionAddToChat }: CsvFilePreviewProps) {
 
   return (
     <SecondaryPanelSelectionActions onSelectionAddToChat={onSelectionAddToChat}>
-      {/* Single scroll container for both axes: the sticky header row and
-          row-number gutter stick against this box, the horizontal scrollbar
-          stays visible at the panel bottom, and the sticky cells are clipped
-          here so they can't paint over the panel header. */}
+      {}
       <div className="flex min-h-0 flex-auto flex-col bg-surface-raised px-4 py-4">
-        {/* overscroll-contain: panning a wide table past its edge must not
-            chain into the browser back/forward gesture (kept alive globally —
-            see app.css overscroll notes) or scroll an ancestor. */}
+        {}
         <div
           ref={scrollRef}
           className="persistent-scrollbar min-h-0 overflow-auto overscroll-contain rounded-md border border-border bg-background"
@@ -1162,7 +1104,7 @@ function IframeFilePreview({ sandbox, title, url }: IframeFilePreviewTarget) {
     <div className="relative min-h-0 flex-1 overflow-hidden">
       {loadState === "loading" && showLoadingIndicator ? (
         <div className="absolute inset-x-0 top-0 z-10">
-          <FilePreviewLoading />
+          <SourceLoadingSkeleton />
         </div>
       ) : null}
       <iframe
@@ -1177,19 +1119,6 @@ function IframeFilePreview({ sandbox, title, url }: IframeFilePreviewTarget) {
   );
 }
 
-function FilePreviewLoading() {
-  return (
-    <div className="space-y-2 px-4 pt-4" aria-busy>
-      <Skeleton className="h-3 w-3/4 rounded-sm" />
-      <Skeleton className="h-3 w-full rounded-sm" />
-      <Skeleton className="h-3 w-5/6 rounded-sm" />
-      <Skeleton className="h-3 w-2/3 rounded-sm" />
-      <Skeleton className="h-3 w-full rounded-sm" />
-      <Skeleton className="h-3 w-3/5 rounded-sm" />
-    </div>
-  );
-}
-
 function FilePreviewMessage({ message, role }: FilePreviewMessageProps) {
   return (
     <EmptyStatePanel role={role} className="mx-4 mt-4 rounded-lg">
@@ -1198,12 +1127,6 @@ function FilePreviewMessage({ message, role }: FilePreviewMessageProps) {
   );
 }
 
-/**
- * The preview's source body. Everything here is chrome and policy — which
- * lines to highlight, whether to scroll to them, the selection-to-chat hook —
- * while the render itself goes through the shared host boundary, so an
- * `experimental_sourceCodeRenderer` replacement covers the file preview too.
- */
 function FilePreviewCode({
   file,
   lineOverflowMode,
@@ -1222,15 +1145,11 @@ function FilePreviewCode({
     <SourceCodeHost
       content={file.contents}
       path={path}
-      // `path` is what the panel shows and what a copied selection is
-      // labelled with; `file.name` can be a shorter server-supplied display
-      // name for the same file, and it is the identity the highlighter's
-      // result cache was keyed on before this went through the host.
       cacheKey={file.cacheKey ?? file.name}
       overflow={lineOverflowMode}
       highlightedLines={highlightedLines}
       scrollToHighlightedLines
-      fallback={<FilePreviewLoading />}
+      fallback={<SourceLoadingSkeleton />}
       onSelectionAddToChat={onSelectionAddToChat}
     />
   );

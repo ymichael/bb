@@ -210,7 +210,6 @@ describe("threads", () => {
         (thread) => thread.id,
       ),
     ).not.toContain(hidden.id);
-    // Fail closed: omitting includeHidden also excludes hidden threads.
     expect(
       listThreads(db, { projectId: project.id }).map((thread) => thread.id),
     ).not.toContain(hidden.id);
@@ -264,7 +263,6 @@ describe("threads", () => {
       providerId: "claude-code",
     });
 
-    // No override on a fresh thread.
     expect(getThreadExecutionOverride(db, thread.id)).toEqual({
       modelOverride: null,
       reasoningLevelOverride: null,
@@ -280,7 +278,6 @@ describe("threads", () => {
       reasoningLevelOverride: "high",
     });
 
-    // Presence-sensitive: an omitted field is left unchanged.
     setThreadExecutionOverride(db, {
       threadId: thread.id,
       reasoningLevelOverride: "max",
@@ -290,7 +287,6 @@ describe("threads", () => {
       reasoningLevelOverride: "max",
     });
 
-    // Explicit null clears.
     setThreadExecutionOverride(db, {
       threadId: thread.id,
       modelOverride: null,
@@ -520,7 +516,6 @@ describe("threads", () => {
       providerId: "codex",
       sectionId: playSection.id,
     });
-    // Active (non-archived) thread in the same section must be excluded.
     createThread(db, noopNotifier, {
       projectId: project.id,
       providerId: "codex",
@@ -661,11 +656,8 @@ describe("threads", () => {
       });
       created.push(thread);
     }
-    // Archive in a specific order so the most recently archived is "thr_4".
     for (const thread of created) {
       archiveThread(db, noopNotifier, thread.id);
-      // Sqlite Date.now() resolution can collapse archives within a tick;
-      // use a tiny delay to keep archivedAt strictly increasing.
       await new Promise((resolve) => setTimeout(resolve, 2));
     }
 
@@ -1639,8 +1631,6 @@ describe("thread originKind", () => {
     );
   });
 
-  // A plugin sweeping its own spawned threads must not read another plugin's
-  // rows, so this narrowing belongs in the query.
   it("filters listings by originPluginId", () => {
     const { db, project } = setup();
     const parent = createThread(db, noopNotifier, {

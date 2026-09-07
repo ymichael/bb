@@ -1,6 +1,5 @@
 import { TASK_STATUSES, type TaskStatus } from "../../shared/contract.js";
 
-/** Always-visible columns in board order; Canceled is appended on demand. */
 export const BOARD_STATUSES = [
   "backlog",
   "todo",
@@ -9,11 +8,6 @@ export const BOARD_STATUSES = [
   "done",
 ] as const satisfies readonly TaskStatus[];
 
-/**
- * The board's column set: the five canonical columns, plus Canceled appended
- * at the end whenever it holds cards (canceled top-level tasks would
- * otherwise be unreachable from the board).
- */
 export function visibleBoardStatuses(
   columns: Readonly<Record<TaskStatus, readonly unknown[]>>,
 ): TaskStatus[] {
@@ -23,24 +17,11 @@ export function visibleBoardStatuses(
   ];
 }
 
-/**
- * Reorder neighbors for a board drop, matching the `boardMove` RPC contract:
- * `beforeTaskId` is the card that sorts BEFORE (above) the dropped card and
- * `afterTaskId` the card that sorts AFTER (below) it.
- */
 interface BoardDropNeighbors {
   beforeTaskId: string | null;
   afterTaskId: string | null;
 }
 
-/**
- * Maps a drop index to the before/after neighbor ids the server expects.
- *
- * `columnTaskIds` is the destination column's current top-to-bottom order and
- * may still contain the dragged card (same-column reorder); it is excluded
- * first. `dropIndex` is the insertion slot among the REMAINING cards
- * (0 = top, length = bottom) and is clamped into range.
- */
 export function dropNeighborsForIndex(
   columnTaskIds: readonly string[],
   draggedTaskId: string,
@@ -54,11 +35,6 @@ export function dropNeighborsForIndex(
   };
 }
 
-/**
- * Insertion slot for a pointer at `pointerY`, given the vertical centers of
- * the column's cards (top-to-bottom, dragged card excluded): the card count
- * whose center sits above the pointer.
- */
 export function dropIndexForPointer(
   cardCenterYs: readonly number[],
   pointerY: number,
@@ -70,12 +46,6 @@ export function dropIndexForPointer(
   return index;
 }
 
-/**
- * Optimistic local application of a board move: removes the task from its
- * current column and inserts it at `dropIndex` in `toStatus` (index among the
- * destination cards after the dragged card is removed, as elsewhere in this
- * module). Returns the input unchanged when the task is unknown.
- */
 export function applyBoardMove<T extends { id: string; status: TaskStatus }>(
   columns: Readonly<Record<TaskStatus, readonly T[]>>,
   taskId: string,

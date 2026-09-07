@@ -17,27 +17,15 @@ interface SplitLayoutStore {
 
 export interface OpenPaneContentInSplitArgs {
   store: SplitLayoutStore;
-  /** react-router's navigate, or anything with the same first two arguments. */
   navigate: (
     route: string,
     options?: { replace?: boolean },
   ) => void | Promise<void>;
   content: PaneContent;
-  /** The URL this content owns, so the focused pane and the URL agree. */
   route: string;
-  /** Splits are off on compact viewports and outside the split workspace. */
   enabled: boolean;
 }
 
-/**
- * Open non-thread page content beside the focused pane: focus it if a pane
- * already holds it, replace at the pane cap, otherwise split right. Falls
- * back to plain navigation where there is no split to grow.
- *
- * Shared by the sidebar's cmd-click/drag entry point and by cmd-click on an
- * app-route link inside plugin UI (useRouteAnchorDelegate), so both place
- * the same page the same way.
- */
 export function openPaneContentInSplit({
   store,
   navigate,
@@ -61,15 +49,6 @@ export function openPaneContentInSplit({
   void navigate(route, existing !== null ? { replace: true } : undefined);
 }
 
-/**
- * Whether the workspace is already holding a plugin's detail page in a pane.
- *
- * The detail page is full-window like the rest of Extensions by default; it
- * only renders as a pane when something deliberately put it there (cmd-click
- * on a link to it from plugin UI). Deciding from the
- * layout rather than the URL is what keeps ordinary navigation to the page
- * from evicting whatever the focused pane was showing.
- */
 export function holdsPluginDetailPane(
   layout: SplitLayout | null,
   pluginId: string,

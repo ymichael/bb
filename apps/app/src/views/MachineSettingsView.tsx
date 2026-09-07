@@ -94,7 +94,6 @@ interface PermissionLimitCardProps {
   value: PermissionMode;
 }
 
-/** The page has room to explain each mode, so keep the choices visible. */
 function PermissionLimitCards({
   disabled,
   onSelect,
@@ -200,9 +199,6 @@ export function MachineSettingsView() {
   const machine = updateInventory.machines.find(
     (candidate) => candidate.host.id === hostId,
   );
-  // This links to Settings → Updates, so it must count what that page lists —
-  // updates, not install prompts — or it sends the reader to a page that has
-  // nothing matching the number they just clicked.
   const updateIssueCount = (machine?.issues ?? []).filter(
     isProviderCliUpdateIssue,
   ).length;
@@ -361,6 +357,7 @@ export function MachineSettingsView() {
                             <span
                               data-provider-icon={entry.providerId}
                               aria-hidden
+                              className="flex size-3.5 shrink-0 items-center justify-center"
                             >
                               {entry.provider === undefined ? (
                                 <entry.ProviderIcon className="size-3.5" />

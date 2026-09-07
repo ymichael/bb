@@ -238,7 +238,6 @@ describe("TerminalWebSocketTransport", () => {
 
     harness.transport.start();
     const socket = harness.sockets[0]!;
-    // React Native's WebSocket has no bufferedAmount property at all.
     socket.bufferedAmount = undefined;
     expect(harness.transport.sendInput(queuedInput)).toBe(true);
     socket.open();
@@ -316,10 +315,8 @@ describe("TerminalWebSocketTransport", () => {
     harness.transport.suspend();
     expect(first.closeCalls).toEqual([{ code: 1000, reason: "suspended" }]);
     expect(harness.states.at(-1)).toBe("closed");
-    // No reconnect while suspended, even past every backoff delay.
     vi.advanceTimersByTime(10_000);
     expect(harness.sockets).toHaveLength(1);
-    // Input typed while suspended waits for the next socket.
     const queued = Buffer.from("ls\n").toString("base64");
     expect(harness.transport.sendInput(queued)).toBe(true);
 
@@ -332,7 +329,6 @@ describe("TerminalWebSocketTransport", () => {
     expect(inputMessages(harness.sockets[1]!)).toEqual([queued]);
     expect(harness.states.at(-1)).toBe("open");
 
-    // Resume is idempotent and suspend before start never opens a socket.
     harness.transport.resume();
     expect(harness.sockets).toHaveLength(2);
     harness.transport.dispose();

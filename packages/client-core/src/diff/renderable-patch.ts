@@ -5,14 +5,6 @@ import {
   type FileChangeAction,
 } from "@bb/thread-view";
 
-/**
- * Patch text a diff renderer can parse, synthesized from a timeline file
- * change. Providers report file changes in several shapes — a full
- * `diff --git` patch, hunk bodies with no header, or plain "+"/"-" content
- * lines for created/deleted files — and every client normalizes them the same
- * way before rendering. Line numbers are disabled for synthesized patches
- * because their hunk headers are invented.
- */
 export interface RenderablePatchText {
   disableLineNumbers: boolean;
   patch: string;
@@ -121,10 +113,6 @@ export function getRenderablePatchText(
     if (patch.includes("@@")) {
       const normalizedPath = normalizePatchPath(change.movePath ?? change.path);
       return {
-        // The leading `diff --git` line is what flips parsePatchFiles into
-        // git-aware mode — without it, the parser keeps the `a/` and `b/`
-        // prefixes on the file headers and the card thinks the file was
-        // renamed (prevName="a/foo", name="b/foo").
         patch: `diff --git a/${normalizedPath} b/${normalizedPath}\n--- a/${normalizedPath}\n+++ b/${normalizedPath}\n${patch.trimEnd()}\n`,
         disableLineNumbers: false,
       };

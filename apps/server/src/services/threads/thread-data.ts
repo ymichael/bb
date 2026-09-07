@@ -157,7 +157,6 @@ export function getLastThreadOutput(
   return null;
 }
 
-/** Latest system/error message for a thread, or null when none exists. */
 export function getLastThreadErrorMessage(
   db: DbConnection,
   threadId: string,

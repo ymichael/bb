@@ -57,7 +57,10 @@ export {
   acpAgentProbeSchema as experimental_acpAgentProbeSchema,
   probeAcpAgent as experimental_probeAcpAgent,
 } from "@bb/provider-bridge-acp";
-export type { AcpAgentProbe, AcpAgentProbeRequest } from "@bb/provider-bridge-acp";
+export type {
+  AcpAgentProbe,
+  AcpAgentProbeRequest,
+} from "@bb/provider-bridge-acp";
 
 export { acpLaunchSpecSchema as experimental_acpLaunchSpecSchema } from "@bb/provider-bridge-acp";
 export type { AcpLaunchSpec } from "@bb/provider-bridge-acp";

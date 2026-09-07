@@ -61,14 +61,6 @@ function plainDisplay(
   return { label, summary, summaryContent: summary };
 }
 
-/**
- * Builds the one-line status pill rendered in the info tab and the git-action
- * dialog. The summary intentionally omits working-tree file/diff aggregates —
- * those are surfaced by `ChangedFilesRow` (info tab) and the dialog's own
- * Changed files row, so echoing them here would just duplicate the same numbers.
- * The summary only carries the merge-base comparison (ahead/behind) or a
- * fallback sentence when there is no comparison to show.
- */
 export function getGitStatusDisplay(
   status: WorkspaceStatus | undefined,
   options?: GetGitStatusDisplayOptions,

@@ -506,10 +506,6 @@ describe("public thread data routes", () => {
     await withTestHarness(async (harness) => {
       const { environment, thread } = seedThreadFixture(harness);
 
-      // Three message turns, each: user request -> turn start -> assistant
-      // message -> turn complete. Segment anchors are the user-message rows, so
-      // a `segmentLimit=1` timeline page exposes only the last turn while the
-      // outline must still cover all three.
       const seedMessageTurn = (args: {
         requestId: number;
         startSequence: number;
@@ -596,7 +592,6 @@ describe("public thread data routes", () => {
         turnId: "turn-3",
       });
 
-      // A single-segment timeline page only holds the last turn.
       const timelineResponse = await harness.app.request(
         `/api/v1/threads/${thread.id}/timeline?segmentLimit=1`,
       );
@@ -617,7 +612,6 @@ describe("public thread data routes", () => {
         await readJson(outlineResponse),
       );
 
-      // The outline covers every message in the thread, not just the page.
       expect(outline.items.filter((item) => item.role === "user")).toHaveLength(
         3,
       );
@@ -637,8 +631,6 @@ describe("public thread data routes", () => {
         "Third question — answered.",
       ]);
 
-      // Ids must match the timeline exactly so the minimap can scroll-spy the
-      // loaded window and jump to any row once it is paginated in.
       const outlineIds = new Set(outline.items.map((item) => item.id));
       for (const id of windowedConversationIds) {
         expect(outlineIds.has(id)).toBe(true);
@@ -753,8 +745,6 @@ describe("public thread data routes", () => {
     await withTestHarness(async (harness) => {
       const { environment, thread } = seedThreadFixture(harness);
 
-      // A user message with no text but a file attachment: the outline should
-      // emit an empty preview plus attachment counts (and never leak the path).
       seedEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -802,7 +792,6 @@ describe("public thread data routes", () => {
         imageCount: 0,
         fileCount: 1,
       });
-      // The slim summary must not carry the on-disk path.
       expect(JSON.stringify(outline)).not.toContain("report.pdf");
     });
   });
@@ -1654,152 +1643,148 @@ describe("public thread data routes", () => {
     });
   });
 
-  it(
-    "expands the newest slice when a large delegation parent completes last",
-    async () => {
-      await withTestHarness(async (harness) => {
-        const { environment, thread } = seedThreadFixture(harness);
-        const providerThreadId = "provider-thread-1";
-        const turnId = "parent-turn";
-        const parentToolCallId = "agent-call";
-        type EventInput = Parameters<typeof insertEvents>[2][number];
-        const eventInputs: EventInput[] = [];
-        let sequence = 0;
-        const push = (
-          event: Omit<EventInput, "environmentId" | "sequence" | "threadId">,
-        ): void => {
-          sequence += 1;
-          eventInputs.push({
-            ...event,
-            environmentId: environment.id,
-            sequence,
-            threadId: thread.id,
-          });
-        };
-
-        push({
-          providerThreadId,
-          scope: turnScope(turnId),
-          type: "turn/started",
-          itemId: null,
-          itemKind: null,
-          parentToolCallId: null,
-          data: JSON.stringify({}),
+  it("expands the newest slice when a large delegation parent completes last", async () => {
+    await withTestHarness(async (harness) => {
+      const { environment, thread } = seedThreadFixture(harness);
+      const providerThreadId = "provider-thread-1";
+      const turnId = "parent-turn";
+      const parentToolCallId = "agent-call";
+      type EventInput = Parameters<typeof insertEvents>[2][number];
+      const eventInputs: EventInput[] = [];
+      let sequence = 0;
+      const push = (
+        event: Omit<EventInput, "environmentId" | "sequence" | "threadId">,
+      ): void => {
+        sequence += 1;
+        eventInputs.push({
+          ...event,
+          environmentId: environment.id,
+          sequence,
+          threadId: thread.id,
         });
+      };
+
+      push({
+        providerThreadId,
+        scope: turnScope(turnId),
+        type: "turn/started",
+        itemId: null,
+        itemKind: null,
+        parentToolCallId: null,
+        data: JSON.stringify({}),
+      });
+      push({
+        providerThreadId,
+        scope: turnScope(turnId),
+        type: "item/started",
+        itemId: parentToolCallId,
+        itemKind: "toolCall",
+        parentToolCallId: null,
+        data: JSON.stringify({
+          item: {
+            type: "toolCall",
+            id: parentToolCallId,
+            tool: "Agent",
+            arguments: { prompt: "Do the long task." },
+            status: "pending",
+          },
+        }),
+      });
+      for (let item = 0; item < 650; item += 1) {
+        const itemId = `command-${item}`;
+        const command = "x".repeat(25_000);
         push({
           providerThreadId,
           scope: turnScope(turnId),
           type: "item/started",
-          itemId: parentToolCallId,
-          itemKind: "toolCall",
-          parentToolCallId: null,
+          itemId,
+          itemKind: "commandExecution",
+          parentToolCallId,
           data: JSON.stringify({
             item: {
-              type: "toolCall",
-              id: parentToolCallId,
-              tool: "Agent",
-              arguments: { prompt: "Do the long task." },
+              type: "commandExecution",
+              id: itemId,
+              command,
+              cwd: "/tmp/test",
+              parentToolCallId,
               status: "pending",
+              approvalStatus: null,
             },
           }),
         });
-        for (let item = 0; item < 650; item += 1) {
-          const itemId = `command-${item}`;
-          const command = "x".repeat(25_000);
-          push({
-            providerThreadId,
-            scope: turnScope(turnId),
-            type: "item/started",
-            itemId,
-            itemKind: "commandExecution",
-            parentToolCallId,
-            data: JSON.stringify({
-              item: {
-                type: "commandExecution",
-                id: itemId,
-                command,
-                cwd: "/tmp/test",
-                parentToolCallId,
-                status: "pending",
-                approvalStatus: null,
-              },
-            }),
-          });
-          push({
-            providerThreadId,
-            scope: turnScope(turnId),
-            type: "item/completed",
-            itemId,
-            itemKind: "commandExecution",
-            parentToolCallId,
-            data: JSON.stringify({
-              item: {
-                type: "commandExecution",
-                id: itemId,
-                command,
-                cwd: "/tmp/test",
-                parentToolCallId,
-                status: "completed",
-                approvalStatus: null,
-                exitCode: 0,
-                aggregatedOutput: `output ${item}`,
-              },
-            }),
-          });
-        }
         push({
           providerThreadId,
           scope: turnScope(turnId),
           type: "item/completed",
-          itemId: parentToolCallId,
-          itemKind: "toolCall",
-          parentToolCallId: null,
+          itemId,
+          itemKind: "commandExecution",
+          parentToolCallId,
           data: JSON.stringify({
             item: {
-              type: "toolCall",
-              id: parentToolCallId,
-              tool: "Agent",
-              arguments: { prompt: "Do the long task." },
-              result: "",
+              type: "commandExecution",
+              id: itemId,
+              command,
+              cwd: "/tmp/test",
+              parentToolCallId,
               status: "completed",
+              approvalStatus: null,
+              exitCode: 0,
+              aggregatedOutput: `output ${item}`,
             },
           }),
         });
-        push({
-          providerThreadId,
-          scope: turnScope(turnId),
-          type: "turn/completed",
-          itemId: null,
-          itemKind: null,
-          parentToolCallId: null,
-          data: JSON.stringify({ status: "completed", providerThreadId }),
-        });
-        insertEvents(harness.deps.db, harness.deps.hub, eventInputs);
-
-        const timelineResponse = await harness.app.request(
-          `/api/v1/threads/${thread.id}/timeline`,
-        );
-        expect(timelineResponse.status).toBe(200);
-        const timeline = threadTimelineResponseSchema.parse(
-          await readJson(timelineResponse),
-        );
-        const turnRow = timeline.rows.find(
-          (row): row is TimelineTurnRow => row.kind === "turn",
-        );
-        expect(turnRow).toBeDefined();
-        if (!turnRow) {
-          throw new Error("Expected a turn row");
-        }
-        expect(turnRow.sourceSeqStart).toBeGreaterThan(2);
-
-        const detailsResponse = await harness.app.request(
-          `/api/v1/threads/${thread.id}/timeline/turn-summary-details?turnId=${turnRow.turnId}&sourceSeqStart=${turnRow.sourceSeqStart}&sourceSeqEnd=${turnRow.sourceSeqEnd}`,
-        );
-        expect(detailsResponse.status).toBe(200);
+      }
+      push({
+        providerThreadId,
+        scope: turnScope(turnId),
+        type: "item/completed",
+        itemId: parentToolCallId,
+        itemKind: "toolCall",
+        parentToolCallId: null,
+        data: JSON.stringify({
+          item: {
+            type: "toolCall",
+            id: parentToolCallId,
+            tool: "Agent",
+            arguments: { prompt: "Do the long task." },
+            result: "",
+            status: "completed",
+          },
+        }),
       });
-    },
-    10_000,
-  );
+      push({
+        providerThreadId,
+        scope: turnScope(turnId),
+        type: "turn/completed",
+        itemId: null,
+        itemKind: null,
+        parentToolCallId: null,
+        data: JSON.stringify({ status: "completed", providerThreadId }),
+      });
+      insertEvents(harness.deps.db, harness.deps.hub, eventInputs);
+
+      const timelineResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline`,
+      );
+      expect(timelineResponse.status).toBe(200);
+      const timeline = threadTimelineResponseSchema.parse(
+        await readJson(timelineResponse),
+      );
+      const turnRow = timeline.rows.find(
+        (row): row is TimelineTurnRow => row.kind === "turn",
+      );
+      expect(turnRow).toBeDefined();
+      if (!turnRow) {
+        throw new Error("Expected a turn row");
+      }
+      expect(turnRow.sourceSeqStart).toBeGreaterThan(2);
+
+      const detailsResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/timeline/turn-summary-details?turnId=${turnRow.turnId}&sourceSeqStart=${turnRow.sourceSeqStart}&sourceSeqEnd=${turnRow.sourceSeqEnd}`,
+      );
+      expect(detailsResponse.status).toBe(200);
+    });
+  }, 10_000);
 
   it("hydrates turn-summary details with future accepted input context", async () => {
     await withTestHarness(async (harness) => {
@@ -2157,8 +2142,6 @@ describe("public thread data routes", () => {
           },
         },
       });
-      // Malformed: missing item.type, so the derived item_kind column is null.
-      // The row is filtered out at the DB level instead of turning into a 500.
       seedStoredEvent(harness.deps, {
         threadId: thread.id,
         environmentId: environment.id,
@@ -2624,9 +2607,14 @@ describe("public thread data routes", () => {
       );
 
       expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
+      await expect(readJson(response)).resolves.toMatchObject({
         ok: true,
         delivery: "queued",
+        queuedMessage: {
+          id: expect.any(String),
+          waitingOn: { kind: "thread-busy" },
+          sendAt: null,
+        },
       });
       const queuedRows = listQueuedThreadMessages(harness.db, thread.id);
       expect(queuedRows).toMatchObject([
@@ -2638,13 +2626,15 @@ describe("public thread data routes", () => {
       expect(JSON.parse(queuedRows[0]?.content ?? "null")).toEqual([
         { type: "text", text: "Queued active follow-up", mentions: [] },
       ]);
+      // Nothing was dispatched, and queueing writes no timeline event at all:
+      // the queue rows above the composer are the only narration of a wait.
       expect(
         harness.db
-          .select({ id: events.id })
+          .select({ type: events.type })
           .from(events)
           .where(eq(events.threadId, thread.id))
           .all(),
-      ).toHaveLength(0);
+      ).toEqual([]);
       expect(capture).not.toHaveBeenCalled();
     });
   });
@@ -2685,12 +2675,15 @@ describe("public thread data routes", () => {
         },
       );
 
-      // Sender attribution is allowed across projects, so the message queues
-      // with the cross-project sender preserved for the reply affordance.
       expect(response.status).toBe(200);
-      await expect(readJson(response)).resolves.toEqual({
+      await expect(readJson(response)).resolves.toMatchObject({
         ok: true,
         delivery: "queued",
+        queuedMessage: {
+          id: expect.any(String),
+          waitingOn: { kind: "thread-busy" },
+          sendAt: null,
+        },
       });
       expect(listQueuedThreadMessages(harness.db, thread.id)).toMatchObject([
         {
@@ -4015,18 +4008,18 @@ describe("public thread data routes", () => {
         },
       );
 
+      // "Send now" overrides plugin waits, not core ones: the workspace is
+      // still being prepared, so the row goes back on the queue waiting on that
+      // rather than being dispatched into a thread that cannot take it.
       expect(sendResponse.status).toBe(409);
       await expect(readJson(sendResponse)).resolves.toMatchObject({
-        code: "thread_not_writable",
-        details: {
-          reason: "still_starting",
-          threadStatus: "starting",
-        },
+        code: "queued_message_still_waiting",
       });
       expect(
         getQueuedThreadMessage(harness.db, createdQueuedMessage.id),
       ).toMatchObject({
         id: createdQueuedMessage.id,
+        waitingOn: JSON.stringify({ kind: "provisioning" }),
       });
       const requestedEvents = harness.db
         .select({ type: events.type })
@@ -4428,7 +4421,6 @@ describe("public thread data routes", () => {
       const threadStorageRoot = `/tmp/bb-host-data/${host.id}/thread-storage/${thread.id}`;
       const html = "<!doctype html><h1>Preview</h1>";
 
-      // Percent-encoded segments decode exactly once before hitting the host.
       const filePromise = harness.app.request(
         `/api/v1/threads/${thread.id}/thread-storage/files/reports/preview%20v2.html`,
       );
@@ -5039,7 +5031,6 @@ describe("public thread data routes", () => {
         data: { item: { type: "agentMessage", id: "msg-1", text: "Reply" } },
       });
 
-      // afterSeq=5 means "after sequence 5" — the match at seq 5 should NOT be returned
       const response = await harness.app.request(
         `/api/v1/threads/${thread.id}/events/wait?type=item/completed&afterSeq=5&waitMs=100`,
       );

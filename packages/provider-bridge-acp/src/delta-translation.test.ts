@@ -20,18 +20,6 @@ import { resolveAcpDialect } from "./dialect.js";
 import { ACP_TOOL_PAYLOAD_MAX_CHARS } from "./tool-classification.js";
 import type { AcpToolCallUpdateEvent } from "./wire.js";
 
-/**
- * ACP translation equivalence for the narrow-grammar path.
- *
- * These cases are the acp event-translation suite, ported so the SAME acp
- * envelopes drive the new pipeline: acp dialect events → semantic deltas →
- * the runtime delta assembler → canonical ThreadEvents. Event content,
- * ordering, scoping, and statuses are asserted exactly as before; ids are
- * asserted by shape and stability because minting moved from the bridge to
- * the assembler (turn ids are `<entropy>-tN` instead of `turn-N`, item ids
- * `<entropy>-iN` instead of provider tool-call ids / `acp-assistant-N`).
- */
-
 const THREAD_ID = "t-acp-translation";
 const ENTROPY = "acp-test";
 const TURN_ID_PATTERN = /^acp-test-t\d+$/;
@@ -47,12 +35,10 @@ interface AcpEquivalenceHarness {
 const SESSION_CWD = "/workspace";
 
 function createHarness(): AcpEquivalenceHarness {
-  // Every production session has a cwd; a command row carries it.
   const translator = createAcpDeltaTranslator({ cwd: SESSION_CWD });
   const assembler = createDeltaAssembler({
     providerId: "acp",
     entropyPrefix: ENTROPY,
-    // Equivalence suites pin per-delta translation fidelity: no coalescing.
     textDeltaFlushMs: 0,
   });
   return {
@@ -122,9 +108,6 @@ function completedItems(events: ThreadEvent[]) {
 }
 
 describe("acp delta translation (bridge-shared invariants)", () => {
-  // Historical fix 0c2f4cc9a: an update arriving after turn completion must
-  // not fabricate a fresh bb turn. A synthetic turn/started here would open a
-  // turn that never completes, wedging the thread.
   it("does not synthesize a turn for updates that arrive after turn completion", () => {
     const harness = createHarness();
     harness.translate(turnStartedEvent());
@@ -148,7 +131,6 @@ describe("acp delta translation (bridge-shared invariants)", () => {
 
     for (const events of [lateChunk, lateToolCall]) {
       expect(events.length).toBeGreaterThan(0);
-      // Only dropped/unhandled output — no turn lifecycle, no items.
       expect(events.every((event) => event.type === "provider/unhandled")).toBe(
         true,
       );
@@ -156,10 +138,6 @@ describe("acp delta translation (bridge-shared invariants)", () => {
     expect(harness.openTurnId()).toBe("");
   });
 
-  // Historical fix d32be7fab: a tool call that starts as one item type and
-  // terminally re-classifies in an update must settle BOTH items. Settling
-  // only the re-classified item leaves the originally started item
-  // in-progress forever.
   it("settles both items when a terminal tool_call_update changes the item type", () => {
     const harness = createHarness();
     harness.translate(turnStartedEvent());
@@ -216,7 +194,6 @@ describe("acp delta translation (bridge-shared invariants)", () => {
       expect(item.id).toBe(startedItemId);
     }
 
-    // The call is fully settled: turn completion must not re-settle it.
     const endEvents = harness.translate(turnCompletedEvent("end_turn"));
     expect(completedItems(endEvents)).toEqual([]);
     expect(endEvents).toContainEqual(
@@ -255,9 +232,6 @@ describe("acp delta translation (bridge-shared invariants)", () => {
     ]);
   });
 
-  // Historical fix f60cf84ee (recast): fs-write item ids must never collide
-  // across writes or sessions. Minting moved to the runtime assembler, whose
-  // per-assembler entropy+serial ids are unique across every session it sees.
   it("keeps unmatched fs writes standalone with distinct item ids", () => {
     const harness = createHarness();
     harness.translate(turnStartedEvent());
@@ -323,8 +297,6 @@ describe("acp delta translation (bridge-shared invariants)", () => {
       ),
     ).toEqual([]);
 
-    // Provider content has replace semantics, but it cannot overwrite the
-    // authoritative file snapshot observed by the ACP client write.
     harness.translate(
       updateEvent({
         sessionUpdate: "tool_call_update",
@@ -381,11 +353,6 @@ describe("acp delta translation (bridge-shared invariants)", () => {
   });
 });
 
-/**
- * Content-mapping invariants moved here from the deleted legacy ACP adapter
- * test, asserted through the delta assembler exactly as the runtime builds
- * them.
- */
 describe("acp delta translation (moved from the legacy adapter suite)", () => {
   function compactionStartedEvent(): ProviderRuntimeEvent {
     return {
@@ -450,6 +417,34 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
         scope: turnScope(turnId),
         status: "failed",
         error: { message: "Provider rejected /compact" },
+      }),
+    ]);
+  });
+
+  it("translates a skipped maintenance prompt into a warning and a clean turn end", () => {
+    const harness = createHarness();
+    harness.translate(compactionStartedEvent());
+    const turnId = harness.openTurnId();
+
+    expect(
+      harness.translate(
+        compactionCompletedEvent({
+          status: "skipped",
+          detail: "Compaction failed: Nothing to compact (session too small)",
+        }),
+      ),
+    ).toEqual([
+      expect.objectContaining({
+        type: "provider/warning",
+        scope: turnScope(turnId),
+        category: "compaction-skipped",
+        summary: "Context compaction skipped",
+        details: "Compaction failed: Nothing to compact (session too small)",
+      }),
+      expect.objectContaining({
+        type: "turn/completed",
+        scope: turnScope(turnId),
+        status: "completed",
       }),
     ]);
   });
@@ -574,8 +569,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
         content: { type: "text", text: "Considering..." },
       }),
     );
-    // The canonical grammar opens every item with item/started (the bridge
-    // opted into synthesis before; the assembler always synthesizes).
     expect(thoughtEvents.map((event) => event.type)).toEqual([
       "item/started",
       "item/reasoning/textDelta",
@@ -593,7 +586,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
         ? thoughtEvents[1].itemId
         : "";
 
-    // The first message chunk closes the open thought item.
     const messageEvents = harness.translate(
       updateEvent({
         sessionUpdate: "agent_message_chunk",
@@ -676,8 +668,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
           cwd: SESSION_CWD,
           status: "completed",
           approvalStatus: null,
-          // The agent reported no exit code, so the row carries none: an
-          // exit code is never synthesized from the status.
           aggregatedOutput: "1 passed",
           presentation: {
             label: { pending: "Running command", completed: "Ran command" },
@@ -689,12 +679,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
     ]);
   });
 
-  // Issue #1529: ACP's tool_call_update has no exit-code field and Cursor
-  // reports both "exited 1" and "never ran" (spawn ENOENT after the
-  // persistent shell's cwd was deleted) as `status: "completed"`, so the
-  // status alone must never become an exit code. The real code, when the
-  // agent has one, rides in `rawOutput.exitCode` (shapes recorded from
-  // `cursor-agent acp` 2026.08.11).
   describe("command exit codes", () => {
     function completeCommand(
       harness: AcpEquivalenceHarness,
@@ -823,7 +807,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
       type: "item/completed",
       item: {
         type: "toolCall",
-        // rawOutput rides the row as `result`, with the data URL scrubbed.
         result: {
           output: "",
           attachments: [{ url: "[image]", contentType: "image/svg+xml" }],
@@ -867,7 +850,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
       events[0].item.type === "fileChange"
         ? events[0].item.changes[0]
         : undefined;
-    // Only the changed lines travel in the diff.
     expect(change?.diff).toContain("-old line");
     expect(change?.diff).toContain("+new line");
     expect(change?.diff).not.toContain("-same");
@@ -927,7 +909,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
       }),
     );
 
-    // One settled item: the started fileChange, not a second one.
     expect(completedEvents).toHaveLength(1);
     expect(completedEvents[0]).toMatchObject({
       type: "item/completed",
@@ -1128,7 +1109,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
         },
       },
     ]);
-    // Each snapshot is its own item; the latest supersedes the rest.
     const second = completedItems(
       harness.translate(
         updateEvent({
@@ -1249,11 +1229,6 @@ describe("acp delta translation (moved from the legacy adapter suite)", () => {
   });
 });
 
-/**
- * Grammar v3: every item the bridge opens or closes carries its presentation
- * (docs/provider-plugin-api.md §3), asserted on the deltas themselves so a
- * new lifecycle site cannot ship without one.
- */
 describe("acp delta translation (presentation)", () => {
   function itemDeltas(
     deltas: ReturnType<AcpDeltaTranslator["translateAcpEvent"]>,
@@ -1307,7 +1282,6 @@ describe("acp delta translation (presentation)", () => {
         }),
       ),
       ...translate(fsWriteEvent("/tmp/new.ts")),
-      // Turn end settles the still-open read.
       ...translate(turnCompletedEvent("end_turn")),
       ...translate({
         jsonrpc: "2.0",
@@ -1409,11 +1383,6 @@ describe("acp delta translation (presentation)", () => {
   });
 });
 
-/**
- * The native kind enum maps straight onto the core kinds; the agent's title
- * is the headline, never the tool name. A kind whose core shape the agent
- * left unfilled stays a generic tool presenting as its kind.
- */
 describe("acp delta translation (native kinds → core kinds)", () => {
   function openItem(update: Record<string, unknown>) {
     const harness = createHarness();
@@ -1587,10 +1556,6 @@ describe("acp delta translation (native kinds → core kinds)", () => {
     });
   });
 
-  // The live data-loss case: one unseen `kind` used to fail the wire parse,
-  // so the tool_call never opened and its `completed` update closed a bare
-  // untitled generic row. The call now opens under the agent's own kind word
-  // and closes on the same item.
   it("keeps a call whose kind the schema does not know", () => {
     const harness = createHarness();
     harness.translate(turnStartedEvent());
@@ -1696,15 +1661,6 @@ describe("acp delta translation (native kinds → core kinds)", () => {
   });
 });
 
-/**
- * Q31: a call to a bb-injected tool reads as that tool (`server: "bb"`, the
- * definition's presentation). ACP gives the bridge no id linking the MCP
- * proxy's call to the agent's own tool_call, so the binding is positional.
- */
-/**
- * The richer-reporting layer (spike M1-M3, M5-M7): what the bridge now takes
- * off the wire that it used to parse and drop.
- */
 describe("acp delta translation (raw payloads and real results)", () => {
   function startedHarness(): AcpEquivalenceHarness {
     const harness = createHarness();
@@ -1712,9 +1668,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     return harness;
   }
 
-  // M1. The exit code is the agent's, never synthesized from the status:
-  // a failed command with exit 2 must not report 1, and a stderr-only
-  // failure must show the stderr.
   it("reports the exit code and stderr Cursor sent, not a status guess", () => {
     const events = startedHarness().translate(
       updateEvent({
@@ -1770,9 +1723,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     });
   });
 
-  // Found in live QA: `node -e "process.exit(3)"` prints nothing, and the row
-  // showed `{"exitCode":3,"stdout":"","stderr":""}` — the envelope, rendered
-  // as JSON, because the empty join fell through to the generic fallback.
   it("shows no output for a command that printed nothing", () => {
     const events = startedHarness().translate(
       updateEvent({
@@ -1794,11 +1744,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     ).toBeUndefined();
   });
 
-  // M2. grok streams cumulative stdout on in_progress updates of a running
-  // command. Before, the update was suppressed and the output vanished.
-  // Mid-flight the rendered envelope is never "output so far": it is a JSON
-  // object, and it carries an exit code the command has not reached. The row
-  // stays empty until the agent reports a stream or the command closes.
   it("streams nothing when a running command's envelope names no stream", () => {
     const harness = startedHarness();
     harness.translate(
@@ -1824,8 +1769,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     expect(streamed).toEqual([]);
   });
 
-  // A bare string rawOutput IS the output. No agent bb has read the wire for
-  // sends one, which is why refusing it would narrow generality for free.
   it("streams a running command's bare-string rawOutput", () => {
     const harness = startedHarness();
     harness.translate(
@@ -1886,7 +1829,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
       }),
     ]);
 
-    // Cumulative: the assembler diffs the snapshot down to the new bytes.
     const second = harness.translate(
       updateEvent({
         sessionUpdate: "tool_call_update",
@@ -1904,7 +1846,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
       }),
     ]);
 
-    // A tail-window reset re-sends a shorter snapshot; the row resets.
     const third = harness.translate(
       updateEvent({
         sessionUpdate: "tool_call_update",
@@ -1924,10 +1865,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     ]);
   });
 
-  // Found in live QA: grok sends its whole rawOutput envelope on the
-  // in-progress update of a command that has printed nothing, and the row
-  // streamed `{"type":"Bash","output":[],"exit_code":0,…}` — including an
-  // exit code the command had not reached.
   it("streams the command's own output, never the rawOutput envelope", () => {
     const harness = startedHarness();
     harness.translate(
@@ -1980,8 +1917,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     ]);
   });
 
-  // M3. rawInput/rawOutput reach the row as args/result, and a failed call
-  // carries its output as the error.
   it("forwards rawInput as args, rawOutput as result, and the failure text as error", () => {
     const events = startedHarness().translate(
       updateEvent({
@@ -2028,7 +1963,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     expect(String(result)).toContain("more characters truncated");
   });
 
-  // M6. ACP says locations are absolute; grok sends them relative.
   it("resolves a relative location and grok's target_file against the session cwd", () => {
     const translator = createAcpDeltaTranslator({ cwd: "/workspace/app" });
     const assembler = createDeltaAssembler({
@@ -2074,8 +2008,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     });
   });
 
-  // M7. The programmatic tool name names the row; the dialect supplies the
-  // kind at open so grok's row does not open generic and close as a command.
   it("names a generic row by the unstable tool name", () => {
     const events = startedHarness().translate(
       updateEvent({
@@ -2121,7 +2053,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
       });
     translate(turnStartedEvent());
 
-    // grok's `tool_call` has no kind at all; the kind rides `_meta`.
     const opened = translate(
       updateEvent({
         sessionUpdate: "tool_call",
@@ -2145,7 +2076,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     const openedId =
       opened[0]?.type === "item/started" ? opened[0].item.id : "";
 
-    // …and it closes as the same command row, not a second item.
     const closed = translate(
       updateEvent({
         sessionUpdate: "tool_call_update",
@@ -2175,8 +2105,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     });
   });
 
-  // M5. Cursor asks for its fetch permission under a different id, and the
-  // ask is the only place the URL appears.
   it("binds a permission request by kind and gives the row the URL it named", () => {
     const harness = startedHarness();
     const opened = harness.translate(
@@ -2204,12 +2132,8 @@ describe("acp delta translation (raw payloads and real results)", () => {
       title: "Fetch https://nodejs.org/dist/index.json",
       kind: "fetch",
     });
-    // The approval joins the in-flight call's row, not the agent's ask id.
     expect(bound.toolCallId).toBe("call-fetch");
 
-    // The row keeps the shape it opened with — a row that opens as one kind
-    // and settles as another is two rows in the timeline — and takes the
-    // headline the ask revealed.
     expect(
       harness.translate(
         updateEvent({
@@ -2274,8 +2198,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
     });
   });
 
-  // #1719: the permission merge must never overwrite a richer call. opencode
-  // asks about a running `edit` under the same id with kind `other`.
   it("leaves a call that already has a core shape alone", () => {
     const harness = startedHarness();
     harness.translate(
@@ -2301,10 +2223,6 @@ describe("acp delta translation (raw payloads and real results)", () => {
   });
 });
 
-/**
- * Sub-agents are not in the protocol (version 1 has no such concept), so the
- * agent's own dialect is the only thing that can report one.
- */
 describe("acp delta translation (dialects)", () => {
   function dialectHarness(dialectId: string): AcpEquivalenceHarness {
     const translator = createAcpDeltaTranslator({
@@ -2530,8 +2448,6 @@ describe("acp delta translation (dialects)", () => {
     const openedId =
       opened[0]?.type === "item/started" ? opened[0].item.id : "";
 
-    // `cursor/task` names the child and what it was asked to do; the row is
-    // still open, so it updates in place rather than minting a second row.
     const reported = harness.assembler.assemble({
       threadId: THREAD_ID,
       deltas: harness.translator.noteDelegationReport(THREAD_ID, {
@@ -2575,9 +2491,6 @@ describe("acp delta translation (dialects)", () => {
     ]);
   });
 
-  // Cursor sends `cursor/task` after the sub-agent finished, so the report
-  // can arrive once the row has settled. Re-opening it would show the same
-  // work twice.
   it("ignores a delegation report for a call that already settled", () => {
     const harness = dialectHarness("cursor");
     harness.translate(
@@ -2625,7 +2538,6 @@ describe("acp delta translation (dialects)", () => {
     });
   });
 
-  // A bb-injected tool call is bb's own, whatever the dialect thinks.
   it("keeps a bb-injected tool binding ahead of the dialect", () => {
     const harness = dialectHarness("cursor");
     harness.translator.configureInjectedTools([{ name: "AskUserQuestion" }]);
@@ -2674,8 +2586,6 @@ describe("acp delta translation (bb-injected tools)", () => {
 
   it("binds the agent's announced MCP call when the proxy forwards the bb tool call", () => {
     const { translate, translator } = injectedHarness();
-    // Cursor's order: the generic announcement first, then the MCP request
-    // reaches the proxy, then the agent settles its call.
     const [started] = translate(
       updateEvent({
         sessionUpdate: "tool_call",
@@ -2781,8 +2691,6 @@ describe("acp delta translation (bb-injected tools)", () => {
       item: { type: "toolCall", server: "bb", tool: "ask_user_question" },
     });
 
-    // A proxied call with only a command open waits; it never rebinds the
-    // command or the already-bound question.
     translator.noteInjectedToolCall(THREAD_ID, "bb_workflow_run");
     const settled = completedItems(translate(turnCompletedEvent("end_turn")));
     expect(settled.map((item) => item.type)).toEqual([

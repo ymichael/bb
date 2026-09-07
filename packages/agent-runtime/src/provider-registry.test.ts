@@ -16,8 +16,6 @@ const dynamicAcpLaunchSpec = {
   },
 };
 
-/** What the server sends for any acp-* id: the ACP plugin's artifact plus the
- * shared ACP tier capabilities. */
 const ACP_BRIDGE_LAUNCH: AgentRuntimeBridgeLaunch = {
   pluginId: "provider-fixture",
   dataDir: "/data/plugins/provider-fixture/bridge-data",
@@ -45,8 +43,6 @@ const ACP_BRIDGE_LAUNCH: AgentRuntimeBridgeLaunch = {
   },
 };
 
-/** What the server sends for Pi: the provider-pi plugin's artifact, plus
- * Pi's declared capabilities. */
 const PI_BRIDGE_LAUNCH: AgentRuntimeBridgeLaunch = {
   pluginId: "provider-fixture",
   dataDir: "/data/plugins/provider-fixture/bridge-data",
@@ -67,11 +63,6 @@ const PI_BRIDGE_LAUNCH: AgentRuntimeBridgeLaunch = {
   },
 };
 
-/**
- * A bridge is never spawned directly any more: the runtime runs the bootstrap
- * and passes it the bridge module plus the plugin scope it must hand the
- * bridge. Assert that shape once, so each test states only what differs.
- */
 function expectBridgeSpawn(
   provider: { process: { args: string[] } },
   expected: { module: string | RegExp; bundleDir?: string },
@@ -162,9 +153,6 @@ describe("provider registry", () => {
     expect(provider.process.env).toEqual(bridgeNodeEnv);
   });
 
-  // A first-party id is no longer a special case here — reservation of
-  // first-party ids is server-side policy, and the daemon has already
-  // verified the artifact bytes.
   it("creates pi provider with expected process config", () => {
     const provider = createProviderForId("pi", {
       additionalWorkspaceWriteRoots: [],
@@ -195,10 +183,6 @@ describe("provider registry", () => {
   });
 
   it("runs every acp id on the acp plugin's verified artifact", () => {
-    // Every ACP agent — bb's known list and the ones a user configures in the
-    // plugin's settings — is registered by the ACP plugin and carries that
-    // plugin's artifact, so the daemon routes each one onto the generic
-    // artifact adapter.
     for (const providerId of ["acp-cursor", "acp-opencode", "acp-custom"]) {
       const provider = createProviderForId(providerId, {
         additionalWorkspaceWriteRoots: [],
@@ -211,7 +195,6 @@ describe("provider registry", () => {
       expectBridgeSpawn(provider, {
         module: "/data/provider-bridges/acp.mjs",
       });
-      // The declared "tip" ladder projects onto fork-yes / rewind-no.
       expect(provider.capabilities).toMatchObject({
         supportsServiceTier: true,
         supportsFork: true,
@@ -256,8 +239,6 @@ describe("provider registry", () => {
     });
   });
 
-  // A user-configured agent is a registration like any other: its launch
-  // spec is declared bridge options, beside the host-local write roots.
   it("carries a configured acp agent's declared launch spec", () => {
     const provider = createProviderForId("acp-custom", {
       additionalWorkspaceWriteRoots: ["/extra-root"],
@@ -268,8 +249,6 @@ describe("provider registry", () => {
     });
 
     expect(provider.id).toBe("acp-custom");
-    // Model listing has no session, so the bridge only sees the static
-    // provider options; the launch spec must ride them too.
     expect(provider.buildCommandPlan({ type: "model/list" })).toMatchObject({
       kind: "request",
       method: "model/list",
@@ -306,11 +285,6 @@ describe("provider registry", () => {
     });
   });
 
-  // Codex graduated onto this route, where its environment-level write roots
-  // and its declared thread capabilities have to survive: both used to come
-  // from the bundled-bridge branch this replaced. The write roots are a
-  // host-local fact the server cannot supply at all, so the registry adds
-  // them to the bridge's static provider options.
   it("carries environment write roots and declared capabilities onto an artifact bridge", () => {
     const provider = createProviderForId("codex", {
       additionalWorkspaceWriteRoots: ["/extra-root"],
@@ -369,12 +343,7 @@ describe("provider registry", () => {
     });
   });
 
-  // The launch source, not the provider id, decides which binary runs: the
-  // server states the delivery path and the runtime obeys it.
   it("honors a verified bridge launch for an id the registry does not know", () => {
-    // The hash-verified artifact is its own routing authority: the server only
-    // attaches a bridgeLaunch to providers it has routed onto the bridge
-    // protocol, and the daemon has already verified the artifact bytes.
     const provider = createProviderForId("echo-agent", {
       additionalWorkspaceWriteRoots: [],
       bridgeLaunch: {
@@ -400,7 +369,6 @@ describe("provider registry", () => {
     expectBridgeSpawn(provider, {
       module: "/data/provider-bridges/artifact.mjs",
     });
-    // The transported declaration capabilities drive execution checks.
     expect(provider.capabilities.supportsServiceTier).toBe(true);
     expect(provider.capabilities.permissionModes).toEqual([
       "accept-edits",

@@ -9,6 +9,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { AvailableModel, ProviderInfo, ReasoningLevel } from "@bb/domain";
+import { makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import type { SystemExecutionOptionsResponse } from "@bb/server-contract";
 import type { ExperimentalProviderModelPickerValue } from "@get-bb/plugin-sdk";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -47,12 +48,10 @@ function provider(
   brandPrefix: string,
   supportsServiceTier: boolean,
 ): ProviderInfo {
-  return {
+  return makeProviderInfo({
     id,
-    pluginId: `provider-${id}`,
     displayName,
     logoUrl: null,
-    available: true,
     maintenance: { health: true, usage: true, installation: false },
     strings: {
       signInHint: "Sign in",
@@ -60,7 +59,6 @@ function provider(
       installUrl: "https://example.com/install",
       brandPrefix,
     },
-    composerActions: [],
     capabilities: {
       supportsThreadArchive: true,
       supportsThreadRename: true,
@@ -71,7 +69,7 @@ function provider(
       permissionModes: ["auto"],
       modelCatalogScope: "host",
     },
-  };
+  });
 }
 
 function model(

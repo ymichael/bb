@@ -9,23 +9,13 @@ import {
 } from "@bb/shared-ui/tooltip";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-/** Shared first-column width for conventional plugin detail tables. */
 export const PLUGIN_DETAIL_PRIMARY_COLUMN_CLASS = "w-40 md:w-48";
 
-/** Theme-aware fill shared by plugin detail table header cells. */
 export const PLUGIN_DETAIL_HEADER_CELL_CLASS = "bg-surface-recessed/55";
 
 const DETAIL_ROW_GRID =
   "grid grid-cols-[10rem_minmax(0,1fr)] md:grid-cols-[12rem_minmax(0,1fr)]";
 
-/**
- * The table treatment for detail-page rows with a name and richer detail.
- *
- * Capabilities and Scheduled jobs share a shell. The outer edge, row rules,
- * and column divider form one connected grid, so names and descriptions remain
- * easy to scan. Background services use their own labelled Status/Service table
- * because status is a distinct attribute rather than descriptive copy.
- */
 export function PluginDetailTable({ children }: { children: ReactNode }) {
   return (
     <div className="max-w-full overflow-hidden rounded-lg border border-border bg-card align-top">
@@ -36,16 +26,8 @@ export function PluginDetailTable({ children }: { children: ReactNode }) {
   );
 }
 
-// Matched to ResourceDetailListItem (detail-shell.tsx:150), the house row
-// density. A table cell is still a row; it should not sit looser than one.
-//
-// The type is pinned here rather than left to the cell's contents: a `td`
-// inherits the 16px/24px root leading, and that — not the padding — was what
-// made these rows stand 10px taller than every other row in the app.
-//
 const CELL = "py-1.5 align-top text-sm leading-snug";
 
-/** Label/value rows that use the same connected grid as plugin collections. */
 export function PluginDetailFieldRow({
   label,
   children,
@@ -98,13 +80,6 @@ export function PluginDetailFieldRow({
   );
 }
 
-/**
- * A glyph whose tooltip names what it stands for.
- *
- * The kind is carried by the icon rather than a column: a plugin contributes
- * one or two items in most of its seven kinds, so a Kind column would be
- * near-unique per row and read as filler. Hovering — or focusing — names it.
- */
 export function PluginDetailGlyph({
   icon,
   label,
@@ -133,7 +108,6 @@ export function PluginDetailGlyph({
   );
 }
 
-/** Name plus description, used by Capabilities and Scheduled jobs. */
 export function PluginDetailRow({
   glyph,
   name,
@@ -147,8 +121,6 @@ export function PluginDetailRow({
   mono?: boolean;
   detail: ReactNode;
 }) {
-  // A row without detail must not reserve an empty second column, or it hangs a
-  // strip of dead padding off the right edge of the surface.
   const hasDetail = detail !== null && detail !== undefined && detail !== "";
   const detailId = useId();
   const [expanded, setExpanded] = useState(false);
@@ -166,11 +138,7 @@ export function PluginDetailRow({
         colSpan={hasDetail ? undefined : 2}
       >
         <span className="flex min-w-0 items-center gap-2">
-          {/*
-            `flex`, not a plain span: as a block it wrapped the inline-level
-            glyph in a line box, which added four invisible pixels to every row
-            in every one of these tables.
-          */}
+          {}
           <span className="flex shrink-0">{glyph}</span>
           <span
             className={cn(

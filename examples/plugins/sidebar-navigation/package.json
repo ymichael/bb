@@ -1,0 +1,27 @@
+{
+  "name": "bb-plugin-sidebar-navigation",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "bbPluginSdk": ">=0.4.33"
+  },
+  "bb": {
+    "name": "Sidebar Navigation Example",
+    "description": "Replaces the bounded sidebar navigation controls with a compact grid.",
+    "branding": {
+      "icon": "PanelsTopLeft"
+    },
+    "server": "./server.ts",
+    "app": "./app.tsx"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@get-bb/plugin-sdk": "workspace:*",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "npm:@typescript/typescript6@^6.0.2"
+  }
+}

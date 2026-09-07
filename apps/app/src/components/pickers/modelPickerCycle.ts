@@ -1,13 +1,6 @@
 import { reasoningLevelValues, type ReasoningLevel } from "@bb/domain";
 import type { PickerOption } from "./OptionPicker";
 
-/**
- * The value after `current` in `options`, wrapping at the end. Returns null
- * when there is nothing to move to: an empty list, a single option, or a list
- * whose rotation lands back on `current`. A value that is absent from the list
- * rotates to the first option, so a model outside the provider's primary list
- * still has somewhere to go.
- */
 export function nextCycleValue<T extends string>(
   options: readonly PickerOption<T>[],
   current: T,
@@ -19,11 +12,6 @@ export function nextCycleValue<T extends string>(
   return next.value;
 }
 
-/**
- * The value before `current`, wrapping at the start. "Previous over the list"
- * is "next over the reversed list", so both directions share one policy for
- * wrapping, absent values, and lists too short to move within.
- */
 export function previousCycleValue<T extends string>(
   options: readonly PickerOption<T>[],
   current: T,
@@ -31,11 +19,6 @@ export function previousCycleValue<T extends string>(
   return nextCycleValue([...options].reverse(), current);
 }
 
-/**
- * The next supported reasoning value in canonical rank order, wrapping at
- * either end. Provider responses may list efforts in any order, so their array
- * order cannot define what forward and backward mean.
- */
 export function cycleReasoningValue(
   options: readonly PickerOption<ReasoningLevel>[],
   current: ReasoningLevel,

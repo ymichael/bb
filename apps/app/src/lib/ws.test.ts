@@ -230,7 +230,6 @@ describe("WebSocketManager thread-open signals", () => {
     expect(threadOpen).toHaveBeenCalledWith(signal);
     expect(changed).not.toHaveBeenCalled();
     expect(manager.consumePendingOpenFile("thr_1")).toEqual(signal.file);
-    // Consumed exactly once: a later visit does not re-open.
     expect(manager.consumePendingOpenFile("thr_1")).toBeNull();
   });
 
@@ -365,12 +364,10 @@ describe("WebSocketManager liveness", () => {
 
     vi.advanceTimersByTime(REALTIME_PING_INTERVAL_MS);
     expect(pingCount(socket)).toBe(1);
-    // A pong keeps the socket; nothing else happens.
     receive(socket, { type: "pong" });
     vi.advanceTimersByTime(REALTIME_PONG_TIMEOUT_MS);
     expect(fakeSocketState.instances).toHaveLength(1);
 
-    // Next probe goes unanswered: the socket is half-open.
     vi.advanceTimersByTime(
       REALTIME_PING_INTERVAL_MS - REALTIME_PONG_TIMEOUT_MS,
     );
@@ -382,8 +379,6 @@ describe("WebSocketManager liveness", () => {
     expect(socket.readyState).toBe(3);
     const replacement = getSocketAt(1);
     replacement.open();
-    // The watermark is the last inbound frame, not the moment the timeout
-    // fired: anything fetched after the pong may have raced a dead socket.
     expect(connectedEvents).toEqual([
       { reconnected: false },
       { reconnected: true, disconnectedAt: lastActivityAt },
@@ -401,7 +396,6 @@ describe("WebSocketManager liveness", () => {
       changes: ["events-appended"],
     });
     vi.advanceTimersByTime(1000);
-    // A frame arrived within the pong window: no probe was needed.
     expect(pingCount(socket)).toBe(0);
 
     vi.advanceTimersByTime(REALTIME_PING_INTERVAL_MS);
@@ -413,7 +407,6 @@ describe("WebSocketManager liveness", () => {
       changes: ["events-appended"],
     });
     vi.advanceTimersByTime(REALTIME_PONG_TIMEOUT_MS);
-    // A changed frame answered the probe as well as a pong would.
     expect(fakeSocketState.instances).toHaveLength(1);
   });
 
@@ -428,7 +421,6 @@ describe("WebSocketManager liveness", () => {
     expect(pingCount(socket)).toBe(1);
     receive(socket, { type: "pong" });
     vi.advanceTimersByTime(REALTIME_PING_INTERVAL_MS);
-    // The interval resumed with the tab.
     expect(pingCount(socket)).toBe(2);
   });
 
@@ -439,7 +431,6 @@ describe("WebSocketManager liveness", () => {
     socket.close();
     const closedAt = Date.now();
     vi.advanceTimersByTime(500);
-    // partysocket would still be waiting out its backoff.
     expect(fakeSocketState.instances).toHaveLength(1);
 
     browserEvents.setVisible(true);
@@ -459,8 +450,6 @@ describe("WebSocketManager liveness", () => {
     const { browserEvents, connectedEvents, socket } = createLiveManager();
     const openedAt = Date.now();
 
-    // Backgrounded for a while, then resumed: the probe goes out first and the
-    // browser reports the close a moment later (before the pong timeout).
     browserEvents.setVisible(false);
     vi.advanceTimersByTime(60_000);
     browserEvents.setVisible(true);
@@ -468,15 +457,12 @@ describe("WebSocketManager liveness", () => {
     vi.advanceTimersByTime(1000);
     socket.close();
 
-    // No partysocket backoff: the replacement is created synchronously, and
-    // the watermark is the last inbound frame (here: the open), not the close.
     expect(fakeSocketState.instances).toHaveLength(2);
     getSocketAt(1).open();
     expect(connectedEvents.at(-1)).toEqual({
       reconnected: true,
       disconnectedAt: openedAt,
     });
-    // The pong timer of the dead socket must not fire against the new one.
     vi.advanceTimersByTime(REALTIME_PONG_TIMEOUT_MS);
     expect(fakeSocketState.instances).toHaveLength(2);
   });

@@ -6,11 +6,6 @@ import {
 import { cn } from "@bb/shared-ui/lib/utils";
 import { TimelineStatusIndicator } from "./TimelineStatusIndicator.js";
 
-// Both indicator states — the plain status line and the expandable thinking
-// header — render at this fixed height and vertically center their label. The
-// expandable variant materializes the moment thinking text streams in; without
-// a shared height the swap grows the row ~8px and the bottom-anchored timeline
-// animates the jump (see HeightTransition's ResizeObserver).
 const INDICATOR_HEADER_HEIGHT_CLASS = "min-h-7 items-center";
 
 interface TimelineWorkingIndicatorProps {

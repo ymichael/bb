@@ -1,5 +1,3 @@
-// The page's half of the bb mobile shell bridge. Every export works in a
-// plain browser: a missing bridge is the normal case.
 export {
   canOpenNativeScreen,
   getNativeShell,

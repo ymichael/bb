@@ -43,8 +43,6 @@ export async function deliverCommentToLatestAgent(
   const task = store.getTask(input.taskId);
   if (!task) throw new Error(`Task not found: ${input.taskId}`);
 
-  // The CLI can explicitly notify while preserving an agent-authored comment.
-  // Exclude the comment being delivered so it cannot select its own thread.
   const latestReply = store.getLatestAgentComment(
     input.taskId,
     input.commentId,

@@ -23,7 +23,9 @@ function parseExpression(args: {
 
 function assertValidTimezone(timezone: string): void {
   try {
-    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(new Date(0));
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(
+      new Date(0),
+    );
   } catch {
     throw new ScheduleValidationError("Invalid timezone");
   }
@@ -40,7 +42,11 @@ export function validateScheduleDefinition(args: {
     );
   }
   assertValidTimezone(args.timezone);
-  parseExpression({ cron: args.cron, now: Date.now(), timezone: args.timezone });
+  parseExpression({
+    cron: args.cron,
+    now: Date.now(),
+    timezone: args.timezone,
+  });
 }
 
 export function computeNextScheduledTime(args: {
@@ -52,14 +58,21 @@ export function computeNextScheduledTime(args: {
   return parseExpression(args).next().getTime();
 }
 
-export function validateOnceDefinition(args: { runAt: number; now: number }): void {
+export function validateOnceDefinition(args: {
+  runAt: number;
+  now: number;
+}): void {
   if (args.runAt <= args.now) {
-    throw new ScheduleValidationError("One-shot run time must be in the future");
+    throw new ScheduleValidationError(
+      "One-shot run time must be in the future",
+    );
   }
 }
 
 export function computeInitialNextRunAt(args: {
-  trigger: { triggerType: "schedule"; cron: string; timezone: string } | { triggerType: "once"; runAt: number };
+  trigger:
+    | { triggerType: "schedule"; cron: string; timezone: string }
+    | { triggerType: "once"; runAt: number };
   enabled: boolean;
   now: number;
 }): number | null {

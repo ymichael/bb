@@ -82,8 +82,6 @@ describe("command palette guide interaction", () => {
     expect(
       container.querySelector('[data-guide-fixture="command-palette-overlay"]'),
     ).not.toBeNull();
-    // The measured badge rides the dialog's margin, anchored to the row it
-    // annotates, and stays outside the clipping listbox.
     expect(badge?.parentElement).toBe(
       container.querySelector('[data-guide-fixture="command-palette-dialog"]'),
     );
@@ -113,8 +111,6 @@ describe("command palette guide interaction", () => {
         ?.getAttribute("aria-selected"),
     ).toBe("true");
 
-    // The palette is this page's subject: running the command hides it only
-    // as a timed beat, then it restores itself with the panel still open.
     act(() => vi.advanceTimersByTime(2400));
     expect(
       container.querySelector('[data-guide-fixture="command-palette-overlay"]'),
@@ -123,7 +119,6 @@ describe("command palette guide interaction", () => {
       container.querySelector('[data-guide-fixture="release-checklist-panel"]'),
     ).not.toBeNull();
 
-    // The header shortcut restores it immediately, without waiting the beat.
     const rerunAction = container.querySelector<HTMLButtonElement>(
       '[data-guide-fixture="command-palette-action"]',
     );

@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, join } from "node:path";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
@@ -61,7 +62,14 @@ async function createFixture(
     now: args.now,
     serverUrl: args.serverUrl ?? "https://server.example.test",
   });
-  return { fetchFn, installTarball, logger: testLogger, runProcess, updater };
+  return {
+    dataDir,
+    fetchFn,
+    installTarball,
+    logger: testLogger,
+    runProcess,
+    updater,
+  };
 }
 
 afterEach(async () => {
@@ -79,6 +87,85 @@ describe("protocol self-update", () => {
     );
     expect(test.fetchFn).toHaveBeenCalledTimes(2);
     expect(test.installTarball).toHaveBeenCalledOnce();
+  });
+
+  it("verifies and persists the server artifact digest", async () => {
+    const test = await createFixture();
+    const bytes = new TextEncoder().encode("verified-tarball");
+    const digest = createHash("sha256").update(bytes).digest("hex");
+    test.fetchFn.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/install/version")) {
+        return Response.json({
+          version: "9.0.0-test",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION + 1,
+        });
+      }
+      return new Response(bytes, {
+        headers: { "x-bb-artifact-sha256": digest },
+      });
+    });
+
+    await expect(test.updater.handleProtocolMismatch()).resolves.toBe(
+      "updated",
+    );
+    await expect(
+      readFile(join(test.dataDir, "host-artifact.sha256"), "utf8"),
+    ).resolves.toBe(`${digest}\n`);
+    expect(test.installTarball).toHaveBeenCalledOnce();
+  });
+
+  it("rejects a downloaded artifact whose digest does not match", async () => {
+    const test = await createFixture();
+    test.fetchFn.mockImplementation(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("/install/version")) {
+        return Response.json({
+          version: "9.0.0-test",
+          protocolVersion: HOST_DAEMON_PROTOCOL_VERSION + 1,
+        });
+      }
+      return new Response("tampered", {
+        headers: { "x-bb-artifact-sha256": "a".repeat(64) },
+      });
+    });
+
+    await expect(test.updater.handleProtocolMismatch()).resolves.toBe("failed");
+    expect(test.installTarball).not.toHaveBeenCalled();
+    expect(test.logger.error).toHaveBeenCalledWith(
+      expect.objectContaining({ err: expect.any(Error) }),
+      expect.stringContaining("self-update failed"),
+    );
+  });
+
+  it("skips downloading and reinstalling an identical installed artifact", async () => {
+    const test = await createFixture();
+    const digest = "b".repeat(64);
+    await writeFile(join(test.dataDir, "host-artifact.sha256"), `${digest}\n`);
+    test.fetchFn.mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/install/version")) {
+          return Response.json({
+            version: "9.0.0-test",
+            protocolVersion: HOST_DAEMON_PROTOCOL_VERSION + 1,
+          });
+        }
+        expect(init?.headers).toEqual({
+          "if-none-match": `"sha256-${digest}"`,
+        });
+        return new Response(null, {
+          headers: { "x-bb-artifact-sha256": digest },
+          status: 304,
+        });
+      },
+    );
+
+    await expect(test.updater.handleProtocolMismatch()).resolves.toBe(
+      "updated",
+    );
+    expect(test.installTarball).not.toHaveBeenCalled();
+    expect(test.logger.info).toHaveBeenCalledWith(
+      { artifactDigest: digest },
+      expect.stringContaining("already installed"),
+    );
   });
 
   it("finds npm beside the running Node executable when the service PATH omits it", async () => {

@@ -5,23 +5,12 @@ import { throwParentThreadInvalid } from "../lib/lifecycle-api-errors.js";
 
 const MAX_THREAD_HIERARCHY_DEPTH = 4;
 
-/**
- * Whether a thread is an agent-delegated child. Forks and side chats keep
- * provenance in sourceThreadId/originKind instead of parentThreadId, so a
- * non-null parent is now the hierarchy signal.
- */
 export function isAgentDelegatedChildThread<
   T extends Pick<Thread, "parentThreadId">,
 >(thread: T): thread is T & { parentThreadId: string } {
   return thread.parentThreadId !== null;
 }
 
-/**
- * Whether a child thread reports its turns and blockers to its parent. Forks
- * and side chats are user-initiated branches the user reads directly, so their
- * origin excludes them. A hidden child still reports, because a hidden parent
- * delegates work too and needs the result.
- */
 export function isParentNotifiableChildThread<
   T extends Pick<Thread, "parentThreadId" | "originKind">,
 >(thread: T): thread is T & { parentThreadId: string } {
@@ -58,10 +47,6 @@ interface ResolveThreadSubtreeDepthArgs {
   visitedThreadIds: Set<string>;
 }
 
-/**
- * A live parent may belong to another project: agents delegate work across
- * repositories, and the child still reports to and inherits policy from it.
- */
 export function isLiveParentThread(args: IsLiveParentThreadArgs): boolean {
   return (
     args.parentThread !== null &&
@@ -129,11 +114,6 @@ interface CanThreadSpawnChildArgs {
   thread: ParentThread;
 }
 
-/**
- * True when a fork/side-chat may be created under this thread, i.e. its current
- * hierarchy depth is below MAX_THREAD_HIERARCHY_DEPTH so a new child would not
- * exceed the cap. Server-derived policy so clients never recompute the cap.
- */
 export function canThreadSpawnChild(
   deps: Pick<AppDeps, "db">,
   args: CanThreadSpawnChildArgs,

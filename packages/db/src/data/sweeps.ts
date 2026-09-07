@@ -10,13 +10,10 @@ import type { DbConnection } from "../connection.js";
 import type { DbNotifier } from "../notifier.js";
 import { environments, maintenanceScanCursors } from "../schema.js";
 
-/** Destroyed environments are hard-deleted after 7 days. */
 export const DESTROYED_ENVIRONMENT_TTL_MS = 7 * 24 * 60 * 60_000;
 
-/** Closed daemon session rows are retained briefly for debugging/history. */
 export const CLOSED_SESSION_ROW_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
-/** Completed item output remains inspectable, but old large blobs are bounded. */
 export const COMPLETED_EVENT_OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60_000;
 
 export const COMPLETED_EVENT_OUTPUT_TRUNCATION_THRESHOLD_CHARS = 32 * 1024;
@@ -25,8 +22,7 @@ export const COMPLETED_EVENT_OUTPUT_RETAINED_TAIL_CHARS = 2 * 1024;
 const COMPLETED_EVENT_OUTPUT_TRUNCATION_CURSOR_VERSION = 1;
 export const DEFAULT_CLOSED_SESSION_PRUNE_BATCH_SIZE = 1_000;
 export const DEFAULT_COMPLETED_EVENT_OUTPUT_TRUNCATION_BATCH_SIZE = 250;
-// Each environment delete cascades ON DELETE SET NULL over its events and
-// threads (~0.007 ms/event), so the per-tick budget is environments, not rows.
+export const DEFAULT_DESTROYED_ENVIRONMENT_EVENT_DETACH_BATCH_SIZE = 50;
 export const DEFAULT_DESTROYED_ENVIRONMENT_PRUNE_BATCH_SIZE = 10;
 
 const COMPLETED_EVENT_OUTPUT_TRUNCATION_MARKER =
@@ -92,15 +88,14 @@ export interface PruneClosedSessionsResult {
 }
 
 export interface PruneDestroyedEnvironmentsArgs {
-  // Compared against `environments.updatedAt`: the table has no destroy
-  // timestamp, and any metadata write (e.g. PATCH /environments/:id) moves
-  // this clock, restarting the retention window for a destroyed row.
   updatedBefore: number;
+  eventBatchSize: number;
   limit: number;
 }
 
 export interface PruneDestroyedEnvironmentsResult {
   deleted: number;
+  detachedEvents: number;
 }
 
 export interface TruncateCompletedEventItemOutputsArgs {
@@ -120,8 +115,6 @@ export function pruneClosedSessions(
   db: DbConnection,
   args: PruneClosedSessionsArgs,
 ): PruneClosedSessionsResult {
-  // Keep the prune plan pinned to the retention index; this path runs
-  // periodically and can otherwise regress into a scan plus temp sort.
   const result = db.$client
     .prepare<ClosedSessionDeleteParameters>(
       `
@@ -344,18 +337,6 @@ export function truncateCompletedEventItemOutputs(
   };
 }
 
-/**
- * Sweep retiring managed environments with zero non-archived threads.
- * Returns the list of environment records that are candidates for cleanup.
- * The caller decides what to do (e.g., queue destroy commands).
- *
- * The archive grace window (delay a retiring environment's destroy so an
- * accidental archive can be undone) is enforced by the server in
- * `advanceEnvironmentCleanup`, not here: this sweep returns a candidate as soon
- * as it is retiring with no live threads, and the advance defers the actual
- * destroy until the grace window elapses. Keeping the grace check in one place
- * (the advance) avoids splitting the policy across the db query.
- */
 export function sweepManagedEnvironments(db: DbConnection) {
   const rows = db
     .select()
@@ -382,12 +363,10 @@ export function pruneDestroyedEnvironments(
   notifier: DbNotifier,
   args: PruneDestroyedEnvironmentsArgs,
 ): PruneDestroyedEnvironmentsResult {
-  if (args.limit <= 0) {
-    return { deleted: 0 };
+  if (args.limit <= 0 || args.eventBatchSize <= 0) {
+    return { deleted: 0, detachedEvents: 0 };
   }
 
-  // Oldest first so a backlog drains deterministically and every call makes
-  // progress even when a later batch is cut short.
   const staleEnvironmentIds = db
     .select({ id: environments.id })
     .from(environments)
@@ -402,20 +381,39 @@ export function pruneDestroyedEnvironments(
     .all()
     .map((environment) => environment.id);
 
-  // `limit` on the SELECT above is what bounds a call: each environment's
-  // ON DELETE SET NULL cascade over its events and threads runs synchronously
-  // inside the DELETE and this loop never yields, so a call costs `limit`
-  // cascades whether they run as one `id IN (...)` statement or one statement
-  // each (a restart backlog with no LIMIT held the event loop for seconds).
-  // One DELETE per environment only keeps each implicit transaction to a
-  // single environment, so a failure mid-batch leaves already-pruned rows
-  // pruned and each notification follows its own commit. Keeping the event
-  // loop responsive across environments is the caller's job: the server sweep
-  // calls this with `limit: 1` and yields between calls.
+  let deleted = 0;
+  let detachedEvents = 0;
   for (const environmentId of staleEnvironmentIds) {
-    db.delete(environments).where(eq(environments.id, environmentId)).run();
-    notifier.notifyEnvironment(environmentId, ["environment-deleted"]);
+    const result = db.transaction(
+      (tx) => {
+        const detached = tx.run(sql`
+          UPDATE events
+          SET environment_id = NULL
+          WHERE rowid IN (
+            SELECT rowid
+            FROM events INDEXED BY events_environment_idx
+            WHERE environment_id = ${environmentId}
+            ORDER BY rowid
+            LIMIT ${args.eventBatchSize}
+          )
+        `).changes;
+        if (detached > 0) {
+          return { deleted: 0, detachedEvents: detached };
+        }
+        const deleteResult = tx
+          .delete(environments)
+          .where(eq(environments.id, environmentId))
+          .run();
+        return { deleted: deleteResult.changes, detachedEvents: 0 };
+      },
+      { behavior: "immediate" },
+    );
+    detachedEvents += result.detachedEvents;
+    if (result.deleted > 0) {
+      notifier.notifyEnvironment(environmentId, ["environment-deleted"]);
+      deleted += result.deleted;
+    }
   }
 
-  return { deleted: staleEnvironmentIds.length };
+  return { deleted, detachedEvents };
 }

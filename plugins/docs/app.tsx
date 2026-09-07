@@ -424,9 +424,6 @@ function TiptapEditor({
     ensureEditorStyles();
     if (!rootRef.current) return;
     const markdownDocument = parseMarkdownDocument(initialValue);
-    // `---\n\n# Heading` is the canonical frontmatter layout, and the editor
-    // never sees the leading blank lines, so replay them on save instead of
-    // handing every touched document a spurious diff line.
     const bodyLeadingBreaks = markdownDocument.frontmatter
       ? (/^(?:\r?\n)*/.exec(markdownDocument.body)?.[0] ?? "")
       : "";
@@ -625,8 +622,6 @@ function useNotebook(vaultId: string | null) {
     store.owner ??= consumer;
     if (store.data === null) {
       void refreshNotebookStore(store, rpcRef.current, {
-        // A second view mounting against the same empty store is another
-        // consumer of the initial load, not evidence that the result is stale.
         queueIfInFlight: false,
       });
     }
@@ -636,9 +631,6 @@ function useNotebook(vaultId: string | null) {
       if (store.owner === consumer)
         store.owner = store.consumers.values().next().value ?? null;
       if (store.consumers.size === 0) {
-        // React Strict Mode immediately replays effects in development. Defer
-        // eviction through that replay so the remounted consumer keeps the
-        // same in-flight request instead of holding a detached, empty store.
         queueMicrotask(() => {
           if (
             store.consumers.size !== 0 ||

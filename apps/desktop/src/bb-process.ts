@@ -248,14 +248,6 @@ export function resolveBbAppProcessRuntime(
     ) {
       return {
         appDirPath,
-        // process.execPath inside an AppImage points into the desktop shell's
-        // temporary FUSE mount. The bb-app bridge intentionally outlives an
-        // unclean shell exit so the next launch can identify and reap it, but
-        // reusing that inner executable leaves the bridge and its descendants
-        // executing from a mount that disappears with the shell. Starting the
-        // outer AppImage gives the managed process tree its own mount. Its
-        // bootstrap supervises a separate bridge process group and keeps the
-        // mount alive until the bridge and all descendants have exited.
         executablePath: appImagePath,
         kind: "appimage",
         mode: "electron-node",
@@ -312,13 +304,13 @@ export function createBbAppProcessLaunch(
   }
 
   return {
-    // Keep the original bridge path as an inert argv entry. The stale-runtime
-    // supervisor uses it to verify ownership before signaling a recorded PID.
     args: [
       "--input-type=module",
       "--eval",
       APPIMAGE_BRIDGE_BOOTSTRAP,
+      "--",
       args.bridgePath,
+      "--no-sandbox",
     ],
     env: {
       ...env,
@@ -392,10 +384,6 @@ export function startBbAppProcess(args: StartBbAppProcessArgs): BbAppProcess {
   });
   const childProcess = spawn(launch.executablePath, launch.args, {
     cwd: args.cwd,
-    // The AppImage bootstrap must remain the process-group leader until every
-    // managed descendant has exited. Besides keeping its FUSE mount alive,
-    // owning the PGID prevents a delayed group signal from ever targeting a
-    // recycled ID after the bridge process exits.
     detached: args.runtime.kind === "appimage",
     env: launch.env,
     stdio: ["ignore", "pipe", "pipe"],

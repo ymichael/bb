@@ -155,6 +155,19 @@ updates. The server API is unauthenticated and permits command execution and
 file reads, so use this only behind a trusted network boundary and restrict the
 ports to Tailscale traffic with the host firewall when the LAN is not trusted.
 
+To access the production-style worktree server directly from another machine,
+run:
+
+```bash
+pnpm start:worktree-remote
+```
+
+This uses the same checkout-specific data directory and ports as
+`pnpm start:worktree`, but binds its single server listener to all IPv4
+interfaces. The server API is unauthenticated and permits command execution and
+file reads, so use it only behind a trusted network boundary and restrict the
+port to Tailscale traffic with the host firewall when the LAN is not trusted.
+
 To use the component storybook from another machine, run:
 
 ```bash

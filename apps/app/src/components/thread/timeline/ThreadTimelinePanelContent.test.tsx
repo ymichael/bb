@@ -47,6 +47,7 @@ vi.mock("./useThreadTimelineController.js", () => ({
     activeThinking: null,
     activeWorkflows: [],
     activeBackgroundCommands: [],
+    contextBoundarySeq: null,
     contextWindowUsage: undefined,
     goal: null,
     modelFallback: null,
@@ -110,6 +111,7 @@ function baseTimeline(
     timelineLoading: false,
     timelineRows: [],
     ...overrides,
+    contextBoundarySeq: overrides.contextBoundarySeq ?? null,
     modelFallback: overrides.modelFallback ?? null,
   };
 }

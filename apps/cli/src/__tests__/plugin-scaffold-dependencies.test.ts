@@ -1,6 +1,6 @@
 import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import {
   PLUGIN_SERVER_EXTERNALS,
   RUNTIME_SLOT_BY_SPECIFIER,
@@ -9,26 +9,9 @@ import {
 import { scaffoldPlugin } from "@bb/templates/plugin-scaffold";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-/**
- * A scaffold that imports a package it declares as a devDependency is
- * unbuildable the moment something installs without dev deps — and that is the
- * common case, not the exotic one: the packaged CLI runs with
- * NODE_ENV=production (npm reads it as `omit=dev`), and the server installs
- * git: plugins with an explicit `--omit=dev`. Issue #1133 was exactly this,
- * with `zod` in devDependencies while `server.ts` imported it.
- *
- * The rule is derived from the build's own externals/shim lists rather than
- * restated here, so adding a shim or an external cannot leave this stale.
- * Lives in the CLI because `bb plugin new` writes the scaffold and
- * `bb plugin build` consumes it; @bb/templates cannot depend on
- * @bb/plugin-build without a workspace cycle.
- */
-
 const DIRS_WITHOUT_BUNDLED_SOURCE = new Set([
   "node_modules",
   "dist",
-  // Vendored SDK declarations, if a pre-npm plugin still carries them — the
-  // npm types they reference are devDependencies by design.
   "types",
   "skills",
 ]);
@@ -51,7 +34,6 @@ async function generatedSourceFiles(rootDir: string): Promise<string[]> {
   return files;
 }
 
-/** Bare npm specifiers a generated file imports (not relative, alias, builtin). */
 function importedSpecifiers(source: string): string[] {
   const specifiers = new Set<string>();
   for (const match of source.matchAll(/(?:from|import)\s*["']([^"']+)["']/g)) {
@@ -69,12 +51,34 @@ function importedSpecifiers(source: string): string[] {
   return [...specifiers];
 }
 
-/** The npm package owning a specifier: `react/jsx-runtime` → `react`. */
 function packageNameOf(specifier: string): string {
   const segments = specifier.split("/");
   return specifier.startsWith("@")
     ? segments.slice(0, 2).join("/")
     : (segments[0] ?? specifier);
+}
+
+const repoRoot = resolve(import.meta.dirname, "..", "..", "..", "..");
+const pluginSdkRoot = join(repoRoot, "packages", "plugin-sdk");
+
+async function backendTestHarnessImports(): Promise<string[]> {
+  const harnessDir = join(pluginSdkRoot, "src", "testing");
+  const packages = new Set<string>();
+  for (const entry of await readdir(harnessDir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.endsWith(".ts")) continue;
+    const source = await readFile(join(harnessDir, entry.name), "utf8");
+    for (const specifier of importedSpecifiers(source)) {
+      packages.add(packageNameOf(specifier));
+    }
+  }
+  return [...packages];
+}
+
+async function sdkOptionalPeers(): Promise<Set<string>> {
+  const manifest: { peerDependencies?: Record<string, string> } = JSON.parse(
+    await readFile(join(pluginSdkRoot, "package.json"), "utf8"),
+  );
+  return new Set(Object.keys(manifest.peerDependencies ?? {}));
 }
 
 async function scaffoldWithDependencies(workDir: string): Promise<{
@@ -119,8 +123,6 @@ describe("scaffold dependency classification", () => {
       for (const specifier of importedSpecifiers(
         await readFile(file, "utf8"),
       )) {
-        // Swapped for a host runtime shim, or left unresolved for the
-        // loader — either way it is never read from node_modules.
         if (specifier in RUNTIME_SLOT_BY_SPECIFIER) continue;
         const packageName = packageNameOf(specifier);
         if (PLUGIN_SERVER_EXTERNALS.includes(packageName)) continue;
@@ -132,14 +134,6 @@ describe("scaffold dependency classification", () => {
     expect(misdeclared).toEqual([]);
   });
 
-  /**
-   * The flip side of the shim (#2072): esbuild never reads a shimmed package
-   * from node_modules, but tsc does, so every shimmed npm package has to be
-   * installed for types — as a devDependency — or the documented
-   * `import { toast } from "sonner"` fails to typecheck in a fresh scaffold.
-   * Derived from the build's shim table, so adding a slot without declaring
-   * its types fails here.
-   */
   it("declares every runtime-shimmed package as a type-only devDependency", async () => {
     const { dependencies, devDependencies } =
       await scaffoldWithDependencies(workDir);
@@ -152,12 +146,22 @@ describe("scaffold dependency classification", () => {
     ).toEqual([]);
   });
 
+  it("declares every optional peer the backend test harness imports", async () => {
+    const { dependencies, devDependencies } =
+      await scaffoldWithDependencies(workDir);
+    const declared = new Set([...dependencies, ...devDependencies]);
+    const optionalPeers = await sdkOptionalPeers();
+
+    const missing = (await backendTestHarnessImports()).filter(
+      (name) => optionalPeers.has(name) && !declared.has(name),
+    );
+
+    expect(missing).toEqual([]);
+  });
+
   it("keeps host-provided packages out of dependencies", async () => {
     const { dependencies } = await scaffoldWithDependencies(workDir);
 
-    // Bundling a shimmed package ships a second copy of a singleton (a second
-    // React means "Invalid hook call"), and bundling an external defeats the
-    // loader alias.
     expect(
       dependencies.filter(
         (name) =>

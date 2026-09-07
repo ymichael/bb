@@ -5,6 +5,7 @@ import { cleanup, render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadTerminalContent } from "./ThreadTerminalContent";
 import type { ThreadTerminalController } from "./useThreadTerminalController";
+import { makeTerminalSession } from "@/test/fixtures/terminal-sessions";
 
 const threadTerminalView = vi.hoisted(() =>
   vi.fn((props: { autoFocus: boolean; isPanelOpen: boolean }) => (
@@ -19,22 +20,14 @@ vi.mock("./ThreadTerminalView", () => ({
   ThreadTerminalView: threadTerminalView,
 }));
 
-const session: TerminalSession = {
+const session: TerminalSession = makeTerminalSession({
   id: "term_1",
   threadId: "thr_1",
   environmentId: "env_1",
   hostId: "host_1",
-  title: "Terminal",
-  initialCwd: "/workspace",
-  cols: 100,
-  rows: 30,
-  status: "running",
-  exitCode: null,
-  closeReason: null,
   createdAt: 1,
   updatedAt: 1,
-  lastUserInputAt: null,
-};
+});
 
 function controller(
   isPanelOpen: boolean,
@@ -91,8 +84,6 @@ describe("ThreadTerminalContent", () => {
     );
     const mountedView = rendered.getByTestId("terminal-view");
 
-    // Compact drawer swiped closed: the panel is hidden but still persisted
-    // open, so the controller asks to keep the view mounted.
     rendered.rerender(
       <ThreadTerminalContent
         autoFocus={false}
@@ -104,7 +95,6 @@ describe("ThreadTerminalContent", () => {
     expect(hiddenView).toBe(mountedView);
     expect(hiddenView.dataset.panelOpen).toBe("false");
 
-    // Reopening reuses the same xterm instance instead of remounting.
     rendered.rerender(
       <ThreadTerminalContent autoFocus={false} controller={controller(true)} />,
     );

@@ -4,11 +4,6 @@ import { cn } from "@bb/shared-ui/lib/utils";
 import type { ShowcaseArchetype } from "./showcase-archetype";
 import { accentInk, accentTint, neutral } from "./showcase-tokens";
 
-/**
- * The one example-card shape every tier uses, so grids of different sources
- * still read as one system. Without an accent token the icon chip goes
- * neutral, marking capability-level entries apart from the flagship ideas.
- */
 export function ShowcaseExampleCard({
   icon,
   title,
@@ -21,8 +16,6 @@ export function ShowcaseExampleCard({
   title: string;
   description: string;
   accentToken?: string;
-  /** Full seeded prompt, shown on hover AND keyboard focus (the card view
-   * truncates the brief, so this is the only way to read it pre-commit). */
   tooltip?: string;
   onClick: () => void;
 }) {

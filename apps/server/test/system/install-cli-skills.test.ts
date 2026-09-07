@@ -23,7 +23,6 @@ async function writeBuiltinCliSkill(harness: TestAppHarness): Promise<void> {
   );
 }
 
-/** The hash the server would install, read from its own registered tree. */
 function expectedCliSkillTreeHash(harness: TestAppHarness): string {
   const entry = resolveServerOwnedSkillCatalogEntries({
     builtinSkillsRootPath: harness.deps.config.builtinSkillsRootPath,

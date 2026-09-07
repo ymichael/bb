@@ -97,8 +97,6 @@ describe("identity", () => {
     });
     expect(first.hostId).toBe("host-original");
 
-    // Simulate the first attempt failing after loadHostIdentity but before
-    // persistHostId — the user retries with a different BB_HOST_ID.
     const second = await loadHostIdentity({
       dataDir,
       fallbackHostName: () => "test-host",

@@ -2,28 +2,25 @@
 
 import type { ComponentProps } from "react";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Host, ProviderInfo } from "@bb/domain";
+import type { ProviderInfo } from "@bb/domain";
+import { makeHost, makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { UsageLimitsSettingsSectionContent } from "./UsageLimitsSettingsSection";
 
-const primaryHost: Host = {
+const primaryHost = makeHost({
   id: "host-primary",
   name: "MacBook Pro",
-  type: "persistent",
-  status: "connected",
   lastSeenAt: 1,
-  maxPermissionMode: "full",
-  lastRejectedProtocolVersion: null,
   createdAt: 1,
   updatedAt: 1,
-};
+});
 
-const remoteHost: Host = {
+const remoteHost = makeHost({
   ...primaryHost,
   id: "host-remote",
   name: "Build machine",
-};
+});
 
 function provider(
   id: string,
@@ -31,12 +28,10 @@ function provider(
   supportsUsage = true,
   strings?: ProviderInfo["strings"],
 ): ProviderInfo {
-  return {
+  return makeProviderInfo({
     id,
-    pluginId: `provider-${id}`,
     displayName,
     logoUrl: null,
-    available: true,
     maintenance: { health: true, usage: supportsUsage, installation: false },
     capabilities: {
       supportsThreadArchive: false,
@@ -48,12 +43,10 @@ function provider(
       modelCatalogScope: "workspace",
       permissionModes: ["full"],
     },
-    composerActions: [],
     ...(strings === undefined ? {} : { strings }),
-  };
+  });
 }
 
-/** The first-party roster with the copy its plugins declare. */
 const FIRST_PARTY_PROVIDERS: ProviderInfo[] = [
   provider("codex", "Codex", true, {
     signInHint: "Run `codex` to sign in and see your usage.",
@@ -62,7 +55,8 @@ const FIRST_PARTY_PROVIDERS: ProviderInfo[] = [
   }),
   provider("claude-code", "Claude Code", true, {
     signInHint: "Run `claude` to sign in and see your usage.",
-    expiredHint: "Your Claude session expired. Run `claude`, then reload usage.",
+    expiredHint:
+      "Your Claude session expired. Run `claude`, then reload usage.",
     installUrl: "https://claude.com/claude-code",
   }),
   provider("acp-cursor", "Cursor", true, {
@@ -78,8 +72,6 @@ afterEach(cleanup);
 function renderContent(
   props: ComponentProps<typeof UsageLimitsSettingsSectionContent>,
 ) {
-  // The roster (names and declared copy) comes from the provider list; a
-  // test that passes none gets the first-party roster, as the live query would.
   return render(
     <TooltipProvider>
       <UsageLimitsSettingsSectionContent
@@ -124,7 +116,7 @@ describe("UsageLimitsSettingsSectionContent", () => {
     expect(screen.getByText("$5.00 / $50")).toBeDefined();
   });
 
-  it("keeps an uninstalled provider visible with its status", () => {
+  it("hides an uninstalled provider", () => {
     renderContent({
       usage: {
         codex: { status: "unauthenticated" },
@@ -136,8 +128,8 @@ describe("UsageLimitsSettingsSectionContent", () => {
       onRefresh: vi.fn(),
     });
 
-    expect(screen.getByRole("heading", { name: "Cursor" })).toBeDefined();
-    expect(screen.getByText("Not installed on this machine.")).toBeDefined();
+    expect(screen.queryByRole("heading", { name: "Cursor" })).toBeNull();
+    expect(screen.queryByText("Not installed on this machine.")).toBeNull();
     expect(screen.getByRole("heading", { name: "Codex" })).toBeDefined();
   });
 
@@ -286,6 +278,11 @@ describe("UsageLimitsSettingsSectionContent", () => {
       onSelectHost,
     });
 
+    const sectionHeader = screen
+      .getByRole("heading", { name: "Usage limits" })
+      .closest("section")?.firstElementChild;
+    expect(sectionHeader?.classList.contains("flex-col")).toBe(true);
+
     fireEvent.pointerDown(
       screen.getByRole("button", { name: "Usage limits machine" }),
       { button: 0 },
@@ -307,6 +304,11 @@ describe("UsageLimitsSettingsSectionContent", () => {
       onSelectHost: vi.fn(),
     });
 
+    const sectionHeader = screen
+      .getByRole("heading", { name: "Usage limits" })
+      .closest("section")?.firstElementChild;
+    expect(sectionHeader?.classList.contains("flex-row")).toBe(true);
+    expect(sectionHeader?.classList.contains("flex-col")).toBe(false);
     expect(
       screen.queryByRole("button", { name: "Usage limits machine" }),
     ).toBeNull();
@@ -315,11 +317,12 @@ describe("UsageLimitsSettingsSectionContent", () => {
 
 describe("UsageLimitsSettingsSectionContent marks", () => {
   it("draws each provider's declared logo beside its usage block", () => {
-    // Core vendors no brand marks: the block draws the logo the provider's
-    // plugin declared (served as logoUrl), passed through from the roster.
     renderContent({
       providers: [
-        { ...provider("codex", "Codex"), logoUrl: "/api/v1/system/providers/codex/logo" },
+        {
+          ...provider("codex", "Codex"),
+          logoUrl: "/api/v1/system/providers/codex/logo",
+        },
       ],
       usage: {},
       isLoading: false,

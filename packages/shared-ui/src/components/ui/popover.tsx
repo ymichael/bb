@@ -1,4 +1,3 @@
-/* shadcn/ui-derived */
 import * as React from "react";
 import * as PopoverPrimitive from "@radix-ui/react-popover";
 
@@ -16,10 +15,7 @@ import {
   getOverlayTriggerClassName,
   preventOverlayTriggerSelection,
 } from "./overlay-trigger.js";
-
-// ---------------------------------------------------------------------------
-// Context — separate instance from DropdownMenu
-// ---------------------------------------------------------------------------
+import { usePointerCoarse } from "./hooks/use-pointer-coarse.js";
 
 const ResponsivePopoverContext =
   React.createContext<ResponsiveOverlayContextValue>({
@@ -31,10 +27,6 @@ const ResponsivePopoverContext =
 function useResponsivePopover() {
   return React.useContext(ResponsivePopoverContext);
 }
-
-// ---------------------------------------------------------------------------
-// Root
-// ---------------------------------------------------------------------------
 
 function Popover({
   children,
@@ -69,10 +61,6 @@ function Popover({
     </PopoverPrimitive.Root>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Trigger
-// ---------------------------------------------------------------------------
 
 const PopoverTrigger = React.forwardRef<
   HTMLButtonElement,
@@ -115,19 +103,13 @@ const PopoverTrigger = React.forwardRef<
 });
 PopoverTrigger.displayName = "PopoverTrigger";
 
-// ---------------------------------------------------------------------------
-// Content
-// ---------------------------------------------------------------------------
-
 const PopoverContent = React.forwardRef<
   HTMLDivElement,
   React.ComponentPropsWithoutRef<typeof PopoverPrimitive.Content> & {
-    /** Title announced by screen readers when the mobile drawer opens. */
     mobileTitle?: string;
-    /** Class name applied to the drawer panel on mobile. */
     mobileClassName?: string;
-    /** Called when the mobile drawer transform completes. */
     onMobileContentAnimationEnd?: (open: boolean) => void;
+    autoFocusRef?: React.RefObject<HTMLElement | null>;
   }
 >(
   (
@@ -139,18 +121,28 @@ const PopoverContent = React.forwardRef<
       mobileTitle,
       mobileClassName,
       onMobileContentAnimationEnd,
+      onOpenAutoFocus,
+      autoFocusRef,
       ...props
     },
     ref,
   ) => {
     const { isCompactViewport, open, onOpenChange } = useResponsivePopover();
-    // Unconditional (rules of hooks — the compact branch returns early); the
-    // compact drawer path is covered by the persistent drawer shell.
+    const isPointerCoarse = usePointerCoarse();
     const scopeProps = usePortalScopeProps();
 
+    React.useEffect(() => {
+      if (!open || isCompactViewport || isPointerCoarse || !autoFocusRef)
+        return;
+      const frame = window.requestAnimationFrame(() => {
+        const target = autoFocusRef.current;
+        target?.focus();
+        if (target instanceof HTMLInputElement) target.select();
+      });
+      return () => window.cancelAnimationFrame(frame);
+    }, [autoFocusRef, isCompactViewport, isPointerCoarse, open]);
+
     if (isCompactViewport) {
-      // Forward DOM-level props (event handlers, data-*, aria-*) but strip
-      // Radix positioning/behavior props that are meaningless for a Drawer.
       const domProps = stripRadixContentProps(props);
 
       return (
@@ -182,6 +174,10 @@ const PopoverContent = React.forwardRef<
           {...scopeProps}
           align={align}
           sideOffset={sideOffset}
+          onOpenAutoFocus={(event) => {
+            if (isPointerCoarse || autoFocusRef) event.preventDefault();
+            if (!isPointerCoarse) onOpenAutoFocus?.(event);
+          }}
           className={cn(
             "z-50 w-96 rounded-md border bg-popover p-4 text-popover-foreground shadow-md outline-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
             className,
@@ -195,10 +191,6 @@ const PopoverContent = React.forwardRef<
   },
 );
 PopoverContent.displayName = "PopoverContent";
-
-// ---------------------------------------------------------------------------
-// Anchor (desktop-only positioning concept — passthrough on mobile)
-// ---------------------------------------------------------------------------
 
 const PopoverAnchor = React.forwardRef<
   React.ComponentRef<typeof PopoverPrimitive.Anchor>,
@@ -217,9 +209,5 @@ const PopoverAnchor = React.forwardRef<
   );
 });
 PopoverAnchor.displayName = "PopoverAnchor";
-
-// ---------------------------------------------------------------------------
-// Exports
-// ---------------------------------------------------------------------------
 
 export { Popover, PopoverTrigger, PopoverContent, PopoverAnchor };

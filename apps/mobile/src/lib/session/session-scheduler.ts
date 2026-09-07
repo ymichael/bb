@@ -15,37 +15,19 @@ export type SessionState =
   | { status: "idle" }
   | { status: "authenticating" }
   | { status: "authenticated"; expiresAt: number }
-  /** The gate rejected the machine credential: re-pair this profile. */
   | { status: "auth-required"; detail: string }
-  /** Transient failure; a retry is scheduled for `retryAt`. */
   | { status: "error"; detail: string; retryAt: number };
 
 export interface SessionSchedulerDeps {
   cookieStore: CookieStoreLike;
-  /** Defaults to `fetchDesktopSession` from @bb/connect-client. */
   fetchSession?: (credential: ConnectCredential) => Promise<DesktopSession>;
 }
 
 export interface SessionScheduler {
-  /** Mint + install a session for `profile` now and keep it renewed. */
   start(profile: ConnectServerProfile): Promise<SessionState>;
-  /** Renew now, coalescing with a renewal already in flight. */
   renewNow(): Promise<SessionState>;
-  /**
-   * The server or gate answered 401/403 while the session was believed
-   * valid (a query, the `/ws` upgrade). Re-mint: success installs a fresh
-   * cookie (the old one was lost or expired early), a gate refusal flips to
-   * `auth-required`, and a transient failure leaves the current state alone
-   * (the cookie we hold may still be fine; the regular renewal keeps
-   * running). Coalesces with a renewal already in flight.
-   */
   verifySession(): Promise<SessionState>;
-  /**
-   * Call on AppState `active`: renews when the session is spent, nearly
-   * spent, or in the error state (timers do not run in the background).
-   */
   renewIfDue(): void;
-  /** Forget the current session (profile switch, sign-out, unmount). */
   stop(): void;
   getState(): SessionState;
   onStateChange(listener: (state: SessionState) => void): () => void;
@@ -55,14 +37,6 @@ function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Keeps a bb connect desktop-session cookie alive for one connect profile
- * (mirrors apps/desktop/src/connect-session-renewal.ts). The gate issues a
- * one-hour cookie; we re-mint `SESSION_RENEWAL_LEAD_MS` before expiry and on
- * demand. Every
- * `start()`/`stop()` bumps a generation so a slow renewal for a profile the
- * user already left cannot reschedule itself.
- */
 export function createSessionScheduler(
   deps: SessionSchedulerDeps,
 ): SessionScheduler {
@@ -72,8 +46,6 @@ export function createSessionScheduler(
   let generation = 0;
   let profile: ConnectServerProfile | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
-  // Tagged with its generation so a renewal started before `stop()`/`start()`
-  // is not handed back to the caller of the new `start()`.
   let inFlight: { generation: number; promise: Promise<SessionState> } | null =
     null;
   let state: SessionState = { status: "idle" };
@@ -131,8 +103,6 @@ export function createSessionScheduler(
     } catch (error) {
       if (!isCurrent()) return state;
       if (mapAuthError(error) === "auth-required") {
-        // A verification can arrive while a renewal is still scheduled;
-        // nothing is worth renewing once the credential is refused.
         clearTimer();
         setState({ status: "auth-required", detail: describe(error) });
         return state;
@@ -181,8 +151,6 @@ export function createSessionScheduler(
     },
     renewNow,
     verifySession() {
-      // Nothing to verify before the first mint or after a refusal: the
-      // regular path (start / retry) owns those states.
       if (state.status === "idle" || state.status === "auth-required") {
         return Promise.resolve(state);
       }

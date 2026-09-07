@@ -169,9 +169,7 @@ function delayedSseResponse(delayMs: number, events: JsonValue[]): Response {
           try {
             controller.enqueue(bytes);
             controller.close();
-          } catch {
-            // The request deadline can cancel the reader before this fires.
-          }
+          } catch {}
         }, delayMs);
       },
     }),

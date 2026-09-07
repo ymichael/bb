@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
 import type { Host, ProviderInfo } from "@bb/domain";
+import { makeHost, makeProviderInfo } from "@bb/test-helpers/domain-fixtures";
 import { StoryCard, StoryRow } from "../../../.ladle/story-card";
 import {
   UsageLimitsSettingsSectionContent,
@@ -89,8 +90,6 @@ const EMPTY_AND_ERROR_USAGE: Usage = {
   "claude-code": {
     status: "error",
     message: "Claude usage is temporarily unavailable.",
-    // Read from local credentials before the usage call, so an outage does not
-    // erase the plan bb already knows about.
     planLabel: "Max (5x)",
     accountEmail: null,
   },
@@ -98,48 +97,35 @@ const EMPTY_AND_ERROR_USAGE: Usage = {
 };
 
 const HOSTS: Host[] = [
-  {
+  makeHost({
     id: "host-macbook",
     name: "MacBook Pro",
-    type: "persistent",
-    status: "connected",
     lastSeenAt: 1_700_000_000_000,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 2,
-  },
-  {
+  }),
+  makeHost({
     id: "host-studio",
     name: "Mac Studio",
-    type: "persistent",
-    status: "connected",
     lastSeenAt: 1_700_000_000_000,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 2,
-  },
-  {
+  }),
+  makeHost({
     id: "host-build",
     name: "Build machine",
-    type: "persistent",
     status: "disconnected",
     lastSeenAt: 1_700_000_000_000,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 2,
-  },
+  }),
 ];
 
 function provider(id: string, displayName: string): ProviderInfo {
-  return {
+  return makeProviderInfo({
     id,
-    pluginId: `provider-${id}`,
     displayName,
     logoUrl: null,
-    available: true,
     maintenance: { health: true, usage: true, installation: false },
     capabilities: {
       supportsThreadArchive: false,
@@ -151,8 +137,7 @@ function provider(id: string, displayName: string): ProviderInfo {
       modelCatalogScope: "workspace",
       permissionModes: ["full"],
     },
-    composerActions: [],
-  };
+  });
 }
 
 const PROVIDERS = [

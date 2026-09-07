@@ -53,8 +53,6 @@ describe("guide fixture boundaries", () => {
     expect(
       markup.match(/data-guide-responsive-strategy="reflow"/g),
     ).toHaveLength(1);
-    // Two-axis, capped: width or height pressure shrinks; headroom grows the
-    // fixture toward the legibility ceiling, never past it.
     expect(spatialFixtureScale(360, 720)).toBe(0.5);
     expect(spatialFixtureScale(720, 720)).toBe(1);
     expect(spatialFixtureScale(1280, 720)).toBe(MAX_FIXTURE_SCALE);
@@ -65,26 +63,17 @@ describe("guide fixture boundaries", () => {
   });
 
   it("keeps annotation chips legible while the fixture shrinks under them", () => {
-    // A chip never renders below its authored size: the counter-scale is the
-    // exact inverse of a shrunken fixture, so size x scale x counter = 1.
     expect(annotationChipCounterScale(0.5)).toBe(2);
     expect(annotationChipCounterScale(0.8)).toBeCloseTo(1.25, 10);
     for (const scale of [0.5, 0.6, 0.8, 0.95]) {
       expect(scale * annotationChipCounterScale(scale)).toBeCloseTo(1, 10);
     }
-    // A fixture at or above authored scale leaves chips alone, so they grow
-    // with a roomy mock instead of pinning to one size.
     expect(annotationChipCounterScale(1)).toBe(1);
     expect(annotationChipCounterScale(MAX_FIXTURE_SCALE)).toBe(1);
-    // The ceiling stops a thumbnail-sized fixture from being blanketed by
-    // constant-size chips.
     expect(annotationChipCounterScale(0.2)).toBe(MAX_CHIP_COUNTER_SCALE);
-    // Degenerate measurements fall back to the authored size.
     expect(annotationChipCounterScale(0)).toBe(1);
     expect(annotationChipCounterScale(Number.NaN)).toBe(1);
 
-    // The fixture publishes the counter-scale; the chip consumes it with an
-    // authored-size fallback for chips rendered outside any fixture.
     const markup = renderToStaticMarkup(createElement(ProductMap));
     expect(markup).toContain("--guide-chip-scale");
     expect(markup).toContain("scale-[var(--guide-chip-scale,1)]");
@@ -96,8 +85,6 @@ describe("guide fixture boundaries", () => {
     expect(markup).toContain(
       "overflow-x-clip transition-[height] duration-300 ease-out",
     );
-    // The caret+label group shrink-wraps and centers as one unit, so the
-    // carets hug the strip; the scroller stays the sole horizontal owner.
     expect(markup).toContain("mx-auto flex w-fit max-w-full items-center");
     expect(markup).toContain("data-guide-page-list-scroll");
     expect(markup).toContain("min-w-0 overflow-x-auto");
@@ -163,8 +150,6 @@ describe("guide fixture boundaries", () => {
     expect(tabStrip).not.toContain("items-end");
     expect(tabStrip).not.toContain("pb-2");
     expect(tabStrip).not.toContain("data-guide-badge=");
-    // The tab chips ride the lane the gutter reserves above the frame, each
-    // measured from its own tab — no layer duplicating panel geometry.
     for (const id of ["thread-panel", "file-opener", "code-renderers"]) {
       expect(appMarkup).toMatch(
         new RegExp(
@@ -210,11 +195,11 @@ describe("guide fixture boundaries", () => {
   it("places the sidebar and frame badges in the measured exterior gutter", () => {
     const markup = renderWireframe(createElement(AppShellWireframe));
 
-    // Exterior chips are measured from the regions they annotate — the
-    // markup carries the placement declaration; the rendered QA sweep is the
-    // geometry gate.
     expect(markup).toMatch(
       /data-guide-badge="nav-panel"[\s\S]*?data-guide-badge-placement="start"/,
+    );
+    expect(markup).toMatch(
+      /data-guide-badge="sidebar-navigation"[^>]*data-guide-badge-placement="start"[^>]*data-guide-badge-align="start"/,
     );
     expect(markup).toMatch(
       /data-guide-badge="thread-list"[\s\S]*?data-guide-badge-placement="start"/,
@@ -223,14 +208,23 @@ describe("guide fixture boundaries", () => {
       /data-guide-badge="content-scripts"[\s\S]*?data-guide-badge-placement="end"/,
     );
     expect(markup).not.toContain("overflow-x-auto");
-    // Width bands live on SpatialFixture's measured element (one owner, one
-    // table), never on fixture wrappers where scrollWidth cannot see them.
     expect(markup).not.toContain("min-w-[1260px]");
     expect(markup).toContain("relative w-full px-10 pb-0 pt-[26px]");
-    // The engaged tint for content scripts is the frame's own box.
     expect(markup).toMatch(
       /data-guide-target="content-scripts"[^>]*class="[^"]*absolute inset-0/,
     );
+  });
+
+  it("keeps nested sidebar targets reachable and the thread-header badge outside its control", () => {
+    const markup = renderWireframe(createElement(AppShellWireframe));
+
+    expect(markup).toMatch(
+      /data-guide-region="nav-panel"[^>]*class="[^"]*z-\[2\][^"]*block/,
+    );
+    expect(markup).toMatch(
+      /data-guide-badge="thread-header"[^>]*data-guide-badge-placement="above"/,
+    );
+    expect(markup.match(/data-guide-badge="thread-header"/g)).toHaveLength(1);
   });
 
   it("keeps the sidebar trigger in app-owned overlay chrome", () => {
@@ -239,7 +233,7 @@ describe("guide fixture boundaries", () => {
       'data-guide-fixture="sidebar-top-reserve"',
     );
     const reserveEnd = markup.indexOf(
-      'data-guide-fixture="sidebar-primary-actions"',
+      'data-guide-fixture="sidebar-navigation-primary-actions"',
     );
 
     expect(markup).toContain('data-guide-fixture="sidebar-trigger-overlay"');
@@ -250,6 +244,47 @@ describe("guide fixture boundaries", () => {
     );
   });
 
+  it("shows the app-wide plugin overlay above the host layout", () => {
+    const markup = renderWireframe(createElement(AppShellWireframe));
+    const contract = anatomy.surfaceFixtures["app-overlay"];
+
+    expect(contract.requiredStates).toEqual(["anchor"]);
+    for (const label of contract.labels.anchor) {
+      expect(markup).toContain(label);
+    }
+    for (const classAnchor of contract.fixtureClassAnchors) {
+      expect(markup, `missing fixture class ${classAnchor}`).toContain(
+        classAnchor,
+      );
+    }
+    expect(markup).toMatch(
+      /data-guide-region="app-overlay"[^>]*class="[^"]*absolute[^"]*z-\[6\][^"]*shadow-md/,
+    );
+    expect(markup.match(/data-guide-badge="app-overlay"/g)).toHaveLength(1);
+  });
+
+  it("shows the complete sidebar navigation replacement boundary", () => {
+    const markup = renderWireframe(createElement(AppShellWireframe));
+    const contract = anatomy.surfaceFixtures["sidebar-navigation"];
+
+    expect(contract.requiredStates).toEqual([
+      "owner",
+      "replacement",
+      "fallback",
+    ]);
+    for (const label of contract.labels.owner) {
+      expect(markup).toContain(label);
+    }
+    for (const classAnchor of contract.fixtureClassAnchors) {
+      expect(markup).toContain(classAnchor);
+    }
+    expect(markup).toContain('data-guide-region="sidebar-navigation"');
+    expect(markup).toContain(
+      'data-guide-fixture="sidebar-navigation-primary-actions"',
+    );
+    expect(markup).not.toContain("Custom navigation");
+  });
+
   it("grows the app window within capped viewport-fit bounds while retaining loose timeline spacing", () => {
     const markup = renderWireframe(createElement(AppShellWireframe));
     const timeline = markup.slice(
@@ -257,11 +292,7 @@ describe("guide fixture boundaries", () => {
       markup.indexOf("Fix the flaky checkout tests"),
     );
 
-    // One width owner: the gutter wrapper's floor; the frame fills it minus
-    // the gutter, so a second inner floor would just be a copy to drift.
     expect(markup).not.toContain("min-w-[1180px]");
-    // One authored height per fixture — no frozen app-chrome arithmetic. The
-    // two-axis fixture scale is what fits short panels.
     expect(markup).not.toContain("100dvh");
     expect(markup).toContain("flex min-h-[650px] items-stretch");
     expect(markup).toContain("flex w-[300px] shrink-0 flex-col");
@@ -378,8 +409,6 @@ describe("guide fixture boundaries", () => {
     });
 
     expect(markup).toContain('data-guide-transient-for="mention-provider"');
-    // The menu anchors to the banner it seats above, so its clearance
-    // derives from the banner's own box rather than an authored offset.
     expect(markup).toMatch(
       /data-guide-target="composer-banners"[^>]*>[\s\S]*?data-guide-transient-for="mention-provider"/,
     );

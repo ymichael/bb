@@ -175,12 +175,6 @@ function SortableProviderRow({
   );
 }
 
-/**
- * The generic provider directory: every registered provider in picker order.
- * Order and the default are user settings; each provider's own options
- * (memory, native subagents, …) live on its plugin's settings page, never
- * here — core knows no provider by name.
- */
 export function ProvidersSettingsSection({
   disabled,
   generalSettings,

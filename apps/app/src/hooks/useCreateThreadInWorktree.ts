@@ -8,11 +8,6 @@ interface UseCreateThreadInWorktreeArgs {
   environmentId: string;
 }
 
-// Navigates to root compose and signals the env id via transient
-// location.state. RootComposeView consumes it once on mount,
-// seeds the picker to reuse mode for that env, and clears state — refresh
-// reverts to the user's host-mode default. Reuse intent is never persisted
-// to localStorage or to project-level server defaults.
 export function useCreateThreadInWorktree({
   projectId,
   environmentId,

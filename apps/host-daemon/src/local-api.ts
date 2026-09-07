@@ -43,28 +43,13 @@ type WorkspaceOpenTargetListHandler = (
 ) => Promise<WorkspaceOpenTarget[]>;
 type OpenInTargetHandler = (request: OpenPathInTargetArgs) => Promise<void>;
 
-/**
- * Browser-reachable local HTTP API for colocated setups.
- *
- * Route ownership is documented in `@bb/host-daemon-contract/src/local.ts`.
- * Some routes describe the UI/client machine, while others describe the
- * work-host machine. Remote-client support should route work-host operations
- * through the server and connected work host daemon instead of adding them to a
- * client.
- */
 interface StartLocalApiServerOptions {
   dataDir?: string;
   hostId: string;
   localApiConfig: HostDaemonLocalApiConfig;
   serverUrl: string;
-  /** Port the BB server binds on (parsed from `serverUrl` upstream so the
-   * daemon doesn't need to depend on server config). Used to build the CORS
-   * allowlist. */
   serverPort: number;
-  /** Vite dev port for the BB app frontend; allowed origin for CORS when set. */
   devAppPort?: number;
-  /** Optional public app origin (e.g. `https://app.example.com`); allowed
-   * origin for CORS when the frontend is served from a non-localhost domain. */
   appUrl?: string;
   getConnected: () => boolean;
   listWorkspaceOpenTargets?: WorkspaceOpenTargetListHandler;
@@ -90,16 +75,10 @@ interface ResolveOpenPathInTargetArgs {
 const CLIENT_CONFIG_CACHE_TTL_MS = 1_000;
 const EMPTY_CLIENT_CONFIG: ClientConfig = { servers: {} };
 
-/**
- * Whether an origin hostname is one a DNS-rebound page cannot mint: a loopback
- * name, or a bare IP literal. Mirrors the server's check in
- * `browser-request-guard.ts`; see #1531 for folding both into one module.
- */
 function isSelfEvidentLocalHostname(hostname: string): boolean {
   if (hostname === "localhost" || hostname.endsWith(".localhost")) {
     return true;
   }
-  // `URL.hostname` keeps the brackets on an IPv6 literal.
   if (hostname.startsWith("[") && hostname.endsWith("]")) {
     return true;
   }
@@ -225,15 +204,9 @@ export async function startLocalApiServer(
     value: options.devAppPort,
   });
   const allowedCorsOrigins = new Set<string>(buildLocalAppOrigins(originArgs));
-  // A daemon enrolled with a remote bb already trusts that server for command
-  // traffic. Trust its exact web origin for loopback editor-helper calls too,
-  // so an enrolled browser machine needs no duplicate BB_APP_URL setting.
   try {
     allowedCorsOrigins.add(new URL(options.serverUrl).origin);
-  } catch {
-    // startHostDaemon validates ordinary server URLs. Keep this boundary
-    // defensive for injected test/custom callers instead of failing startup.
-  }
+  } catch {}
   const isAllowedAppOrigin = async (
     origin: string,
     requestUrl: string,
@@ -244,10 +217,6 @@ export async function startLocalApiServer(
     ) {
       return true;
     }
-    // Matching the addressed authority proves nothing by itself: a page on a
-    // public name that resolves to this machine controls both `Origin` and
-    // `Host`, so it can make them agree. This API binds loopback, so a genuine
-    // caller always addresses it by a loopback name or a bare address.
     let originUrl: URL;
     try {
       originUrl = new URL(origin);
@@ -271,13 +240,6 @@ export async function startLocalApiServer(
   app.get(options.localApiConfig.healthPath, (c) =>
     c.text(healthResponseSchema.parse(options.localApiConfig.healthValue)),
   );
-  // CORS hides a response; it does not stop the request being acted on. A
-  // `no-cors` POST with a simple content type skips the preflight, reaches
-  // `/open-in-target`, and runs it, while the page never reads the reply. The
-  // in-app browser can now reach any loopback port it is not told to avoid, and
-  // a second bb daemon on this machine sits on a port the desktop cannot name,
-  // so reject a foreign browser origin outright instead of only withholding the
-  // response header. Non-browser callers send no `Origin` and are unaffected.
   app.use("*", async (c, next) => {
     const origin = c.req.header("origin");
     if (

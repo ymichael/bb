@@ -1,15 +1,3 @@
-/**
- * Incoming deep links: the `bb://` scheme, universal / app links
- * (`https://<handle>.getbb.app/threads/<id>`, any Direct server's URL), and
- * the Expo dev-client's own URLs. Pure: the app-shell (`+native-intent.tsx`)
- * feeds `redirectSystemPath` through `resolveIncomingLink` and acts on the
- * result (switch the active profile, navigate, or prompt to add the server).
- *
- * Web paths map onto the mobile routes where the app has the same surface
- * (mirrors @bb/client-core `route-paths.ts`); everything else falls back to
- * home so a link never strands the user on a "screen does not exist" page.
- */
-
 const BB_URL_SCHEME = "bb";
 
 export interface LinkProfileLike {
@@ -18,48 +6,27 @@ export interface LinkProfileLike {
 }
 
 export type IncomingLink =
-  /** `bb://<path>` — already an app path, routed as-is. */
   | { kind: "scheme"; path: string }
-  /** `http(s)://host[:port]/<web path>` — a universal / app link or a pasted web URL. */
   | { kind: "web"; origin: string; pathname: string; search: string }
-  /** Anything else (the dev-client's `exp+…://`, mailto, …): leave it alone. */
   | { kind: "foreign" };
 
 export type LinkResolution =
   | { kind: "passthrough" }
   | {
       kind: "navigate";
-      /** Mobile route path (with query string). */
       path: string;
-      /** Profile to activate before navigating; null keeps the active one. */
       profileId: string | null;
     }
   | {
-      /** A web link whose server is not saved on this phone. */
       kind: "unknown-server";
       serverUrl: string;
-      /** Where to go once the server is added. */
       path: string;
     };
 
-export interface ResolveIncomingLinkContext {
-  profiles: readonly LinkProfileLike[];
-  activeProfileId: string | null;
-  /**
-   * Whether this bundle exposes the developer-only route groups
-   * (`app/dev/*`, `app/e2e/*`); dev builds and `EXPO_PUBLIC_BB_E2E=1` do.
-   * Scheme links into them land on home otherwise.
-   */
-  developerRoutesEnabled: boolean;
-}
-
-/** The add-server route, prefilled with the linked server and a follow-up path. */
 const ADD_SERVER_PATH = "/settings/servers/add";
 
-/** Route groups that exist only in dev / e2e bundles (see app/e2e/reset.tsx). */
 const DEVELOPER_ROUTE_PREFIXES = ["/dev", "/e2e"] as const;
 
-/** `/dev/spike`, `/e2e/reset?x=1`, … — mobile paths under a developer-only group. */
 export function isDeveloperRoutePath(path: string): boolean {
   const pathname = path.split("?", 1)[0] ?? "";
   return DEVELOPER_ROUTE_PREFIXES.some(
@@ -85,7 +52,6 @@ function splitPathAndSearch(rest: string): {
   };
 }
 
-/** Classify a URL string. Never throws. */
 export function parseIncomingLink(
   url: string,
   scheme: string = BB_URL_SCHEME,
@@ -95,8 +61,6 @@ export function parseIncomingLink(
   const [, protocol, rest] = match;
   if (!protocol || rest === undefined) return { kind: "foreign" };
   if (protocol.toLowerCase() === scheme) {
-    // `bb://threads/x?y=1` → `/threads/x?y=1`; `bb:///threads/x` too. The
-    // "host" part of a custom-scheme URL is the first path segment.
     const { pathname, search } = splitPathAndSearch(rest);
     return { kind: "scheme", path: `${pathname}${search}` };
   }
@@ -120,7 +84,6 @@ export function parseIncomingLink(
 
 interface ProfileMatch {
   profile: LinkProfileLike;
-  /** The web path with the profile's path prefix (if any) removed. */
   pathname: string;
 }
 
@@ -135,11 +98,6 @@ function profilePrefix(
   }
 }
 
-/**
- * Find the saved profile a web link belongs to: same origin and, when the
- * profile sits under a path prefix, the link path inside it (longest prefix
- * wins).
- */
 export function matchProfileForWebLink(
   profiles: readonly LinkProfileLike[],
   origin: string,
@@ -163,7 +121,6 @@ export function matchProfileForWebLink(
   return best;
 }
 
-/** `/settings/servers/add?serverUrl=…&next=…` */
 export function addServerPathForLink(serverUrl: string, next: string): string {
   const params = new URLSearchParams();
   params.set("serverUrl", serverUrl);

@@ -10,7 +10,6 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// A fresh store per render so one test's atom reads never leak into the next.
 function renderPermissionModePreference() {
   const store = createStore();
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -32,8 +31,6 @@ describe("usePromptBoxPermissionModePreference", () => {
   it("drops a stored legacy readonly preference instead of widening it", () => {
     window.localStorage.setItem("bb.promptbox.permission-mode", "readonly");
     const { result } = renderPermissionModePreference();
-    // Untrusted local data: "readonly" must never be reinterpreted as a
-    // writable mode, so the preference reads as unset.
     expect(result.current.value).toBe("");
   });
 

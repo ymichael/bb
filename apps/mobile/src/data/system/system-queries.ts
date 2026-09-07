@@ -22,7 +22,6 @@ interface QueryOptions {
   enabled?: boolean;
 }
 
-/** `GET /system/config`, kept live through the `system` subscription. */
 export function useSystemConfig(options?: QueryOptions) {
   const { sdk } = useProfileClient();
   const enabled = options?.enabled ?? true;
@@ -35,10 +34,6 @@ export function useSystemConfig(options?: QueryOptions) {
   });
 }
 
-/**
- * `GET /system/version`. The server consults npm (5 s timeout, cached for an
- * hour), so this is kept fresh for a long time and never refetched on focus.
- */
 export function useSystemVersion(options?: QueryOptions) {
   const { sdk } = useProfileClient();
   return useQuery<SystemVersionResponse>({
@@ -49,11 +44,6 @@ export function useSystemVersion(options?: QueryOptions) {
   });
 }
 
-/**
- * The provider roster with display names (`GET /system/providers`). Cheaper
- * than the execution-options query (no model probe); use it when only names
- * are needed.
- */
 export function useSystemProviders(options?: QueryOptions) {
   const { sdk } = useProfileClient();
   const enabled = options?.enabled ?? true;
@@ -66,7 +56,6 @@ export function useSystemProviders(options?: QueryOptions) {
   });
 }
 
-/** Route the model probe through an environment's host or an explicit host. */
 export type ExecutionOptionsRouting =
   | { environmentId: string; hostId?: undefined }
   | { environmentId?: undefined; hostId: string }
@@ -74,7 +63,6 @@ export type ExecutionOptionsRouting =
 
 export type UseSystemExecutionOptionsArgs = ExecutionOptionsRouting & {
   enabled?: boolean;
-  /** Omit to let the server pick its default provider. */
   providerId?: string;
 };
 
@@ -103,14 +91,6 @@ function isSameExecutionOptionsRoute(
   );
 }
 
-/**
- * Providers, models, and the machine's permission ceiling for a provider on
- * a route (`GET /system/execution-options`). Switching provider on the same
- * route keeps the previous provider roster as placeholder data (models are
- * provider-specific and start empty) so the picker does not blank out; the
- * Claude probe can take seconds, so callers should render `isPlaceholderData`
- * / `isLoading` as a loading state.
- */
 export function useSystemExecutionOptions(
   args: UseSystemExecutionOptionsArgs = {},
 ) {
@@ -149,8 +129,6 @@ export function useSystemExecutionOptions(
       ) {
         return undefined;
       }
-      // A prior response's models belong to the prior provider. Keep only the
-      // provider-independent roster while the newly selected provider loads.
       return {
         providers: previousData.providers,
         models: [],

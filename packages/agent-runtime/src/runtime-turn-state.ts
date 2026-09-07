@@ -11,13 +11,6 @@ interface WaitForActiveTurnStateArgs {
   timeoutMs: number;
 }
 
-/**
- * Tracks the active turn per thread from observed turn lifecycle events and
- * lets callers await the next `turn/started` observation. Waiters resolve with
- * the turn id in the same tick `observe()` records it, with `null` on timeout,
- * and with `null` when the thread goes idle (`clearThread`/`clear`), so no
- * caller ever has to poll this state.
- */
 export class RuntimeTurnState {
   private readonly activeTurnIdByThreadId = new Map<string, string>();
   private readonly activeTurnWaitersByThreadId = new Map<

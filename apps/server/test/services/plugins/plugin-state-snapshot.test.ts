@@ -288,8 +288,6 @@ describe("plugin activation snapshots and garbage collection", () => {
         validationResult: "valid",
         validatedAt: 1,
       });
-    // The root plugin is collectable; the nested plugin of the same checkout
-    // is not, and its files are inside the root's storage directory.
     makeArtifact("root", "gc-root", checkout);
     makeArtifact("nested", "gc-nested", nestedPath);
     upsertInstalledPlugin(db, {
@@ -407,8 +405,6 @@ describe("plugin activation snapshots and garbage collection", () => {
       "repo",
       commit,
     );
-    // The repository holds a directory named like the commit. Path parsing
-    // would treat it as the checkout root and miss the active root plugin.
     const nestedPath = join(checkout, "vendor", commit);
     await mkdir(nestedPath, { recursive: true });
     await writeFile(join(nestedPath, "sentinel"), "keep");

@@ -22,28 +22,11 @@ export function parseGitDiffFiles(
   }
 }
 
-/** A normalized single-file patch plus the file it parsed to. */
 interface NormalizedFilePatch {
-  /** Complete patch text, including a `diff --git` header. */
   patch: string;
   file: ParsedGitDiffFile;
 }
 
-/**
- * Normalize and parse patch text for exactly ONE file.
- *
- * Patch sources disagree about headers: `git diff` emits a `diff --git` line,
- * GitHub's REST API and inline review hunks emit bare `@@` hunks. Only the
- * `diff --git` line puts the parser in git-aware mode — without it the `a/`
- * and `b/` prefixes survive into the file names and every file reads as a
- * rename. Completing the header from `path` is what makes one host renderer
- * able to accept both shapes.
- *
- * Returns null when nothing renderable parses out — including the case that
- * matters most in practice, text that is not a patch at all: completing a
- * header in front of it still parses, just to a file with no hunks, which
- * would render as an empty diff instead of showing the caller their content.
- */
 export function normalizeFilePatch({
   patch,
   path,
@@ -69,13 +52,6 @@ interface GitDiffContextEnrichmentInput {
   patchText?: string;
 }
 
-/**
- * Reparses a raw file patch with both full file sides attached. The returned
- * file is only enriched when the supplied paths and every hunk line agree with
- * the original patch. `@pierre/diffs` trusts caller-supplied contents, so this
- * check prevents unrelated, empty, or swapped files from being presented as
- * expandable context.
- */
 export function enrichGitDiffFileForContext({
   fileDiff,
   oldFile,
@@ -86,9 +62,6 @@ export function enrichGitDiffFileForContext({
     return fileDiff;
   }
 
-  // Do not inherit the partial diff's cache key. Pierre treats matching cache
-  // keys as semantic equality, but callers may refresh the full contents while
-  // retaining the same patch identity.
   const enrichedFile = processFile(patchText, { oldFile, newFile });
   if (
     enrichedFile === undefined ||
@@ -224,10 +197,6 @@ export function normalizeGitDiffPath(
   return trimmedPath && trimmedPath.length > 0 ? trimmedPath : undefined;
 }
 
-// Browser-renderable raster formats only. SVG diffs arrive as regular text
-// hunks, so SVG preview support is handled separately and keeps a raw toggle.
-// TIFF/HEIC are absent because `<img>` can't render them in every browser we
-// support.
 const IMAGE_GIT_DIFF_FILE_EXTENSIONS: ReadonlySet<string> = new Set([
   "avif",
   "bmp",

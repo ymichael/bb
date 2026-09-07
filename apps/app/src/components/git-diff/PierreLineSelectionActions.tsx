@@ -88,9 +88,6 @@ function isGutterUtilityPointerEvent(
   return isGutterUtilityPath(event.nativeEvent.composedPath());
 }
 
-// `Event.composedPath()` is `EventTarget[]` under lib.dom but `[EventTarget?]`
-// once `@types/node`'s web-globals are in scope; accept both (each element is
-// re-narrowed with `instanceof Element` below).
 function isGutterUtilityPath(
   path: readonly (EventTarget | undefined)[],
 ): boolean {

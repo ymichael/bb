@@ -1,7 +1,13 @@
 import type { ThreadListEntry, ThreadWithRuntime } from "@bb/domain";
+import { makeThreadWithRuntime as makeThreadWithRuntimeFixture } from "@bb/test-helpers/domain-fixtures";
 import type { SidebarBootstrapResponse } from "@bb/server-contract";
 import { describe, expect, it } from "vitest";
 import { createQueryClientTestHarness } from "@/test/queryClientTestHarness";
+import { makeThreadListEntry as makeThreadListEntryFixture } from "@bb/test-helpers/domain-fixtures";
+import {
+  makeProjectWithThreadsResponse,
+  makeSidebarBootstrapResponse,
+} from "@/test/fixtures/projects";
 import {
   sidebarNavigationQueryKey,
   threadListQueryKey,
@@ -16,23 +22,13 @@ import {
 function makeThreadWithRuntime(
   thread: Partial<ThreadWithRuntime> = {},
 ): ThreadWithRuntime {
-  return {
+  return makeThreadWithRuntimeFixture({
     id: "thread-1",
     projectId: "project-1",
     environmentId: "env-1",
-    providerId: "codex",
     title: null,
     titleFallback: null,
-    sectionId: null,
     status: "active",
-    parentThreadId: null,
-    sourceThreadId: null,
-    originKind: null,
-    originPluginId: null,
-    visibility: "visible",
-    archivedAt: null,
-    pinnedAt: null,
-    deletedAt: null,
     lastReadAt: null,
     latestAttentionAt: 50,
     createdAt: 1,
@@ -42,61 +38,36 @@ function makeThreadWithRuntime(
       hostReconnectGraceExpiresAt: null,
     },
     ...thread,
-  };
+  });
 }
 
 function makeThreadListEntry(
   thread: Partial<ThreadListEntry> = {},
 ): ThreadListEntry {
-  return {
-    ...makeThreadWithRuntime(thread),
-    activity: {
-      activeWorkflowCount: 0,
-      activeBackgroundAgentCount: 0,
-      activeBackgroundCommandCount: 0,
-      activePlanModeCount: 0,
-      activeGoalCount: 0,
-    },
-    pinSortKey: null,
-    hasPendingInteraction: false,
+  return makeThreadListEntryFixture({
+    ...makeThreadWithRuntime(),
     environmentHostId: "host-1",
     environmentName: "Environment",
     environmentBranchName: "main",
     environmentWorkspaceDisplayKind: "managed-worktree",
     ...thread,
-  };
+  });
 }
 
 function makeSidebarNavigation(
   threads: ThreadListEntry[],
 ): SidebarBootstrapResponse {
-  return {
-    sections: [],
+  return makeSidebarBootstrapResponse({
     projects: [
-      {
+      makeProjectWithThreadsResponse({
         id: "project-1",
-        kind: "standard",
         name: "Project",
-        gitRemoteUrl: null,
         createdAt: 1,
         updatedAt: 1,
-        sources: [],
         threads,
-        defaultExecutionOptions: null,
-      },
+      }),
     ],
-    personalProject: {
-      id: "proj_personal",
-      kind: "personal",
-      name: "Personal",
-      gitRemoteUrl: null,
-      createdAt: 1,
-      updatedAt: 1,
-      sources: [],
-      threads: [],
-      defaultExecutionOptions: null,
-    },
-  };
+  });
 }
 
 describe("thread state cache owner", () => {

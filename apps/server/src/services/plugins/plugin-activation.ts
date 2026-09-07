@@ -55,7 +55,6 @@ interface PluginActivationContext {
   withArtifactLock: <T>(key: string, fn: () => Promise<T>) => Promise<T>;
   withLifecycleLock: <T>(id: string, fn: () => Promise<T>) => Promise<T>;
   disposeOne: (id: string) => Promise<void>;
-  /** Resolves the load problem, or null once the row's sources are loaded. */
   loadOne: (row: InstalledPluginRow) => Promise<string | null>;
   restoreRegistration: (row: InstalledPluginRow) => void;
   provenanceForRow: (row: InstalledPluginRow) => PluginProvenance;
@@ -137,8 +136,6 @@ export function createPluginActivation(context: PluginActivationContext) {
       );
     }
     await disposeOne(snapshot.pluginId);
-    // Rollback is intentionally limited to bb-owned state. Effects the
-    // candidate already caused in external systems cannot be reversed.
     await restorePluginStateSnapshot({
       db: deps.db,
       dataDir: deps.dataDir,
@@ -169,8 +166,6 @@ export function createPluginActivation(context: PluginActivationContext) {
         `plugin "${snapshot.pluginId}" failed to reload during rollback: ${runtime.detail ?? "unknown error"}`,
       );
     }
-    // Loading synchronizes schedule registrations; replay the captured host
-    // rows once more so rollback restores their exact run state.
     await restorePluginHostStateSnapshot({ db: deps.db, snapshotId });
     if (!setPluginStateSnapshotStatus(deps.db, snapshotId, "restored", now())) {
       throw new Error(`plugin rollback snapshot disappeared: ${snapshotId}`);

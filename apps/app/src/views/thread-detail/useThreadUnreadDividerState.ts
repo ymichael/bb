@@ -113,8 +113,6 @@ export function useThreadUnreadDividerState({
         currentSnapshot.attentionAt === threadLatestAttentionAt
       ) {
         if (threadLastReadAt === null) {
-          // Preserve the existing scroll decision when a manual unread mark
-          // moves the divider from the cutoff row to the top.
           const autoScroll =
             currentSnapshot.placement !== null && currentSnapshot.autoScroll;
           return {
@@ -135,12 +133,7 @@ export function useThreadUnreadDividerState({
         threadId,
       };
     });
-  }, [
-    routeThreadId,
-    threadId,
-    threadLastReadAt,
-    threadLatestAttentionAt,
-  ]);
+  }, [routeThreadId, threadId, threadLastReadAt, threadLatestAttentionAt]);
 
   if (
     !shouldTrackThreadUnreadDivider({

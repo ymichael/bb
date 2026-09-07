@@ -2,8 +2,8 @@
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
+import { makeTask } from "../../test-fixtures.js";
 
-// jsdom lacks matchMedia; the vendored Dialog's responsive root needs it.
 if (!window.matchMedia) {
   window.matchMedia = (query: string) => ({
     matches: false,
@@ -17,8 +17,6 @@ if (!window.matchMedia) {
   });
 }
 
-// loadPluginApp installs the fake SDK runtime; nothing SDK-touching may be
-// imported before it runs.
 const app = await loadPluginApp(() => import("../../app"));
 
 afterEach(cleanup);
@@ -28,22 +26,14 @@ const TASK_ID = "01HZZZZZZZZZZZZZZZZZZZZZT5";
 const THREAD_ROW_ID = "01HZZZZZZZZZZZZZZZZZZZZZR1";
 const OFFLINE_ROW_ID = "01HZZZZZZZZZZZZZZZZZZZZZR2";
 
-const task = {
+const task = makeTask({
   id: TASK_ID,
   projectId: PROJECT_ID,
   number: 5,
   key: "TSK-5",
   title: "Ship the PR pill",
-  description: "",
-  status: "todo",
-  priority: "none",
-  dueDate: null,
-  parentTaskId: null,
   position: 1,
-  createdAt: "2026-07-15T00:00:00.000Z",
-  updatedAt: "2026-07-15T00:00:00.000Z",
-  labelIds: [],
-};
+});
 
 function taskThreadRow(id: string, threadId: string, title: string) {
   return {
@@ -124,7 +114,6 @@ describe("task detail pull request pills", () => {
       name: "Pull request #12: Ship the PR pill (Merged)",
     })) as HTMLAnchorElement;
     expect(link.href).toBe("https://github.com/acme/bb/pull/12");
-    // New-tab links must not leak the opener to GitHub.
     expect(link.target).toBe("_blank");
     expect(link.rel).toContain("noopener");
     expect(link.textContent).toContain("#12");
@@ -154,7 +143,6 @@ describe("task detail pull request pills", () => {
 
     await slot.findByText("Offline worker");
     expect(slot.getAllByText("PR unavailable")).toHaveLength(1);
-    // The healthy thread with no PR renders no pill and no link.
     expect(slot.queryByRole("link")).toBeNull();
   });
 
@@ -187,7 +175,6 @@ describe("task detail pull request pills", () => {
         input: { taskId: TASK_ID, threadId: "thr_worker000" },
       });
     });
-    // The section disappears with its last thread.
     await waitFor(() => expect(slot.queryByText("Worker")).toBeNull());
   });
 
@@ -205,7 +192,6 @@ describe("task detail pull request pills", () => {
       { subPath: "task/TSK-5" },
       {
         rpc: detailRpc({
-          // First fetch sees an open PR; every revalidation sees it merged.
           listTaskPullRequests: () => {
             lookupCount += 1;
             return {
@@ -226,7 +212,6 @@ describe("task detail pull request pills", () => {
       name: "Pull request #12: Ship the PR pill (Open)",
     });
 
-    // GitHub merged the PR; no Tasks realtime event fires for that.
     window.dispatchEvent(new Event("focus"));
 
     await waitFor(() => {

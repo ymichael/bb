@@ -25,15 +25,6 @@ import {
   ContextMenuTrigger,
 } from "@bb/shared-ui/context-menu";
 
-/**
- * Portaled overlay content renders into document.body — outside every
- * `[data-bb-plugin-root]` slot mount — so plugin-scoped utilities
- * (prefixed with `:where([data-bb-plugin-root])`, see buildPluginApp) would not style it.
- * usePortalScopeProps re-attaches the scope iff the component rendered from a
- * plugin slot (PluginContext present). Regression for the Phase-3 bug where a
- * plugin's `className` on DialogContent silently didn't apply.
- */
-
 function inPluginScope(children: ReactNode) {
   return (
     <PluginContext.Provider value="test-plugin">
@@ -61,12 +52,9 @@ describe("usePortalScopeProps", () => {
     const content = baseElement.querySelector('[role="dialog"]');
     expect(content).not.toBeNull();
     expect(content!.getAttribute("data-bb-portaled-overlay")).toBe("");
-    // Portaled out of the plugin mount subtree, so it must carry its own
-    // scope root for the plugin stylesheet to reach it.
     expect(content!.getAttribute("data-bb-plugin-root")).toBe("");
 
     const scoped = baseElement.querySelectorAll("[data-bb-plugin-root]");
-    // Overlay + content (both portaled top-level elements).
     expect(scoped.length).toBe(2);
     expect(
       baseElement.querySelectorAll("[data-bb-portaled-overlay]").length,

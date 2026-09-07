@@ -71,10 +71,8 @@ describe("splitStreamingMarkdown", () => {
   });
 
   it("requires the closing fence to match the opening marker", () => {
-    // A shorter backtick run does not close a four-backtick fence.
     const text = "Intro.\n\n````md\n```\ninner\n```\n\ntext\n";
     expectSplit(text, "Intro.\n\n");
-    // A tilde fence is closed only by tildes.
     const tilde = "Intro.\n\n~~~\n```\n\nx\n";
     expectSplit(tilde, "Intro.\n\n");
   });

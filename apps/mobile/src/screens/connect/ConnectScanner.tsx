@@ -8,9 +8,7 @@ import {
 import { Button, GROUPED_CARD_RADIUS, Text } from "@/ui";
 
 interface ConnectScannerProps {
-  /** Called once per recognized pairing payload; the scanner then pauses. */
   onScanned: (input: ConnectPairingInput) => void;
-  /** Re-arm the scanner after the caller handled a payload. */
   active: boolean;
 }
 
@@ -19,16 +17,9 @@ const CARD_STYLE = {
   borderCurve: "continuous" as const,
 };
 
-/**
- * Camera viewfinder that recognizes the pairing QR (JSON / URL / bare code,
- * see `parseConnectPairingPayload`). Anything else is ignored so a stray
- * barcode never pairs. Permission prompts and the settings fallback live
- * here; the simulator has no camera and shows a blank viewfinder.
- */
 export function ConnectScanner({ onScanned, active }: ConnectScannerProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [lastIgnored, setLastIgnored] = useState<string | null>(null);
-  // One payload per arming: the camera keeps firing while the QR is in view.
   const handledRef = useRef(false);
   useEffect(() => {
     if (active) handledRef.current = false;

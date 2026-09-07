@@ -10,11 +10,7 @@ type PreviewState =
   | { status: "ready"; frameLoaded: boolean; url: string }
   | { status: "error"; message: string };
 
-function PdfFileOpener({
-  path,
-  source,
-  Original,
-}: PluginFileOpenerProps) {
+function PdfFileOpener({ path, source, Original }: PluginFileOpenerProps) {
   const [reloadNonce, setReloadNonce] = useState(0);
   const [state, setState] = useState<PreviewState>({ status: "loading" });
   const target = useMemo(

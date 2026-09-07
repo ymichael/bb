@@ -23,13 +23,8 @@ import {
 } from "@/lib/plugin-replacement-preference";
 import { diffRendererProviderAtom } from "./codeRendererProvider";
 import { DiffHost } from "./DiffHost";
+import { makePluginRegistrationSet } from "@/test/fixtures/plugins";
 
-/**
- * Records whether BB's default renderer chunk was ever pulled. `vi.mock`
- * factories run on first import of the specifier, and `DiffHost` only reaches
- * `./BbDiff` through `lazy(() => import(...))`, so a flag set here is exactly
- * "the default renderer chunk loaded".
- */
 const bbDiff = vi.hoisted(() => ({
   loaded: false,
   lastProps: null as Record<string, unknown> | null,
@@ -96,16 +91,12 @@ const receivedProps: PluginDiffRendererProps[] = [];
 function registerDiffRenderer(
   component: (props: PluginDiffRendererProps) => React.ReactNode,
 ) {
-  setPluginSlotRegistrations("demo", {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    diffRenderers: [{ id: "diffs", title: "Demo diffs", component }],
-  });
+  setPluginSlotRegistrations(
+    "demo",
+    makePluginRegistrationSet({
+      diffRenderers: [{ id: "diffs", title: "Demo diffs", component }],
+    }),
+  );
 }
 
 beforeEach(() => {
@@ -141,8 +132,6 @@ describe("DiffHost", () => {
     );
 
     expect(await screen.findByTestId("plugin-diff")).toBeDefined();
-    // A microtask/frame is enough for a lazy() import to settle if one were
-    // requested; assert after letting the queue drain.
     await act(async () => {
       await Promise.resolve();
     });
@@ -197,8 +186,6 @@ describe("DiffHost", () => {
     expect(patch).toContain("+++ b/src/app.ts");
     expect(patch).toContain("-const b = 2;");
     expect(patch).toContain("+const b = 3;");
-    // The reconstruction must re-parse to the same rendered file, or a
-    // replacement would draw something the caller never asked for.
     const reparsed = parseGitDiffFiles(patch)[0];
     expect(reparsed?.name).toBe("src/app.ts");
     expect(reparsed?.hunks).toHaveLength(1);
@@ -219,7 +206,6 @@ describe("DiffHost", () => {
 
     expect(await screen.findByTestId("bb-diff")).toBeDefined();
     expect(bbDiff.loaded).toBe(true);
-    // Delegation must reach BB's renderer with the host-only inputs intact.
     expect(bbDiff.lastProps?.file).toBeDefined();
   });
 
@@ -250,25 +236,19 @@ describe("DiffHost", () => {
       receivedProps.push(props);
       return <div data-testid="plugin-diff">first plugin</div>;
     });
-    setPluginSlotRegistrations("aardvark", {
-      homepageSections: [],
-      settingsSections: [],
-      navPanels: [],
-      threadPanelActions: [],
-      sidebarFooterActions: [],
-      fileOpeners: [],
-      messageDirectives: [],
-      diffRenderers: [
-        {
-          id: "diffs",
-          title: "Aardvark diffs",
-          component: () => <div data-testid="aardvark-diff">aardvark</div>,
-        },
-      ],
-    });
+    setPluginSlotRegistrations(
+      "aardvark",
+      makePluginRegistrationSet({
+        diffRenderers: [
+          {
+            id: "diffs",
+            title: "Aardvark diffs",
+            component: () => <div data-testid="aardvark-diff">aardvark</div>,
+          },
+        ],
+      }),
+    );
     const store = createStore();
-    // "aardvark" sorts before "demo", so automatic would switch the user's
-    // renderer out from under them; an explicit pin must not.
     store.set(
       diffRendererProviderAtom,
       replacementProviderKey({ pluginId: "demo", id: "diffs" }),
@@ -337,7 +317,6 @@ describe("experimental_Diff", () => {
       return <div data-testid="plugin-diff">plugin diff</div>;
     });
 
-    // The shape GitHub's REST API returns: hunks with no `diff --git` header.
     render(
       <PluginDiff
         patch={"@@ -1,2 +1,2 @@\r\n-const b = 2;\r\n+const b = 3;"}
@@ -381,10 +360,6 @@ describe("experimental_Diff", () => {
   });
 });
 
-/**
- * A bundle built against an SDK before 0.4.16 reads `experimental_Original`
- * (renamed `Original` in 0.4.16). The host passes both for one release.
- */
 describe("DiffHost experimental_Original alias", () => {
   it("delegates to BB's renderer through the alias and warns once across renders", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

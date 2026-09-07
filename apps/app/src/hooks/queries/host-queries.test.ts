@@ -1,19 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { Host } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { selectPrimaryHost } from "./host-queries";
 
 function host(overrides: Partial<Host> & Pick<Host, "id">): Host {
-  return {
+  return makeHost({
     name: overrides.id,
-    type: "persistent",
-    status: "connected",
-    lastSeenAt: null,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
     createdAt: 1,
     updatedAt: 1,
     ...overrides,
-  };
+  });
 }
 
 describe("selectPrimaryHost", () => {

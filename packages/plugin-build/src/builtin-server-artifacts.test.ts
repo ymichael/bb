@@ -7,7 +7,6 @@ import { resolvePluginBuildToolchain } from "./toolchain.js";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
 
-/** Every `@get-bb/plugin-sdk…` specifier a bundle still imports or requires. */
 function bundledSdkSpecifiers(bundle: string): string[] {
   const specifiers = new Set<string>();
   for (const match of bundle.matchAll(
@@ -18,16 +17,6 @@ function bundledSdkSpecifiers(bundle: string): string[] {
   return [...specifiers].sort();
 }
 
-/**
- * The packaged server aliases exactly one specifier, the bare
- * `@get-bb/plugin-sdk`, to the runtime bundle it ships; any other SDK
- * specifier left in a plugin's `dist/server.js` resolves to
- * `plugin-sdk-runtime.js/<subpath>` there and fails the plugin's load, which
- * is how every packaged install once came up with zero provider plugins.
- * Each first-party server entry is built the way `bb plugin build` and the
- * server's own build build it, and the bundle is imported, so a subpath that
- * was left external — or inlined from a source-only resolution — cannot pass.
- */
 describe("builtin server artifacts", () => {
   const tempDirs: string[] = [];
 
@@ -54,7 +43,6 @@ describe("builtin server artifacts", () => {
         await cp(join(source, fileName), join(root, fileName));
       }
       await cp(join(source, "src"), join(root, "src"), { recursive: true });
-      // The manifest's branding icon must resolve for the build to run.
       await cp(join(source, "icons"), join(root, "icons"), { recursive: true });
       await symlink(
         join(source, "node_modules"),
@@ -67,8 +55,6 @@ describe("builtin server artifacts", () => {
       const built = await buildPluginServer(root, "0.9.0-test", toolchain);
 
       const bundle = await readFile(built.jsPath, "utf8");
-      // Entries whose root imports are type-only leave no SDK specifier at
-      // all; what must never remain is a subpath.
       expect(
         bundledSdkSpecifiers(bundle).filter(
           (specifier) => specifier !== "@get-bb/plugin-sdk",

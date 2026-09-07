@@ -15,14 +15,6 @@ import type { AppDeps } from "../../types.js";
 
 type WireThreadTab = ThreadTabsWireResponse["tabs"][number];
 
-/**
- * Omit `hostId` from the wire when it is `null`. The field arrived with a
- * `.default(null)` after mobile builds had already shipped a `.strict()` copy
- * of this schema, and installed apps cannot update with the server: an
- * unknown key makes their SDK reject every tabs response, and the panel
- * stops syncing ("Couldn't sync tabs"). Current clients parse the omission
- * back to `null` through the default, so nothing is lost on the wire.
- */
 function toWireThreadTab(tab: ThreadTab): WireThreadTab {
   if (tab.kind === "host-file-preview") {
     const { hostId, ...rest } = tab;

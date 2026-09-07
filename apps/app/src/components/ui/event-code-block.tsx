@@ -7,13 +7,6 @@ interface EventCodeBlockProps {
   tone?: "default" | "danger";
 }
 
-/**
- * Code-styling primitive — renders monospace text with the standard event
- * surface treatment, but does not own scroll behavior. Wrap with
- * `TimelineDetailScroll` (or another scroll container) when the content can
- * exceed its available height; this primitive only controls typography,
- * padding, and tone.
- */
 export function EventCodeBlock({
   children,
   className,

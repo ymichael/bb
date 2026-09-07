@@ -230,13 +230,6 @@ const MERMAID_WHEEL_MIN_ZOOM_FACTOR = 0.82;
 const MERMAID_WHEEL_MAX_ZOOM_FACTOR = 1.22;
 const MERMAID_DIAGRAM_CENTER_POINT: MermaidDiagramPoint = { x: 0, y: 0 };
 
-// Mermaid bakes concrete colors into the rendered SVG and does its own
-// lighten/darken math, so it can't consume `var(--token)` directly. Resolve the
-// app's theme tokens to concrete rgb() strings at render time — mirroring
-// buildTerminalTheme in ThreadTerminalView — so diagrams track the active
-// palette (built-in or custom), not just light/dark mode. Each mermaid slot maps
-// to the closest semantic token; the neutral fills/borders/text follow the
-// canvas/ink anchors and the line color follows the accent.
 const MERMAID_TOKEN = {
   nodeFill: "--secondary",
   altFill: "--muted",
@@ -249,11 +242,6 @@ const MERMAID_TOKEN = {
 
 let srgbCanvasContext: CanvasRenderingContext2D | null | undefined;
 
-// Normalize any CSS color (including the oklch()/color-mix() values
-// getComputedStyle preserves) to an sRGB rgb()/rgba() string. Mermaid's color
-// math (khroma) only understands sRGB, so feeding it raw oklch() breaks shading.
-// fillStyle alone preserves the color space, so rasterize a pixel and read the
-// sRGB backing store back.
 function toSrgbColor(color: string): string {
   if (srgbCanvasContext === undefined) {
     srgbCanvasContext =
@@ -276,9 +264,6 @@ function resolveThemeColor(probe: HTMLElement, varName: string): string {
   const raw = getComputedStyle(document.documentElement)
     .getPropertyValue(varName)
     .trim();
-  // Assigning the (possibly color-mix/var) token to a real color property forces
-  // the browser to compute a concrete color. "currentColor" is a themed fallback
-  // if a token is ever missing.
   probe.style.color = raw || "currentColor";
   return toSrgbColor(getComputedStyle(probe).color);
 }
@@ -985,12 +970,7 @@ export function MarkdownMermaidDiagram({
   const containerElementRef = useRef<HTMLDivElement>(null);
   const diagramElementRef = useRef<HTMLDivElement>(null);
   const renderId = useMemo(() => buildMermaidRenderId(reactId), [reactId]);
-  // Re-render the SVG (which has baked-in colors) when the app palette changes,
-  // not just on light/dark mode toggles.
   const appThemeEpoch = useAppThemeEpoch();
-  // A diagram that was rendered before (a remount during the streaming
-  // settled/tail hand-off, a re-expanded turn, navigating back) paints its
-  // cached SVG on the first frame instead of flashing the placeholder.
   const [initialCachedDiagram] = useState(() =>
     peekMermaidRenderCache(
       buildMermaidRenderCacheKey({ appThemeEpoch, preferredTheme, source }),
@@ -1004,15 +984,9 @@ export function MarkdownMermaidDiagram({
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [displayMode, setDisplayMode] =
     useState<MermaidDiagramDisplayMode>("preview");
-  // Diagrams render only once they come near the viewport (shared observer);
-  // a long thread with many diagrams does not run Mermaid for all of them on
-  // mount.
   const [hasEnteredViewport, setHasEnteredViewport] = useState(
     initialCachedDiagram !== null,
   );
-  // The source last handed to the renderer for this instance. Source changes
-  // after the first render are streaming deltas and are debounced; the first
-  // render and theme changes run immediately.
   const renderedSourceRef = useRef<string | null>(
     initialCachedDiagram === null ? null : source,
   );
@@ -1089,8 +1063,6 @@ export function MarkdownMermaidDiagram({
         isCurrentRender = false;
       };
     }
-    // Streaming delta: keep the previous render on screen and re-render once
-    // the source has been stable for the debounce window.
     const timeoutId = window.setTimeout(
       runRender,
       MERMAID_SOURCE_RENDER_DEBOUNCE_MS,

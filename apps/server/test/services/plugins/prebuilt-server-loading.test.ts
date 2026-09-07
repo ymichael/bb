@@ -44,14 +44,6 @@ function gitPersistence(url: string, requestedRef: string) {
   };
 }
 
-/**
- * Prebuilt backend distribution (design §3 loader amendment, §6): managed
- * (git:/npm:) installs prefer a fresh, SDK-compatible dist/server.js;
- * path installs always load from source. Pre-1.0, minor SDK bumps are
- * breaking, so compatibility means the exact SDK version. The fixture's
- * source entry THROWS, so whichever half runs is unambiguous.
- */
-
 const THROWING_SERVER_TS = `throw new Error("source must not load");\n`;
 
 const PREBUILT_SERVER_JS = `export default async function plugin(bb) {
@@ -123,8 +115,6 @@ describe("prebuilt server bundle loading", () => {
 
   it("prefers a fresh dist/server.js for git installs (source never evaluated)", async () => {
     const rootDir = await writePrebuiltPlugin("bb-plugin-gitdist");
-    // Managed-source registration without the clone step (materialization is
-    // not under test); the row's git: source is what flips the loader path.
     upsertInstalledPlugin(db, {
       ...gitPersistence("https://github.com/acme/bb-plugin-gitdist", "v1"),
       id: "gitdist",
@@ -170,7 +160,6 @@ describe("prebuilt server bundle loading", () => {
     await service.reload("minordist");
 
     const entry = service.list().find((plugin) => plugin.id === "minordist");
-    // The throwing source ran — proof the 0.x-stale dist was NOT imported.
     expect(entry?.status).toBe("error");
     expect(entry?.statusDetail).toContain("source must not load");
   });
@@ -191,7 +180,6 @@ describe("prebuilt server bundle loading", () => {
     await service.reload("staledist");
 
     const entry = service.list().find((plugin) => plugin.id === "staledist");
-    // The throwing source ran — proof the stale dist was NOT imported.
     expect(entry?.status).toBe("error");
     expect(entry?.statusDetail).toContain("source must not load");
   });

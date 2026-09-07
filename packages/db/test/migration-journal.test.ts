@@ -137,11 +137,6 @@ describe("migration journal integrity", () => {
     expect(violations).toEqual([]);
   });
 
-  // Regression guard: a migration that is hand-authored and added to the
-  // journal without running `drizzle-kit generate` has no meta snapshot. The
-  // snapshot chain then silently goes stale, and the next `drizzle-kit
-  // generate` diffs against the wrong base and emits a corrupt migration.
-  // Every journal entry must carry its generated snapshot.
   it("has a matching snapshot file for every journal entry", () => {
     const { entries } = readJournal();
 
@@ -159,7 +154,10 @@ describe("migration journal integrity", () => {
     let previousSnapshotId: string | null = null;
     for (const entry of entries) {
       const snapshot = readSnapshot(entry.idx);
-      if (previousSnapshotId !== null && snapshot.prevId !== previousSnapshotId) {
+      if (
+        previousSnapshotId !== null &&
+        snapshot.prevId !== previousSnapshotId
+      ) {
         violations.push(
           `${entry.tag} snapshot prevId=${snapshot.prevId}, expected ${previousSnapshotId}`,
         );

@@ -4,7 +4,6 @@ import {
   hostDaemonEventBatchResponseSchema,
   hostDaemonInteractiveInterruptResponseSchema,
   hostDaemonInteractiveRequestResponseSchema,
-  hostDaemonRuntimePolicySchema,
   hostDaemonSessionOpenResponseSchema,
   hostDaemonSkillTreeSchema,
   hostDaemonToolCallResponseSchema,
@@ -17,7 +16,6 @@ import {
   type HostDaemonInteractiveInterruptRequest,
   type HostDaemonInteractiveRequest,
   type HostDaemonLoadedEnvironment,
-  type HostDaemonRuntimePolicy,
   type HostDaemonProjectAttachmentContentQuery,
   type HostDaemonSessionOpenRequest,
   type HostDaemonSessionOpenResponse,
@@ -149,9 +147,6 @@ function toRetryControlError(error: ServerResponseError): Error {
   return error.retryable ? error : new AbortError(error);
 }
 
-// The client only ever calls fetchFn(url, init); it never uses fetch.preconnect.
-// Typing the dependency as fetch's call signature (not `typeof fetch`) keeps it
-// precise and lets plain function / vi.fn mocks satisfy it.
 export type FetchFn = (
   ...args: Parameters<typeof fetch>
 ) => ReturnType<typeof fetch>;
@@ -162,7 +157,6 @@ interface CreateServerClientOptions {
   logger: HostDaemonLogger;
   machineCredential?: string;
   getSessionId: () => string;
-  /** Runs before each POST attempt so retryable ordering preconditions can be repaired. */
   beforeInteractiveRequestRegistrationAttempt?: () => Promise<void>;
   fetchFn?: FetchFn;
 }
@@ -182,7 +176,6 @@ interface OpenSessionArgs {
 }
 
 export interface ServerClient {
-  getRuntimePolicy(): Promise<HostDaemonRuntimePolicy>;
   openSession(args: OpenSessionArgs): Promise<HostDaemonSessionOpenResponse>;
   fetchProjectAttachment(
     args: FetchProjectAttachmentArgs,
@@ -317,7 +310,6 @@ function validateHostArtifactPartialByteLength(
   }
 }
 
-/** A declared content-length that disagrees is refused before a byte is read. */
 function assertHostArtifactContentLength(
   response: Response,
   expectedByteLength: number,
@@ -340,15 +332,6 @@ function assertHostArtifactContentLength(
   }
 }
 
-/**
- * Read an executable artifact response — a plugin host bundle or a provider
- * bridge bundle — enforcing the declared length and the absolute ceiling as
- * the stream arrives, so a server that lies about either is cut off mid-body
- * instead of after the daemon has allocated it.
- *
- * `maxBytes` is an internal seam for exercising the limit without allocating
- * the production cap.
- */
 export async function readHostArtifactBytes(
   response: Response,
   expectedByteLength: number,
@@ -449,17 +432,6 @@ export function createServerClient(
   }
 
   return {
-    async getRuntimePolicy(): Promise<HostDaemonRuntimePolicy> {
-      const response = await fetchFn(buildInternalUrl("/runtime-policy"), {
-        method: "GET",
-        headers: headers(),
-      });
-      if (!response.ok) {
-        throw await createResponseError("get runtime policy", response);
-      }
-      return hostDaemonRuntimePolicySchema.parse(await response.json());
-    },
-
     async openSession(
       args: OpenSessionArgs,
     ): Promise<HostDaemonSessionOpenResponse> {
@@ -535,10 +507,6 @@ export function createServerClient(
     },
 
     async fetchSkillTree(treeHash: string): Promise<HostDaemonSkillTree> {
-      // Skill trees ride the same authenticated transport as the rest of the
-      // daemon protocol and are hash-verified after download. For a trusted-LAN
-      // setup, that declared network is the boundary even when it uses HTTP.
-      // Attachments and self-update intentionally retain stricter guards.
       const response = await fetchFn(
         buildInternalUrl(`/skills/tree/${encodeURIComponent(treeHash)}`),
         { method: "GET", headers: headers() },

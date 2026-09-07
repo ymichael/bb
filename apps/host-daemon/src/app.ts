@@ -1,3 +1,4 @@
+import { startDesktopBrowserBroker } from "./desktop-browser-broker.js";
 import { CommandRouter } from "./command-router.js";
 import { createDaemon, type HostDaemon } from "./daemon.js";
 import {
@@ -96,7 +97,6 @@ interface IdleProviderSessionReaperRuntimeManager {
 interface StartIdleProviderSessionReaperArgs {
   logger: HostDaemonLogger;
   nowMs: () => number;
-  resolveProviderSessionReapingEnabled: () => Promise<boolean>;
   runtimeManager: IdleProviderSessionReaperRuntimeManager;
   setIntervalFn: IdleProviderSessionReaperIntervalFn;
 }
@@ -130,7 +130,7 @@ interface CreateHostDaemonAppOptions {
   fetchFn?: FetchFn;
   createWebSocket?: CreateReconnectingWebSocket;
   closeMachineAuthProxy?: () => Promise<void>;
-  forceExit?: (code: number) => void;
+  exitProcess?: (code: number) => void;
 }
 
 export interface HostDaemonApp {
@@ -160,22 +160,11 @@ export function startIdleProviderSessionReaper(
       return;
     }
     running = true;
-    void args
-      .resolveProviderSessionReapingEnabled()
-      .catch((error) => {
-        args.logger.warn(
-          { ...runtimeErrorLogFields(error) },
-          "Failed to read idle provider session experiment policy",
-        );
-        return false;
+    void args.runtimeManager
+      .reapIdleProviderSessions({
+        idleForMs: IDLE_PROVIDER_SESSION_REAP_AFTER_MS,
+        nowMs: args.nowMs(),
       })
-      .then((providerSessionReapingEnabled) =>
-        args.runtimeManager.reapIdleProviderSessions({
-          idleForMs: IDLE_PROVIDER_SESSION_REAP_AFTER_MS,
-          nowMs: args.nowMs(),
-          providerSessionReapingEnabled,
-        }),
-      )
       .then((result) => {
         if (result.reapedSessions.length === 0) {
           return;
@@ -288,14 +277,10 @@ export async function createHostDaemonApp(
   }
 
   async function flushThreadEventsBeforeInteractiveRegistration(): Promise<void> {
-    // Interactive registration creates server-owned turn-scoped timeline state,
-    // so the server must first observe the provider turn/started for that turn.
     await eventSink.flush();
   }
 
   async function flushThreadEventsBeforeToolCall(): Promise<void> {
-    // Dynamic tool calls can append server-owned turn-scoped events, so the
-    // server must first observe any provider turn/started already emitted.
     await eventSink.flush();
   }
 
@@ -699,8 +684,6 @@ export async function createHostDaemonApp(
   const idleProviderSessionReaper = startIdleProviderSessionReaper({
     logger: options.logger,
     nowMs: Date.now,
-    resolveProviderSessionReapingEnabled: async () =>
-      (await serverClient.getRuntimePolicy()).providerSessionReaping,
     runtimeManager,
     setIntervalFn: (callback, intervalMs) => {
       const timer = setInterval(callback, intervalMs);
@@ -746,7 +729,15 @@ export async function createHostDaemonApp(
     },
   });
 
+  const desktopBrowserBroker = await startDesktopBrowserBroker({
+    dataDir: options.dataDir,
+    hostId: options.hostId,
+    serverUrl: options.serverUrl,
+    onChanged: (event) => sendServerMessage(event),
+  });
+
   const router = new CommandRouter({
+    desktopBrowserBroker,
     dataDir: options.dataDir,
     fetchProjectAttachment: (args) =>
       runSessionRequest({
@@ -866,10 +857,6 @@ export async function createHostDaemonApp(
     onTerminalMessage: (message) => terminalManager.handleMessage(message),
     onSessionOpened: async (session) => {
       sessionState.value = session.sessionId;
-      // Apply the HTTP session snapshot before the first await. A plugin may
-      // declare shares after session/open and immediately push generation 1;
-      // applying generation 0 synchronously prevents that newer websocket
-      // replacement from being overwritten by the initial empty snapshot.
       connectTunnel.replaceAuthoritativeShareSet(session.connectShares);
       await pluginHostManager.reconcileGenerations(
         session.pluginHostGenerations,
@@ -902,6 +889,7 @@ export async function createHostDaemonApp(
     },
     setSession: (session) => {
       sessionState.value = session?.sessionId ?? null;
+      desktopBrowserBroker.setConnected(session !== null);
       if (session === null) {
         clearInteractiveInterruptRetry();
       }
@@ -943,11 +931,12 @@ export async function createHostDaemonApp(
     },
     logger: options.logger,
     releaseLock: options.releaseLock,
-    ...(options.forceExit ? { forceExit: options.forceExit } : {}),
+    ...(options.exitProcess ? { exitProcess: options.exitProcess } : {}),
     flushEvents: async () => {
       await eventSink.flush();
     },
     shutdownRuntimes: async () => {
+      await desktopBrowserBroker.close();
       idleProviderSessionReaper.stop();
       eventLoopStallMonitor.stop();
       hostDaemonHealthMonitor.stop();
@@ -956,8 +945,6 @@ export async function createHostDaemonApp(
       await localApi?.close();
       connectTunnel.shutdown();
       await watchManager.shutdown();
-      // Tear down the isolated parcel watcher child (SIGKILL + clear timers) so
-      // the daemon's event loop can drain and the child is not orphaned.
       disposeParcelWatcherBackend();
       await terminalManager.shutdownAll();
       await runtimeManager.shutdownAll();
@@ -974,12 +961,12 @@ export async function createHostDaemonApp(
     },
   });
   requestDaemonRestart = () => {
-    void daemon.shutdown("self-update").catch((error) => {
+    void daemon.shutdown("self-update", 0).catch((error) => {
       options.logger.error({ err: error }, "Self-update shutdown failed");
     });
   };
   connection.setSessionCloseHandler((reason) =>
-    daemon.shutdown(`session-close:${reason}`),
+    daemon.shutdown(`session-close:${reason}`, 0),
   );
 
   return {

@@ -30,9 +30,7 @@ export interface ProfilesContextValue {
   status: ProfileStoreStatus;
   profiles: readonly ServerProfile[];
   activeProfile: ServerProfile | null;
-  /** Non-null when a saved profile could not be read (it was skipped). */
   loadError: string | null;
-  /** Live client/socket/session for `activeProfile`; null until activated. */
   connection: ActiveProfileConnection | null;
   addProfile(input: NewServerProfile): Promise<ServerProfile>;
   updateProfile(id: string, patch: ServerProfilePatch): Promise<ServerProfile>;
@@ -42,20 +40,12 @@ export interface ProfilesContextValue {
 
 const ProfilesContext = createContext<ProfilesContextValue | null>(null);
 
-// Keeps the React tree shape stable while no profile is active (first run,
-// after removing the last server). Nothing queries through it: hooks that
-// need a client go through `useProfileClient`, which requires a connection.
 let placeholderQueryClient: QueryClient | null = null;
 function getPlaceholderQueryClient(): QueryClient {
   placeholderQueryClient ??= createProfileQueryClient();
   return placeholderQueryClient;
 }
 
-/**
- * Owns the profile store, activates the selected profile (client + realtime
- * + connect session), and scopes TanStack Query to the active profile's
- * QueryClient. Mount once, inside the theme provider.
- */
 export function ProfilesProvider({ children }: { children: ReactNode }) {
   const store = getProfileStore();
   const connector = getActiveProfileConnector();
@@ -121,7 +111,6 @@ export function useProfiles(): ProfilesContextValue {
   return value;
 }
 
-/** The active profile's SDK client. Only call under an active connection. */
 export function useProfileClient(): ProfileClient {
   const { connection } = useProfiles();
   if (!connection) {

@@ -14,9 +14,6 @@ import { PluginIcon, pluginIconName } from "@/components/plugin/PluginIcon";
 import type { MessageProseSelection } from "./SelectableMessageProse.js";
 import type { ThreadTimelinePluginMessageAction } from "./types.js";
 
-// Labeled horizontal action button for the floating selection menu. Unlike the
-// hover-revealed icon-only `MessageActionBar` buttons, the floating menu IS the
-// affordance, so each action shows its label (matching the approved mock).
 const SELECTION_ACTION_BUTTON_CLASS =
   "inline-flex cursor-pointer items-center gap-1 rounded px-1.5 py-0.5 text-xs text-foreground transition-colors hover:bg-surface-recessed focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring select-none max-md:pointer-coarse:min-h-7 max-md:pointer-coarse:px-2 max-md:pointer-coarse:py-1";
 const SELECTION_MENU_CONTENT_CLASS =
@@ -24,9 +21,7 @@ const SELECTION_MENU_CONTENT_CLASS =
 
 interface SelectionAction {
   icon: IconName;
-  /** Set on plugin-contributed actions; renders PluginIcon over `icon`. */
   plugin?: { pluginId: string | null; icon: string | null };
-  /** Render key when `label` may not be unique (plugin actions). */
   key?: string;
   label: string;
   onSelect: (selection: MessageProseSelection) => void;
@@ -35,10 +30,6 @@ interface SelectionAction {
 export interface TimelineSelectionMenuProps {
   selection: MessageProseSelection | null;
   onAddToChat?: (text: string) => void;
-  /**
-   * Plugin-contributed actions for the current selection, resolved by the
-   * timeline root (each `onSelect` already carries the selection context).
-   */
   pluginActions?: readonly ThreadTimelinePluginMessageAction[];
   onDismiss: () => void;
 }
@@ -54,23 +45,14 @@ function ActionButton({
 }) {
   const ignoreNextClickRef = useRef(false);
   const activate = () => {
-    // On mobile browsers, showing the keyboard requires focus to reach the
-    // destination editor before the deliberate touch action returns. The
-    // selection action can mount a side chat or update the main draft, while
-    // dismissing this popover unmounts its focus trap; let neither update drift
-    // beyond pointer-up.
     flushSync(() => {
       action.onSelect(selection);
-      // Clear the lingering highlight so the source text doesn't read as
-      // "still selected" after the quote/side-chat has been created.
       window.getSelection()?.removeAllRanges();
       onDismiss();
     });
   };
   const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
     if (event.pointerType === "mouse") return;
-    // Preserve the native touch/pen selection until pointer-up activates the
-    // action. The stored selection remains the source of truth for the action.
     event.preventDefault();
     ignoreNextClickRef.current = true;
   };
@@ -82,8 +64,6 @@ function ActionButton({
     <button
       type="button"
       className={SELECTION_ACTION_BUTTON_CLASS}
-      // Keep the text selection alive through the click so the action still
-      // receives the selected text (and the menu stays anchored).
       onMouseDown={(event: MouseEvent) => preventOverlayTriggerSelection(event)}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -124,11 +104,6 @@ function ActionButton({
   );
 }
 
-/**
- * Floating horizontal menu shown near an agent-message text selection. Built as
- * a self-contained component driven by `selection` + callbacks; the timeline
- * controller that supplies them is wired separately.
- */
 export function TimelineSelectionMenu({
   selection,
   onAddToChat,
@@ -138,8 +113,6 @@ export function TimelineSelectionMenu({
   const open = selection !== null;
   const portalScopeProps = usePortalScopeProps();
 
-  // Dismiss on scroll/resize rather than re-anchoring: the captured rect goes
-  // stale the moment the viewport moves, so closing is the honest behavior.
   useEffect(() => {
     if (!open || typeof window === "undefined") return;
     const dismiss = () => onDismiss();
@@ -185,7 +158,6 @@ export function TimelineSelectionMenu({
         ]
       : []),
     ...pluginActions.map((action) => ({
-      // Unused when `plugin` is set; a valid member keeps the type narrow.
       icon: "MessageSquarePlus" as const,
       plugin: { pluginId: action.pluginId, icon: action.icon },
       key: action.key,
@@ -195,9 +167,6 @@ export function TimelineSelectionMenu({
   ];
   if (actions.length === 0) return null;
 
-  // Prefer the conventional above-selection placement on every input type.
-  // Radix's collision handling flips the menu below only when the viewport
-  // does not have enough room above the virtual anchor.
   return (
     <PopoverPrimitive.Root
       open
@@ -205,10 +174,7 @@ export function TimelineSelectionMenu({
         if (!next) onDismiss();
       }}
     >
-      {/*
-        Use a virtual viewport anchor. A real fixed-position anchor can be
-        distorted by transformed ancestors in diff/preview panels.
-      */}
+      {}
       <PopoverPrimitive.Anchor virtualRef={virtualAnchorRef} />
       <PopoverPrimitive.Portal>
         <PopoverPrimitive.Content
@@ -220,9 +186,6 @@ export function TimelineSelectionMenu({
           className={SELECTION_MENU_CONTENT_CLASS}
           onEscapeKeyDown={() => onDismiss()}
           onOpenAutoFocus={(event) => event.preventDefault()}
-          // Selection actions explicitly hand focus to their destination
-          // composer. Do not let the popover restore focus to its now-closed
-          // action button and steal that handoff on mobile.
           onCloseAutoFocus={(event) => event.preventDefault()}
         >
           {actions.map((action, index) => (

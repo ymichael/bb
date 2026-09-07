@@ -3,17 +3,13 @@ import { useUploadPromptAttachment } from "@/hooks/mutations/project-mutations";
 import { getMutationErrorMessage } from "@/lib/mutation-errors";
 import { BbHttpError } from "@/lib/sdk";
 import type { PromptDraftAttachment } from "@bb/client-core";
-import type { InlineQueuedMessageEditState } from "./useInlineQueuedMessageEditing";
+import type { InlineComposerDraftSession } from "./useActiveComposerDraft";
 
 interface UseComposerAttachmentUploadsArgs {
   projectId: string;
-  /** Appends an uploaded attachment to the bottom composer draft. */
   addDraftAttachment: (attachment: PromptDraftAttachment) => void;
-  inlineEditingQueuedMessage: InlineQueuedMessageEditState | null;
-  inlineEditingQueuedMessageRef: React.RefObject<InlineQueuedMessageEditState | null>;
-  commitInlineQueuedMessage: (
-    next: InlineQueuedMessageEditState | null,
-  ) => void;
+  inlineEditSessionId: number | null;
+  inlineSessionRef: React.RefObject<InlineComposerDraftSession | null>;
 }
 
 interface UseComposerAttachmentUploadsResult {
@@ -28,7 +24,6 @@ interface UseComposerAttachmentUploadsResult {
 }
 
 interface DraftAttachmentUploadTarget {
-  /** Changes whenever a newly mounted draft must not receive older uploads. */
   key: string;
   addAttachment: (attachment: PromptDraftAttachment) => void;
 }
@@ -51,10 +46,6 @@ interface DraftAttachmentOperationState {
   targetKey: string | null;
 }
 
-/**
- * The server states why it refused an upload (unsupported format, size
- * limit); transport failures carry nothing a user can act on.
- */
 function uploadRejectionReason(error: unknown): string | null {
   return error instanceof BbHttpError
     ? getMutationErrorMessage({ error, fallbackMessage: "Request failed" })
@@ -71,7 +62,6 @@ function attachFailureMessage(
     : `Failed to attach ${names}: ${reason}`;
 }
 
-/** Upload state for one independently mounted composer draft. */
 export function useDraftAttachmentUploads({
   projectId,
   target,
@@ -156,17 +146,11 @@ export function useDraftAttachmentUploads({
   };
 }
 
-/**
- * Uploads dropped/picked files for either independently mounted composer. The
- * inline owner is captured per invocation so a dismissed edit session cannot
- * receive a late upload.
- */
 export function useComposerAttachmentUploads({
   projectId,
   addDraftAttachment,
-  inlineEditingQueuedMessage,
-  inlineEditingQueuedMessageRef,
-  commitInlineQueuedMessage,
+  inlineEditSessionId,
+  inlineSessionRef,
 }: UseComposerAttachmentUploadsArgs): UseComposerAttachmentUploadsResult {
   const {
     attachmentError: bottomAttachmentError,
@@ -177,32 +161,19 @@ export function useComposerAttachmentUploads({
     projectId,
     target: { key: "bottom", addAttachment: addDraftAttachment },
   });
-  const inlineEditSessionId = inlineEditingQueuedMessage?.editSessionId ?? null;
   const addInlineAttachment = useCallback(
     (uploaded: PromptDraftAttachment) => {
-      const current = inlineEditingQueuedMessageRef.current;
-      if (
-        current === null ||
-        current.editSessionId !== inlineEditSessionId ||
-        current.draft.attachments.some(
-          (existing) => existing.path === uploaded.path,
-        )
-      ) {
+      const current = inlineSessionRef.current;
+      if (current === null || current.editSessionId !== inlineEditSessionId) {
         return;
       }
-      commitInlineQueuedMessage({
-        ...current,
-        draft: {
-          ...current.draft,
-          attachments: [...current.draft.attachments, uploaded],
-        },
-      });
+      current.setDraft((draft) =>
+        draft.attachments.some((existing) => existing.path === uploaded.path)
+          ? draft
+          : { ...draft, attachments: [...draft.attachments, uploaded] },
+      );
     },
-    [
-      commitInlineQueuedMessage,
-      inlineEditSessionId,
-      inlineEditingQueuedMessageRef,
-    ],
+    [inlineEditSessionId, inlineSessionRef],
   );
   const {
     attachmentError: inlineAttachmentError,
@@ -211,8 +182,6 @@ export function useComposerAttachmentUploads({
     isAttachingFiles: isAttachingInlineFiles,
   } = useDraftAttachmentUploads({
     projectId,
-    // `editSessionId` is monotonically unique per edit session, so a key match
-    // is a session match.
     target:
       inlineEditSessionId !== null
         ? {

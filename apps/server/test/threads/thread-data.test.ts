@@ -111,5 +111,4 @@ describe("thread data stored event parsing", () => {
       db.$client.close();
     }
   });
-
 });

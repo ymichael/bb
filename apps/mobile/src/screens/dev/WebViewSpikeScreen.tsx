@@ -1,13 +1,3 @@
-// Phase 0 spike screen for the "WebView shell around the PWA" plan.
-//
-// It loads any bb server origin in a WKWebView with the props the shell would
-// use, then runs injected probes for the six Phase 0 questions: getUserMedia,
-// the file chooser, xterm, the soft keyboard, cold-start timing, and a
-// plain-HTTP LAN origin.
-//
-// Everything the page reports is appended to an on-screen log and mirrored to
-// `<documents>/webview-spike/session.jsonl`, so a run on a simulator can be
-// read from the host without a debugger attached.
 import {
   fetchDesktopSession,
   redeemMachineCredential,
@@ -34,8 +24,6 @@ import {
   type SpikeProbeId,
 } from "./webview-spike-probes";
 
-// The boot watcher has to start at the page's time origin, so it ships with
-// the harness rather than as a probe a run injects later.
 const SPIKE_PRELUDE = `${SPIKE_HARNESS}
 ${BOOT_TIMING_PROBE}`;
 
@@ -53,11 +41,6 @@ interface SpikeEvent {
   payload: unknown;
 }
 
-/**
- * Mirrors every spike event to two host-readable channels: the Metro console,
- * which a run can `grep` live, and a JSONL file inside the app container for a
- * complete record after the run.
- */
 function appendSessionLine(event: SpikeEvent): void {
   const line = JSON.stringify(event);
   console.log(`SPIKE ${line}`);
@@ -73,9 +56,7 @@ function appendSessionLine(event: SpikeEvent): void {
     } finally {
       handle.close();
     }
-  } catch {
-    // The log file is a convenience for the host. Never fail the run on it.
-  }
+  } catch {}
 }
 
 function firstParam(value: string | string[] | undefined): string | undefined {
@@ -117,14 +98,9 @@ export function WebViewSpikeScreen() {
   const [cacheEnabled, setCacheEnabled] = useState(
     firstParam(params.cache) !== "0",
   );
-  // iOS puts a previous/next/Done accessory bar above the keyboard for every
-  // web form field. The native app has no such bar, so the shell needs to know
-  // whether hiding it closes part of the keyboard-quality gap.
   const [hideAccessoryBar, setHideAccessoryBar] = useState(
     firstParam(params.accessory) === "0",
   );
-  // WKWebView only exposes `navigator.serviceWorker` for app-bound domains,
-  // which need both this flag and a static `WKAppBoundDomains` Info.plist list.
   const appBound = firstParam(params.appbound) === "1";
   const [log, setLog] = useState<string[]>([]);
   const webViewRef = useRef<WebView>(null);
@@ -158,10 +134,6 @@ export function WebViewSpikeScreen() {
     });
   }, [cacheEnabled, grantType, incognito, loadedUrl, record, reloadKey]);
 
-  // Enrolls this simulator as a connect machine and installs the desktop
-  // session cookie in both native cookie stores, exactly the way
-  // `dev/connect-spike` does. The WebView then authenticates through the same
-  // jar, so a tunnel origin loads without a sign-in page.
   const enroll = useCallback(
     async (machineCode: string) => {
       try {
@@ -213,8 +185,6 @@ export function WebViewSpikeScreen() {
     void enroll(enrollCode);
   }, [enroll, enrollCode]);
 
-  // Expo Router reuses this screen when a new deep link only changes the
-  // query, so the loaded URL has to follow the param rather than seed state.
   const urlParam = firstParam(params.url);
   const cacheParam = firstParam(params.cache);
   const accessoryParam = firstParam(params.accessory);
@@ -248,8 +218,6 @@ export function WebViewSpikeScreen() {
     [record],
   );
 
-  // `bb://dev/webview-spike?probes=environment,voice&nonce=1` runs a probe
-  // sequence with no taps, so a whole spike is one `simctl openurl` call.
   const probeList = firstParam(params.probes);
   const probeNonce = firstParam(params.nonce);
   const probeDelayMs = Number(firstParam(params.delay) ?? "1200");
@@ -360,7 +328,6 @@ export function WebViewSpikeScreen() {
           key={`${loadedUrl}#${reloadKey}#${incognito ? "i" : "p"}#${cacheEnabled ? "c" : "n"}#${hideAccessoryBar ? "a" : "b"}#${probeNonce ?? ""}#${appBound ? "ab" : "nb"}`}
           ref={webViewRef}
           source={{ uri: loadedUrl }}
-          // The props the production shell would set.
           sharedCookiesEnabled
           originWhitelist={["*"]}
           javaScriptEnabled
@@ -368,7 +335,7 @@ export function WebViewSpikeScreen() {
           allowsInlineMediaPlayback
           mediaPlaybackRequiresUserAction={false}
           mediaCapturePermissionGrantType={grantType}
-          allowsBackForwardNavigationGestures
+          allowsBackForwardNavigationGestures={false}
           allowFileAccessFromFileURLs
           incognito={incognito}
           cacheEnabled={cacheEnabled}

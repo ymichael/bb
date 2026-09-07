@@ -48,7 +48,6 @@ describe("AnimatedBody", () => {
         <span>expensive body</span>
       </AnimatedBody>,
     );
-    // Retained: re-opening must be instant.
     expect(screen.getByText("expensive body")).not.toBeNull();
     expect(
       screen.getByRole("region", { hidden: true }).getAttribute("aria-hidden"),
@@ -83,14 +82,11 @@ describe("prompt-stack card bodies", () => {
       );
     }
     render(<Card />);
-    // Collapsed: the rows (and their live durations) are not in the DOM, so
-    // no timer runs for a card nobody opened.
     expect(screen.queryByText("Background agent 2")).toBeNull();
     expect(setInterval).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { expanded: false }));
     expect(screen.getByText("Background agent 2")).not.toBeNull();
-    // Three live durations mounted; they share one 1 Hz ticker.
     expect(setInterval).toHaveBeenCalledTimes(1);
   });
 });

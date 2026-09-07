@@ -1,8 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  CURSOR_ACP_MAINTENANCE,
-  __testing,
-} from "./provider-maintenance.js";
+import { CURSOR_ACP_MAINTENANCE, __testing } from "./provider-maintenance.js";
 
 function cursorMissingInstallationStatus() {
   return {
@@ -60,9 +57,6 @@ describe("ACP provider maintenance", () => {
     });
   });
 
-  // The installer belongs to the agent's dialect, not to a bb provider id:
-  // an agent whose dialect has no maintenance surface offers none, whatever
-  // it is registered as.
   it("offers the installer only through a fresh matching action", () => {
     expect(
       __testing.buildProviderInstallationRun(
@@ -87,13 +81,15 @@ describe("ACP provider maintenance", () => {
       available: false,
       message: "opencode install is not available on this host.",
     });
-    // A matching action with no maintenance surface still declines.
     expect(
-      __testing.buildProviderInstallationRun(cursorMissingInstallationStatus(), {
-        maintenance: undefined,
-        command: "opencode",
-        action: "install",
-      }),
+      __testing.buildProviderInstallationRun(
+        cursorMissingInstallationStatus(),
+        {
+          maintenance: undefined,
+          command: "opencode",
+          action: "install",
+        },
+      ),
     ).toEqual({
       available: false,
       message: "opencode install is not available on this host.",

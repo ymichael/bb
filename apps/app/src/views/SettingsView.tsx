@@ -1,14 +1,17 @@
 import { useMemo, useState, type ReactNode } from "react";
-import { Navigate, useNavigate } from "react-router-dom";
-// Route views render icons outside the shell's core set. Importing the
-// extended registry here ships it as a static dependency of this route chunk,
-// so those icons never flash blank waiting for an on-demand load.
+import {
+  Navigate,
+  useNavigate,
+  useLocation,
+  matchPath,
+} from "react-router-dom";
 import "@bb/shared-ui/icon-extended";
 import {
   builtInThemes,
   defaultAppSettings,
   defaultAppTheme,
   defaultExperiments,
+  managedBranchPrefixSchema,
   type AppTheme,
   type FaviconColorPreference,
   type PluginThemeMeta,
@@ -19,6 +22,7 @@ import type {
 } from "@bb/host-daemon-contract";
 import { Button } from "@bb/shared-ui/button";
 import { Icon } from "@bb/shared-ui/icon";
+import { Input } from "@bb/shared-ui/input";
 import { Switch } from "@bb/shared-ui/switch";
 import { COARSE_POINTER_ICON_SIZE_CLASS } from "@bb/shared-ui/coarse-pointer-sizing";
 import {
@@ -44,8 +48,12 @@ import { UsageLimitsSettingsSection } from "@/components/settings/UsageLimitsSet
 import { ProvidersSettingsSection } from "@/components/settings/ProvidersSettingsSection";
 import { CodeRendererSettings } from "@/components/settings/CodeRendererSettings";
 import { SidebarThreadListSetting } from "@/components/settings/SidebarThreadListSetting";
+import { SidebarNavigationSetting } from "@/components/settings/SidebarNavigationSetting";
 import { SplitDimmingSetting } from "@/components/settings/SplitDimmingSetting";
 import { useSettingsNavState } from "@/components/settings/settings-nav";
+import { PluginsOverview } from "@/components/plugin/PluginsOverview";
+import { PluginDetailPaneView } from "@/views/ToolsView";
+import { SETTINGS_PLUGIN_ROUTE_PATH } from "@/lib/route-paths";
 import { PluginSettingsPage } from "@/components/plugin/PluginSettings";
 import { FileOpenersSettingsSection } from "@/components/settings/FileOpenersSettingsSection";
 import { VoiceInputSettingsSection } from "@/components/settings/VoiceInputSettingsSection";
@@ -147,7 +155,10 @@ interface AppearanceSettingsSectionProps {
 
 interface GeneralSettingsSectionProps {
   desktopBrowserAvailable: boolean;
+  managedBranchPrefix: string;
+  managedBranchPrefixDisabled: boolean;
   navigateToThreadAfterCreate: boolean;
+  onManagedBranchPrefixChange: (prefix: string) => Promise<void> | void;
   onNavigateToThreadAfterCreateChange: (enabled: boolean) => void;
   onOpenLinksInAppBrowserChange: (enabled: boolean) => void;
   onRewriteLocalhostLinksChange: (enabled: boolean) => void;
@@ -182,17 +193,16 @@ function appPaletteLabel(
 }
 
 interface ExperimentsSettingsSectionProps {
-  /** True while the config query hasn't loaded or a toggle write is in flight. */
   disabled: boolean;
   changelogPreviewEnabled: boolean;
   editMessagesEnabled: boolean;
   mobileAppEnabled: boolean;
-  providerSessionReapingEnabled: boolean;
+  sidebarProgressiveDisclosureEnabled: boolean;
   timelineWindowingEnabled: boolean;
   onChangelogPreviewEnabledChange: (enabled: boolean) => void;
   onEditMessagesEnabledChange: (enabled: boolean) => void;
   onMobileAppEnabledChange: (enabled: boolean) => void;
-  onProviderSessionReapingEnabledChange: (enabled: boolean) => void;
+  onSidebarProgressiveDisclosureEnabledChange: (enabled: boolean) => void;
   onTimelineWindowingEnabledChange: (enabled: boolean) => void;
 }
 
@@ -242,8 +252,6 @@ const CREATE_CUSTOM_PALETTE_PROMPT =
 const PALETTE_SETTING_DESCRIPTION =
   "Palettes change bb's colors, including syntax colors in diffs and file previews. Choose a built-in palette or create one from a prompt.";
 
-// Renders the favicon glyph itself in the candidate color by using the
-// favicon image as a CSS mask, so the preview matches the resulting tab icon.
 function FaviconColorPreview({ value }: { value: FaviconColorPreference }) {
   return (
     <span
@@ -537,9 +545,94 @@ const NAVIGATE_TO_THREAD_AFTER_CREATE_SETTING_LABEL =
 const RICH_TEXT_EDITING_SETTING_LABEL = "Markdown formatting in prompt box";
 const UNHANDLED_PROVIDER_EVENTS_SETTING_LABEL =
   "Show unhandled provider events";
-const STEER_ACTIVE_THREAD_ON_ENTER_SETTING_LABEL =
-  "Steer running threads on Enter";
+const FOLLOW_UP_BEHAVIOR_SETTING_LABEL = "Default thread followup behavior";
+const FOLLOW_UP_BEHAVIOR_OPTIONS = [
+  {
+    steerOnEnter: false,
+    label: "Queue",
+    description:
+      "Enter adds a follow-up. It runs when the agent stops. Command+Enter steers the run.",
+  },
+  {
+    steerOnEnter: true,
+    label: "Steer",
+    description:
+      "Enter steers the run now. Command+Enter adds a follow-up for later.",
+  },
+] as const;
 const STREAMER_MODE_SETTING_LABEL = "Streamer mode";
+const MANAGED_BRANCH_PREFIX_SETTING_LABEL = "Worktree branch prefix";
+const MANAGED_BRANCH_PREFIX_EXAMPLE_SLUG = "fix-login-flow-thr_ab12cd34ef";
+
+interface ManagedBranchPrefixSettingProps {
+  disabled: boolean;
+  onChange: (prefix: string) => Promise<void> | void;
+  value: string;
+}
+
+function ManagedBranchPrefixSetting({
+  disabled,
+  onChange,
+  value,
+}: ManagedBranchPrefixSettingProps) {
+  const [draft, setDraft] = useState(value);
+  const [committedValue, setCommittedValue] = useState(value);
+  if (value !== committedValue) {
+    setCommittedValue(value);
+    setDraft(value);
+  }
+
+  const valid = managedBranchPrefixSchema.safeParse(draft).success;
+  const commit = () => {
+    if (!valid) {
+      setDraft(value);
+      return;
+    }
+    if (draft !== value) {
+      void Promise.resolve(onChange(draft)).catch(() => setDraft(value));
+    }
+  };
+
+  return (
+    <SettingsWithControl
+      label={MANAGED_BRANCH_PREFIX_SETTING_LABEL}
+      description={
+        valid ? (
+          `bb puts this in front of every branch it creates for a worktree, such as ${draft}${MANAGED_BRANCH_PREFIX_EXAMPLE_SLUG}. Leave it empty for no prefix.`
+        ) : (
+          <span className="text-destructive" role="alert">
+            This prefix cannot start a valid git branch name.
+          </span>
+        )
+      }
+      controlPlacement="below"
+    >
+      <Input
+        value={draft}
+        aria-label={MANAGED_BRANCH_PREFIX_SETTING_LABEL}
+        aria-invalid={!valid}
+        disabled={disabled}
+        placeholder="No prefix"
+        className={cn(
+          "h-8 font-mono text-xs",
+          !valid && "border-destructive focus-visible:ring-destructive",
+        )}
+        onChange={(event) => setDraft(event.target.value)}
+        onBlur={commit}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            commit();
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setDraft(value);
+          }
+        }}
+      />
+    </SettingsWithControl>
+  );
+}
 
 export function AppearanceSettingsSection({
   appearance,
@@ -557,6 +650,7 @@ export function AppearanceSettingsSection({
     <SettingsSection title="Appearance">
       <div className="space-y-5">
         <SidebarThreadListSetting />
+        <SidebarNavigationSetting />
         <CodeRendererSettings />
         <SettingsWithControl label="Theme">
           <DropdownMenu>
@@ -697,7 +791,10 @@ export function AppearanceSettingsSection({
 
 export function GeneralSettingsSection({
   desktopBrowserAvailable,
+  managedBranchPrefix,
+  managedBranchPrefixDisabled,
   navigateToThreadAfterCreate,
+  onManagedBranchPrefixChange,
   onNavigateToThreadAfterCreateChange,
   onOpenLinksInAppBrowserChange,
   onRewriteLocalhostLinksChange,
@@ -734,15 +831,56 @@ export function GeneralSettingsSection({
         </SettingsWithControl>
 
         <SettingsWithControl
-          label={STEER_ACTIVE_THREAD_ON_ENTER_SETTING_LABEL}
-          description="Use Enter to steer the current run and Command+Enter to queue a follow-up."
+          label={FOLLOW_UP_BEHAVIOR_SETTING_LABEL}
+          description="What Enter does in the prompt box while the thread runs."
         >
-          <Switch
-            checked={steerActiveThreadOnEnter}
-            disabled={steerActiveThreadOnEnterDisabled}
-            onCheckedChange={onSteerActiveThreadOnEnterChange}
-            aria-label={STEER_ACTIVE_THREAD_ON_ENTER_SETTING_LABEL}
-          />
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={SETTINGS_DROPDOWN_TRIGGER_CLASS}
+                disabled={steerActiveThreadOnEnterDisabled}
+                aria-label={FOLLOW_UP_BEHAVIOR_SETTING_LABEL}
+              >
+                {steerActiveThreadOnEnter ? "Steer" : "Queue"}
+                <Icon
+                  name="ChevronDown"
+                  className="size-3.5 text-muted-foreground"
+                />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className={cn(SETTINGS_DROPDOWN_CONTENT_CLASS, "max-w-72")}
+            >
+              {FOLLOW_UP_BEHAVIOR_OPTIONS.map((option) => (
+                <DropdownMenuItem
+                  key={option.label}
+                  className="items-start"
+                  onSelect={() =>
+                    onSteerActiveThreadOnEnterChange(option.steerOnEnter)
+                  }
+                >
+                  <span className="min-w-0">
+                    <span className="block">{option.label}</span>
+                    <span className="block text-2xs leading-snug text-subtle-foreground">
+                      {option.description}
+                    </span>
+                  </span>
+                  <Icon
+                    name="Check"
+                    className={cn(
+                      "ml-auto",
+                      steerActiveThreadOnEnter !== option.steerOnEnter &&
+                        "opacity-0",
+                      COARSE_POINTER_ICON_SIZE_CLASS,
+                    )}
+                  />
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SettingsWithControl>
 
         {desktopBrowserAvailable ? (
@@ -768,6 +906,12 @@ export function GeneralSettingsSection({
             aria-label={REWRITE_LOCALHOST_LINKS_SETTING_LABEL}
           />
         </SettingsWithControl>
+
+        <ManagedBranchPrefixSetting
+          value={managedBranchPrefix}
+          disabled={managedBranchPrefixDisabled}
+          onChange={onManagedBranchPrefixChange}
+        />
 
         <SettingsWithControl
           label={STREAMER_MODE_SETTING_LABEL}
@@ -810,20 +954,20 @@ export function DebugSettingsSection({
 const CHANGELOG_PREVIEW_EXPERIMENT_LABEL = "Changelog preview";
 const EDIT_MESSAGES_EXPERIMENT_LABEL = "Edit messages";
 const MOBILE_APP_EXPERIMENT_LABEL = "Mobile app";
-const PROVIDER_SESSION_REAPING_EXPERIMENT_LABEL =
-  "Idle provider session release";
+const SIDEBAR_PROGRESSIVE_DISCLOSURE_EXPERIMENT_LABEL =
+  "Sidebar progressive disclosure";
 const TIMELINE_WINDOWING_EXPERIMENT_LABEL = "Timeline windowing";
 export function ExperimentsSettingsSection({
   changelogPreviewEnabled,
   disabled,
   editMessagesEnabled,
   mobileAppEnabled,
-  providerSessionReapingEnabled,
+  sidebarProgressiveDisclosureEnabled,
   timelineWindowingEnabled,
   onChangelogPreviewEnabledChange,
   onEditMessagesEnabledChange,
   onMobileAppEnabledChange,
-  onProviderSessionReapingEnabledChange,
+  onSidebarProgressiveDisclosureEnabledChange,
   onTimelineWindowingEnabledChange,
 }: ExperimentsSettingsSectionProps) {
   return (
@@ -869,14 +1013,14 @@ export function ExperimentsSettingsSection({
         </SettingsWithControl>
 
         <SettingsWithControl
-          label={PROVIDER_SESSION_REAPING_EXPERIMENT_LABEL}
-          description="Release restorable provider sessions after 30 idle minutes. A change can take up to five minutes."
+          label={SIDEBAR_PROGRESSIVE_DISCLOSURE_EXPERIMENT_LABEL}
+          description="In By project and By machine, show the first five groups in the current sort order, keep attention groups visible, and reveal ten more per click. Manually is unchanged."
         >
           <Switch
-            checked={providerSessionReapingEnabled}
+            checked={sidebarProgressiveDisclosureEnabled}
             disabled={disabled}
-            onCheckedChange={onProviderSessionReapingEnabledChange}
-            aria-label={PROVIDER_SESSION_REAPING_EXPERIMENT_LABEL}
+            onCheckedChange={onSidebarProgressiveDisclosureEnabledChange}
+            aria-label={SIDEBAR_PROGRESSIVE_DISCLOSURE_EXPERIMENT_LABEL}
           />
         </SettingsWithControl>
 
@@ -916,8 +1060,6 @@ export function SettingsView() {
   const [navigateToThreadAfterCreate, setNavigateToThreadAfterCreate] =
     useNavigateToThreadAfterCreatePreference();
   const [richTextEditing, setRichTextEditing] = useRichTextEditingPreference();
-  // The in-app browser only exists on desktop; hide the toggle entirely on web,
-  // where it would have no effect.
   const [desktopBrowserAvailable] = useState(isDesktopBrowserAvailable);
   const experiments = systemConfigQuery.data?.experiments ?? defaultExperiments;
   const updateExperimentsMutation = useUpdateExperiments();
@@ -926,10 +1068,25 @@ export function SettingsView() {
   const updateGeneralSettingsMutation = useUpdateGeneralSettings();
   const appearance = systemConfigQuery.data?.appearance ?? defaultAppTheme;
   const updateAppearanceMutation = useUpdateAppearance();
+  const location = useLocation();
   const { activePluginId, activeSection, hasUnknownSection } =
     useSettingsNavState();
   if (hasUnknownSection) {
     return <Navigate to={SETTINGS_ROUTE_PATH} replace />;
+  }
+
+  if (activeSection === "plugins") {
+    const pluginId = matchPath(SETTINGS_PLUGIN_ROUTE_PATH, location.pathname)
+      ?.params.pluginId;
+    return (
+      <div className="-mx-4 -mt-4 flex min-h-0 flex-1 flex-col overflow-hidden pt-4 md:-mx-5 md:-mt-5 md:pt-5">
+        {pluginId ? (
+          <PluginDetailPaneView pluginId={pluginId} />
+        ) : (
+          <PluginsOverview />
+        )}
+      </div>
+    );
   }
 
   let content: ReactNode = null;
@@ -1039,11 +1196,13 @@ export function SettingsView() {
             mobileApp: enabled,
           })
         }
-        providerSessionReapingEnabled={experiments.providerSessionReaping}
-        onProviderSessionReapingEnabledChange={(enabled) =>
+        sidebarProgressiveDisclosureEnabled={
+          experiments.sidebarProgressiveDisclosure
+        }
+        onSidebarProgressiveDisclosureEnabledChange={(enabled) =>
           updateExperimentsMutation.mutate({
             ...experiments,
-            providerSessionReaping: enabled,
+            sidebarProgressiveDisclosure: enabled,
           })
         }
         timelineWindowingEnabled={experiments.timelineWindowing}
@@ -1066,6 +1225,17 @@ export function SettingsView() {
       <>
         <GeneralSettingsSection
           desktopBrowserAvailable={desktopBrowserAvailable}
+          managedBranchPrefix={generalSettings.managedBranchPrefix}
+          managedBranchPrefixDisabled={
+            systemConfigQuery.data === undefined ||
+            updateGeneralSettingsMutation.isPending
+          }
+          onManagedBranchPrefixChange={async (prefix) => {
+            await updateGeneralSettingsMutation.mutateAsync({
+              ...generalSettings,
+              managedBranchPrefix: prefix,
+            });
+          }}
           navigateToThreadAfterCreate={navigateToThreadAfterCreate}
           openLinksInAppBrowser={openLinksInAppBrowser}
           rewriteLocalhostLinks={rewriteLocalhostLinks}

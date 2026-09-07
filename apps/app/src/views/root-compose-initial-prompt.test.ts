@@ -7,16 +7,15 @@ import {
 
 describe("readInitialPromptFromSearch", () => {
   it("reads a shared prompt", () => {
-    expect(
-      readInitialPromptFromSearch("?initialPrompt=look%20at%20this"),
-    ).toBe("look at this");
+    expect(readInitialPromptFromSearch("?initialPrompt=look%20at%20this")).toBe(
+      "look at this",
+    );
     expect(
       readInitialPromptFromSearch("?projectId=p1&initialPrompt=hello"),
     ).toBe("hello");
   });
 
   it("ignores an absent, empty, or whitespace-only value", () => {
-    // A stray parameter must not open a compose session on its own.
     expect(readInitialPromptFromSearch("")).toBeNull();
     expect(readInitialPromptFromSearch("?projectId=p1")).toBeNull();
     expect(readInitialPromptFromSearch("?initialPrompt=")).toBeNull();
@@ -34,9 +33,9 @@ describe("readInitialPromptFromSearch", () => {
 describe("stripInitialPromptFromSearch", () => {
   it("removes only the seed, so a reload does not seed twice", () => {
     expect(stripInitialPromptFromSearch("?initialPrompt=hi")).toBe("");
-    expect(
-      stripInitialPromptFromSearch("?projectId=p1&initialPrompt=hi"),
-    ).toBe("?projectId=p1");
+    expect(stripInitialPromptFromSearch("?projectId=p1&initialPrompt=hi")).toBe(
+      "?projectId=p1",
+    );
     expect(stripInitialPromptFromSearch("?projectId=p1")).toBe("?projectId=p1");
   });
 });

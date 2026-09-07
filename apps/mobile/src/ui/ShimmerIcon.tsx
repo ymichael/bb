@@ -12,32 +12,17 @@ import { Icon, type IconName } from "./Icon";
 
 export interface ShimmerIconProps {
   name: IconName;
-  /** Pixel size; defaults to 14 (the chip / row glyph size). */
   size?: number;
-  /** Glyph color; defaults to the current `foreground` token. */
   color?: string;
-  /** Animate (default true); false renders the plain glyph. */
   active?: boolean;
 }
 
-/** Web `--shine-icon-edge-opacity`: the glyph outside the bright band. */
 const EDGE_OPACITY = 0.45;
-/** Web `.animate-shine-icon` cycle. */
 const SWEEP_DURATION_MS = 2600;
-/** Band widths as a share of the glyph: a soft halo and a bright core. */
 const HALO_WIDTH_RATIO = 0.9;
 const CORE_WIDTH_RATIO = 0.4;
 const HALO_OPACITY = 0.75;
 
-/**
- * Glyph with the web `.animate-shine-icon` treatment for live activity
- * (running commands, workflows): the glyph sits at 45 % opacity and a
- * bright band sweeps across it. React Native has no CSS mask, so the band
- * is a clipped window that moves over the glyph while a second copy of the
- * glyph inside the window moves the opposite way, so the two copies stay
- * aligned. A wider, dimmer window behind the bright one softens the edges
- * the way the web gradient does.
- */
 export function ShimmerIcon({
   name,
   size = 14,
@@ -102,7 +87,6 @@ function SweepBand({
   opacity: number;
   progress: SharedValue<number>;
 }) {
-  // The band travels from fully left of the glyph to fully right of it.
   const travel = size + bandWidth;
   const windowStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: -bandWidth + progress.get() * travel }],

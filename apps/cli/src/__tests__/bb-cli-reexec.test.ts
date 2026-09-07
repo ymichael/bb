@@ -3,10 +3,7 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  BB_CLI_REEXEC_ENV,
-  maybeReexecViaBbCli,
-} from "../bb-cli-reexec.js";
+import { BB_CLI_REEXEC_ENV, maybeReexecViaBbCli } from "../bb-cli-reexec.js";
 
 describe("maybeReexecViaBbCli", () => {
   let tempRoot: string;

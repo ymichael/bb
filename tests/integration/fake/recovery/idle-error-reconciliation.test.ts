@@ -17,10 +17,10 @@ import {
   TURN_TIMEOUT_MS,
 } from "./shared.js";
 
-describe.sequential(
-  "fake provider idle-error reconciliation integration",
-  () => {
-    it("does not revive an idle thread that was manually marked errored before reconnect", () =>
+describe.sequential("fake provider idle-error reconciliation integration", () => {
+  it(
+    "does not revive an idle thread that was manually marked errored before reconnect",
+    () =>
       withHarness(async (harness) => {
         const { thread } = await createRecoveryThread(
           harness,
@@ -62,6 +62,7 @@ describe.sequential(
 
         const afterReconnect = await getThread(harness.api, thread.id);
         expect(afterReconnect.status).toBe("error");
-      }), RECOVERY_TEST_TIMEOUT_MS);
-  },
-);
+      }),
+    RECOVERY_TEST_TIMEOUT_MS,
+  );
+});

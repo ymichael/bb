@@ -22,8 +22,6 @@ import {
   ensureGitRepo,
   getCheckoutRef,
   getCurrentBranch,
-  hasRef,
-  hasUncommittedChanges,
   parseNameStatusEntries,
   parseNameStatusSourceEntries,
   parseNumstatEntriesZ,
@@ -51,21 +49,17 @@ import {
   withCheckoutMutationLock,
   withCheckoutMutationLocks,
 } from "./checkout-mutation-lock.js";
-import { runGitWithWorktreeMetadataLock } from "./worktree-metadata-lock.js";
 
 export interface DiffOptions {
   target?: WorkspaceDiffTarget;
   maxDiffBytes?: number;
   maxFileListBytes?: number;
-  /** Maximum untracked files whose contents may be inspected. */
   maxUntrackedFiles?: number;
 }
 
 export interface StatusOptions {
   mergeBaseBranch?: string;
-  /** Maximum untracked files whose line stats may be enriched. */
   maxUntrackedLineStatFiles?: number;
-  /** Maximum aggregate untracked bytes whose line stats may be enriched. */
   maxUntrackedLineStatBytes?: number;
 }
 
@@ -81,18 +75,6 @@ export interface CommitResult {
   commitSubject: string;
 }
 
-export interface SquashMergeOptions {
-  targetBranch: string;
-  commitMessage: string;
-}
-
-export interface SquashMergeResult {
-  merged: boolean;
-  commitSha: string;
-  commitSubject: string;
-  targetBranch: string;
-}
-
 export type PullRequestActionOptions = GitHostPullRequestAction;
 
 type DiffSummary = {
@@ -105,7 +87,6 @@ type DiffSummary = {
 
 export interface DiffFilesArgs {
   target: WorkspaceDiffTarget;
-  /** Maximum returned files; `truncated` reports additional changed files. */
   maxFiles: number;
 }
 
@@ -113,14 +94,12 @@ export interface DiffFilesResult {
   files: RawDiffFileStat[];
   shortstat: string;
   mergeBaseRef: string | null;
-  /** True when more changed files exist beyond the returned bounded slice. */
   truncated: boolean;
 }
 
 export interface DiffPatchArgs {
   target: WorkspaceDiffTarget;
   paths: string[];
-  /** Per-file patch byte budget; a longer patch is truncated to this size. */
   maxBytesPerFile: number;
 }
 
@@ -152,14 +131,6 @@ type DiffOutputLimits = {
   maxFileListBytes?: number;
 };
 
-/**
- * Optional subset of repo-relative paths to scope a diff to. `undefined` means
- * "all changed paths" — the full-diff behavior. When present, the git
- * invocations are scoped to exactly these paths (a trailing `-- <paths>`
- * pathspec) and untracked handling only considers the requested untracked
- * subset. For renamed entries the caller must include BOTH the old and new path
- * so git's `-M` rename detection still pairs them in a scoped diff.
- */
 type DiffPathSubset = {
   paths?: string[];
 };
@@ -185,23 +156,6 @@ type TruncatedOutput = {
   truncated: boolean;
 };
 
-type WorktreeEntry = {
-  path: string;
-  branchRef: string | null;
-};
-
-type SquashMergeTarget = {
-  kind: "local";
-  baseRef: string;
-  expectedSha: string;
-};
-
-type PublishSquashMergeCommitArgs = {
-  targetBranch: string;
-  target: SquashMergeTarget;
-  commitSha: string;
-};
-
 type ReadDiffArtifactsArgs = {
   diffArgs: string[];
   filesArgs: string[];
@@ -215,10 +169,6 @@ type DiffStatArtifacts = {
   numstat: string;
   shortstat: string;
   mergeBaseRef: string | null;
-  /**
-   * Untracked working-tree paths for `uncommitted`/`all` targets; empty for
-   * targets that do not surface untracked files.
-   */
   untrackedPaths: string[];
 };
 
@@ -238,12 +188,6 @@ type UntrackedStatusNumstatEnrichment = {
 type ReadTrackedPatchByPathArgs = {
   target: WorkspaceDiffTarget;
   paths: string[];
-  /**
-   * Per-file patch byte budget. Bounds the page's combined `git diff` buffer
-   * (sized `paths.length * maxBytesPerFile` + headroom) and, on the per-file
-   * fallback, each single-file read — so a large page truncates instead of
-   * overflowing the default buffer and failing the whole page.
-   */
   maxBytesPerFile: number;
 };
 
@@ -267,38 +211,6 @@ const WORKSPACE_STATUS_UNTRACKED_ENRICHMENT_TIMEOUT_MS = 10_000;
 const TEMPORARY_UNTRACKED_INDEX_ADD_ATTEMPTS = 3;
 const DIFF_NUMSTAT_BASE_BUFFER_BYTES = 64 * 1024;
 const DIFF_NUMSTAT_PER_FILE_BUFFER_BYTES = 16 * 1024;
-
-function parseWorktreeList(porcelainOutput: string): WorktreeEntry[] {
-  const entries: WorktreeEntry[] = [];
-  let currentPath: string | null = null;
-  let currentBranchRef: string | null = null;
-
-  for (const line of porcelainOutput.split("\n")) {
-    if (line === "") {
-      if (currentPath !== null) {
-        entries.push({ path: currentPath, branchRef: currentBranchRef });
-      }
-      currentPath = null;
-      currentBranchRef = null;
-      continue;
-    }
-
-    if (line.startsWith("worktree ")) {
-      currentPath = line.slice("worktree ".length);
-      continue;
-    }
-
-    if (line.startsWith("branch ")) {
-      currentBranchRef = line.slice("branch ".length);
-    }
-  }
-
-  if (currentPath !== null) {
-    entries.push({ path: currentPath, branchRef: currentBranchRef });
-  }
-
-  return entries;
-}
 
 function resolveWorkspaceFileStatusKind(args: {
   indexStatus: string;
@@ -355,8 +267,6 @@ function mapNameStatusLetter(letter: string): WorkspaceFileStatusKind {
     case "U":
     case "M":
       return letter;
-    // Type change (e.g. file ↔ symlink). Render as a modification — the
-    // WorkspaceFileStatusKind enum doesn't model type changes separately.
     case "T":
       return "M";
     default:
@@ -411,10 +321,6 @@ function isMissingHeadRevisionError(stderr: string): boolean {
   );
 }
 
-function isNotGitRepositoryError(stderr: string): boolean {
-  return stderr.includes("not a git repository");
-}
-
 async function listWorkspaceFilesRecursively(
   args: ListWorkspaceFilesRecursivelyArgs,
 ): Promise<string[]> {
@@ -429,12 +335,11 @@ async function listWorkspaceFilesRecursively(
     }
     const fullPath = path.join(args.dir, entry.name);
     if (entry.isDirectory()) {
-      results.push(
-        ...(await listWorkspaceFilesRecursively({
-          dir: fullPath,
-          root: args.root,
-        })),
-      );
+      const childResults = await listWorkspaceFilesRecursively({
+        dir: fullPath,
+        root: args.root,
+      });
+      for (const childResult of childResults) results.push(childResult);
       continue;
     }
     results.push(path.relative(args.root, fullPath));
@@ -468,16 +373,6 @@ function formatShortstat(args: {
   return `${parts.join(", ")}\n`;
 }
 
-/**
- * Truncates a string to at most `maxBytes` UTF-8 bytes on a codepoint boundary.
- * A naive `buffer.subarray(0, maxBytes)` can slice through a multibyte
- * character, which `toString("utf8")` then renders as a replacement character
- * (U+FFFD, 3 bytes) — corrupting the text AND overshooting the byte budget. We
- * cut at `maxBytes`, then walk the cut point back over any trailing UTF-8
- * continuation bytes (`0b10xxxxxx`) so the result never ends mid-character; the
- * straddling codepoint is dropped whole. The result is always valid UTF-8 and
- * `Buffer.byteLength(result) <= maxBytes`.
- */
 function truncateToMaxBytes(value: string, maxBytes: number): string {
   const buffer = Buffer.from(value, "utf8");
   if (buffer.byteLength <= maxBytes) {
@@ -503,13 +398,6 @@ function truncateOutputToMaxBytes(
   return { value: truncateToMaxBytes(value, maxBytes), truncated: true };
 }
 
-/**
- * Append a `-- <paths>` pathspec to a git diff/show argument list so the
- * invocation is scoped to a subset of files. `paths === undefined` returns the
- * args unchanged (full-diff behavior). Any existing trailing `--` separator is
- * normalized so we never emit a duplicate (e.g. the `uncommitted` args already
- * carry a trailing `--`).
- */
 function withDiffPathspec(
   args: string[],
   paths: string[] | undefined,
@@ -522,15 +410,6 @@ function withDiffPathspec(
   return [...withoutSeparator, "--", ...paths];
 }
 
-/**
- * Per-file framing headroom (`diff --git` header, index/mode lines, hunk
- * headers, the `GIT binary patch` terminator) added on top of each file's patch
- * budget when sizing the combined page buffer, plus a fixed base so a tiny
- * page is never starved. The buffer only needs to be generous enough that a
- * page whose files are individually within budget reads fully; anything larger
- * is intentionally truncated and recovered downstream (the section/entry
- * count-mismatch fallback to per-file fetch, then per-entry tail-cut).
- */
 const COMBINED_PAGE_PER_FILE_HEADROOM_BYTES = 4 * 1024;
 const COMBINED_PAGE_BASE_HEADROOM_BYTES = 64 * 1024;
 
@@ -578,8 +457,6 @@ async function readEmptyTreeSha(
   workspacePath: string,
   options: Pick<RunGitOptions, "shellPath" | "timeoutMs"> = {},
 ): Promise<string> {
-  // An unborn branch has no HEAD tree. Compare the index and working tree to
-  // Git's empty tree so staged files remain visible before the first commit.
   const emptyTree = await runGit(["hash-object", "-t", "tree", os.devNull], {
     cwd: workspacePath,
     ...options,
@@ -716,18 +593,9 @@ export class Workspace {
     return getCurrentBranch(this.path, this.gitProcessOptions);
   }
 
-  /**
-   * Raw `gh` pull request lookup for the workspace's current branch. A
-   * detached HEAD has no branch and therefore no PR ("none"); lookup failures
-   * surface as "unavailable". Never throws — see
-   * {@link getPullRequestForCurrentBranch}.
-   */
   async getPullRequest(
     options: GitHostCliOptions = {},
   ): Promise<GitHostPullRequestLookup> {
-    // A vanished workspace (deleted worktree dir) means the lookup cannot
-    // run; without this check getCurrentBranch folds it into "no branch" and
-    // the missing workspace would masquerade as "no PR exists".
     if (!(await this.exists)) {
       return {
         outcome: "unavailable",
@@ -798,8 +666,6 @@ export class Workspace {
     const mergeBaseBranch = options.mergeBaseBranch;
     const [statusOutput, diffOutput, checkout, defaultBranch, mergeBaseData] =
       await Promise.all([
-        // --no-optional-locks: this runs on the watcher polling cadence and
-        // must not take index.lock under a concurrent commit.
         this.runGit(
           [
             "--no-optional-locks",
@@ -975,13 +841,6 @@ export class Workspace {
     });
   }
 
-  /**
-   * Structured table of contents for a diff target: one `RawDiffFileStat` per
-   * changed file with no patch text. Uses only `--numstat` + `--name-status -M`
-   * (rename detection) and, for `uncommitted`/`all` targets, the untracked
-   * working-tree files (each tagged `origin: "untracked"`). The server maps
-   * these raw stats into product tiering — the daemon stays policy-free.
-   */
   async diffFiles(args: DiffFilesArgs): Promise<DiffFilesResult> {
     await ensureGitRepo(this.path, this.gitProcessOptions);
     assertPositiveInteger(args.maxFiles, "maxFiles");
@@ -1034,15 +893,6 @@ export class Workspace {
     };
   }
 
-  /**
-   * Patch text for a requested subset of paths, byte-bounded per file. Paths are
-   * partitioned into tracked vs. untracked using the SAME `ls-files` computation
-   * that builds the TOC (the caller-supplied origin is not trusted): tracked
-   * paths are fetched in ONE combined `git diff` per page (see
-   * `readTrackedPatchByPathCombined`), and untracked paths use a disposable
-   * intent-to-add index so their process count is also independent of file
-   * count.
-   */
   async diffPatch(args: DiffPatchArgs): Promise<DiffPatchEntry[]> {
     await ensureGitRepo(this.path, this.gitProcessOptions);
 
@@ -1067,7 +917,6 @@ export class Workspace {
       maxBytesPerFile: args.maxBytesPerFile,
     });
 
-    // Preserve the caller's requested order; drop any duplicates.
     const seen = new Set<string>();
     const entries: DiffPatchEntry[] = [];
     for (const path of args.paths) {
@@ -1115,7 +964,7 @@ export class Workspace {
     }
     if (
       gitResult.exitCode === 128 ||
-      isNotGitRepositoryError(gitResult.stderr)
+      gitResult.stderr.includes("not a git repository")
     ) {
       const filePaths = await listWorkspaceFilesRecursively({
         dir: this.path,
@@ -1134,10 +983,6 @@ export class Workspace {
 
     return this.withMutation(async () => {
       await this.runGit(["add", "-A"], { cwd: this.path });
-      // Detect "nothing to commit" deterministically inside the mutation lock,
-      // so a commit racing a concurrent commit (or an already-clean tree)
-      // surfaces as a typed no_changes condition the server maps to 409,
-      // instead of a generic git failure that surfaces as a 502.
       const staged = await this.runGit(["diff", "--cached", "--quiet"], {
         cwd: this.path,
         allowFailure: true,
@@ -1169,190 +1014,6 @@ export class Workspace {
       await this.runGit(["reset", "--hard", "HEAD"], { cwd: this.path });
       await this.runGit(["clean", "-fd"], { cwd: this.path });
     });
-  }
-
-  async squashMergeInto(
-    options: SquashMergeOptions,
-  ): Promise<SquashMergeResult> {
-    await ensureGitRepo(this.path, this.gitProcessOptions);
-
-    const sourceBranch = await this.currentBranch;
-    if (!sourceBranch) {
-      throw new WorkspaceError(
-        "detached_head",
-        "Cannot squash merge from a detached workspace",
-      );
-    }
-
-    const target = await this.resolveSquashMergeTarget(options.targetBranch);
-    const tempDir = await createTempDir("bb-squash-");
-    const tempDirPath = path.resolve(tempDir);
-
-    try {
-      await runGitWithWorktreeMetadataLock(
-        ["worktree", "add", "--detach", tempDir, target.baseRef],
-        { cwd: this.path, ...this.gitProcessOptions },
-      );
-      const squashCommit = await new Workspace(
-        tempDir,
-        this.gitProcessOptions,
-      ).withMutation(async () => {
-        await this.runGit(["merge", "--squash", sourceBranch], {
-          cwd: tempDir,
-        });
-        // A squash of a branch with no committed work ahead of the target
-        // stages nothing; surface that as a typed no_changes condition the
-        // server maps to 409, not a generic git "nothing to commit" failure.
-        const staged = await this.runGit(["diff", "--cached", "--quiet"], {
-          cwd: tempDir,
-          allowFailure: true,
-        });
-        if (staged.exitCode === 0) {
-          throw new WorkspaceError("no_changes", "No changes to merge");
-        }
-        await this.runGit(
-          ["commit", "--no-verify", "-m", options.commitMessage],
-          {
-            cwd: tempDir,
-          },
-        );
-        const commitSha = await revParse(
-          tempDir,
-          "HEAD",
-          this.gitProcessOptions,
-        );
-        const commitSubject = (
-          await this.runGit(["log", "-1", "--pretty=%s"], { cwd: tempDir })
-        ).stdout.trim();
-        return { commitSha, commitSubject };
-      });
-      await this.publishSquashMergeCommit({
-        targetBranch: options.targetBranch,
-        target,
-        commitSha: squashCommit.commitSha,
-      });
-
-      return {
-        merged: true,
-        commitSha: squashCommit.commitSha,
-        commitSubject: squashCommit.commitSubject,
-        targetBranch: options.targetBranch,
-      };
-    } finally {
-      await runGitWithWorktreeMetadataLock(
-        ["worktree", "remove", tempDir, "--force"],
-        {
-          cwd: this.path,
-          ...this.gitProcessOptions,
-          allowFailure: true,
-        },
-      );
-      await fs.rm(tempDir, { recursive: true, force: true });
-
-      const remainingTempWorktree = (await this.listWorktrees()).find(
-        (entry) => path.resolve(entry.path) === tempDirPath,
-      );
-      if (remainingTempWorktree) {
-        throw new WorkspaceError(
-          "worktree_cleanup_failed",
-          "Temporary worktree cleanup failed",
-        );
-      }
-    }
-  }
-
-  private async resolveSquashMergeTarget(
-    targetBranch: string,
-  ): Promise<SquashMergeTarget> {
-    const localRef = `refs/heads/${targetBranch}`;
-    if (await hasRef(this.path, localRef, this.gitProcessOptions)) {
-      return {
-        kind: "local",
-        baseRef: localRef,
-        expectedSha: await revParse(
-          this.path,
-          localRef,
-          this.gitProcessOptions,
-        ),
-      };
-    }
-
-    const directRemoteRef = `refs/remotes/${targetBranch}`;
-    if (await hasRef(this.path, directRemoteRef, this.gitProcessOptions)) {
-      throw new WorkspaceError(
-        "non_local_target_branch",
-        `Cannot squash merge into remote branch ${targetBranch}; select a local branch`,
-      );
-    }
-
-    const remoteRef = `refs/remotes/origin/${targetBranch}`;
-    if (await hasRef(this.path, remoteRef, this.gitProcessOptions)) {
-      throw new WorkspaceError(
-        "non_local_target_branch",
-        `Cannot squash merge into remote-only branch ${targetBranch}; select a local branch`,
-      );
-    }
-
-    throw new WorkspaceError(
-      "branch_not_found",
-      `Target branch does not exist: ${targetBranch}`,
-    );
-  }
-
-  private async publishSquashMergeCommit(
-    args: PublishSquashMergeCommitArgs,
-  ): Promise<void> {
-    const checkedOutTargetPath = await this.findWorktreePathForBranch(
-      args.targetBranch,
-    );
-    if (checkedOutTargetPath !== null) {
-      await new Workspace(
-        checkedOutTargetPath,
-        this.gitProcessOptions,
-      ).withMutation(async () => {
-        if (
-          await hasUncommittedChanges(
-            checkedOutTargetPath,
-            this.gitProcessOptions,
-          )
-        ) {
-          throw new WorkspaceError(
-            "dirty_target_branch",
-            `Cannot squash merge into ${args.targetBranch}: target branch is checked out at ${checkedOutTargetPath} with uncommitted changes`,
-          );
-        }
-
-        await this.runGit(["merge", "--ff-only", args.commitSha], {
-          cwd: checkedOutTargetPath,
-        });
-      });
-      return;
-    }
-
-    await this.runGit(
-      [
-        "update-ref",
-        `refs/heads/${args.targetBranch}`,
-        args.commitSha,
-        args.target.expectedSha,
-      ],
-      { cwd: this.path },
-    );
-  }
-
-  private async findWorktreePathForBranch(
-    branchName: string,
-  ): Promise<string | null> {
-    const entries = await this.listWorktrees();
-    const branchRef = `refs/heads/${branchName}`;
-    return entries.find((entry) => entry.branchRef === branchRef)?.path ?? null;
-  }
-
-  private async listWorktrees(): Promise<WorktreeEntry[]> {
-    const result = await this.runGit(["worktree", "list", "--porcelain"], {
-      cwd: this.path,
-    });
-    return parseWorktreeList(result.stdout);
   }
 
   private async buildDiffSummary(args: {
@@ -1436,7 +1097,6 @@ export class Workspace {
         this.runGit(
           [
             "rev-list",
-            // Ignore patch-equivalent commits so squash-merged branches are not still ahead.
             "--cherry-pick",
             "--left-right",
             "--count",
@@ -1521,10 +1181,6 @@ export class Workspace {
       if (entry.deletions !== null) effectiveDeletions += entry.deletions;
     }
 
-    // `--cherry-pick` handles regular merges, rebase-merges, and cherry-picks,
-    // but not squash merges. Only look for a squash when the branch still
-    // appears ahead AND the base has advanced since the fork point — if the
-    // base hasn't moved, no squash could exist there.
     if (normalizedAheadCount > 0 && normalizedBehindCount > 0 && mergeBaseRef) {
       const squashMerged = await this.detectSquashMerge(
         mergeBaseRef,
@@ -1537,12 +1193,6 @@ export class Workspace {
       }
     }
 
-    // `commits` is cherry-pick-filtered (patch-equivalent commits that already
-    // exist on the base are excluded), but `--name-status <base>...HEAD` is
-    // not. If every branch commit has landed on the base via cherry-pick or
-    // squash merge, there's nothing "committed unmerged" to surface — drop
-    // the file list and stats to match so the UI doesn't show files with no
-    // commits behind them.
     if (effectiveCommits.length === 0) {
       effectiveFiles = [];
       effectiveInsertions = 0;
@@ -1564,19 +1214,6 @@ export class Workspace {
     };
   }
 
-  /**
-   * Detect whether the branch has already landed on the base as a squash
-   * merge. A squash collapses N branch commits into a single base commit with
-   * a combined patch-id that none of the originals match, so `--cherry-pick`
-   * can't see it. Compare the branch's cumulative patch-id against each
-   * commit on the base since the merge-base; a match means the branch
-   * landed. If the cumulative diff is empty (e.g. commits that cancel out),
-   * treat the branch as merged — there's nothing left to land.
-   *
-   * The diff/log pipelines are offloaded to `sh -c` so git streams directly
-   * into `git patch-id` without Node buffering the intermediate output; only
-   * the tiny patch-id output (one line per commit) is captured.
-   */
   private async detectSquashMerge(
     mergeBaseRef: string,
     mergeBaseBranch: string,
@@ -1591,8 +1228,6 @@ export class Workspace {
       return false;
     }
     if (!branchPatchIdResult.stdout.trim()) {
-      // Empty cumulative diff — the branch contributes no net changes and is
-      // effectively merged.
       return true;
     }
     const branchPatchId = parsePatchId(
@@ -1602,11 +1237,6 @@ export class Workspace {
       return false;
     }
 
-    // Cap the base-side scan to keep `getStatus` bounded on long-divergent
-    // branches. Squash merges we care about land within a reasonable window;
-    // if the user opens a branch that's thousands of commits behind, we'll
-    // miss detection and report the branch as ahead — the fallback is
-    // pessimistic but correct.
     const basePatchIdsResult = await this.runShellPipeline(
       'git log -p -n 1000 --format="commit %H" "$1".."$2" | git patch-id --stable',
       [mergeBaseRef, mergeBaseBranch],
@@ -1624,14 +1254,6 @@ export class Workspace {
     return target.type === "uncommitted" || target.type === "all";
   }
 
-  /**
-   * Enriches a small untracked status snapshot with exact Git numstat data.
-   * This is optional presentation work: exceeding either budget, hitting the
-   * enrichment deadline, a concurrent file disappearance, a directory-like
-   * untracked entry, or a Git failure degrades to incomplete line counts
-   * instead of making workspace status unavailable. Eligible files can still
-   * carry exact per-file counts when another entry is ineligible.
-   */
   private async readBoundedUntrackedStatusNumstat(args: {
     paths: string[];
     maxFiles: number;
@@ -1742,12 +1364,6 @@ export class Workspace {
     }
   }
 
-  /**
-   * Reads at most `maxFiles + 1` tracked/untracked records and returns an exact
-   * bounded slice. Name-status and numstat use the same complete diff universe,
-   * so Git cannot reclassify an add/delete pair as a rename merely because a
-   * later stat pass sees a smaller pathspec.
-   */
   private async readBoundedDiffStatArtifacts(
     target: WorkspaceDiffTarget,
     maxFiles: number,
@@ -1856,12 +1472,6 @@ export class Workspace {
     );
   }
 
-  /**
-   * Runs `--name-status -M`, `--numstat -M`, and `--shortstat` for a target
-   * (no patch text), returning the raw outputs plus the resolved merge-base and
-   * any untracked working-tree paths the TOC must surface. Mirrors
-   * `readDiffArtifacts`'s target switch but omits the patch artifact.
-   */
   private async readDiffStatArtifacts(
     target: WorkspaceDiffTarget,
   ): Promise<DiffStatArtifacts> {
@@ -2027,7 +1637,6 @@ export class Workspace {
     };
   }
 
-  /** Exact untracked numstat using a disposable intent-to-add index. */
   private async readUntrackedDiffFileStats(
     untrackedPaths: string[],
   ): Promise<RawDiffFileStat[]> {
@@ -2060,7 +1669,6 @@ export class Workspace {
     });
   }
 
-  /** Fetches an untracked patch page with a fixed number of Git processes. */
   private async readUntrackedPatchByPathCombined(args: {
     paths: string[];
     maxBytesPerFile: number;
@@ -2119,19 +1727,6 @@ export class Workspace {
     );
   }
 
-  /**
-   * Computes the tracked patch for the requested paths in ONE combined `git
-   * diff` per page, keyed by the requested (new) file path. Two invocations run
-   * for the page: a `--name-status -z` list (the authoritative per-file order
-   * plus the raw, unquoted paths — including spaces) and the combined patch
-   * text. The patch is split into per-file sections at each `diff --git `
-   * boundary and ZIPPED positionally with the name-status entries — both are
-   * git-sorted by the same pathspec, so section[i] belongs to entry[i]. We key
-   * by the entry's new path (NOT by parsing the `diff --git` header, which git
-   * does not quote for spaces and a token split would mangle); renames carry
-   * old+new and are keyed by new. If the section and entry counts ever disagree
-   * we fall back to per-file fetch so correctness never regresses.
-   */
   private async readTrackedPatchByPathCombined(
     args: ReadTrackedPatchByPathArgs,
   ): Promise<Map<string, string>> {
@@ -2144,28 +1739,16 @@ export class Workspace {
     const sections = splitPatchIntoSections(combined.patch);
 
     if (sections.length !== entries.length) {
-      // The positional zip is only valid when the two git outputs agree
-      // file-for-file. Any mismatch (an unexpected split boundary, a name-status
-      // entry with no section, etc.) breaks the keying invariant, so fall back
-      // to the unambiguous per-file fetch rather than risk mis-keying a patch.
       return this.readTrackedPatchByPathPerFile(args);
     }
 
     const patchByPath = new Map<string, string>();
     for (let index = 0; index < entries.length; index += 1) {
-      // Key by the entry's new path — the path the client requested.
       patchByPath.set(entries[index].path, sections[index]);
     }
     return patchByPath;
   }
 
-  /**
-   * Per-file fallback for `readTrackedPatchByPathCombined`: one target-scoped
-   * `git diff` per requested path (plus its rename/copy source so `-M` pairs
-   * them), keyed by the requested path. Unambiguous for every path because the
-   * key is the requested path, not a header-parsed one — used only when the
-   * combined split's section/entry counts disagree.
-   */
   private async readTrackedPatchByPathPerFile(
     args: ReadTrackedPatchByPathArgs,
   ): Promise<Map<string, string>> {
@@ -2197,20 +1780,6 @@ export class Workspace {
     return new Map(entries);
   }
 
-  /**
-   * Runs the combined git invocations for a page of tracked paths. A scoped
-   * `git diff -- <new path>` cannot pair a rename: with only the new path in the
-   * pathspec, `-M` never sees the source and renders the rename as a pure
-   * addition. So we first read the FULL-target name-status (one cheap, patchless
-   * invocation that sees every file and therefore detects renames), collect the
-   * rename/copy SOURCE paths for the requested files, and add them to the
-   * pathspec. Then the page's `--name-status -z` and patch (PATCH ONLY — no
-   * numstat/shortstat) both run scoped to `[...requested, ...renameSources]`, so
-   * each rename is paired `a/old → b/new` and both outputs are git-sorted by the
-   * same pathspec — letting the caller zip section[i] with entry[i]. Returns
-   * `null` when the target resolves to no diff (e.g. a branch target whose merge
-   * base cannot be found), matching the stat/artifact readers.
-   */
   private async readCombinedTrackedDiff(
     args: ReadTrackedPatchByPathArgs,
   ): Promise<{ nameStatus: string; patch: string } | null> {
@@ -2276,11 +1845,6 @@ export class Workspace {
     return { nameStatus: nameStatus.stdout, patch: patch.stdout };
   }
 
-  /**
-   * Resolves the git argv prefix (`diff`/`show` plus `--no-ext-diff`) and the
-   * range/sha args for a diff target's TRACKED side. Returns `null` for branch
-   * targets whose merge base cannot be resolved — those surface as no diff.
-   */
   private async resolveTrackedDiffRange(
     target: WorkspaceDiffTarget,
   ): Promise<ResolvedTrackedDiffRange | null> {
@@ -2639,11 +2203,6 @@ export class Workspace {
     });
   }
 
-  /**
-   * Presents untracked paths to Git as intent-to-add entries in a disposable
-   * alternate index. This gives one combined diff for the whole set without
-   * mutating the workspace index or spawning a child process per file.
-   */
   private async withTemporaryUntrackedIndex<T>(
     relativePaths: readonly string[],
     work: (
@@ -2696,9 +2255,8 @@ export class Workspace {
         if (add.exitCode === 0) {
           return await work(env, candidates);
         }
-        const refreshedCandidates = await this.filterExistingUntrackedPaths(
-          candidates,
-        );
+        const refreshedCandidates =
+          await this.filterExistingUntrackedPaths(candidates);
         if (refreshedCandidates.length === candidates.length) {
           const detail = add.stderr.trim();
           throw new WorkspaceError(
@@ -2709,9 +2267,6 @@ export class Workspace {
         candidates = refreshedCandidates;
       }
 
-      // A path kept disappearing during every bounded retry. Reset any partial
-      // alternate-index state and let callers return placeholders/empty patches
-      // for this stale snapshot instead of rejecting the whole batch.
       await this.runGit(["read-tree", "--empty"], {
         cwd: this.path,
         env,
@@ -2755,7 +2310,6 @@ export class Workspace {
     return parseNullSeparatedLines(untrackedFilesOutput.stdout);
   }
 
-  /** Lists only the caller's requested paths that are currently untracked. */
   private async listRequestedUntrackedPaths(
     relativePaths: readonly string[],
   ): Promise<string[]> {
@@ -2822,17 +2376,6 @@ function joinDiffArtifactOutput(parts: string[]): string {
 
 const DIFF_SECTION_HEADER = "diff --git ";
 
-/**
- * Splits a combined `git diff` into one entry per changed file, cutting at each
- * `diff --git ` header line. Every changed file — including binary
- * ("Binary files … differ"), pure-rename, and mode-only sections — is exactly
- * one section, so the result is ordered identically to git's per-file output
- * and can be positionally zipped with the `--name-status -z` entries. We do NOT
- * derive the path from the header (git does not quote spaces there); the caller
- * keys each section by the corresponding name-status entry's path. Each section
- * is normalized to end in a single trailing newline, matching the byte framing
- * of a single-file `git diff` invocation.
- */
 function splitPatchIntoSections(combinedPatch: string): string[] {
   if (combinedPatch.length === 0) {
     return [];
@@ -2858,16 +2401,6 @@ function splitPatchIntoSections(combinedPatch: string): string[] {
   return sections.map((sectionLines) => formatPatchSection(sectionLines));
 }
 
-/**
- * Joins a section's lines back into patch text, dropping the trailing empty
- * lines the `\n` split produces at a section boundary (or end of output), so a
- * combined-split section is byte-equal to the per-file `git diff` for that file.
- *
- * A text diff ends with a single newline after its last content line. A
- * `GIT binary patch` literal block, however, is terminated by a blank line that
- * is part of git's per-file framing — so for a binary section we re-add that
- * terminator (the strip above removes it along with the boundary artifact).
- */
 function formatPatchSection(lines: string[]): string {
   let end = lines.length;
   while (end > 0 && lines[end - 1] === "") {
@@ -2883,13 +2416,6 @@ function formatPatchSection(lines: string[]): string {
 
 const NAME_STATUS_LETTERS = new Set(["A", "M", "D", "R", "C", "T"]);
 
-/**
- * Narrows a raw `git diff --name-status` letter to the canonical
- * `RawDiffFileStat["statusLetter"]` set. Renames and copies carry a similarity
- * score (`R100`, `C75`), so only the first character is significant. Anything
- * outside the known taxonomy (e.g. unmerged `U`, which the diff targets here
- * never surface) is reported as a modification.
- */
 function normalizeNameStatusLetter(
   status: string,
 ): RawDiffFileStat["statusLetter"] {
@@ -2900,12 +2426,6 @@ function normalizeNameStatusLetter(
   return "M";
 }
 
-/**
- * Truncates a single file's patch to at most `maxBytes` UTF-8 bytes, flagging
- * whether the tail was cut. A non-positive budget disables truncation. The cut
- * is codepoint-safe (see `truncateToMaxBytes`), so a multibyte character at the
- * budget boundary is dropped whole rather than corrupted into U+FFFD.
- */
 function truncatePatchToMaxBytes(
   patch: string,
   maxBytes: number,

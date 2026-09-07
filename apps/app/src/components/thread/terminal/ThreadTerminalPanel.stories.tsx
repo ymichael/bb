@@ -3,6 +3,7 @@ import type { TerminalSession } from "@bb/server-contract";
 import { StoryCard, StoryRow } from "../../../../.ladle/story-card";
 import { ThreadTerminalContent } from "./ThreadTerminalContent";
 import type { ThreadTerminalController } from "./useThreadTerminalController";
+import { makeTerminalSession } from "@/test/fixtures/terminal-sessions";
 
 export default {
   title: "terminal/Content",
@@ -10,22 +11,16 @@ export default {
 
 const THREAD_ID = "thr_terminal_story";
 
-const BASE_TERMINAL_SESSION: TerminalSession = {
+const BASE_TERMINAL_SESSION: TerminalSession = makeTerminalSession({
   id: "term_story_1",
   threadId: THREAD_ID,
   environmentId: "env_terminal_story",
   hostId: "host_terminal_story",
   title: "Terminal 1",
   initialCwd: "/Users/michael/project",
-  cols: 100,
-  rows: 30,
-  status: "running",
-  exitCode: null,
-  closeReason: null,
   createdAt: 1,
   updatedAt: 1,
-  lastUserInputAt: null,
-};
+});
 
 const RUNNING_SESSION: TerminalSession = {
   ...BASE_TERMINAL_SESSION,

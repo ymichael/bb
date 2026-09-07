@@ -15,27 +15,20 @@ interface ResolveRootComposeThreadEnvironmentArgs {
   selectedBranch: RootComposeSelectedBranch | null;
 }
 
-interface ResolveManagedBaseBranchArgs {
-  defaultBranch: string | null | undefined;
-  defaultWorktreeBaseBranch: string | null | undefined;
-  selectedBranch: RootComposeSelectedBranch | null;
-}
+type ResolveManagedBaseBranchArgs = Pick<
+  ResolveRootComposeThreadEnvironmentArgs,
+  "defaultBranch" | "defaultWorktreeBaseBranch" | "selectedBranch"
+>;
 
 function resolveManagedBaseBranch(
   args: ResolveManagedBaseBranchArgs,
 ): BaseBranchSpec {
-  if (!args.selectedBranch) {
-    if (
-      args.defaultWorktreeBaseBranch &&
-      args.defaultWorktreeBaseBranch !== args.defaultBranch
-    ) {
-      return { kind: "named", name: args.defaultWorktreeBaseBranch };
-    }
+  const branchName =
+    args.selectedBranch?.name ??
+    args.defaultWorktreeBaseBranch ??
+    args.defaultBranch;
 
-    return { kind: "default" };
-  }
-
-  return { kind: "named", name: args.selectedBranch.name };
+  return branchName ? { kind: "named", name: branchName } : { kind: "default" };
 }
 
 export function resolveRootComposeThreadEnvironment(
@@ -46,8 +39,6 @@ export function resolveRootComposeThreadEnvironment(
   if (!parsed) return null;
 
   if (parsed.type === "reuse") {
-    // Bare reuse value (mode picked but no worktree chosen yet) is an
-    // incomplete state — submit is disabled by returning null.
     if (parsed.environmentId === null) return null;
     return { type: "reuse", environmentId: parsed.environmentId };
   }
@@ -67,11 +58,7 @@ export function resolveRootComposeThreadEnvironment(
         hostId: parsed.hostId,
         workspace: {
           type: "managed-worktree",
-          baseBranch: resolveManagedBaseBranch({
-            defaultBranch: args.defaultBranch,
-            defaultWorktreeBaseBranch: args.defaultWorktreeBaseBranch,
-            selectedBranch: args.selectedBranch,
-          }),
+          baseBranch: resolveManagedBaseBranch(args),
         },
       };
     }

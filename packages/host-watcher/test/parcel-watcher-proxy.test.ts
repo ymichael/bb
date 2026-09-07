@@ -30,7 +30,6 @@ interface FakeSubscription {
   unsubscribed: boolean;
 }
 
-/** Stand-in for the real @parcel/watcher running inside a child. */
 class FakeParcel implements ParcelWatcherBackend {
   readonly subscriptions: FakeSubscription[] = [];
   failNextSubscribe = false;
@@ -83,17 +82,11 @@ class FakeParcel implements ParcelWatcherBackend {
   }
 }
 
-/** One fake child: a parcel handler wired to an in-memory ChildChannel. */
 class FakeChild {
   readonly parcel = new FakeParcel();
   readonly channel: ChildChannel;
   exited = false;
   responsive = true;
-  /**
-   * Report the child gone from inside `send`, the way the real fork channel
-   * does when the IPC pipe breaks: it catches the EPIPE and runs its exit
-   * listeners synchronously, before `send` returns.
-   */
   dieOnSend = false;
 
   private readonly handler;
@@ -126,7 +119,6 @@ class FakeChild {
       },
       kill: () => this.exit(),
     };
-    // Announce readiness once the parent has attached its listeners.
     queueMicrotask(() => {
       if (!this.exited) {
         this.parentListener?.({ kind: "ready" });
@@ -171,6 +163,80 @@ function createHarness(options?: {
     return child;
   };
   return { proxy, children, current };
+}
+
+interface RecoveryBenchmarkCounts {
+  subscriptions: number;
+  affectedSubscriptions: number;
+  unaffectedSubscriptions: number;
+  childRestarts: number;
+  proxyResubscriptions: number;
+  listEntriesCalls: number;
+  affectedSubscriptionsReceivingErrors: number;
+  affectedSubscriptionsReceivingEvents: number;
+  unaffectedSubscriptionsReceivingErrors: number;
+  unaffectedSubscriptionsReceivingEvents: number;
+}
+
+async function runRecoveryCountSample(
+  subscriptionCount: number,
+): Promise<RecoveryBenchmarkCounts> {
+  let listEntriesCalls = 0;
+  const { proxy, children, current } = createHarness({
+    listEntries: () => {
+      listEntriesCalls += 1;
+      return Promise.resolve(["current-entry"]);
+    },
+  });
+  let affectedErrors = 0;
+  let affectedEvents = 0;
+  const unaffectedSubscriptionsReceivingErrors = new Set<number>();
+  const unaffectedSubscriptionsReceivingEvents = new Set<number>();
+
+  for (let index = 0; index < subscriptionCount; index += 1) {
+    await proxy.subscribe(`/root-${index}`, (error, events) => {
+      if (index === 0) {
+        if (error) {
+          affectedErrors += 1;
+        } else {
+          affectedEvents += events.length;
+        }
+        return;
+      }
+      if (error) {
+        unaffectedSubscriptionsReceivingErrors.add(index);
+      } else if (events.length > 0) {
+        unaffectedSubscriptionsReceivingEvents.add(index);
+      }
+    });
+  }
+  await flush();
+
+  current().parcel.emitError(
+    "/root-0",
+    `Events were dropped by the FSEvents client. ${RESCAN_REQUIRED_MESSAGE}.`,
+  );
+  await flush();
+  const totalSubscribeCalls = children.reduce(
+    (total, child) => total + child.parcel.subscriptions.length,
+    0,
+  );
+  const counts: RecoveryBenchmarkCounts = {
+    subscriptions: subscriptionCount,
+    affectedSubscriptions: 1,
+    unaffectedSubscriptions: subscriptionCount - 1,
+    childRestarts: children.length - 1,
+    proxyResubscriptions: totalSubscribeCalls - subscriptionCount,
+    listEntriesCalls,
+    affectedSubscriptionsReceivingErrors: affectedErrors > 0 ? 1 : 0,
+    affectedSubscriptionsReceivingEvents: affectedEvents > 0 ? 1 : 0,
+    unaffectedSubscriptionsReceivingErrors:
+      unaffectedSubscriptionsReceivingErrors.size,
+    unaffectedSubscriptionsReceivingEvents:
+      unaffectedSubscriptionsReceivingEvents.size,
+  };
+  proxy.dispose();
+  return counts;
 }
 
 describe("createParcelWatcherProxy", () => {
@@ -225,22 +291,18 @@ describe("createParcelWatcherProxy", () => {
     await flush();
     expect(children).toHaveLength(1);
 
-    // The child dies (e.g. parcel deadlocked and the proxy SIGKILLed it).
     current().exit();
     await flush();
 
-    // A fresh child is spawned and the subscription replayed onto it...
     expect(children).toHaveLength(2);
     expect(current().parcel.activeDirs()).toEqual(["/root"]);
 
-    // ...and events resume without the caller re-subscribing or seeing an error.
     current().parcel.emit("/root", [
       { path: "/root/after.ts", type: "update" },
     ]);
     expect(received).toEqual(["/root/after.ts"]);
     expect(errorCount).toBe(0);
 
-    // The original handle is still valid after the restart.
     await subscription.unsubscribe();
     await flush();
     expect(current().parcel.activeDirs()).toEqual([]);
@@ -263,25 +325,67 @@ describe("createParcelWatcherProxy", () => {
     await flush();
     expect(children).toHaveLength(1);
 
-    // Parcel's shared backend dies in the child (inotify EINTR).
     current().parcel.emitError(
       "/root",
       "Unable to poll: Interrupted system call",
     );
     await flush();
 
-    // The proxy SIGKILLed the child (reclaiming the leak) and replayed onto a
-    // fresh one — without surfacing a terminal error to the caller.
     expect(children[0]?.exited).toBe(true);
     expect(children).toHaveLength(2);
     expect(current().parcel.activeDirs()).toEqual(["/root"]);
     expect(errorCount).toBe(0);
 
-    // Events flow again on the fresh backend.
     current().parcel.emit("/root", [
       { path: "/root/healed.ts", type: "update" },
     ]);
     expect(received).toEqual(["/root/healed.ts"]);
+    proxy.dispose();
+  });
+
+  it("routes rescan-required errors only to the affected subscription", async () => {
+    const listEntries = vi.fn(() => Promise.resolve(["current-entry"]));
+    const { proxy, children, current } = createHarness({ listEntries });
+    const affectedErrors: string[] = [];
+    const affectedEvents: string[] = [];
+    const unaffectedErrors: string[] = [];
+    const unaffectedEvents: string[] = [];
+
+    await proxy.subscribe("/affected", (error, events) => {
+      if (error) {
+        affectedErrors.push(error.message);
+        return;
+      }
+      affectedEvents.push(...events.map((event) => event.path));
+    });
+    await proxy.subscribe("/unaffected", (error, events) => {
+      if (error) {
+        unaffectedErrors.push(error.message);
+        return;
+      }
+      unaffectedEvents.push(...events.map((event) => event.path));
+    });
+    await flush();
+    expect(children).toHaveLength(1);
+
+    current().parcel.emitError(
+      "/affected",
+      `Events were dropped by the FSEvents client. ${RESCAN_REQUIRED_MESSAGE}.`,
+    );
+    await flush();
+
+    expect(children).toHaveLength(1);
+    expect(affectedErrors).toEqual([
+      `Events were dropped by the FSEvents client. ${RESCAN_REQUIRED_MESSAGE}.`,
+    ]);
+    expect(affectedEvents).toEqual([]);
+    expect(unaffectedErrors).toEqual([]);
+    expect(unaffectedEvents).toEqual([]);
+    expect(listEntries).not.toHaveBeenCalled();
+    expect(current().parcel.activeDirs().sort()).toEqual([
+      "/affected",
+      "/unaffected",
+    ]);
     proxy.dispose();
   });
 
@@ -298,11 +402,8 @@ describe("createParcelWatcherProxy", () => {
       }
     });
     await flush();
-    // Initial subscribe is fresh: no rescan, nothing missed.
     expect(received).toEqual([]);
 
-    // Child dies; the replay onto the new child carries a rescan that re-emits
-    // the root's current entries so callers reconcile changes missed in the gap.
     current().exit();
     await flush();
     expect([...received].sort()).toEqual([
@@ -330,11 +431,9 @@ describe("createParcelWatcherProxy", () => {
       await flush();
       expect(children).toHaveLength(1);
 
-      // Child wedges: it stops processing messages (no pongs).
       current().responsive = false;
       await vi.advanceTimersByTimeAsync(3_500);
 
-      // Liveness check kills it and brings up a replacement.
       expect(children[0]?.exited).toBe(true);
       expect(children).toHaveLength(2);
       expect(current().parcel.activeDirs()).toEqual(["/root"]);
@@ -380,7 +479,7 @@ describe("createParcelWatcherProxy", () => {
       const { proxy, children, current } = createHarness({
         baseRestartDelayMs: 1_000,
         maxRestartDelayMs: 8_000,
-        pingIntervalMs: 100_000, // keep pings out of this test
+        pingIntervalMs: 100_000,
       });
       let terminalError: Error | null = null;
       await proxy.subscribe("/root", (error) => {
@@ -391,20 +490,16 @@ describe("createParcelWatcherProxy", () => {
       await flush();
       expect(children).toHaveLength(1);
 
-      // A one-off crash heals immediately (a single failure is not penalized).
       current().exit();
       await flush();
       expect(children).toHaveLength(2);
 
-      // A second crash before the child proved healthy is BACKED OFF, not an
-      // immediate tight-loop respawn.
       current().exit();
       await flush();
       expect(children).toHaveLength(2);
       await vi.advanceTimersByTimeAsync(1_000);
       expect(children).toHaveLength(3);
 
-      // The proxy keeps recovering — it never surfaces a permanent give-up error.
       expect(terminalError).toBeNull();
       proxy.dispose();
     } finally {
@@ -417,29 +512,22 @@ describe("createParcelWatcherProxy", () => {
     try {
       const { proxy, children, current } = createHarness({
         baseRestartDelayMs: 1_000,
-        pingIntervalMs: 100_000, // keep pings out of this test
+        pingIntervalMs: 100_000,
       });
       await proxy.subscribe("/root", () => {});
       await proxy.subscribe("/other", () => {});
       await flush();
       expect(children).toHaveLength(1);
 
-      // Crash once. This heals immediately, which arms the backoff counter — so
-      // the NEXT failure schedules its respawn instead of spawning inline.
       current().exit();
       expect(children).toHaveLength(2);
 
-      // Break the replacement's pipe before it announces readiness, so the
-      // first replayed subscribe reports the child gone from inside `send`.
-      // That detaches the channel mid-loop; the replay must not follow it.
       current().dieOnSend = true;
       await flush();
 
       await vi.advanceTimersByTimeAsync(1_000);
       await flush();
 
-      // A third child came up with BOTH watches re-armed — the replay survived
-      // the death instead of taking the daemon down with a null dereference.
       expect(children).toHaveLength(3);
       expect(current().parcel.activeDirs().sort()).toEqual(["/other", "/root"]);
       proxy.dispose();
@@ -456,8 +544,6 @@ describe("createParcelWatcherProxy", () => {
         errors.push(error.message);
       }
     });
-    // The child exists synchronously; make its first subscribe attempt reject
-    // (path transiently missing) before it readies and replays.
     const firstChild = children[0];
     if (firstChild) {
       firstChild.parcel.failNextSubscribe = true;
@@ -465,8 +551,6 @@ describe("createParcelWatcherProxy", () => {
     await pending;
     await flush();
 
-    // RootSubscription must see a RECOVERABLE rescan signal (so it retries via
-    // its existence-gated path), not an opaque terminal error.
     expect(errors).toContain(RESCAN_REQUIRED_MESSAGE);
     proxy.dispose();
   });
@@ -477,14 +561,11 @@ describe("createParcelWatcherProxy", () => {
     await flush();
     expect(children).toHaveLength(1);
 
-    // Crash; the replacement child is spawning but has not emitted 'ready' yet.
     current().exit();
-    // Add another subscription inside that window.
     await proxy.subscribe("/late", () => {});
     await flush();
 
     expect(children).toHaveLength(2);
-    // Exactly one live watch per dir on the new child — no orphaned duplicate.
     expect(
       current()
         .parcel.activeDirs()
@@ -498,3 +579,21 @@ describe("createParcelWatcherProxy", () => {
     proxy.dispose();
   });
 });
+
+if (process.env.BB_WATCHER_RECOVERY_BENCHMARK === "1") {
+  describe("watcher recovery count harness", () => {
+    it("reports two-subscription and fan-out recovery work", async () => {
+      const result = {
+        twoSubscriptions: await runRecoveryCountSample(2),
+        fanOut: await runRecoveryCountSample(100),
+      };
+      expect(result.twoSubscriptions.affectedSubscriptions).toBe(1);
+      expect(result.twoSubscriptions.unaffectedSubscriptions).toBe(1);
+      expect(result.fanOut.affectedSubscriptions).toBe(1);
+      expect(result.fanOut.unaffectedSubscriptions).toBe(99);
+      process.stdout.write(
+        `WATCHER_RECOVERY_COUNTS ${JSON.stringify(result)}\n`,
+      );
+    }, 30_000);
+  });
+}

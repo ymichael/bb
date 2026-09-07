@@ -36,28 +36,15 @@ import {
   REUSE_VALUE_WITHOUT_ENVIRONMENT,
 } from "./environment-picker-value";
 
-// ---------------------------------------------------------------------------
-// Pure presentational picker. Use directly in stories with mocked data.
-// App callers should use EnvironmentPicker (the connected wrapper below).
-// ---------------------------------------------------------------------------
-
 interface SelectedEnvironment {
   modeLabel: string;
   compactModeLabel: string;
   icon: IconName;
 }
 
-/** Multi-machine picker input. Callers pass this
- * only while the experiment is on; the menu switches to machine-grouped
- * sections once more than one host exists. */
 export interface EnvironmentPickerMachines {
-  /** All hosts known to the server, in server order. */
   hosts: readonly Host[];
-  /** Host id of the daemon running on this browser's machine, if reachable —
-   * its section gets the "this machine" badge and "Work locally" label. */
   localDaemonHostId: string | null;
-  /** Server-resolved primary host id from `/system/config`; null while it
-   * loads or before any host has enrolled. */
   primaryHostId: string | null;
 }
 
@@ -65,34 +52,16 @@ export interface EnvironmentPickerUIProps {
   value: string;
   onChange: (value: string) => void;
   sources: readonly ProjectSource[];
-  /** The host bb runs work on, or null while it loads / before one connects. */
   host: Host | null;
-  /** Whether `host` is the machine this browser runs on. When false (e.g. a
-   * phone on the tailnet), the picker surfaces the host name so it's clear work
-   * runs on a remote machine, and "Work locally" becomes "Work on host". */
   isLocal: boolean;
-  /** When true, the "Reuse existing worktree" entry is disabled — the
-   * caller signals that the project has no worktree envs available to
-   * reuse. The entry is always rendered so the affordance stays
-   * discoverable; it just can't be selected. */
   reuseDisabled?: boolean;
-  /** Reason to disable "New worktree" while leaving local/remote work usable. */
   worktreeDisabledReason?: string | null;
-  /** Render with the dim, hover-to-foreground treatment used inside the prompt box. */
   muted?: boolean;
-  /** Render as a non-interactive label while preserving the selected mode. */
   disabled?: boolean;
   className?: string;
-  /** Render with the menu open on mount. Story-only escape hatch. */
   defaultOpen?: boolean;
-  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
   modal?: boolean;
-  /** Multi-machine host list; null/omitted (or a single host) keeps the
-   * single-host menu unchanged. */
   machines?: EnvironmentPickerMachines | null;
-  /** Opens the guided "set up <project> on <machine>" flow for a connected
-   * machine without a project source (machine menu only). Omitted, those
-   * machines keep a disabled "Not set up for this project" row. */
   onRequestMachineSetup?: (host: Host) => void;
 }
 
@@ -121,13 +90,8 @@ export function EnvironmentPickerUI({
       findLocalPathProjectSourceForHost(sources, hostId) !== undefined,
     [hostId, sources],
   );
-  // Plain "Work locally" labels read wrong from a phone on the tailnet, where
-  // work runs on a different machine — surface the host name there instead.
   const localLabel = isLocal ? "Work locally" : "Work remotely";
 
-  // An unreachable host blocks every option, so the menu collapses to a single
-  // reason instead of repeating it on each row. Source/worktree availability
-  // only narrows the individual options once the host itself is reachable.
   const hostUnavailableReason = !host
     ? "No host connected"
     : !hostConnected
@@ -144,9 +108,6 @@ export function EnvironmentPickerUI({
 
   const parsed = useMemo(() => parseEnvironmentValue(value), [value]);
 
-  // When the server knows multiple machines, name the selected one in the
-  // full composer chip ("Mac Studio · New worktree"). Single-machine and
-  // compact layouts use the shorter mode-only label.
   const selectedMachineName = useMemo(() => {
     if (!isMachineMenu || !machines || parsed?.type !== "host") return null;
     return (
@@ -156,10 +117,6 @@ export function EnvironmentPickerUI({
   }, [isMachineMenu, machines, parsed]);
 
   const selected = useMemo((): SelectedEnvironment => {
-    // A down host overrides whatever mode is persisted: surfacing "Host
-    // offline" is clearer than a stale "Work remotely" or a blank "Environment"
-    // that hides why nothing can run. The selection itself is kept so it
-    // resumes once the host reconnects.
     if (hostUnavailableReason !== null) {
       return {
         modeLabel: selectedMachineName
@@ -289,18 +246,11 @@ export function EnvironmentPickerUI({
 
 interface EnvironmentOptionsSectionProps {
   hostId: string | null;
-  /** Host name to label the group with, or null when the host is this machine. */
   hostName: string | null;
-  /** When set, the host can't run any work — the group shows this reason alone
-   * and renders none of the options. Null when the host is reachable. */
   hostUnavailableReason: string | null;
-  /** Label for the non-worktree option ("Work locally" vs "Work remotely"). */
   localLabel: string;
-  /** Why the local/worktree options are unavailable, or null when usable. */
   workspaceDisabledReason: string | null;
-  /** Why the worktree option is unavailable, or null when usable. */
   worktreeDisabledReason: string | null;
-  /** Why the reuse option is unavailable, or null when usable. */
   reuseDisabledReason: string | null;
   selectedType:
     | NonNullable<ReturnType<typeof parseEnvironmentValue>>["type"]
@@ -378,18 +328,12 @@ function EnvironmentOptionsSection({
   );
 }
 
-// Machine-grouped menu (>1 host)
-// ---------------------------------------------------------------------------
-
 const MACHINE_BADGE_CLASS_NAME =
   "shrink-0 rounded-sm border border-border bg-muted/40 px-1.5 py-0.5 text-2xs leading-none text-subtle-foreground";
 
 interface MachineGroupedEnvironmentOptionsProps {
   machines: EnvironmentPickerMachines;
   sources: readonly ProjectSource[];
-  /** Host id the current selection (and its branches query) points at. The
-   * worktree disabled reason only applies to that host — other machines'
-   * checkouts haven't been probed. */
   selectedHostId: string | null;
   worktreeDisabledReason: string | null;
   reuseDisabledReason: string | null;
@@ -413,7 +357,6 @@ function MachineGroupedEnvironmentOptions({
   onRequestMachineSetup,
 }: MachineGroupedEnvironmentOptionsProps) {
   const now = Date.now();
-  // This machine leads; the rest keep server order (stable sort).
   const orderedHosts = [...machines.hosts].sort(
     (left, right) =>
       Number(left.id !== machines.localDaemonHostId) -
@@ -456,9 +399,7 @@ function MachineGroupedEnvironmentOptions({
 interface MachineSectionProps {
   host: Host;
   isThisMachine: boolean;
-  /** This project's source on this machine, or null when not set up here. */
   source: ProjectSource | null;
-  /** Why "New worktree" is unavailable on this machine, or null when usable. */
   worktreeDisabledReason: string | null;
   now: number;
   value: string;
@@ -522,9 +463,6 @@ function MachineSection({
           />
         </>
       ) : onRequestMachineSetup && connected ? (
-        // Guided per-machine setup (Mockup B): clone from the project remote
-        // or point at an existing folder on this host. Needs the daemon
-        // online, so offline machines keep the disabled row below.
         <EnvironmentMenuItem
           label={`Set up on ${host.name}…`}
           icon="Plus"
@@ -543,13 +481,9 @@ function MachineSection({
   );
 }
 
-// Shared menu item
-// ---------------------------------------------------------------------------
-
 interface EnvironmentMenuItemProps {
   label: string;
   description?: string;
-  /** Right-aligned muted detail (e.g. a checkout path in the machine menu). */
   hint?: string;
   icon: IconName;
   selected: boolean;
@@ -582,8 +516,6 @@ function EnvironmentMenuItem({
         <Icon
           name={icon}
           className={cn(
-            // Center the 14px icon on the label's 16px first line; on coarse
-            // pointers icon and line are both 20px, so no offset.
             "mt-px max-md:pointer-coarse:mt-0",
             "text-muted-foreground",
             COARSE_POINTER_COMPACT_ICON_SIZE_SHRINK_CLASS,

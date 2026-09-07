@@ -34,6 +34,7 @@ describe("desktop menu shortcuts", () => {
       openNewTab: "CommandOrControl+T",
       openNewThread: "CommandOrControl+N",
       openSettings: "CommandOrControl+,",
+      reopenClosedTab: "CommandOrControl+Shift+T",
     });
   });
 
@@ -55,9 +56,11 @@ describe("desktop menu shortcuts", () => {
       binding("thread.new", "n", { mod: true }),
       binding("thread.new", "u", { mod: true, shift: true }),
       binding("settings.open", ",", { mod: true }),
+      binding("panel.reopenClosedTab", "t", { mod: true, shift: true }),
     ]);
     expect(accelerators.openNewThread).toBe("CommandOrControl+Shift+U");
     expect(accelerators.openSettings).toBe("CommandOrControl+,");
+    expect(accelerators.reopenClosedTab).toBe("CommandOrControl+Shift+T");
     expect(accelerators.openNewTab).toBeUndefined();
   });
 });

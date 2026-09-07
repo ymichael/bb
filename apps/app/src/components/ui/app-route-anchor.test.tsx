@@ -20,12 +20,6 @@ interface NavigationSample {
 
 const samples: NavigationSample[] = [];
 
-/**
- * Records every committed (isPending, pathname) pair. The pairs prove commit
- * ordering: a `{ isPending: true, pathname: <old> }` sample means the pending
- * flag painted while the previous route was still on screen, i.e. the tap's
- * event did not flush the destination route synchronously.
- */
 function NavigationSampler() {
   const isPending = useIsRouteNavigationPending();
   const { pathname } = useLocation();
@@ -50,9 +44,6 @@ describe("RouteAnchor transition navigation", () => {
 
     fireEvent.click(screen.getByRole("link", { name: "open thr-new" }));
 
-    // The tap's urgent commit shows the pending affordance with the old route
-    // still mounted; the destination route lands in a follow-up transition
-    // commit, which also clears the pending flag.
     expect(samples).toContainEqual({
       isPending: true,
       pathname: "/threads/thr-old",

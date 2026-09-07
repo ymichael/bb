@@ -53,9 +53,7 @@ export interface ThreadTimelineSurfaceProps {
   onMessageAddToChat?: ThreadTimelineAddToChatHandler;
   onSendToMainMessage?: ThreadTimelineSendToMainMessageHandler;
   onSelectionAddToChat?: ThreadTimelineAddToChatHandler;
-  /** Surface-scoped consumer actions for the per-message action bar. */
   consumerMessageActions?: readonly ThreadTimelineConsumerMessageAction[];
-  /** Forwarded to ThreadTimelineRows; see its doc. */
   includePluginMessageActions?: boolean;
   onLoadOlderRows?: () => Promise<void> | void;
   onOpenLink?: ThreadTimelineLinkHandler;
@@ -70,7 +68,6 @@ export interface ThreadTimelineSurfaceProps {
   stoppingAnchorAt?: number;
   timelineErrorClassName?: string;
   timelineRows: TimelineRow[];
-  /** Outline destination kept mounted while timeline windowing is enabled. */
   timelineNavigationTargetRowId?: string | null;
   threadId: string;
   threadRuntimeDisplayStatus: ThreadRuntimeDisplayStatus;
@@ -295,9 +292,6 @@ function LoadOlderMessages({
   return (
     <div ref={sentinelRef} className="flex justify-center pt-2 mb-3">
       {isAutoLoadEnabled ? (
-        // Scrolling here loads the next page, so the affordance is progress
-        // rather than a control. Reserved height whether or not a fetch is in
-        // flight, so arriving at the top does not shift the rows below.
         <span
           className="text-muted-foreground text-xs"
           aria-live="polite"
@@ -323,7 +317,6 @@ function LoadOlderMessages({
   );
 }
 
-// Delay before revealing the loading indicator so fast loads don't flash.
 const LOADING_INDICATOR_REVEAL_DELAY_MS = 200;
 
 function DelayedThreadLoadingIndicator() {
@@ -343,23 +336,20 @@ function DelayedThreadLoadingIndicator() {
   return <ThreadTimelineLoadingSkeleton />;
 }
 
-// A lightweight placeholder that mirrors the timeline's real building blocks
-// while the thread loads: a right-aligned user bubble, assistant prose, and a
-// run of work rows (leading icon + title), then more prose.
 function ThreadTimelineLoadingSkeleton() {
   return (
     <div className="mt-6 space-y-5" role="status" aria-label="Loading thread">
-      {/* User message bubble (right-aligned, like ConversationMessageContent). */}
+      {}
       <div className="flex justify-end px-2">
         <Skeleton className="h-12 w-3/5" />
       </div>
-      {/* Assistant prose (text-sm lines). */}
+      {}
       <div className="space-y-2 px-2">
         <Skeleton className="h-3.5 w-11/12" />
         <Skeleton className="h-3.5 w-full" />
         <Skeleton className="h-3.5 w-3/4" />
       </div>
-      {/* Work rows: leading icon + title, like tool-call / file-change rows. */}
+      {}
       <div className="space-y-2.5 px-2">
         <div className="flex items-center gap-2">
           <Skeleton className="size-3.5 shrink-0 rounded" />
@@ -374,7 +364,7 @@ function ThreadTimelineLoadingSkeleton() {
           <Skeleton className="h-3 w-1/3" />
         </div>
       </div>
-      {/* More assistant prose. */}
+      {}
       <div className="space-y-2 px-2">
         <Skeleton className="h-3.5 w-5/6" />
         <Skeleton className="h-3.5 w-2/3" />

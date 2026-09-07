@@ -10,7 +10,7 @@
   "files": [
     {
       "path": "registry/components/ui/collapsible.tsx",
-      "content": "import * as CollapsiblePrimitive from \"@radix-ui/react-collapsible\"\n\nconst Collapsible = CollapsiblePrimitive.Root\n\nconst CollapsibleTrigger = CollapsiblePrimitive.CollapsibleTrigger\n\nconst CollapsibleContent = CollapsiblePrimitive.CollapsibleContent\n\nexport { Collapsible, CollapsibleTrigger, CollapsibleContent }\n",
+      "content": "import * as CollapsiblePrimitive from \"@radix-ui/react-collapsible\";\n\nconst Collapsible = CollapsiblePrimitive.Root;\n\nconst CollapsibleTrigger = CollapsiblePrimitive.CollapsibleTrigger;\n\nconst CollapsibleContent = CollapsiblePrimitive.CollapsibleContent;\n\nexport { Collapsible, CollapsibleTrigger, CollapsibleContent };\n",
       "type": "registry:ui",
       "target": "components/ui/collapsible.tsx"
     }

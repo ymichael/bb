@@ -9,8 +9,6 @@ export default {
   title: "right-panel/Thread storage",
 };
 
-// Mirrors the DetailCard styling used by ThreadMetadataCard so a row in
-// isolation reads the same way as it does inside the full right-panel Info tab.
 function PanelStage({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-[360px] w-full max-w-[460px] min-w-0 flex-col overflow-hidden rounded-md border border-border bg-background px-4 py-3">

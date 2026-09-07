@@ -1,10 +1,5 @@
 // @vitest-environment jsdom
 
-// ProseMirror reads `navigator` once, while its module loads, to set
-// `browser.safari` and `browser.ios`. The sibling suite mocks `navigator` per
-// test, which lands too late to turn those flags on. So this file claims the
-// iPad identity in a hoisted block, before any import runs, and it is the only
-// suite that exercises ProseMirror's real iOS Enter path.
 import { vi } from "vitest";
 
 vi.hoisted(() => {
@@ -29,6 +24,7 @@ vi.hoisted(() => {
 });
 
 import type { PromptTextMention } from "@bb/domain";
+import { EMPTY_ORDERED_MENTION_SUGGESTIONS } from "@bb/client-core";
 import { useState } from "react";
 import {
   act,
@@ -43,7 +39,6 @@ import {
   PromptBoxInternal,
 } from "./PromptBoxInternal";
 
-// ProseMirror waits this long before it replays a swallowed iOS Enter.
 const IOS_ENTER_REPLAY_MS = 200;
 
 function getPromptEditorElement(): HTMLElement {
@@ -97,7 +92,7 @@ describe("PromptBoxInternal on a real iPadOS ProseMirror build", () => {
           mentionMenuPlacement="bottom"
           typeahead={{
             mention: {
-              suggestions: [],
+              results: EMPTY_ORDERED_MENTION_SUGGESTIONS,
               isLoading: false,
               isError: false,
               onQueryChange: vi.fn(),
@@ -162,7 +157,7 @@ describe("PromptBoxInternal on a real iPadOS ProseMirror build", () => {
         mentionMenuPlacement="bottom"
         typeahead={{
           mention: {
-            suggestions: [],
+            results: EMPTY_ORDERED_MENTION_SUGGESTIONS,
             isLoading: false,
             isError: false,
             onQueryChange: vi.fn(),
@@ -180,8 +175,6 @@ describe("PromptBoxInternal on a real iPadOS ProseMirror build", () => {
 
     expect(onSubmit).toHaveBeenCalledOnce();
 
-    // The hook handles the event, so ProseMirror never arms its iOS fallback.
-    // If it ever does, the replay would submit a second time.
     act(() => {
       vi.advanceTimersByTime(IOS_ENTER_REPLAY_MS * 2);
     });
@@ -201,7 +194,7 @@ describe("PromptBoxInternal on a real iPadOS ProseMirror build", () => {
         mentionMenuPlacement="bottom"
         typeahead={{
           mention: {
-            suggestions: [],
+            results: EMPTY_ORDERED_MENTION_SUGGESTIONS,
             isLoading: false,
             isError: false,
             onQueryChange: vi.fn(),
@@ -211,17 +204,12 @@ describe("PromptBoxInternal on a real iPadOS ProseMirror build", () => {
       />,
     );
 
-    // The iPad software keyboard reports an empty `code`, so the hook declines
-    // the event and ProseMirror swallows it into its 200 ms fallback.
     fireEvent.keyDown(getPromptEditorElement(), {
       key: "Enter",
       code: "",
       keyCode: 13,
     });
 
-    // Nothing has happened yet. That delay is itself the proof that
-    // ProseMirror's iOS branch is live in this suite: off that branch,
-    // ProseMirror would have inserted the newline synchronously.
     expect(onSubmit).not.toHaveBeenCalled();
     expect(onChange).not.toHaveBeenCalled();
 

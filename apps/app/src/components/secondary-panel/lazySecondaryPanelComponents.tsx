@@ -11,22 +11,6 @@ import {
 } from "./secondaryPanelSizing";
 import { secondaryPanelWidthPercentAtom } from "./threadSecondaryPanelAtoms";
 
-/**
- * Lazy entry points for the secondary-panel surfaces (the panel shell, the
- * terminal, the browser deck, the new-tab page and the file previews).
- *
- * The thread route renders none of these before a user opens the panel on a
- * phone, yet their static imports (xterm, `@pierre/diffs`, Shiki, the
- * markdown renderer, ...) used to sit in the SplitWorkspaceRoute closure that
- * every thread open must download and parse. Each wrapper carries its own
- * Suspense boundary, so a chunk that is still loading shows a local
- * placeholder instead of collapsing the whole route to App's `null` fallback.
- * `bundle-budget.json` ratchets the route closure; keep new panel surfaces
- * behind these wrappers.
- *
- * Only `typeof import(...)` types reference the heavy modules here: type-only
- * imports create no static edge for the bundler.
- */
 type ThreadSecondaryPanelModule = typeof import("./ThreadSecondaryPanel");
 type ThreadSecondaryPanelTabContentModule =
   typeof import("./ThreadSecondaryPanelTabContent");
@@ -37,8 +21,22 @@ type NewTabPageModule = typeof import("./NewTabPage");
 type FilePreviewModule = typeof import("./FilePreview");
 type ThreadStorageFileTreeModule = typeof import("./ThreadStorageFileTree");
 
+let threadSecondaryPanelModulePromise: Promise<ThreadSecondaryPanelModule> | null =
+  null;
+
+function loadThreadSecondaryPanel(): Promise<ThreadSecondaryPanelModule> {
+  threadSecondaryPanelModulePromise ??= import("./ThreadSecondaryPanel");
+  return threadSecondaryPanelModulePromise;
+}
+
+export function preloadThreadSecondaryPanel(): void {
+  void loadThreadSecondaryPanel().catch(() => {
+    threadSecondaryPanelModulePromise = null;
+  });
+}
+
 const ThreadSecondaryPanelChunk = lazy(() =>
-  import("./ThreadSecondaryPanel").then(({ ThreadSecondaryPanel }) => ({
+  loadThreadSecondaryPanel().then(({ ThreadSecondaryPanel }) => ({
     default: ThreadSecondaryPanel,
   })),
 );
@@ -101,8 +99,7 @@ const ThreadStorageFilePreviewTabContentChunk = lazy(() =>
   ),
 );
 
-/** Generic "content is on its way" body for a panel tab. */
-function SecondaryPanelContentSkeleton() {
+export function SecondaryPanelContentSkeleton() {
   return (
     <div
       className="space-y-2 px-4 py-4"
@@ -122,14 +119,6 @@ interface ThreadSecondaryPanelInlinePlaceholderProps {
   resizablePanelId: string | undefined;
 }
 
-/**
- * Stands in for the inline secondary panel while its chunk loads.
- *
- * It registers a `Panel` with the same id, order, default size and bounds as
- * the real one, so the panel group lays the timeline out at its final width
- * from the first frame; when the real panel replaces it, the group derives
- * the same layout and nothing shifts or animates.
- */
 function ThreadSecondaryPanelInlinePlaceholder({
   isOpen,
   isConversationCollapsed,
@@ -158,6 +147,7 @@ function ThreadSecondaryPanelInlinePlaceholder({
       className={cn(
         "min-w-0 overflow-clip",
         `relative transition-[flex-grow,flex-basis] ${PANEL_COLLAPSE_TRANSITION_CLASS}`,
+        isOpen && !isConversationCollapsed && "border-l border-border-seam",
       )}
       data-testid="thread-secondary-panel-placeholder"
     >
@@ -173,11 +163,6 @@ function ThreadSecondaryPanelInlinePlaceholder({
 type LazyThreadSecondaryPanelProps = ComponentProps<
   ThreadSecondaryPanelModule["ThreadSecondaryPanel"]
 > & {
-  /**
-   * What to show while the panel chunk loads in a drawer. Inline hosts get
-   * the placeholder `Panel` above; drawers pass their own skeleton so the
-   * body matches the surrounding content.
-   */
   drawerFallback: ReactNode;
 };
 
@@ -241,12 +226,6 @@ export function LazyFilePreview(
   );
 }
 
-/**
- * The storage browser's `@pierre/trees` tree. Its model comes from the same
- * chunk (`useThreadStorageBrowser` imports it to build the model), so by the
- * time a caller has a model to render the chunk is already loaded and the
- * fallback shows for at most one commit.
- */
 export function LazyThreadStorageFileTree({
   fallback,
   ...props

@@ -30,18 +30,15 @@ export interface ProfileStoreState {
   status: ProfileStoreStatus;
   profiles: readonly ServerProfile[];
   activeProfileId: string | null;
-  /** Non-null when a persisted profile could not be read; the rest still load. */
   loadError: string | null;
 }
 
 export interface ProfileStore {
-  /** Read persisted profiles. Idempotent; concurrent calls share one load. */
   load(): Promise<ProfileStoreState>;
   getSnapshot(): ProfileStoreState;
   subscribe(listener: () => void): () => void;
   listProfiles(): readonly ServerProfile[];
   getActiveProfile(): ServerProfile | null;
-  /** Adds and, when it is the first profile, activates it. */
   addProfile(input: NewServerProfile): Promise<ServerProfile>;
   updateProfile(id: string, patch: ServerProfilePatch): Promise<ServerProfile>;
   removeProfile(id: string): Promise<void>;
@@ -61,7 +58,6 @@ function defaultGenerateId(): string {
 }
 
 function withoutUndefined<T extends object>(value: T): T {
-  // Explicit `undefined` in a patch means "leave alone", not "clear".
   return Object.fromEntries(
     Object.entries(value).filter(([, v]) => v !== undefined),
   ) as T;
@@ -83,10 +79,7 @@ function parseIndex(raw: string | null): ProfileIndex {
   try {
     const parsed = profileIndexSchema.safeParse(JSON.parse(raw));
     if (parsed.success) return parsed.data;
-  } catch {
-    // fall through: a corrupt index is treated as empty; profiles keyed by
-    // id are unreachable without it, but a crash loop would be worse.
-  }
+  } catch {}
   return { ids: [], activeProfileId: null };
 }
 
@@ -112,7 +105,6 @@ export function createProfileStore(deps: CreateProfileStoreDeps): ProfileStore {
     loadError: null,
   };
   let loadPromise: Promise<ProfileStoreState> | null = null;
-  // Serialize mutations so two rapid writes cannot interleave index updates.
   let mutationChain: Promise<unknown> = Promise.resolve();
 
   function setState(next: ProfileStoreState): void {
@@ -152,7 +144,6 @@ export function createProfileStore(deps: CreateProfileStoreDeps): ProfileStore {
         ? index.activeProfileId
         : (profiles[0]?.id ?? null);
     setState({ status: "ready", profiles, activeProfileId, loadError });
-    // Heal the index when a profile was dropped or the active id was stale.
     if (
       profiles.length !== index.ids.length ||
       activeProfileId !== index.activeProfileId
@@ -237,8 +228,6 @@ export function createProfileStore(deps: CreateProfileStoreDeps): ProfileStore {
           state.activeProfileId === id
             ? (profiles[0]?.id ?? null)
             : state.activeProfileId;
-        // Index first: if the delete below fails, the orphaned value is
-        // unreachable rather than resurrected on next load.
         await writeIndex({ ids: profiles.map((p) => p.id), activeProfileId });
         setState({ ...state, profiles, activeProfileId });
         await storage.deleteItem(profileStorageKey(id));

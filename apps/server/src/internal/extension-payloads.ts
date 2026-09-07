@@ -1,31 +1,3 @@
-/**
- * Ingest validation for provider extension payloads.
- *
- * Extension kinds (`"<pluginId>/<name>"`) are opaque JSON on the wire: the
- * daemon's assembler copies the bridge's payload onto the canonical
- * `extension` item or `thread/extensionState/updated` event without reading
- * it. The plugin that owns the kind declared a Standard Schema for it
- * (`extensionKinds` on its provider declaration), and this is
- * the one place that schema is enforced — before the event is persisted, so
- * nothing a client renders or a plugin reads back came from a payload its
- * plugin did not vouch for.
- *
- * The kind is also checked against who emitted it. Clients resolve a kind's
- * renderer by the kind alone, so a bridge that emitted another plugin's kind
- * would persist a row rendered as that plugin's UI. The thread's provider
- * names the plugin that emitted the row (its live registration's
- * `pluginId`), and it must be the plugin the kind names — the same rule a
- * namespaced presentation glyph is held to (`presentation-icons.ts`). A
- * thread whose provider has no live registration has nothing to vouch for
- * its rows, so every extension kind on it is refused.
- *
- * A payload that fails — foreign kind, undeclared kind, schema miss,
- * validator error, or oversized — is not dropped silently: the event is
- * replaced by a `provider/unhandled` carrying the original kind and payload,
- * the same visible fate as any provider traffic core cannot classify
- * (guardrail G11 counts it). The batch keeps its shape, so sequencing and the
- * accepted-event response are unaffected.
- */
 import { getThread } from "@bb/db";
 import type { ExtensionKind, JsonValue, ThreadEvent } from "@bb/domain";
 import { parseExtensionKind } from "@bb/domain";
@@ -37,11 +9,6 @@ import type {
 } from "@get-bb/plugin-sdk";
 import type { AppDeps } from "../types.js";
 
-/**
- * Extension payloads are timeline rows, not transcripts. The cap is generous
- * for structured state (a goal, a permission profile, a widget model) and far
- * below anything that would bloat the events table or the boot payload.
- */
 export const EXTENSION_PAYLOAD_MAX_BYTES = 64 * 1024;
 
 export type ExtensionPayloadValidationDeps = Pick<
@@ -49,7 +16,6 @@ export type ExtensionPayloadValidationDeps = Pick<
   "db" | "logger" | "providerRegistry"
 >;
 
-/** One extension payload in an event, plus what its replacement row needs. */
 interface ExtensionPayloadSite {
   surface: "item" | "state";
   kind: ExtensionKind;
@@ -95,7 +61,6 @@ function extensionSiteOf(event: ThreadEvent): ExtensionPayloadSite | null {
 
 type ValidationOutcome = { ok: true } | { ok: false; reason: string };
 
-/** A Standard Schema issue path is a bare key or a list of keys/`{ key }`s. */
 function issuePathSegments(path: StandardSchemaV1Issue["path"]): string[] {
   if (path === undefined) {
     return [];
@@ -137,11 +102,6 @@ async function validateAgainstSchema(
   return { ok: true };
 }
 
-/**
- * The reason the kind may not appear on this thread at all, or null.
- * `providerId` is the thread's provider (null for an unknown thread); its
- * live registration names the plugin that emitted the row.
- */
 function extensionOwnershipProblem(
   deps: ExtensionPayloadValidationDeps,
   site: ExtensionPayloadSite,
@@ -194,12 +154,6 @@ async function validateSite(
   return validateAgainstSchema(schema, site.payload);
 }
 
-/**
- * The rejected event's visible replacement. The thread's provider id is what
- * `provider/unhandled` is counted under; the kind and payload ride the raw
- * event so the row is diagnosable. Scope and parent are kept so the row sits
- * where the original would have.
- */
 function toUnhandledEvent(
   site: ExtensionPayloadSite,
   providerId: string | null,
@@ -223,10 +177,6 @@ function toUnhandledEvent(
   };
 }
 
-/**
- * Validate every extension payload in a batch. Returns envelopes in the same
- * order and count; a rejected event is replaced by its `provider/unhandled`.
- */
 export async function validateExtensionPayloads(
   deps: ExtensionPayloadValidationDeps,
   envelopes: readonly HostDaemonEventEnvelope[],
@@ -237,8 +187,6 @@ export async function validateExtensionPayloads(
       if (site === null) {
         return envelope;
       }
-      // One thread lookup per site: the provider id decides which plugin the
-      // kind is checked against and what a replacement is counted under.
       const providerId = getThread(deps.db, site.threadId)?.providerId ?? null;
       const outcome = await validateSite(deps, site, providerId);
       if (outcome.ok) {

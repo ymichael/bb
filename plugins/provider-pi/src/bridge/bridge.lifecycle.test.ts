@@ -4,6 +4,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
@@ -11,22 +12,20 @@ import {
   experimental_closeAllForTests,
   experimental_scratchDirForTests,
 } from "./bridge.js";
-import { FULL_PERMISSION_OPTIONS, type FakePiBridgeHarness, startFakePiBridge } from "./test-support.js";
-
-/**
- * Protocol rule 6 at the process level: after every path that detaches a
- * thread (stop{interrupt}, stop{release}, discard, a failed construction,
- * the fork helper, the catalog's close) the pi child it served is gone —
- * not merely unowned. The fake loads the real extension, so the fd-4 reader
- * that kept pi's exit waiting lives in these children too; the process log
- * records each spawn and exit, and the pid is probed afterwards.
- */
-
+import {
+  FULL_PERMISSION_OPTIONS,
+  type FakePiBridgeHarness,
+  startFakePiBridge,
+} from "./test-support.js";
 
 let harness: FakePiBridgeHarness;
 
 beforeEach(async () => {
-  harness = await startFakePiBridge({ prefix: "bb-pi-lifecycle-", initialize: true, processLog: true });
+  harness = await startFakePiBridge({
+    prefix: "bb-pi-lifecycle-",
+    initialize: true,
+    processLog: true,
+  });
 }, 90_000);
 
 afterEach(async () => {
@@ -45,9 +44,6 @@ function isAlive(pid: number): boolean {
 }
 
 async function expectEveryChildGone(expectedSpawns: number): Promise<void> {
-  // A child that ignores EOF is SIGTERMed after 4 s and SIGKILLed after
-  // another 4 s; the exit then has to reach the process log. Leave room for
-  // that whole escalation on a starved runner.
   const deadline = Date.now() + 30_000;
   for (;;) {
     const log = harness.readProcessLog();
@@ -73,7 +69,10 @@ async function startThread(threadId: string): Promise<void> {
       {
         name: "bb_probe",
         description: "A bb tool.",
-        inputSchema: { type: "object", properties: { value: { type: "string" } } },
+        inputSchema: {
+          type: "object",
+          properties: { value: { type: "string" } },
+        },
       },
     ],
   });
@@ -96,7 +95,10 @@ it("stop{release} ends the child", async () => {
     intent: "release",
     activeTurnId: null,
   });
-  expect(stop.result).toMatchObject({ ok: true, providerCheckpointId: "leaf-1" });
+  expect(stop.result).toMatchObject({
+    ok: true,
+    providerCheckpointId: "leaf-1",
+  });
   await expectEveryChildGone(1);
 }, 90_000);
 
@@ -121,7 +123,11 @@ it("stop{interrupt} of a live run ends the child, and the turn settled before th
 
 it("discard ends the child and removes the session file", async () => {
   await startThread("thr_lc_discard");
-  const sessionFile = join(harness.workspaceDir, "sessions", "thr_lc_discard.jsonl");
+  const sessionFile = join(
+    harness.workspaceDir,
+    "sessions",
+    "thr_lc_discard.jsonl",
+  );
   expect(existsSync(sessionFile)).toBe(true);
   const discard = await harness.request((nextId += 1), "thread/discard", {
     threadId: "thr_lc_discard",
@@ -133,8 +139,6 @@ it("discard ends the child and removes the session file", async () => {
 }, 90_000);
 
 it("a failed construction leaves no child", async () => {
-  // Retry policy has deterministic unit coverage. This process-level case
-  // needs one real child to prove the bridge kills a failed construction.
   vi.stubEnv("FAKE_PI_EXIT_BEFORE_FIRST_RESPONSE", "1");
   const response = await harness.request((nextId += 1), "thread/start", {
     threadId: "thr_lc_failed",
@@ -151,8 +155,6 @@ it("a failed construction leaves no child", async () => {
 }, 90_000);
 
 it("the fork helper child exits once the fork is done", async () => {
-  // The fake's extension runs the real SessionManager fork, so the source
-  // is a real pi session written by pi's own SessionManager.
   const sessionDir = join(harness.workspaceDir, "sessions");
   const { SessionManager } = await import("@earendil-works/pi-coding-agent");
   const source = SessionManager.create(harness.workspaceDir, sessionDir);
@@ -163,7 +165,14 @@ it("the fork helper child exits once the fork is done", async () => {
     api: "openai-responses",
     provider: "fake-provider",
     model: "fake-model",
-    usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, totalTokens: 2, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+    usage: {
+      input: 1,
+      output: 1,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 2,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
     stopReason: "stop",
     timestamp: 2,
   });
@@ -178,9 +187,12 @@ it("the fork helper child exits once the fork is done", async () => {
     options: FULL_PERMISSION_OPTIONS,
     instructionMode: "append",
   });
-  expect(forkResponse.result).toMatchObject({ providerThreadId: "thr_lc_fork" });
-  // The helper read the source and wrote only the fork.
-  expect(readFileSync(join(sessionDir, "thr_lc_src.jsonl"), "utf8")).toBe(sourceBefore);
+  expect(forkResponse.result).toMatchObject({
+    providerThreadId: "thr_lc_fork",
+  });
+  expect(readFileSync(join(sessionDir, "thr_lc_src.jsonl"), "utf8")).toBe(
+    sourceBefore,
+  );
   expect(existsSync(join(sessionDir, "thr_lc_fork.jsonl"))).toBe(true);
   await harness.request((nextId += 1), "thread/stop", {
     threadId: "thr_lc_fork",
@@ -188,11 +200,9 @@ it("the fork helper child exits once the fork is done", async () => {
     intent: "release",
     activeTurnId: null,
   });
-  // The helper child and the session child.
   await expectEveryChildGone(2);
 }, 90_000);
 
-/** The per-child scratch files; the extension file lives for the process. */
 function scratchFiles(): string[] {
   return readdirSync(experimental_scratchDirForTests())
     .filter((name) => name !== "bb-pi-extension.mjs")
@@ -211,13 +221,38 @@ async function expectScratchFilesGone(): Promise<void> {
   }
 }
 
+it("accepts a prompt containing only a local image", async () => {
+  const threadId = "thr_image_only";
+  await harness.startThread(threadId);
+  const imagePath = join(harness.workspaceDir, "screenshot.png");
+  writeFileSync(imagePath, Buffer.from("fake png data"));
+
+  const response = await harness.request(2, "turn/start", {
+    threadId,
+    providerThreadId: threadId,
+    clientRequestId: "creq_234567abcd",
+    input: [{ type: "localImage", path: imagePath, mimeType: "image/png" }],
+    options: FULL_PERMISSION_OPTIONS,
+  });
+
+  expect(response.result).toEqual({ threadId });
+  await harness.waitForTurnBoundary(threadId);
+  expect(
+    harness.deltasOf(threadId).some(
+      (delta) => delta.kind === "item.textDelta" && delta.text === "Response to: ",
+    ),
+  ).toBe(true);
+});
+
 it("a child's tool and prompt files go with the child after release and failed construction", async () => {
-  // The bridge process outlives every pi child it spawns, so a file written
-  // for one child must not wait for the bridge's own temp dir to be removed.
   await harness.startThread("thr_lc_scratch", {
     options: { ...FULL_PERMISSION_OPTIONS, instructions: "be brief" },
     dynamicTools: [
-      { name: "bb_probe", description: "A bb tool.", inputSchema: { type: "object" } },
+      {
+        name: "bb_probe",
+        description: "A bb tool.",
+        inputSchema: { type: "object" },
+      },
     ],
   });
   expect(scratchFiles()).toEqual([
@@ -233,8 +268,6 @@ it("a child's tool and prompt files go with the child after release and failed c
   await expectEveryChildGone(1);
   await expectScratchFilesGone();
 
-  // A construction that exits before readiness still owns the files the
-  // bridge prepared for it, and its exit removes them.
   vi.stubEnv("FAKE_PI_EXIT_BEFORE_FIRST_RESPONSE", "1");
   const failed = await harness.request((nextId += 1), "thread/start", {
     threadId: "thr_lc_scratch_failed",
@@ -250,7 +283,9 @@ it("a child's tool and prompt files go with the child after release and failed c
 }, 60_000);
 
 it("closing the catalog waits for its child to exit", async () => {
-  const models = await harness.request((nextId += 1), "model/list", { cwd: harness.workspaceDir });
+  const models = await harness.request((nextId += 1), "model/list", {
+    cwd: harness.workspaceDir,
+  });
   expect(models.result).toMatchObject({ models: expect.any(Array) });
   await experimental_closeAllForTests();
   const log = harness.readProcessLog();
@@ -271,7 +306,6 @@ it("a child that ignores EOF and SIGTERM is SIGKILLed", async () => {
     activeTurnId: null,
   });
   expect(stop.result).toMatchObject({ ok: true });
-  // stdin EOF (ignored) → SIGTERM after the grace (ignored) → SIGKILL.
   expect(isAlive(pid)).toBe(true);
   const deadline = Date.now() + 15_000;
   while (isAlive(pid) && Date.now() < deadline) {

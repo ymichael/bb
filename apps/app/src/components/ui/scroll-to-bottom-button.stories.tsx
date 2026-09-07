@@ -48,8 +48,6 @@ export function Overview() {
   );
 }
 
-// The button as it appears in a thread: floating just above the composer,
-// overlaying the conversation, when the user has scrolled up.
 function MockTimelineFrame({
   active,
   label,

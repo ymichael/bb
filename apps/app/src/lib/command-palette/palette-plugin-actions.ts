@@ -7,7 +7,6 @@ export interface BuildPluginPaletteActionsArgs {
   slots: readonly PluginCommandPaletteActionSlot[];
   threadId: string | null;
   projectId: string | null;
-  /** The focused thread view's opener, or null when no thread is on screen. */
   openThreadPanel: PluginThreadPanelOpenHandler | null;
 }
 
@@ -34,13 +33,6 @@ function actionContext(
   };
 }
 
-/**
- * Plugin `commandPaletteAction` rows for the surface the palette opened on.
- *
- * `isAvailable` and `run` are plugin code running inside host chrome, so both
- * are contained: a row whose `isAvailable` throws is treated as unavailable
- * rather than taking the palette down with it.
- */
 export function buildPluginPaletteActions(
   args: BuildPluginPaletteActionsArgs,
 ): PaletteAction[] {

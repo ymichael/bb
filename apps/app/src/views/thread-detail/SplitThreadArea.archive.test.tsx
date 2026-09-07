@@ -33,7 +33,6 @@ interface SeedThread {
   deletedAt: number | null;
 }
 
-// A deferred promise the test resolves/rejects to control the archive round-trip.
 let pendingArchive: {
   promise: Promise<void>;
   resolve: () => void;
@@ -55,8 +54,6 @@ vi.mock("@/hooks/useRealtimeSubscription", () => ({
   useThreadListRealtimeSubscription: () => undefined,
 }));
 
-// The real network transport never settles, so the mount refetch can't clobber
-// the seeded/optimistic cache state the test controls directly.
 vi.mock("@/lib/sdk", () => ({
   sdk: {
     threads: { get: () => new Promise<never>(() => {}) },
@@ -83,9 +80,6 @@ vi.mock("./ThreadDetailView", () => ({
   },
 }));
 
-// Mirrors the real archive lifecycle's shape (optimistic archivedAt + a pending
-// mutation tagged archive_thread, rolled back on failure) — the exact two signals
-// PaneStaleWatcher gates on — without the full cache-owner list plumbing.
 function ArchiveHarness({ threadId }: { threadId: string }) {
   const queryClient = useQueryClient();
   const mutation = useMutation({
@@ -189,25 +183,21 @@ describe("SplitThreadArea archive pruning", () => {
     await screen.findByTestId("pane-thr-b");
 
     fireEvent.click(screen.getByTestId("archive"));
-    // The optimistic archive has landed, but the mutation is still in flight.
     await waitFor(() =>
       expect(archivedAtOf(queryClient, "thr-b")).toBe(ARCHIVED_AT),
     );
 
-    // Gate holds: an unconfirmed archive must not prune the pane.
     expect(screen.getByTestId("pane-thr-b")).toBeTruthy();
     expect(screen.getByTestId("pane-thr-a")).toBeTruthy();
     expect(screen.getByTestId("pane-thr-b").dataset.focused).toBe("true");
     expect(screen.getByTestId("location").textContent).toBe("/threads/thr-b");
 
-    // Reject after the optimistic update; rollback clears archivedAt.
     await act(async () => {
       pendingArchive!.reject(new Error("archive failed"));
       await Promise.resolve();
     });
     await waitFor(() => expect(archivedAtOf(queryClient, "thr-b")).toBeNull());
 
-    // Everything is restored: pane count, contents, focus, and URL.
     expect(screen.getByTestId("pane-thr-a")).toBeTruthy();
     expect(screen.getByTestId("pane-thr-b")).toBeTruthy();
     expect(screen.getByTestId("pane-thr-b").dataset.focused).toBe("true");
@@ -223,16 +213,13 @@ describe("SplitThreadArea archive pruning", () => {
     await waitFor(() =>
       expect(archivedAtOf(queryClient, "thr-b")).toBe(ARCHIVED_AT),
     );
-    // Still in flight → not yet pruned.
     expect(screen.getByTestId("pane-thr-b")).toBeTruthy();
 
-    // Confirm the archive; archivedAt stays set and no mutation is in flight.
     await act(async () => {
       pendingArchive!.resolve();
       await Promise.resolve();
     });
 
-    // The now-confirmed archived pane is pruned; focus + URL follow the survivor.
     await waitFor(() => expect(screen.queryByTestId("pane-thr-b")).toBeNull());
     expect(screen.getByTestId("pane-thr-a")).toBeTruthy();
     await waitFor(() =>

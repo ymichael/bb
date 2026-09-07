@@ -28,9 +28,6 @@ describe("WorkspaceChangesList", () => {
   });
 
   it("caps the scrollable list and reports the hidden remainder", () => {
-    // A stray untracked build directory can put tens of thousands of files
-    // in workspace status. Rendering all of them made every page layout cost
-    // hundreds of milliseconds, so the list must stop at the cap.
     const files = makeFiles(WORKSPACE_CHANGES_LIST_MAX_ROWS + 1234);
     render(<WorkspaceChangesList files={files} />);
 

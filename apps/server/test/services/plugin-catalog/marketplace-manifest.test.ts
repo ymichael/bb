@@ -2,8 +2,15 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import {
+  BUNDLED_MARKETPLACE_NAME,
+  entryOverview,
+  entryScreenshotUrls,
   entryRepositoryUrl,
   entrySourceDisplay,
+  marketplaceEntryCategory,
+  marketplaceEntryCollections,
+  marketplaceCollections,
+  parseBundledMarketplaceManifest,
   parseMarketplaceManifest,
   resolveEntryIcon,
   resolvedEntrySource,
@@ -12,6 +19,7 @@ import {
 import { BUNDLED_CURATED_MARKETPLACE } from "../../../src/services/plugin-catalog/curated-marketplace.js";
 
 const MANIFEST_URL = "https://getbb.app/marketplace/v1/marketplace.json";
+const MANIFEST_V2_URL = "https://getbb.app/marketplace/v2/marketplace.json";
 
 const publishedSchemaShape = z.object({
   $defs: z.object({
@@ -65,6 +73,19 @@ function manifest(plugins: unknown[]): unknown {
   };
 }
 
+function manifestV2(
+  plugins: unknown[],
+  overrides: Record<string, unknown> = {},
+): unknown {
+  return {
+    schemaVersion: 2,
+    name: "bb-community",
+    displayName: "BB Community",
+    plugins,
+    ...overrides,
+  };
+}
+
 function parse(plugins: unknown[]) {
   return parseMarketplaceManifest(manifest(plugins), "manifest");
 }
@@ -76,8 +97,8 @@ function firstEntry(plugins: unknown[]): MarketplaceEntry {
 }
 
 describe("marketplace manifest schema", () => {
-  it("accepts a fully populated entry", () => {
-    const parsed = parse([
+  it("parses a fully populated v1 fixture without changes", () => {
+    const fixture = manifest([
       entry({
         icon: { url: "./icons/widgets.svg" },
         tags: ["interface", "threads"],
@@ -88,16 +109,225 @@ describe("marketplace manifest schema", () => {
         },
       }),
     ]);
-    expect(parsed.plugins).toHaveLength(1);
+    expect(parseMarketplaceManifest(fixture, "manifest")).toEqual(fixture);
   });
 
   it("rejects a schemaVersion it does not implement", () => {
     expect(() =>
       parseMarketplaceManifest(
-        { ...(manifest([entry()]) as object), schemaVersion: 2 },
+        { ...(manifest([entry()]) as object), schemaVersion: 3 },
         "manifest",
       ),
-    ).toThrow(/unknown schemaVersion 2/);
+    ).toThrow(/unknown schemaVersion 3/);
+  });
+
+  describe("version 2", () => {
+    it("parses all discovery fields", () => {
+      const parsed = parseMarketplaceManifest(
+        manifestV2(
+          [
+            entry({
+              category: "thread-content",
+              screenshots: ["./screenshots/widgets/widgets.png"],
+              publishedAt: "2026-08-20T11:47:04-07:00",
+              updatedAt: "2026-08-27T16:12:00Z",
+            }),
+          ],
+          {
+            categories: [
+              {
+                id: "thread-content",
+                displayName: "Document thread tools",
+                description: "Tools for an open thread.",
+              },
+            ],
+            collections: [
+              {
+                id: "new-and-notable",
+                displayName: "New & notable",
+                pluginIds: ["missing-plugin", "widgets"],
+              },
+            ],
+          },
+        ),
+        "manifest",
+      );
+      const parsedEntry = parsed.plugins[0];
+      if (parsedEntry === undefined) throw new Error("entry missing");
+      expect(marketplaceEntryCategory(parsed, parsedEntry)).toMatchObject({
+        id: "thread-content",
+        displayName: "Document thread tools",
+      });
+      expect(marketplaceEntryCollections(parsed, parsedEntry.id)).toEqual([
+        { id: "new-and-notable", rank: 0 },
+      ]);
+      expect(marketplaceEntryCollections(parsed, "missing-plugin")).toEqual([]);
+      expect(marketplaceCollections(parsed)).toEqual([
+        {
+          id: "new-and-notable",
+          displayName: "New & notable",
+          pluginIds: ["widgets"],
+        },
+      ]);
+      expect(
+        entryScreenshotUrls(parsedEntry, {
+          kind: "url",
+          manifestUrl: MANIFEST_V2_URL,
+        }),
+      ).toEqual([
+        "https://getbb.app/marketplace/v2/screenshots/widgets/widgets.png",
+      ]);
+    });
+
+    it("keeps an overview text at the cap and drops a longer one with a warning", () => {
+      const warnings: string[] = [];
+      const atCap = `${"é".repeat(4000)}\n`;
+      const parsed = parseMarketplaceManifest(
+        manifestV2([
+          entry({ overview: atCap }),
+          entry({ id: "long", overview: `${"a".repeat(4001)}\n` }),
+        ]),
+        "manifest",
+      );
+      const [capped, long] = parsed.plugins;
+      if (capped === undefined || long === undefined) {
+        throw new Error("entries missing");
+      }
+      expect(entryOverview(capped, (message) => warnings.push(message))).toBe(
+        atCap,
+      );
+      expect(entryOverview(long, (message) => warnings.push(message))).toBe(
+        undefined,
+      );
+      expect(warnings).toEqual([
+        expect.stringContaining('entry "long" overview text was skipped'),
+      ]);
+    });
+
+    it("accepts omitted discovery fields and ignores unknown keys", () => {
+      const parsed = parseMarketplaceManifest(
+        manifestV2(
+          [
+            entry({
+              futureEntryField: true,
+              icon: { url: "./icons/widgets.svg", futureIconField: true },
+              author: { name: "Acme", futureAuthorField: true },
+            }),
+          ],
+          { futureManifestField: true },
+        ),
+        "manifest",
+      );
+      expect(parsed).not.toHaveProperty("futureManifestField");
+      expect(parsed).not.toHaveProperty("categories");
+      expect(parsed).not.toHaveProperty("collections");
+      expect(parsed.plugins[0]).not.toHaveProperty("futureEntryField");
+      expect(parsed.plugins[0]?.icon).toEqual({ url: "./icons/widgets.svg" });
+      expect(parsed.plugins[0]?.author).toEqual({ name: "Acme" });
+    });
+
+    it("rejects unknown source keys", () => {
+      expect(() =>
+        parseMarketplaceManifest(
+          manifestV2([
+            entry({
+              source: {
+                npm: {
+                  package: "bb-plugin-widgets",
+                  regsitry: "https://npm.test/",
+                },
+              },
+            }),
+          ]),
+          "manifest",
+        ),
+      ).toThrow(/invalid manifest/iu);
+    });
+
+    it("skips an invalid semver entry with a warning", () => {
+      const warnings: string[] = [];
+      const parsed = parseMarketplaceManifest(
+        manifestV2([
+          entry({
+            id: "invalid-range",
+            source: {
+              npm: { package: "bb-plugin-invalid", range: "not-semver" },
+            },
+          }),
+          entry(),
+        ]),
+        "manifest",
+        (message) => warnings.push(message),
+      );
+
+      expect(parsed.plugins.map((plugin) => plugin.id)).toEqual(["widgets"]);
+      expect(warnings).toEqual([
+        expect.stringContaining('entry "invalid-range" was skipped'),
+      ]);
+    });
+
+    it("skips a relative screenshot for a git or path marketplace", () => {
+      const warnings: string[] = [];
+      const parsed = parseMarketplaceManifest(
+        manifestV2([
+          entry({
+            screenshots: ["./screenshots/widgets/widgets.png"],
+          }),
+        ]),
+        "manifest",
+      );
+      const parsedEntry = parsed.plugins[0];
+      if (parsedEntry === undefined) throw new Error("entry missing");
+
+      expect(
+        entryScreenshotUrls(
+          parsedEntry,
+          { kind: "dir", root: "/tmp/marketplace" },
+          (message) => warnings.push(message),
+        ),
+      ).toEqual([]);
+      expect(warnings).toEqual([
+        expect.stringContaining("relative screenshots require an https"),
+      ]);
+    });
+
+    it("leaves an unknown category uncategorized", () => {
+      const parsed = parseMarketplaceManifest(
+        manifestV2([entry({ category: "unknown-category" })]),
+        "manifest",
+      );
+      const parsedEntry = parsed.plugins[0];
+      if (parsedEntry === undefined) throw new Error("entry missing");
+      expect(marketplaceEntryCategory(parsed, parsedEntry)).toBeUndefined();
+    });
+
+    it("uses a built-in category after document categories", () => {
+      const parsed = parseMarketplaceManifest(
+        manifestV2([entry({ category: "security" })], { categories: [] }),
+        "manifest",
+      );
+      const parsedEntry = parsed.plugins[0];
+      if (parsedEntry === undefined) throw new Error("entry missing");
+      expect(marketplaceEntryCategory(parsed, parsedEntry)).toMatchObject({
+        id: "security",
+        displayName: "Security",
+      });
+    });
+
+    it("reserves bundled sources for the built-in marketplace", () => {
+      const bundled = {
+        schemaVersion: 2,
+        name: BUNDLED_MARKETPLACE_NAME,
+        displayName: "BB Official",
+        plugins: [entry({ source: { bundled: { plugin: "docs" } } })],
+      };
+      expect(() =>
+        parseMarketplaceManifest(bundled, "fetched marketplace"),
+      ).toThrow(/not allowed in fetched or third-party documents/u);
+      expect(
+        parseBundledMarketplaceManifest(bundled, "bundled marketplace"),
+      ).toMatchObject({ name: BUNDLED_MARKETPLACE_NAME });
+    });
   });
 
   it("rejects unknown fields anywhere in the document", () => {
@@ -173,7 +403,6 @@ describe("marketplace manifest schema", () => {
         path: "/checkout/icons/widgets.svg",
         relativePath: "icons/widgets.svg",
       });
-      // An absolute icon URL stays remote even for a local marketplace.
       expect(
         resolveEntryIcon(
           firstEntry([
@@ -299,8 +528,6 @@ describe("marketplace manifest schema", () => {
         "git:https://github.com/acme/plugins.git@^1.0.0#plugins/widgets (tags widgets/vX.Y.Z)",
       );
 
-      // ref and range are mutually exclusive, and a range entry still needs
-      // one of them.
       for (const git of [
         {
           url: "https://github.com/acme/plugins.git",
@@ -412,8 +639,6 @@ describe("marketplace manifest schema", () => {
       expect(entryRepositoryUrl(gitlab)).toBe(
         "https://gitlab.com/acme/plugins",
       );
-      // `#` and `?` pass the subdirectory check; raw they would change the
-      // URL's meaning.
       const reserved = firstEntry([
         entry({
           source: {
@@ -455,10 +680,6 @@ describe("marketplace manifest schema", () => {
   });
 
   describe("engines policy", () => {
-    // A listing no longer declares compatibility: the ranges live in the
-    // plugin's own package.json and the install pipeline enforces them there.
-    // The entry schema is strict, so a stale listing fails loudly rather than
-    // carrying a range bb would silently ignore.
     it("refuses an entry that declares engine ranges", () => {
       for (const engines of [
         { bb: ">=1.0.0" },

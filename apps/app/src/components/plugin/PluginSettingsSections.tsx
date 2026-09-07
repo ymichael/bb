@@ -3,13 +3,7 @@ import {
   type PluginSettingsSectionSlot,
 } from "@/lib/plugin-slots";
 import { PluginSlotMount } from "./PluginSlotMount";
-import { ResourceDetailPanel } from "@bb/shared-ui/resource-detail";
 
-/**
- * Plugin `settingsSection` slot mounts, rendered on that plugin's canonical
- * Plugins detail page below the host-rendered declarative form.
- * Each section is contained in its own per-plugin error boundary.
- */
 export function PluginSettingsSections({ pluginId }: { pluginId: string }) {
   const { settingsSections } = usePluginSlots();
   const sections = settingsSections.filter(
@@ -28,40 +22,28 @@ function PluginSettingsSectionList({
     <div className="space-y-6" data-testid="plugin-settings-sections">
       {sections.map((section) => {
         const key = `${section.pluginId}/${section.id}/${section.generation}`;
-        return section.title === undefined ? (
-          <PluginSettingsSectionPanel key={key} section={section} />
-        ) : (
+        return (
           <div key={key} className="space-y-3">
-            <h3 className="text-xs font-medium text-foreground">
-              {section.title}
-            </h3>
-            <PluginSettingsSectionPanel section={section} />
+            {section.title === undefined ? null : (
+              <h3 className="text-xs font-medium text-foreground">
+                {section.title}
+              </h3>
+            )}
+            {section.description === undefined ? null : (
+              <p className="text-xs leading-snug text-subtle-foreground/75">
+                {section.description}
+              </p>
+            )}
+            <PluginSlotMount
+              pluginId={section.pluginId}
+              slotKind="settingsSection"
+              slotId={section.id}
+            >
+              <section.component />
+            </PluginSlotMount>
           </div>
         );
       })}
     </div>
-  );
-}
-
-function PluginSettingsSectionPanel({
-  section,
-}: {
-  section: PluginSettingsSectionSlot;
-}) {
-  return (
-    <ResourceDetailPanel surface="recessed" className="px-3 py-3">
-      {section.description !== undefined ? (
-        <p className="mb-3 text-xs leading-snug text-subtle-foreground/75">
-          {section.description}
-        </p>
-      ) : null}
-      <PluginSlotMount
-        pluginId={section.pluginId}
-        slotKind="settingsSection"
-        slotId={section.id}
-      >
-        <section.component />
-      </PluginSlotMount>
-    </ResourceDetailPanel>
   );
 }

@@ -53,15 +53,12 @@ interface SplitButtonProps {
   primaryAction: SplitButtonAction;
   secondaryActions: SplitButtonAction[];
   disabled?: boolean;
-  /** Escape hatch for targeted overrides (e.g. tighter padding for icon-only primaries). Applied to both buttons. */
   className?: string;
   triggerLabel?: string;
   primaryTooltip?: string;
   triggerTooltip?: string;
   mobileTitle?: string;
-  /** Render with the secondary menu open on mount. Story-only escape hatch. */
   defaultOpen?: boolean;
-  /** Whether the menu blocks page interaction. Defaults to Radix's true; pass false in stories. */
   modal?: boolean;
 }
 

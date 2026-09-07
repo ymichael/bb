@@ -32,6 +32,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 
 import changelogMd from "../../../../CHANGELOG.md?raw";
+import { RELEASE_META } from "../../../../changelog-metadata";
 import { initAnalytics, trackLandingEvent } from "../landing/analytics";
 import blackstoneLogo from "../assets/company-logos/blackstone.png";
 import datadogLogo from "../assets/company-logos/datadog.svg";
@@ -46,7 +47,8 @@ import shortcutLogo from "../assets/company-logos/shortcut.svg";
 import simileLogo from "../assets/company-logos/simile.svg";
 import hermesAvatar from "../assets/hermes-avatar.jpg";
 import vscodeIcon from "../assets/vscode.png";
-import { RELEASE_META, parseChangelog } from "../landing/changelog";
+import { parseChangelog } from "../landing/changelog";
+import { CommandButton } from "../landing/command-button";
 import {
   DiscordLink,
   DownloadLink,
@@ -75,9 +77,6 @@ import {
 import interWoff2 from "@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url";
 import landingCss from "../landing/landing.css?url";
 
-/* "tile" marks bake their own background into the asset (a coloured or white
-   square); "glyph" marks are drawn on transparent. Dark mode inverts only the
-   glyphs — see landing.css .company-proof-tile. */
 const COMPANY_PROOF = [
   ["Meta", metaLogo, "glyph"],
   ["Figma", figmaLogo, "glyph"],
@@ -128,8 +127,6 @@ export const Route = createFileRoute("/")({
     meta: [
       { title: SITE_TITLE },
       { name: "description", content: SITE_DESCRIPTION },
-      // Unfurl title is just "bb": the card image already carries the
-      // tagline, and platforms print the title right next to the image.
       ...unfurlMeta("bb", OG_DESCRIPTION, "/"),
     ],
     links: [
@@ -153,9 +150,6 @@ function LandingRoute() {
   return <LandingPage />;
 }
 
-// Filled (solid) variant of the Hugeicons apple — same silhouette as their
-// stroke AppleIcon, but rendered as a fill so the macOS CTA reads as a solid
-// glyph (the free icon set ships outline variants only).
 const AppleSolidIcon: IconSvgElement = [
   [
     "path",
@@ -175,50 +169,6 @@ const AppleSolidIcon: IconSvgElement = [
   ],
 ];
 
-/* ── CTAs ─────────────────────────────────────────────────────────── */
-
-// The browser install path, rendered as an outline button whose body is the
-// run command. Clicking anywhere copies it (there's no hosted URL to open —
-// the command starts bb locally and opens it in the browser).
-function RunCommandButton({ placement }: { placement: CtaPlacement }) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    // Track and show feedback first; the clipboard write can reject (no user
-    // activation, permissions) and must not swallow the event.
-    trackLandingEvent({
-      name: "landing_cli_command_copied",
-      properties: { placement, command: CLI_COMMAND },
-    });
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
-    navigator.clipboard.writeText(CLI_COMMAND).catch(() => {});
-  };
-  return (
-    <button
-      type="button"
-      className={
-        copied
-          ? "btn btn-ghost btn-install cmd-btn copied"
-          : "btn btn-ghost btn-install cmd-btn"
-      }
-      onClick={copy}
-      aria-label={`Copy browser install command: ${CLI_COMMAND}`}
-    >
-      <span className="cmd-dollar">$</span>
-      <span className="cmd-text">{CLI_COMMAND}</span>
-      <span className="cmd-copy">Copy</span>
-      {/* Toast floats above the button (absolute) so confirming the copy never
-          reflows the centered CTA row — the label stays a fixed width. */}
-      <span
-        className={copied ? "cmd-toast show" : "cmd-toast"}
-        aria-hidden="true"
-      >
-        Copied to clipboard
-      </span>
-    </button>
-  );
-}
-
 function InstallOptions({ placement }: { placement: CtaPlacement }) {
   return (
     <div className="install-options">
@@ -234,7 +184,17 @@ function InstallOptions({ placement }: { placement: CtaPlacement }) {
           <span className="install-note">One-click, no terminal</span>
         </span>
         <span className="install-choice">
-          <RunCommandButton placement={placement} />
+          <CommandButton
+            command={CLI_COMMAND}
+            label={`Copy browser install command: ${CLI_COMMAND}`}
+            size="hero"
+            onCopy={() =>
+              trackLandingEvent({
+                name: "landing_cli_command_copied",
+                properties: { placement, command: CLI_COMMAND },
+              })
+            }
+          />
           <span className="install-note">
             Windows (via WSL), Linux &amp; remote machines
           </span>
@@ -244,9 +204,6 @@ function InstallOptions({ placement }: { placement: CtaPlacement }) {
   );
 }
 
-/* ── Scroll reveal ────────────────────────────────────────────────── */
-
-/** Fade-up sections as they scroll into view. No-JS and prerender stay fully visible. */
 function useScrollReveal() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -276,13 +233,6 @@ function useScrollReveal() {
   }, []);
 }
 
-/** The app mock assembles itself the first time it scrolls into view: window
- *  frame, then title bar, sidebar rows, conversation, and composer in sequence.
- *  The mock is held hidden from first paint by CSS (`html.js` + `:not(.constructing)`)
- *  so it never flashes finished before it builds. Once the entrance finishes the
- *  class is swapped to `.constructed` so later re-renders (switching threads,
- *  opening the diff) don't replay it. Prerender/no-JS/reduced-motion render the
- *  finished mock with no animation. */
 function useConstructMock() {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -307,8 +257,6 @@ function useConstructMock() {
           }
         }
       },
-      // Threshold 0 (not a ratio) so a mock taller than a small mobile viewport
-      // still triggers; the bottom margin holds it until it is meaningfully in view.
       { threshold: 0, rootMargin: "0px 0px -20% 0px" },
     );
     observer.observe(mock);
@@ -321,13 +269,6 @@ function useConstructMock() {
   }, []);
 }
 
-/** Scale the desktop app mock for narrow viewports. Below the mobile breakpoint
- *  the mock keeps its full desktop layout and is shrunk with `zoom` so a fixed
- *  left slice of the app (`--mock-visible-width`) fills the available width; the
- *  rest bleeds off the right edge, clipped by `.mockup-wrap`'s overflow. This
- *  stays legible instead of shrinking the whole app to fit. `--mock-visible-width`
- *  is defined only inside that breakpoint, so above it the variable is unset and
- *  the mock renders unscaled at its natural width. */
 function useFitMock() {
   useEffect(() => {
     const mock = document.querySelector<HTMLElement>(".mock");
@@ -341,13 +282,9 @@ function useFitMock() {
         getComputedStyle(mock).getPropertyValue("--mock-visible-width"),
       );
       if (!visibleWidth) {
-        // Desktop layout (variable unset above the breakpoint): no scaling.
         mock.style.removeProperty("--mock-scale");
         return;
       }
-      // The card is inset by the wrap's side padding (its left gutter holds the
-      // drop shadow), so its on-screen width is the content box — clientWidth
-      // minus the padding — not clientWidth itself.
       const slice =
         wrap.clientWidth -
         Number.parseFloat(wrapStyle.paddingLeft) -
@@ -361,8 +298,6 @@ function useFitMock() {
   }, []);
 }
 
-/* ── Shared bits ──────────────────────────────────────────────────── */
-
 const PROVIDER_ICONS = [
   ClaudeIcon,
   OpenAiIcon,
@@ -374,7 +309,6 @@ const PROVIDER_ICONS = [
   HermesAgentIcon,
 ] as const;
 
-/** How many provider logos stay visible on narrow screens before "+N more". */
 const PROVIDER_ICONS_MOBILE_VISIBLE = 3;
 
 function ProviderChips() {
@@ -398,15 +332,8 @@ function ProviderChips() {
   );
 }
 
-/* ── Hero: interactive bb app mock ────────────────────────────────── */
-// A faithful recreation of the bb app: icon rail + thread sidebar + a markdown
-// conversation + the real composer (PR/diff bar, model picker, worktree row).
-// Clicking a thread in the sidebar swaps the conversation and composer.
-
 type IconProps = { className?: string };
 
-// Real bb app icons (Hugeicons), matched to the app's own Icon map in
-// apps/app/src/components/ui/icon.tsx — same glyphs the desktop app renders.
 const PanelIcon = ({ className }: IconProps) => (
   <HugeiconsIcon icon={SidebarLeftIcon} className={className} />
 );
@@ -437,8 +364,6 @@ const GearIcon = ({ className }: IconProps) => (
 const CheckIcon = ({ className }: IconProps) => (
   <HugeiconsIcon icon={Tick02Icon} className={className} />
 );
-// Sidebar thread-status glyphs, matching the real app's muted glyphs
-// (CheckmarkCircle02 for done, MessageQuestion for needs-input).
 const CircleCheckIcon = ({ className }: IconProps) => (
   <HugeiconsIcon icon={CheckmarkCircle02Icon} className={className} />
 );
@@ -487,8 +412,6 @@ type Step =
   | { kind: "user"; text: string }
   | { kind: "step"; text: ReactNode }
   | { kind: "say"; text: ReactNode }
-  // A "spawn" step prints a tool line in the feed and, the first time it
-  // streams in, adds a nested child thread to the sidebar (like the real app).
   | { kind: "spawn"; text: ReactNode; child: MockThread };
 type Ask = {
   question: string;
@@ -503,14 +426,10 @@ type MockThread = {
   pr?: number;
   change: { files: number; add: number; del: number };
   transcript: Step[];
-  /** Endlessly-cycled work a running thread streams in after its transcript. */
   stream?: Step[];
-  /** A pending AskUserQuestion that replaces the prompt box (like the app). */
   ask?: Ask;
 };
 
-// The subagent the Sentry thread spawns mid-run. It lands as a nested child row
-// in the sidebar and, if opened, streams its own work like any running thread.
 const SENTRY_SUBAGENT: MockThread = {
   id: "sentry-sub",
   title: "Reproduce the null cart",
@@ -537,8 +456,6 @@ const SENTRY_SUBAGENT: MockThread = {
   ],
 };
 
-// Endless "work" each running thread streams in after its transcript. The pool
-// loops, so a glance at the hero always shows tool calls and messages arriving.
 const SENTRY_STREAM: Step[] = [
   { kind: "step", text: "Ran 48 tests" },
   {
@@ -730,7 +647,6 @@ const HERO_THREADS: MockThread[] = [
   },
 ];
 
-// The pinned dispatcher thread, kept out of "All Threads".
 const CHIEF: MockThread = {
   id: "chief",
   title: "Chief",
@@ -768,18 +684,11 @@ function ThreadStatus({ status }: { status: Status }) {
   );
 }
 
-// Cadence + rolling-window size for a running thread's live feed. The window is
-// generously larger than what fits, so the oldest rows are dropped well above
-// the (clipped) top edge and never cause a visible jump.
 const STREAM_INTERVAL_MS = 1600;
 const STREAM_WINDOW = 16;
 
 type FeedItem = { id: string; step: Step; live: boolean };
 
-/** The conversation pane. A running thread streams tool calls and messages in
- *  endlessly after its seed transcript; everything else renders statically.
- *  The first time a `spawn` step streams in, it calls `onSpawn` so the sidebar
- *  can add the nested child thread. Reduced-motion and no-JS render the seed. */
 function ThreadFeed({
   thread,
   onSpawn,
@@ -798,8 +707,6 @@ function ThreadFeed({
       })),
     [thread.transcript],
   );
-  // ThreadFeed is keyed by thread id, so switching threads remounts it and
-  // resets the stream — no in-effect reset needed.
   const [items, setItems] = useState<FeedItem[]>(seedItems);
 
   useEffect(() => {
@@ -832,7 +739,6 @@ function ThreadFeed({
   return (
     <div className={isLive ? "feed feed-live" : "feed"}>
       {items.map(({ id, step, live }, index) => {
-        // Live rows ease in as they arrive; seed rows keep the construct cascade.
         const style: CSSProperties = live
           ? { animation: "c-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both" }
           : { animationDelay: `${0.66 + index * 0.09}s` };
@@ -869,9 +775,6 @@ function ThreadFeed({
   );
 }
 
-// The AskUserQuestion tool. Like the app, it REPLACES the prompt box: a
-// recessed card in the composer slot with the prompt, single-select option
-// rows, and Cancel / Submit answer actions.
 function AskQuestion({ ask }: { ask: Ask }) {
   const [selected, setSelected] = useState(ask.selected);
   return (
@@ -921,9 +824,6 @@ const DIFF_LINES: DiffLine[] = [
   { t: "add", text: "});" },
 ];
 
-// The prompt box — used for follow-ups (with a thread) and the new-thread page
-// (no thread). Carries the full button set: expand, model picker, attach, mic,
-// send, plus the project / environment / branch / permission context row.
 function Composer({ thread }: { thread?: MockThread }) {
   const isNew = !thread;
   return (
@@ -1006,7 +906,6 @@ function Composer({ thread }: { thread?: MockThread }) {
   );
 }
 
-// The diff / secondary panel that opens on the right.
 function DiffPanel({
   thread,
   onClose,
@@ -1052,8 +951,6 @@ function HeroAppMock() {
   const [activeId, setActiveId] = useState(HERO_THREADS[0].id);
   const [view, setView] = useState<"thread" | "new">("thread");
   const [diffOpen, setDiffOpen] = useState(false);
-  // Subagents a running thread spawns, keyed by parent id. They persist once
-  // spawned and render as nested child rows in the sidebar.
   const [spawned, setSpawned] = useState<Record<string, MockThread[]>>({});
   const spawnedChildren = useMemo(
     () => Object.values(spawned).flat(),
@@ -1237,8 +1134,6 @@ function HeroAppMock() {
   );
 }
 
-/* ── Band layout ──────────────────────────────────────────────────── */
-
 function Band({
   title,
   flip,
@@ -1263,13 +1158,6 @@ function Band({
   );
 }
 
-/* ── Looping visual cycle ─────────────────────────────────────────── */
-
-/** Drives a looping visual: hold the current item, fade it out, then swap to the
- *  next and replay its entrance. Returns a monotonic `cycle` (use as the remount
- *  key; mod by item count for content) and whether it is currently fading out, so
- *  the outgoing content can ease away before the next appears. Inert under reduced
- *  motion — the first item just stays shown. */
 function useCycle(holdMs: number, fadeMs: number) {
   const [cycle, setCycle] = useState(0);
   const [leaving, setLeaving] = useState(false);
@@ -1298,12 +1186,6 @@ function useCycle(holdMs: number, fadeMs: number) {
   return { cycle, leaving };
 }
 
-/* ── Band visual: text the bot, bb spawns the thread ──────────────── */
-
-// A Telegram-style chat with the bb bot. The user texts a request; the bot acks
-// and a bb thread card appears, its status going spawning → running. The chat
-// shell and wallpaper stay put; only the messages cycle — they fade in, hold,
-// then fade out together before the conversation replays. CSS-only transitions.
 function AgentChat() {
   const { cycle, leaving } = useCycle(6000, 600);
   return (
@@ -1374,8 +1256,6 @@ function AgentChat() {
   );
 }
 
-/* ── Band visual: bb builds itself a plugin ───────────────────────── */
-
 type CustomizeMessage = {
   role: "user" | "agent" | "tool";
   text: string;
@@ -1394,7 +1274,6 @@ type CustomizeScenario = {
   promptWidth: string;
   branch: string;
   messages: CustomizeMessage[];
-  /** The panel the agent just built, revealed once the thread lands. */
   panel: {
     name: string;
     tasks: CustomizeTask[];
@@ -1404,8 +1283,6 @@ type CustomizeScenario = {
 const CUSTOMIZE_SCENARIO: CustomizeScenario = {
   title: "Build a tasks plugin",
   prompt: "Add a task management system",
-  // Measured width of the prompt at the composer's 13.5px Inter, plus a few px
-  // of slack for the metric-adjusted fallback face. Too small clips the tail.
   promptWidth: "210px",
   branch: "bb/tasks-plugin",
   messages: [
@@ -1467,9 +1344,6 @@ const CUSTOMIZE_SCENARIO: CustomizeScenario = {
   },
 };
 
-// A phone-sized bb thread preview: the prompt types into the composer, sends,
-// the build transcript streams into the feed, and the panel the agent just
-// wrote slides up over the thread — bb extending itself, on screen.
 function CustomizeBuild() {
   const { cycle, leaving } = useCycle(10600, 500);
   const run = CUSTOMIZE_SCENARIO;
@@ -1575,9 +1449,7 @@ function CustomizeBuild() {
             </div>
           </div>
 
-          {/* The panel the agent just wrote, sliding up over the thread it was
-              built in. Purely decorative — the transcript above already states
-              the outcome for assistive tech. */}
+          {}
           <div className="plugin-panel" aria-hidden>
             <div className="plugin-panel-bar">
               <span className="plugin-panel-name">{run.panel.name}</span>
@@ -1609,12 +1481,6 @@ function CustomizeBuild() {
   );
 }
 
-/* ── Band visual: one agent spawns and manages a thread per provider ── */
-
-// A bb sidebar mock: a parent Claude thread with three worker threads nested
-// beneath it on a connector rail, one per provider. Each worker's status flips
-// running → done; the parent manages until they all land, then ships. Mirrors
-// the run-receipt pill and reveal timing — the list replays each cycle.
 function SpawnRow({
   icon,
   name,
@@ -1719,14 +1585,9 @@ function SpawnSidebar() {
   );
 }
 
-/* ── Page ─────────────────────────────────────────────────────────── */
-
 function LandingPage() {
   const [companyProofPaused, setCompanyProofPaused] = useState(false);
   const [companyProofInView, setCompanyProofInView] = useState(false);
-  // Start with enough copies to cover a 5K display before hydration: one
-  // copy is ~1300px, and coverage needs (copies - 1) * copyWidth >= viewport.
-  // The measurement below trims the count once JavaScript runs.
   const [companyProofCopies, setCompanyProofCopies] = useState(5);
   const companyProofRef = useRef<HTMLElement>(null);
   const companyProofMarqueeRef = useRef<HTMLDivElement>(null);
@@ -1745,9 +1606,6 @@ function LandingPage() {
     return () => observer.disconnect();
   }, []);
 
-  // The track scrolls left by one logo-list copy per animation cycle, so the
-  // copies after the first must cover the full marquee width or the viewport
-  // runs out of content near the end of each cycle on wide screens.
   useEffect(() => {
     const marquee = companyProofMarqueeRef.current;
     const firstCopy = marquee?.querySelector(".company-proof-logos");

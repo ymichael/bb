@@ -79,11 +79,6 @@ function seedHostThreads(
   );
 }
 
-/**
- * Drizzle and the raw data helpers prepare every statement through the
- * better-sqlite3 client, so the number of `prepare` calls is the number of
- * SQL statements `work` issued.
- */
 function countPreparedStatements(
   harness: TestAppHarness,
   work: () => void,
@@ -131,13 +126,8 @@ describe("host thread runtime status notifications", () => {
       harness.hub.subscribe(socket, { kind: "thread-list" });
 
       handleDaemonSocketClosed(harness.deps, { sessionId: fixture.sessionId });
-      // The disconnect schedules the grace callbacks with real timers; drop
-      // them so the harness does not fire interruptions after cleanup.
       harness.hub.cancelPendingDaemonDisconnect(fixture.sessionId);
 
-      // Host connectivity only changes an active row's displayed runtime. A
-      // bare notification there would make every client refetch every active
-      // thread list; the snapshot is what lets them patch the row in place.
       const activeMessage = lastStatusChange(
         socket.messages,
         fixture.activeThreadId,
@@ -149,9 +139,6 @@ describe("host thread runtime status notifications", () => {
           hostReconnectGraceExpiresAt: expect.any(Number),
         },
       });
-      // An idle row renders the same whether or not its host is connected, so
-      // it keeps the bare notification it always received rather than a
-      // snapshot that costs per-thread queries and bytes on every disconnect.
       const idleMessage = lastStatusChange(
         socket.messages,
         fixture.idleThreadId,
@@ -177,7 +164,6 @@ describe("host thread runtime status notifications", () => {
         fixture: large,
         status: "idle",
       });
-      // Joined to the host like any other row, but never rendered: no snapshot.
       const deletedActiveThread = seedThread(harness.deps, {
         projectId: large.projectId,
         environmentId: large.environmentId,
@@ -201,9 +187,6 @@ describe("host thread runtime status notifications", () => {
       );
       harness.hub.cancelPendingDaemonDisconnect(small.sessionId);
 
-      // The daemon WebSocket close handler runs this synchronously on the
-      // event loop: the snapshot inputs must come from a fixed handful of
-      // batched statements, not ~6 statements per thread on the host.
       expect(largeStatements).toBe(smallStatements);
 
       for (const threadId of largeActiveThreadIds) {
@@ -236,10 +219,6 @@ describe("host thread runtime status notifications", () => {
         sessionId: fixture.sessionId,
       });
 
-      // Removal interrupts the active thread (run.failed) before the runtime
-      // fan-out. The interruption publishes the settled error snapshot; by the
-      // time the fan-out runs the row is no longer active, so it gets the same
-      // bare notification as every other non-active thread on the host.
       const activeSnapshots = statusChangedMessagesFor(
         socket.messages,
         fixture.activeThreadId,

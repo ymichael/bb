@@ -113,9 +113,7 @@ describe("process utils", () => {
       mkdtempSync(join(tmpdir(), "bb-process-utils-report-")),
       "logs",
     );
-    const connectionError = new Error(
-      "connect ECONNREFUSED 127.0.0.1:38886",
-    );
+    const connectionError = new Error("connect ECONNREFUSED 127.0.0.1:38886");
     Object.defineProperty(connectionError, "code", {
       value: "ECONNREFUSED",
     });

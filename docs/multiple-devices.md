@@ -111,6 +111,39 @@ server URL (Tailscale Serve or `--server-bind-host 0.0.0.0`) with the same
 caveats as a browser. Platforms (iOS first) and what the phone cannot do are
 listed in [platform-support.md](platform-support.md).
 
+### Push notifications on a self-hosted server
+
+The built-in Push notifications plugin sends messages through Expo. A
+self-hosted server must reach `https://exp.host`. The server needs no Apple or
+Google key.
+
+An Expo push token lets its holder send a notification to one app installation.
+The token cannot read notifications. It cannot access the phone or authenticate
+to the bb server. Treat the token as private because a leak can cause unwanted
+notifications.
+
+The server sends a thread title and a short preview. Use these commands to
+manage device registrations and inspect the sender:
+
+```bash
+bb push-notifications list
+bb push-notifications add --token <expo-push-token> --platform ios --label <device-name>
+bb push-notifications remove <id>
+bb push-notifications status
+```
+
+Turn delivery off with `bb plugin disable push-notifications`. The plugin keeps
+registrations in its private storage. Enable the plugin to resume delivery.
+
+The `expoPushUrl` plugin setting changes the Expo endpoint. Use it only for a
+controlled test service or a compatible relay:
+
+```bash
+bb plugin config push-notifications set expoPushUrl <url>
+```
+
+The Expo request supports `HTTPS_PROXY` and `NO_PROXY`.
+
 ## Point the desktop app at another bb
 
 The desktop app's Server menu lists "This Mac", every bb connect server on the
@@ -140,16 +173,18 @@ not directly reachable from another machine. When bb connect is not paired and
 the server URL is a loopback or unspecified address, the dialog does not show an
 installer. It links to Settings → Remote access instead.
 
-The installer always installs the exact `bb-app` package exposed by that
-server at `/install/bb-app.tgz`; a `bb-app` already on PATH is reused, and the
-npm registry consulted, only when the server provides no package. Version
-strings cannot distinguish unpublished builds, so this keeps remote machines
-aligned with development and pre-release servers whose build may not exist on
-npm. The package route is public like `/install.sh`: `bb-app` is public
-software, and exposing an unpublished build slightly early through a paired
-tunnel is an accepted tradeoff. npm installs the package into the machine's bb
-data directory, not its system-wide global prefix, so enrollment needs neither
-`sudo` nor a PATH change.
+The installer always installs the exact host-only `bb-app` package exposed by
+that server at `/install/bb-app.tgz`. The package contains the host daemon,
+provider/plugin workers, native host dependencies, and bundled `bb` CLI, but no
+web app or server. A `bb-app` already on PATH is reused, and the npm registry
+consulted, only when the server provides no package. Version strings cannot
+distinguish unpublished builds, so the route also publishes a SHA-256 digest.
+The installer verifies that digest and uses a conditional request on later runs
+to skip an identical installed artifact. The package route is public like
+`/install.sh`: `bb-app` is public software, and exposing an unpublished build
+slightly early through a paired tunnel is an accepted tradeoff. npm installs
+the package into the machine's bb data directory, not its system-wide global
+prefix, so enrollment needs neither `sudo` nor a PATH change.
 
 Each joined server gets its own daemon instance, data directory
 (`~/.bb-machines/<server-host>`, override with `BB_DATA_DIR` when running the
@@ -165,7 +200,10 @@ bb versions on one machine remain isolated.
 
 The installed launchd/systemd service enables `--auto-update`. If session open
 reports a newer server protocol, the daemon downloads the server artifact,
-updates its private install, then exits so the service manager restarts it.
+verifies its SHA-256 digest, updates its private install, then exits so the
+service manager restarts it. If the identical artifact is already installed,
+the server returns `304` and the daemon restarts without downloading or running
+npm again.
 Failed attempts fall back to normal reconnect behavior with a persisted
 exponential retry backoff from 5 seconds to 5 minutes. Settings → Machines and
 `bb machine retry-update <id-or-name>` can bypass the current backoff. A daemon

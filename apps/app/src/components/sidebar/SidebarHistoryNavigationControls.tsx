@@ -6,12 +6,7 @@ import { COARSE_POINTER_HEADER_ICON_BUTTON_CLASS } from "@bb/shared-ui/coarse-po
 import { useRouteStateHistoryNavigation } from "@/lib/app-route-history";
 
 interface SidebarHistoryNavigationControlsProps {
-  /**
-   * Invoked after an enabled Back/Forward button requests navigation, so the
-   * sidebar can close the mobile drawer. Not called for disabled buttons.
-   */
   onNavigate?: () => void;
-  /** Extra classes for the row, letting the sidebar own placement/visibility. */
   className?: string;
 }
 
@@ -48,11 +43,6 @@ function SidebarHistoryNavButton({
   );
 }
 
-/**
- * Back/Forward controls for the left sidebar, moving through the app-shell
- * route history like browser navigation. Renders a compact icon-button row; the
- * sidebar decides where it sits via `className`.
- */
 export function SidebarHistoryNavigationControls({
   onNavigate,
   className,

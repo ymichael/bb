@@ -40,8 +40,6 @@ describe("buildPluginPaletteActions", () => {
         },
       }),
     ]);
-    // A plugin that throws while the palette is deciding what to show must not
-    // take the palette down, and must not be listed on a guess.
     expect(rows.map((row) => row.id)).toEqual(["plugin:linear/listed"]);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -61,8 +59,6 @@ describe("buildPluginPaletteActions", () => {
       ],
       openThreadPanel,
     )[0]?.run();
-    // The plugin id is the host's half of the lookup: without it the opener
-    // cannot tell whose `threadPanelAction` "issue-panel" names.
     expect(openThreadPanel).toHaveBeenCalledWith({
       actionId: "issue-panel",
       pluginId: "linear",

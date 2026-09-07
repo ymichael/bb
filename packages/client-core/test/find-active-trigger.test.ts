@@ -146,9 +146,6 @@ describe("findActiveTrigger", () => {
   });
 
   it("does not fake a start-of-input boundary at the scan-window edge", () => {
-    // The trigger char sits mid-word (preceded by a letter). With a windowed
-    // scan whose window happens to begin exactly at the trigger char, the `^`
-    // branch must not fire and open a menu.
     const prefix = "y".repeat(500_000);
     const tail = "z".repeat(255);
     const text = `${prefix}@${tail}`;

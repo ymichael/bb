@@ -6,15 +6,6 @@ import { dirname, join } from "node:path";
 import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-/**
- * Guards the boot-path split of the shared `Icon`: the core map renders
- * synchronously from the boot chunk, everything else comes from the lazily
- * loaded extended registry with a same-size placeholder in the meantime, and
- * the two halves stay disjoint and complete. The test setup file preloads the
- * extended registry for every other test, so these tests reset the module
- * graph to observe the cold state the app is in before a route chunk loads.
- */
-
 const require = createRequire(import.meta.url);
 const sharedUiIconDir = dirname(require.resolve("@bb/shared-ui/icon"));
 
@@ -53,7 +44,6 @@ describe("Icon core/extended split", () => {
     expect(svg).not.toBeNull();
     expect(svg?.childElementCount).toBeGreaterThan(0);
     expect(svg?.hasAttribute("data-icon-pending")).toBe(false);
-    // Rendering only core glyphs must not pull the extended registry in.
     expect(registry.getExtendedIcons()).toBeNull();
   });
 
@@ -65,13 +55,9 @@ describe("Icon core/extended split", () => {
     expect(pending).not.toBeNull();
     expect(pending?.hasAttribute("data-icon-pending")).toBe(true);
     expect(pending?.childElementCount).toBe(0);
-    // Same box as a loaded glyph, so nothing shifts when the artwork lands.
     expect(pending?.getAttribute("width")).toBe("24");
     expect(pending?.getAttribute("height")).toBe("24");
 
-    // Rendering the placeholder is what kicks off the on-demand load: no
-    // caller preloads here, so a regression that stops `Icon` from requesting
-    // the registry would leave this waiting forever.
     await act(async () => {
       await vi.waitUntil(() => registry.getExtendedIcons() !== null, {
         timeout: 5000,
@@ -79,7 +65,6 @@ describe("Icon core/extended split", () => {
     });
 
     expect(registry.getExtendedIcons()).not.toBeNull();
-    // Idempotent once the registry is in: resolves without a second load.
     await expect(icon.preloadExtendedIcons()).resolves.toBeUndefined();
     const loaded = view.container.querySelector("svg[data-icon=Palette]");
     expect(loaded?.hasAttribute("data-icon-pending")).toBe(false);
@@ -97,15 +82,11 @@ describe("Icon core/extended split", () => {
     for (const name of registry.EXTENDED_ICON_NAMES) {
       expect(icon.ICON_NAMES).toContain(name);
     }
-    // Every extended name resolves to real artwork once registered.
     for (const name of registry.EXTENDED_ICON_NAMES) {
       expect(extended.EXTENDED_ICON_MAP[name].length).toBeGreaterThan(0);
     }
   });
 
-  // The whole point of the split is that the boot chunk carries only the core
-  // map: `icon.tsx` may reach the extended registry through `import()` alone,
-  // and the names-only registry module must not import any artwork.
   it("keeps the extended artwork off the static import graph of the boot modules", () => {
     const iconSource = readFileSync(join(sharedUiIconDir, "icon.tsx"), "utf8");
     const registrySource = readFileSync(

@@ -51,9 +51,9 @@ describe("buildUserAnswerResolution", () => {
     state.branch.otherSelected = true;
     state.branch.otherText = "  a custom branch  ";
 
-    expect(buildUserAnswerResolution([singleSelect], state).answers.branch).toEqual(
-      { selected: [], freeText: "a custom branch" },
-    );
+    expect(
+      buildUserAnswerResolution([singleSelect], state).answers.branch,
+    ).toEqual({ selected: [], freeText: "a custom branch" });
   });
 
   it("omits free text when Other is selected but blank", () => {
@@ -61,9 +61,9 @@ describe("buildUserAnswerResolution", () => {
     state.branch.otherSelected = true;
     state.branch.otherText = "   ";
 
-    expect(buildUserAnswerResolution([singleSelect], state).answers.branch).toEqual(
-      { selected: [] },
-    );
+    expect(
+      buildUserAnswerResolution([singleSelect], state).answers.branch,
+    ).toEqual({ selected: [] });
   });
 
   it("keeps both options and free text for multi-select", () => {
@@ -72,29 +72,28 @@ describe("buildUserAnswerResolution", () => {
     state.areas.otherSelected = true;
     state.areas.otherText = "docs";
 
-    expect(buildUserAnswerResolution([multiSelect], state).answers.areas).toEqual(
-      { selected: ["app", "cli"], freeText: "docs" },
-    );
+    expect(
+      buildUserAnswerResolution([multiSelect], state).answers.areas,
+    ).toEqual({ selected: ["app", "cli"], freeText: "docs" });
   });
 
   it("drops option values that aren't part of the question", () => {
     const state = createInitialFormState([singleSelect]);
     state.branch.selected = ["main", "ghost"];
 
-    expect(buildUserAnswerResolution([singleSelect], state).answers.branch).toEqual(
-      { selected: ["main"] },
-    );
+    expect(
+      buildUserAnswerResolution([singleSelect], state).answers.branch,
+    ).toEqual({ selected: ["main"] });
   });
 
   it("captures free text for an options-less question", () => {
     const state = createInitialFormState([freeTextOnly]);
-    // No options → "Other" is implicitly active so the textarea is the answer.
     expect(state.notes.otherSelected).toBe(true);
     state.notes.otherText = "ship it";
 
-    expect(buildUserAnswerResolution([freeTextOnly], state).answers.notes).toEqual(
-      { selected: [], freeText: "ship it" },
-    );
+    expect(
+      buildUserAnswerResolution([freeTextOnly], state).answers.notes,
+    ).toEqual({ selected: [], freeText: "ship it" });
   });
 });
 

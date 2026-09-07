@@ -47,27 +47,12 @@ function isNotPairedRpcError(error: BbHttpError): boolean {
   return envelope.success && envelope.data.error.message === "not_paired";
 }
 
-/**
- * Outcome of asking the connect plugin for a machine code.
- * - `issued`: connect is paired; the command routes through getbb.app.
- * - `unpaired`: connect is installed but not paired (or not installed at all).
- *   Only a direct server URL can work.
- * - `disabled`: the user turned the connect plugin off. Retrying cannot help;
- *   the plugin must be enabled first. Only a direct server URL can work.
- * - `unavailable`: a temporary failure (for example the plugin is still
- *   starting). Nothing is known about pairing.
- */
 type ConnectMachineCodeResult =
   | { kind: "issued"; code: ConnectMachineCode }
   | { kind: "unpaired" }
   | { kind: "disabled" }
   | { kind: "unavailable" };
 
-/**
- * The rpc dispatcher answers 503 for any plugin that is not running, whether
- * it is disabled or merely still starting. The plugin list carries the real
- * status, so ask it instead of parsing the 503 message.
- */
 async function isConnectPluginDisabled(): Promise<boolean> {
   try {
     const { plugins } = await sdk.plugins.list();
@@ -108,12 +93,6 @@ async function createConnectMachineCode(): Promise<ConnectMachineCodeResult> {
   }
 }
 
-/**
- * Add-a-machine pairing dialog (multi-machine plan §4.4, Mockup D): mints a
- * join code on open, shows the one-line pairing command with an expiry
- * countdown, and flips to "connected" live when the new machine's daemon
- * appears in the host list.
- */
 export function AddMachineDialog({
   open,
   onOpenChange,
@@ -140,17 +119,6 @@ function formatCountdown(remainingMs: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-/**
- * The pairing one-liner. S9 ships the install script this command downloads;
- * the flag names and order here are the contract it must honor
- * (`--join-code`, `--host-id`, `--server`, mapping onto
- * `bb-app host-daemon join`).
- *
- * With a machine code (tunnel pairing) the whole command targets the connect
- * serverUrl the code was minted for. Otherwise it uses the direct server URL
- * reported by system config, which may differ from the frontend origin in
- * source development.
- */
 function pairingCommand(
   joinCode: string,
   hostId: string,
@@ -167,19 +135,11 @@ function pairingCommand(
 const REMOTE_ACCESS_ROUTE = getPluginConfigurationRoutePath({
   pluginId: "connect",
 });
-// The plugin detail page carries the enable switch; the settings page only
-// says "Enable this plugin" while it is off.
 const CONNECT_PLUGIN_ROUTE = getPluginDetailRoutePath({
   pluginId: "connect",
   view: "installed",
 });
 
-/**
- * Shown instead of the pairing command when connect cannot issue a machine
- * code and the only server URL we know is loopback or unspecified (issue
- * #1690). bb listens on loopback by default, so a command that targets this
- * address dials the new machine itself instead of this server.
- */
 function UnreachableServerNotice({
   serverUrl,
   reason,
@@ -253,8 +213,6 @@ function AddMachineDialogContent({
     mint();
   }, [mint]);
 
-  // Hosts known when the dialog opened. A connected host outside this set is
-  // the machine the user just paired.
   const baselineHostIds = useRef<Set<string> | null>(null);
   if (baselineHostIds.current === null && hostsQuery.data !== undefined) {
     baselineHostIds.current = new Set(hostsQuery.data.map((host) => host.id));
@@ -278,22 +236,17 @@ function AddMachineDialogContent({
       : Math.min(joinCode.expiresAt, machineCode?.expiresAt ?? Infinity);
   const localOnlyServerUrl =
     serverUrl !== null && isLocalOnlyUrl(serverUrl) ? serverUrl : null;
-  // Connect cannot issue a machine code and the fallback URL cannot work:
-  // explain instead of showing a command that dials the wrong machine.
   const unreachable =
     (machineCodeResult?.kind === "unpaired" ||
       machineCodeResult?.kind === "disabled") &&
     localOnlyServerUrl !== null
       ? { serverUrl: localOnlyServerUrl, reason: machineCodeResult.kind }
       : null;
-  // Connect failed for a temporary reason and the fallback URL cannot work:
-  // offer a retry instead of a command that dials the wrong machine.
   const connectUnavailable =
     machineCodeResult?.kind === "unavailable" && localOnlyServerUrl !== null;
   const showCommand =
     joinCode !== null && unreachable === null && !connectUnavailable;
 
-  // Tick only while a command with an expiry is on screen.
   const [now, setNow] = useState(() => Date.now());
   const hasCountdown = showCommand && expiresAt !== null;
   useEffect(() => {
@@ -323,9 +276,9 @@ function AddMachineDialogContent({
           {unreachable !== null
             ? "Pair a machine to run projects and threads on it."
             : "Run this command on the machine you want to add. It installs bb and keeps the machine connected to this server."}
-         </DialogDescription>
-       </DialogHeader>
-       <div className="space-y-3">
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
         {mintJoinCode.isError || connectUnavailable ? (
           <div className="space-y-2">
             <p className="text-sm text-destructive">

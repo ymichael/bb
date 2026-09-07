@@ -15,16 +15,6 @@ interface PierrePostRenderOptions<
   ): unknown;
 }
 
-/**
- * Recovers a Pierre renderer after React replays its ref in development.
- *
- * Strict Mode can attach a replacement renderer to the first renderer's
- * retained plain DOM. Pierre's public `rerender()` method moves that replacement
- * through the normal render path, where its pending worker result is allowed to
- * repaint. A microtask runs after the replay: the discarded instance is already
- * disabled and safely no-ops, while the retained instance performs one forced
- * render. Production returns the original options object unchanged.
- */
 export function usePierreStrictModeRecoveryOptions<
   TInstance extends RerenderablePierreInstance,
   TOptions extends PierrePostRenderOptions<TInstance>,

@@ -1,9 +1,11 @@
-// Channel names for the desktop-only web browser surface. Renderer → main
-// commands drive a hardened, isolated `WebContentsView`; main → renderer pushes
-// carry navigation state and popup-open requests. Mirrors the `bb-desktop:*`
-// convention in `desktop-update-ipc.ts`.
-
 export const BB_DESKTOP_BROWSER_ATTACH_CHANNEL = "bb-desktop:browser:attach";
+export const BB_DESKTOP_BROWSER_TARGET_CHANNEL = "bb-desktop:browser:target";
+export const BB_DESKTOP_BROWSER_CONTROL_CHANNEL = "bb-desktop:browser:control";
+export const BB_DESKTOP_BROWSER_GET_CONTROL_CHANNEL =
+  "bb-desktop:browser:get-control";
+export const BB_DESKTOP_BROWSER_RELEASE_CONTROL_CHANNEL =
+  "bb-desktop:browser:release-control";
+export const BB_DESKTOP_BROWSER_REVEAL_CHANNEL = "bb-desktop:browser:reveal";
 export const BB_DESKTOP_BROWSER_DETACH_CHANNEL = "bb-desktop:browser:detach";
 export const BB_DESKTOP_BROWSER_NAVIGATE_CHANNEL =
   "bb-desktop:browser:navigate";

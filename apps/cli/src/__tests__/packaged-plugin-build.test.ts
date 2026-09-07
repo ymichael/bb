@@ -30,16 +30,6 @@ describe("packaged CLI plugin build", () => {
   });
 
   it("includes a newly generated SDK app export when the facade package is not resolvable", async () => {
-    // Keep the bundle below apps/cli so its external build dependencies
-    // resolve exactly as they do for dist/index.js. @get-bb/plugin-sdk is not a
-    // CLI dependency, so import.meta.resolve in this bundle takes the
-    // packaged fallback that the source-level plugin-build tests do not.
-    //
-    // Built with `--split` like the shipped CLI, so the code that resolves
-    // files relative to import.meta.url (the bb-app version lookup, the SDK
-    // declaration bundles, plugin-build's createRequire/import.meta.resolve)
-    // runs from a chunk directory one level deeper than the entry. A `.js`
-    // entry (apps/cli is ESM) keeps the chunks at cli-chunks/ next to it.
     const tempRoot = await mkdtemp(join(cliRoot, ".packaged-plugin-build-"));
     tempDirs.push(tempRoot);
     const cliEntry = join(tempRoot, "cli.js");
@@ -106,10 +96,6 @@ describe("packaged CLI plugin build", () => {
     delete childEnv.BB_CLI;
     delete childEnv.BB_APP_VERSION;
 
-    // version.ts lands in a shared chunk and walks up from cli-chunks/ to the
-    // workspace's packages/bb-app/package.json; a single-file bundle or the
-    // tsx sources start that walk one directory higher and would not notice
-    // a lookup that stops short.
     expect(await readdir(join(tempRoot, "cli-chunks"))).not.toHaveLength(0);
     const { stdout: versionOutput } = await execFileAsync(
       process.execPath,

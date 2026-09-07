@@ -1,4 +1,3 @@
-// Docs — filesystem-first, multi-host Markdown and HTML vaults.
 import { watch } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -22,6 +21,19 @@ class CliUsageError extends Error {}
 
 const DOCS_CLI_USAGE =
   "Usage: bb docs <vaults|vault-add|vault-remove|list|read|pull|status|push|write|mkdir|move|remove>";
+const DOCS_STATUS_USAGE =
+  "bb docs status [workspace-dir] [--delete] [--diff] [--workspace-host <id>] [--json]";
+const DOCS_STATUS_HELP = [
+  `Usage: ${DOCS_STATUS_USAGE}`,
+  "",
+  "Exit 0: no changes.",
+  "Exit 1: the status operation failed.",
+  "Exit 2: the command usage is not valid.",
+  "Exit 3: local and remote changes conflict.",
+  "Exit 4: changes present.",
+  "",
+  "Exit 4 is a successful status result. Review the output, then run bb docs push separately.",
+].join("\n");
 
 const CLI_OPTIONS_BY_COMMAND: Record<string, ReadonlySet<string>> = {
   vaults: new Set(["--json"]),
@@ -561,8 +573,6 @@ function summarizeMarkdown(
   const firstHeadingIndex = lines.findIndex(
     (line) => markdownHeadingLevel(line) !== null,
   );
-  // A frontmatter title only supersedes a heading that repeats it. Any other
-  // opening heading is body content and belongs in the preview.
   const previewHeadingIndex =
     titleLineIndex >= 0
       ? titleLineIndex
@@ -854,9 +864,7 @@ export default async function plugin(
           preview: summary.preview,
           modifiedAtMs: file.modifiedAtMs ?? 0,
         });
-      } catch {
-        // Files may disappear during a recursive refresh.
-      }
+      } catch {}
     }
     return notes.sort((a, b) => b.modifiedAtMs - a.modifiedAtMs);
   }
@@ -1015,10 +1023,7 @@ export default async function plugin(
       }
       const rootPath = normalizeHostRoot(storage.storageRootPath);
       return {
-        path: hostPathApi(rootPath).join(
-          rootPath,
-          ...relativePath.split("/"),
-        ),
+        path: hostPathApi(rootPath).join(rootPath, ...relativePath.split("/")),
         rootPath,
         hostId: storage.hostId,
       };
@@ -1611,9 +1616,6 @@ export default async function plugin(
       const vaultId = input.vaultId;
       const currentPath = requireVaultPath(input.path, { extension: ".md" });
       const file = await readFile(vaultId, currentPath);
-      // Frontmatter that names the document owns the display title, so the
-      // filename is managed by hand. Frontmatter without a title still lets the
-      // H1 drive the filename.
       if (parseMarkdownDocument(file.content).title) {
         return { path: currentPath };
       }
@@ -2699,8 +2701,7 @@ export default async function plugin(
       {
         name: "status",
         summary: "Show local edits, conflicts, and ignored deletions",
-        usage:
-          "bb docs status [workspace-dir] [--delete] [--diff] [--workspace-host <id>] [--json]",
+        usage: DOCS_STATUS_USAGE,
       },
       {
         name: "push",
@@ -2738,6 +2739,12 @@ export default async function plugin(
         argv[0] === "-h"
       ) {
         return { exitCode: 0, stdout: DOCS_CLI_USAGE };
+      }
+      if (
+        argv[0] === "status" &&
+        (argv[1] === "help" || argv[1] === "--help" || argv[1] === "-h")
+      ) {
+        return { exitCode: 0, stdout: DOCS_STATUS_HELP };
       }
       try {
         const args = parseCli(argv);

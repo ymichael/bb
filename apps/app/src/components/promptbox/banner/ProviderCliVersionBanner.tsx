@@ -27,7 +27,6 @@ function versionRequirementCopy(
   return "A newer version is required.";
 }
 
-/** Blocking update state for the selected provider in the new-thread composer. */
 export function ProviderCliVersionBanner({
   displayName,
   currentVersion,

@@ -9,13 +9,6 @@ import {
   syncPluginTypes,
 } from "../src/plugin-scaffold.js";
 
-/**
- * New scaffolds resolve the plugin API from the published npm package, pinned
- * to the exact SDK of the bb that scaffolded them — no vendored `types/`, no
- * tsconfig path map. These guard that shape;
- * plugin-scaffold-external.test.ts performs the actual outside-the-workspace
- * install and typecheck with library checks enabled.
- */
 describe("scaffoldPlugin SDK dependency", () => {
   let workDir: string;
 
@@ -40,8 +33,6 @@ describe("scaffoldPlugin SDK dependency", () => {
     const tsconfig = JSON.parse(
       await readFile(join(targetDir, "tsconfig.json"), "utf8"),
     );
-    // Only the shadcn alias: `@get-bb/plugin-sdk` must resolve through
-    // node_modules, the way an editor and `tsc` both do.
     expect(tsconfig.compilerOptions.paths).toEqual({ "@/*": ["./*"] });
     expect(tsconfig.compilerOptions.skipLibCheck).toBe(false);
     expect(tsconfig.include).toEqual([
@@ -55,11 +46,8 @@ describe("scaffoldPlugin SDK dependency", () => {
     const pkg = JSON.parse(
       await readFile(join(targetDir, "package.json"), "utf8"),
     );
-    // Exact, not a caret: the declarations describe one bb build.
     expect(pkg.devDependencies["@get-bb/plugin-sdk"]).toBe(PLUGIN_SDK_VERSION);
     expect(pkg.dependencies["@get-bb/plugin-sdk"]).toBeUndefined();
-    // The engines floor stays — the host reads it as a minimum within the
-    // major, independently of the npm pin.
     expect(pkg.engines).toEqual({
       bb: ">=0.9",
       bbPluginSdk: `>=${PLUGIN_SDK_VERSION}`,
@@ -71,9 +59,6 @@ describe("scaffoldPlugin SDK dependency", () => {
       app: "./app.tsx",
     });
     expect(pkg.devDependencies["@types/react"]).toBeDefined();
-    // server.ts imports zod and the build inlines it, so an install that omits
-    // dev deps still has to produce a buildable plugin (see
-    // plugin-scaffold-dependencies.test.ts).
     expect(pkg.dependencies.zod).toBeDefined();
     expect(pkg.devDependencies.zod).toBeUndefined();
 
@@ -93,10 +78,34 @@ describe("scaffoldPlugin SDK dependency", () => {
     expect(components.registries["@bb"]).toBe(
       "https://raw.githubusercontent.com/get-bb/bb/desktop-v0.9.0/packages/plugin-registry/r/{name}.json",
     );
-    // The todo page's Checkbox rides on a bundled radix package: it must be a
-    // real dependency, not a shimmed type-only one.
     expect(pkg.dependencies["@radix-ui/react-checkbox"]).toBeDefined();
     await access(join(targetDir, "components", "ui", "checkbox.tsx"));
+  });
+
+  it("writes a store overview that follows the marketplace content rules", async () => {
+    const targetDir = join(workDir, "bb-plugin-todo");
+    await scaffoldPlugin({
+      targetDir,
+      packageName: "bb-plugin-todo",
+      bbVersion: "0.9.0",
+    });
+
+    const overview = await readFile(
+      join(targetDir, "PLUGIN_OVERVIEW.md"),
+      "utf8",
+    );
+    expect(overview).toContain("bb todo list");
+    expect(overview).toMatch(/^[^#]/u);
+    expect([...overview].length).toBeGreaterThan(700);
+    expect([...overview].length).toBeLessThanOrEqual(4000);
+    const prose = overview
+      .replace(/```[\s\S]*?```/gu, "")
+      .replace(/`[^`]*`/gu, "");
+    expect(prose).not.toMatch(/<[A-Za-z!/?]|!\[/u);
+
+    const readme = await readFile(join(targetDir, "README.md"), "utf8");
+    expect(readme).toContain("## Store listing");
+    expect(readme).toContain("marketplace requires the file");
   });
 
   it("uses the canonical id in a scoped package scaffold", async () => {
@@ -117,8 +126,6 @@ describe("scaffoldPlugin SDK dependency", () => {
     expect(readme).toContain("bb plugin reload scoped");
     expect(readme).toContain("bb plugin config scoped");
 
-    // The CLI command, the page copy, and the skill all name the canonical
-    // id, never the scoped package name.
     const server = await readFile(join(targetDir, "server.ts"), "utf8");
     expect(server).toContain("bb plugin config scoped");
     expect(server).not.toContain("bb plugin config @acme/");
@@ -135,12 +142,6 @@ describe("scaffoldPlugin SDK dependency", () => {
   });
 });
 
-/**
- * The seam `bb plugin types|build|dev` use to decide whether a plugin still
- * owns vendored declarations. Getting this wrong in either direction is a real
- * failure: writing `types/` into a new plugin shadows the installed package,
- * and skipping the refresh for an old one strands it on a stale API.
- */
 describe("resolvePluginSdkLayout", () => {
   let workDir: string;
 
@@ -173,8 +174,6 @@ describe("resolvePluginSdkLayout", () => {
       packageName: "bb-plugin-legacy",
       bbVersion: "0.9.0",
     });
-    // Rebuild the pre-npm layout: vendored declarations plus the path map,
-    // and no SDK dependency.
     const pkgPath = join(targetDir, "package.json");
     const pkg = JSON.parse(await readFile(pkgPath, "utf8"));
     delete pkg.devDependencies["@get-bb/plugin-sdk"];
@@ -191,8 +190,6 @@ describe("resolvePluginSdkLayout", () => {
       pin: null,
     });
 
-    // The refresh path is unchanged for that plugin: it writes the vendored
-    // declarations this bb ships.
     const files = await syncPluginTypes({ rootDir: targetDir, app: false });
     expect(files).toEqual([
       { path: "types/bb-plugin-sdk.d.ts", outcome: "written" },

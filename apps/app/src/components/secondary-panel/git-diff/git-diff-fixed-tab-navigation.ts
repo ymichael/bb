@@ -41,7 +41,6 @@ function normalizeGitDiffFixedTabTarget(
   return null;
 }
 
-/** The Changes owner validates and interprets targets outside the controller. */
 export function createGitDiffFixedTabDestination({
   eligible,
   openCommit,

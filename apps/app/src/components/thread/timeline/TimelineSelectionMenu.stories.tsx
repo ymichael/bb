@@ -20,12 +20,6 @@ const logHandlers: Handlers = {
   onDismiss: () => console.log("onDismiss"),
 };
 
-/**
- * Renders an agent message with one phrase highlighted like a live selection,
- * then anchors the real `TimelineSelectionMenu` above that highlight by
- * measuring its rect — so the story shows the menu exactly as it appears over
- * selected agent prose in the timeline (rather than floating at a mock rect).
- */
 function AgentMessageWithMenu({
   text = AGENT_TEXT,
   selected,
@@ -46,7 +40,6 @@ function AgentMessageWithMenu({
     const measure = () =>
       setSelection({ text: selected, rect: el.getBoundingClientRect() });
     measure();
-    // Re-measure so the menu tracks the highlight as the canvas scrolls/resizes.
     const raf = requestAnimationFrame(measure);
     window.addEventListener("resize", measure);
     window.addEventListener("scroll", measure, true);
@@ -62,8 +55,6 @@ function AgentMessageWithMenu({
   const after = start >= 0 ? text.slice(start + selected.length) : "";
 
   return (
-    // `data-thread-window` is the menu's collision boundary, so it flips/clamps
-    // to stay inside this column just like in the real timeline.
     <div
       data-thread-window
       className="relative w-full overflow-hidden rounded-md border bg-background p-3"

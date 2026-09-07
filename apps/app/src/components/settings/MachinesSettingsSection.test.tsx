@@ -8,6 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { Host } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { RETRY_ACTION_ICON } from "@bb/domain/update-state";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract";
 import type { SystemConfigResponse } from "@bb/server-contract";
@@ -49,16 +50,10 @@ vi.mock("@/hooks/useHostDaemon", () => ({
 const NOW = Date.now();
 
 function host(overrides: Partial<Host> & Pick<Host, "id" | "name">): Host {
-  return {
-    type: "persistent",
-    status: "connected",
+  return makeHost({
     lastSeenAt: NOW,
-    maxPermissionMode: "full",
-    lastRejectedProtocolVersion: null,
-    createdAt: 0,
-    updatedAt: 0,
     ...overrides,
-  };
+  });
 }
 
 const primaryHost = host({ id: "host_primary", name: "MacBook Pro" });
@@ -76,7 +71,6 @@ function systemConfig(): SystemConfigResponse {
   });
 }
 
-/** Sidebar bootstrap with two projects on the primary host, one on dev-vm. */
 function stubSidebarBootstrapFetch(): void {
   vi.stubGlobal(
     "fetch",
@@ -232,7 +226,6 @@ describe("MachinesSettingsSection", () => {
     );
     expect(updateStatus.className).toContain("min-w-0");
     expect(updateStatus.className).not.toContain("shrink-0");
-    // The action lives in the row menu so the rows keep one shape.
     await openHostMenu("dev-vm");
     const renameItem = await screen.findByRole("menuitem", { name: "Rename" });
     const retryItem = await screen.findByRole("menuitem", {
@@ -342,7 +335,6 @@ describe("MachinesSettingsSection", () => {
 
     expect(await screen.findByText("Accept Edits")).toBeDefined();
     expect(screen.getByText("Full Access")).toBeDefined();
-    // The control itself lives on the machine page.
     expect(
       screen.queryByRole("button", { name: /Permission limit for/ }),
     ).toBeNull();

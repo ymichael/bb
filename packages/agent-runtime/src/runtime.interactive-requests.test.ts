@@ -37,7 +37,6 @@ function readChildStdoutLine(child: ChildProcess): Promise<string> {
   });
 }
 
-/** A canonical command-approval `interaction/request`, as a bridge sends it. */
 function commandApprovalRequest(
   id: number,
   overrides: { turnId?: string | null } = {},
@@ -75,11 +74,6 @@ const deniedEscalationOptions = {
   permissionEscalation: "deny",
 } as const;
 
-/**
- * Drive `handleRuntimeProviderRequest` directly: the real bridge-protocol
- * adapter decodes the request and a pipe child echoes the runtime's answer
- * back so the test can read exactly what the bridge would receive.
- */
 async function answerDirectRequest(args: {
   rawRequest: JsonRpcMessage;
   handshake?: Record<string, unknown>;
@@ -99,7 +93,6 @@ async function answerDirectRequest(args: {
     additionalWorkspaceWriteRoots: [],
     bridgeLaunch: createScriptedEchoLaunch(),
   });
-  // The handshake decides where approval policy is enforced.
   const [initialize] = adapter.buildPostInitializeRequests();
   initialize?.onResult({
     protocolVersion: 2,
@@ -179,8 +172,6 @@ describe("createAgentRuntime interactive requests", () => {
       runtime,
       threadId: "t1",
     });
-    // The allow reached the bridge as the canonical resolution: the scripted
-    // turn resumes with its answer instead of "Denied".
     await waitForThreadAgentMessageText({
       events,
       providerId: "fake",
@@ -253,8 +244,6 @@ describe("createAgentRuntime interactive requests", () => {
       input: [promptTextInput({ text: "approve:command denied" })],
       options: deniedEscalationOptions,
     });
-    // The runtime answered the bridge with a denial itself; the handler
-    // never saw the request and the scripted turn resumed denied.
     await waitForThreadAgentMessageText({
       events,
       providerId: "fake",
@@ -274,9 +263,6 @@ describe("createAgentRuntime interactive requests", () => {
         grantedPermissions: null,
       }),
     );
-    // The bridge's handshake says the provider already enforced the policy
-    // before forwarding: the runtime must hand the request to the user even
-    // though the thread's current settings would auto-deny it.
     const answer = await answerDirectRequest({
       rawRequest: commandApprovalRequest(78),
       handshake: { approvalEnforcedBy: "provider" },
@@ -362,8 +348,6 @@ describe("createAgentRuntime interactive requests", () => {
       providerId: "fake",
       options: deniedEscalationOptions,
     });
-    // Escalation policy governs approvals only: a question is never
-    // auto-denied, it always reaches the user.
     await runtime.runTurn({
       clientRequestId: "creq_222222224m",
       threadId: "t1",
@@ -455,7 +439,6 @@ describe("createAgentRuntime interactive requests", () => {
       runtime,
       threadId: "t1",
     });
-    // The bridge received the error answer and surfaced it as a failed turn.
     expect(events).toContainEqual(
       expect.objectContaining({
         type: "provider/error",
@@ -474,8 +457,6 @@ describe("createAgentRuntime interactive requests", () => {
   });
 
   it("forwards a plugin-defined request even under a deny escalation and returns its answer", async () => {
-    // A request is open: no policy auto-answers it, so a deny escalation that
-    // would auto-deny an approval still reaches the handler.
     const onInteractiveRequest = vi.fn(
       async (): Promise<PendingInteractionResolution> => ({
         kind: "request_answer",
@@ -548,7 +529,6 @@ describe("createAgentRuntime interactive requests", () => {
   });
 
   it("responds to unsupported interactive requests with a JSON-RPC error instead of dropping them", async () => {
-    // A request method outside the bridge protocol's inbound vocabulary.
     const answer = await answerDirectRequest({
       rawRequest: {
         jsonrpc: "2.0",
@@ -565,7 +545,6 @@ describe("createAgentRuntime interactive requests", () => {
   });
 
   it("responds to invalid interactive request params with a JSON-RPC invalid params error", async () => {
-    // The right method, a payload the canonical schema refuses.
     const answer = await answerDirectRequest({
       rawRequest: {
         jsonrpc: "2.0",

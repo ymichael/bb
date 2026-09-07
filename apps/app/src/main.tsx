@@ -10,54 +10,24 @@ import { registerProviderCliInstallQueryClient } from "./components/provider-cli
 import { initializePreferredTheme } from "./hooks/useTheme";
 import { initializeFavicon } from "./lib/favicon-color-preference";
 import { installForeignDomMutationGuard } from "./lib/foreign-dom-mutation-guard";
-import {
-  createAppQueryClient,
-  installAppQueryClientBrowserEvents,
-} from "./lib/query-client";
+import { installAppQueryClientBrowserEvents } from "./lib/query-client";
+import { appQueryClient } from "./lib/app-query-client";
 import { applyCachedAppThemeCss } from "./lib/themes";
-import { wsManager } from "./lib/ws";
 import "./app.css";
 
-// Before anything renders: a content script that moves a React-owned node out
-// from under React turns the next unmount into a blank page. See the module
-// doc for why this is a wrapper rather than a fix in our own components.
 installForeignDomMutationGuard();
 
-// V8 keeps 10 frames by default, which a React commit-phase throw fills
-// entirely with reconciler internals — a crash report then names no bb
-// component at all. Deep enough to reach our own frames, cheap because it only
-// costs anything when an Error is actually constructed.
 Error.stackTraceLimit = 50;
 
-const queryClient = createAppQueryClient({
-  // While the realtime socket is connected, change events and the reconnect
-  // watermark own cache freshness; a focus or browser-online refetch on top
-  // would re-request every active query on each phone unlock, app switch,
-  // and mobile-Safari `online` blip.
-  shouldRefetchOnWindowFocus: () =>
-    wsManager.getConnectionState() !== "connected",
-});
-installAppQueryClientBrowserEvents(queryClient);
-// The provider CLI install store outlives every component, so it takes the
-// client here rather than reading it from context when an install finishes.
-registerProviderCliInstallQueryClient(queryClient);
+installAppQueryClientBrowserEvents(appQueryClient);
+registerProviderCliInstallQueryClient(appQueryClient);
 
 initializePreferredTheme();
-// Apply the palette cached from the last load before React renders, so a
-// non-default theme doesn't flash the default. useAppTheme reconciles it with
-// the server's authoritative appearance once /system/config loads.
 applyCachedAppThemeCss();
 initializeFavicon();
-// react-resizable-panels injects a global `*{cursor: ew-resize !important}`
-// rule while a handle is hovered or dragged, which fights the col-resize /
-// row-resize cursors set on our handles. Take ownership of the cursor before
-// any PanelGroup mounts so panel splitters match the sidebar splitter.
 disableGlobalCursorStyles();
 
 createRoot(document.getElementById("root")!, {
-  // An uncaught render/commit error unmounts the whole root. React's default
-  // handler reports only the error, so the report never says which subtree
-  // died; the component stack is the one piece that makes it actionable.
   onUncaughtError: (error, errorInfo) => {
     console.error(
       "[bb] uncaught render error — the app root was torn down",
@@ -67,10 +37,9 @@ createRoot(document.getElementById("root")!, {
   },
 }).render(
   <StrictMode>
-    {/* Outside the providers: a crash in the query client or the router has to
-        land here too, or it still takes the window white. */}
+    {}
     <AppErrorBoundary>
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={appQueryClient}>
         <BrowserRouter>
           <App />
           <AppToaster position="bottom-right" />

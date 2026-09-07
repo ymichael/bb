@@ -1,27 +1,13 @@
+import type { ArchiveThreadsTransaction } from "./thread-state-cache-owner";
 import type { QueryClient } from "@tanstack/react-query";
-import type { EnvironmentArchiveThreadsResponse } from "@bb/server-contract";
-import {
-  sidebarNavigationQueryKey,
-  threadSearchQueryKeyPrefix,
-  threadQueryKey,
-  threadsQueryKey,
-} from "../queries/query-keys";
-import {
-  restoreCachedSidebarNavigation,
-  snapshotCachedSidebarNavigation,
-  type CachedSidebarNavigationSnapshot,
-} from "./query-cache";
-import {
-  getCachedThreadLists,
-  restoreCachedThreadLists,
-  type CachedThreadListSnapshot,
-} from "./thread-list-cache-data";
+import { threadQueryKey, threadsQueryKey } from "../queries/query-keys";
+import { snapshotCachedSidebarNavigation } from "./query-cache";
+import { getCachedThreadLists } from "./thread-list-cache-data";
 import {
   getCachedLiveThreadIdsMatching,
   getCachedThreadSnapshots,
   optimisticallyArchiveThreads,
   removeLiveThreadsFromCachedLists,
-  type CachedThreadSnapshot,
 } from "./thread-archive-cache";
 
 interface ArchiveEnvironmentThreadsTransactionArgs {
@@ -29,28 +15,10 @@ interface ArchiveEnvironmentThreadsTransactionArgs {
   queryClient: QueryClient;
 }
 
-interface RollbackArchiveEnvironmentThreadsTransactionArgs {
-  queryClient: QueryClient;
-  transaction: ArchiveEnvironmentThreadsTransaction | undefined;
-}
-
-interface SettleArchiveEnvironmentThreadsTransactionArgs {
-  queryClient: QueryClient;
-  response: EnvironmentArchiveThreadsResponse | undefined;
-  transaction: ArchiveEnvironmentThreadsTransaction | undefined;
-}
-
-export interface ArchiveEnvironmentThreadsTransaction {
-  archivedThreadIds: string[];
-  previousSidebarNavigation: CachedSidebarNavigationSnapshot;
-  previousThreadLists: CachedThreadListSnapshot;
-  previousThreads: CachedThreadSnapshot[];
-}
-
 export async function beginArchiveEnvironmentThreadsTransaction({
   environmentId,
   queryClient,
-}: ArchiveEnvironmentThreadsTransactionArgs): Promise<ArchiveEnvironmentThreadsTransaction> {
+}: ArchiveEnvironmentThreadsTransactionArgs): Promise<ArchiveThreadsTransaction> {
   await queryClient.cancelQueries({ queryKey: threadsQueryKey() });
   const archivedThreadIds = getCachedLiveThreadIdsMatching({
     matchesThread: (thread) => thread.environmentId === environmentId,
@@ -87,37 +55,4 @@ export async function beginArchiveEnvironmentThreadsTransaction({
     previousThreadLists,
     previousThreads,
   };
-}
-
-export function rollbackArchiveEnvironmentThreadsTransaction({
-  queryClient,
-  transaction,
-}: RollbackArchiveEnvironmentThreadsTransactionArgs): void {
-  if (!transaction) {
-    return;
-  }
-
-  restoreCachedThreadLists(queryClient, transaction.previousThreadLists);
-  restoreCachedSidebarNavigation(
-    queryClient,
-    transaction.previousSidebarNavigation,
-  );
-  for (const snapshot of transaction.previousThreads) {
-    queryClient.setQueryData(threadQueryKey(snapshot.id), snapshot.thread);
-  }
-}
-
-export function settleArchiveEnvironmentThreadsTransaction({
-  queryClient,
-  response,
-  transaction,
-}: SettleArchiveEnvironmentThreadsTransactionArgs): void {
-  queryClient.invalidateQueries({ queryKey: threadsQueryKey() });
-  queryClient.invalidateQueries({ queryKey: sidebarNavigationQueryKey() });
-  queryClient.invalidateQueries({ queryKey: threadSearchQueryKeyPrefix() });
-  for (const threadId of response?.archivedThreadIds ??
-    transaction?.archivedThreadIds ??
-    []) {
-    queryClient.invalidateQueries({ queryKey: threadQueryKey(threadId) });
-  }
 }

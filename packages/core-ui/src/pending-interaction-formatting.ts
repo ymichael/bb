@@ -142,8 +142,6 @@ export function formatPendingInteractionSubjectDetailLines(
     return interaction.payload.questions.map((question) => question.prompt);
   }
   if (!isApprovalPendingInteractionPayload(interaction.payload)) {
-    // A plugin form (raised by a plugin or by a provider): the title is the
-    // summary and the form's data is the plugin's to render.
     return [];
   }
   switch (interaction.payload.subject.kind) {
@@ -189,8 +187,6 @@ export function formatPendingInteractionSubjectDetailLines(
       ];
     }
     case "plan": {
-      // The plan body is the subject, not a detail line. Surfaces render it
-      // themselves so they can keep its Markdown; this only names the file.
       return interaction.payload.subject.planFilePath
         ? [`Plan file: ${interaction.payload.subject.planFilePath}`]
         : [];
@@ -258,7 +254,6 @@ function resolveGrantedPermissionsForApproval(
     return interaction.payload.subject.sessionGrant;
   }
 
-  // A plan verdict carries no grant.
   return null;
 }
 

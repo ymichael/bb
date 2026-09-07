@@ -34,21 +34,11 @@ const writeQueues = new WeakMap<QueryClient, Map<string, Promise<void>>>();
 const pendingWriteCounts = new WeakMap<QueryClient, Map<string, number>>();
 const attemptedLocalMigrations = new WeakMap<QueryClient, Set<string>>();
 
-/**
- * The native side chat is gone, but the thread-tabs contract still carries its
- * kind for rows persisted before the removal. Drop those tabs on read so old
- * threads load with the rest of their strip intact.
- */
 type PersistedThreadFixedPanelTab = Exclude<
   FixedPanelTab,
   { kind: "plugin-page-fixed" }
 >;
 
-/**
- * Keep the shared app panel model broader than the server's thread-only tab
- * contract. Legacy side chats are no longer app tabs, while plugin-page fixed
- * views are local to their nav page and must never leak into thread sync.
- */
 function persistedThreadTabs(
   tabs: readonly (FixedPanelTab | ThreadTab)[],
 ): readonly PersistedThreadFixedPanelTab[] {

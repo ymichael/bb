@@ -14,8 +14,6 @@ interface SystemTitleArgs {
   systemMessageSubject: SystemMessageSubject | null;
 }
 
-// The component always supplies the `agent`-only props; the `system` path
-// ignores them, so anchor them to inert values for these system-title cases.
 function systemTitle({
   systemMessageKind,
   systemMessageSubject,
@@ -116,8 +114,6 @@ describe("generatedConversationTitle — system source", () => {
   });
 
   it("falls back to System Message when the subject shape mismatches the kind", () => {
-    // Defensive: a `thread`-expecting kind handed a non-thread subject must not
-    // throw — it degrades to the generic title.
     const title = systemTitle({
       systemMessageKind: "child-completed",
       systemMessageSubject: { kind: "thread-batch", count: 2 },

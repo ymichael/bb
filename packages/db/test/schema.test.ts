@@ -779,7 +779,6 @@ describe("db rebuild schema", () => {
           instanceId: "instance",
           hostName: "host",
           hostType: "persistent",
-          // data_dir intentionally omitted — column is NOT NULL.
           protocolVersion: 1,
           heartbeatIntervalMs: 1_000,
           leaseTimeoutMs: 10_000,

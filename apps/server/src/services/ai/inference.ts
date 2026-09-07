@@ -22,9 +22,6 @@ type BaseInferenceDeps = Pick<AppDeps, "config" | "logger">;
 
 type InferenceModels = ReturnType<typeof builtinModels>;
 
-// Built lazily: constructing the registry at module scope would turn any
-// failure inside it into a server import failure rather than a failure of the
-// one inference call that needed it.
 let inferenceModelsInstance: InferenceModels | undefined;
 
 function getInferenceModels(): InferenceModels {
@@ -32,15 +29,6 @@ function getInferenceModels(): InferenceModels {
   return inferenceModelsInstance;
 }
 
-/**
- * Ids the server serves itself: `openai` transcription and every builtin
- * inference provider. They route server-direct before the registry is
- * consulted, and a plugin cannot register them — otherwise a marketplace
- * plugin declaring `{ id: "openai" }` would receive the user's audio and
- * prompts. The SDK's static list is the one source: the fake host enforces
- * it, and plugin-ai-services.test.ts pins it to pi-ai's live provider
- * registry plus `openai`, so a pi-ai bump must move the list with it.
- */
 export function isServerDirectAiServiceId(id: string): boolean {
   return SERVER_DIRECT_AI_SERVICE_IDS.includes(id);
 }
@@ -67,9 +55,6 @@ const RESULT_TOOL_NAME = "result";
 const DEFAULT_INFERENCE_TIMEOUT_MS = 30_000;
 
 export const INFERENCE_POLICY = {
-  // The command timeout is enforced by the daemon around the provider request.
-  // Leave enough time for its settled response to cross the host RPC boundary
-  // so the server does not discard a useful timeout or completion as stale.
   hostRpcGraceMs: 1_000,
   commitMessage: { maxAttempts: 2, retryDelayMs: 0, timeoutMs: 5_000 },
   threadMetadata: { maxAttempts: 2, retryDelayMs: 250, timeoutMs: 5_000 },
@@ -87,9 +72,6 @@ interface InferenceTimeoutErrorArgs {
   timeoutMs: number;
 }
 
-/**
- * Raised when an inference request exceeds its configured timeout budget.
- */
 export class InferenceTimeoutError extends Error {
   readonly timeoutMs: number;
 
@@ -125,13 +107,7 @@ function validateStructuredResult<T extends TSchema>(
     arguments: toToolCallArguments(value),
   };
 
-  // validateToolCall validates arguments against the TypeBox schema and
-  // returns the validated data. Its return type is `any` so the cast is needed.
   return validateToolCall(tools, toolCall) as Static<T>;
-}
-
-function parseInferenceSchema(schema: TSchema): JsonObject {
-  return jsonObjectSchema.parse(schema);
 }
 
 function isTransientInferenceError(error: Error): boolean {
@@ -157,10 +133,6 @@ interface InferenceCompleteWithFallbackArgs<T extends TSchema> {
   timeoutMs: number;
 }
 
-/**
- * Complete with the primary model, switching to the configured fallback only
- * after a transient failure.
- */
 export async function inferenceCompleteWithFallback<T extends TSchema>(
   deps: LoggedWorkSessionDeps,
   args: InferenceCompleteWithFallbackArgs<T>,
@@ -269,13 +241,6 @@ export async function inferenceCompleteWithFallback<T extends TSchema>(
   throw new Error("Inference fallback loop completed without an outcome");
 }
 
-/**
- * Helper inference through the plugin that registered the configured
- * service id, on the primary host. Transport failures (no host, RPC error)
- * surface as the host layer's ApiErrors; a service's own failure rides the
- * result and becomes an `AiServiceCallError` (timeouts become the inference
- * timeout the retry policy already understands).
- */
 async function completeWithAiService<T extends TSchema>(
   deps: LoggedWorkSessionDeps,
   modelInfo: ProviderModelInfo,
@@ -295,11 +260,9 @@ async function completeWithAiService<T extends TSchema>(
     {
       serviceId: service.id,
       model: modelInfo.modelId,
-      // Helper inference is limited to short titles and commit subjects;
-      // preserve the previous no-reasoning latency and cost profile.
       reasoningEffort: "none",
       prompt: args.prompt,
-      outputSchema: parseInferenceSchema(args.schema),
+      outputSchema: jsonObjectSchema.parse(args.schema),
       timeoutMs,
     },
     { hostId, timeoutMs: timeoutMs + INFERENCE_POLICY.hostRpcGraceMs },
@@ -310,16 +273,12 @@ async function completeWithAiService<T extends TSchema>(
     }
     throw new AiServiceCallError(service.id, result.code, result.message);
   }
-  return validateStructuredResult(args.schema, jsonObjectSchema.parse(result.value));
+  return validateStructuredResult(
+    args.schema,
+    jsonObjectSchema.parse(result.value),
+  );
 }
 
-/**
- * Send a prompt to the configured inference model and return structured
- * output validated via a tool call. The model is given a single tool whose
- * parameters match the provided TypeBox schema; the tool call arguments
- * are validated against the schema and returned. Returns `null` if the
- * model is not configured or does not produce a valid tool call.
- */
 export async function inferenceComplete<T extends TSchema>(
   deps: LoggedWorkSessionDeps,
   args: InferenceCompleteArgs<T>,
@@ -330,8 +289,6 @@ export async function inferenceComplete<T extends TSchema>(
       args.model === undefined ? "BB_INFERENCE" : "inference model override",
     value: configuredModel,
   });
-  // Server-direct providers first; the registry only serves ids the server
-  // does not serve itself.
   if (
     !isServerDirectAiServiceId(modelInfo.provider) &&
     deps.aiServices.get(modelInfo.provider) !== null
@@ -394,7 +351,5 @@ export async function inferenceComplete<T extends TSchema>(
     return null;
   }
 
-  // validateToolCall validates arguments against the TypeBox schema and
-  // returns the validated data. Its return type is `any` so the cast is needed.
   return validateToolCall(tools, toolCall) as Static<T>;
 }

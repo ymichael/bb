@@ -8,27 +8,15 @@ const appDir = dirname(fileURLToPath(import.meta.url));
 interface BundleBootChunk {
   fileName: string;
   bytes: number;
-  /** npm package names whose code landed in this chunk. */
   packages: string[];
 }
 
 export interface BundleChunk extends BundleBootChunk {
-  /** Chunks this one imports statically (its `import` edges, not `import()`). */
   imports: string[];
-  /**
-   * The app-relative source module this chunk was created for (an entry or a
-   * dynamic-import target), or null for a shared chunk Rolldown split out.
-   */
   facade: string | null;
 }
 
-/**
- * The static-import closure of one lazy route chunk, minus the chunks that
- * are already on the boot path. This is the JavaScript that must arrive
- * between "app shell painted" and "route content painted".
- */
 interface BundleRouteClosure {
-  /** The route's own chunk (the target of App's `lazy(() => import(...))`). */
   entry: string;
   chunks: BundleBootChunk[];
 }
@@ -36,24 +24,14 @@ interface BundleRouteClosure {
 export interface BundleStats {
   entry: string;
   bootChunks: BundleBootChunk[];
-  /** Every JS chunk in the build, so checks can reason about lazy closures too. */
   chunks: BundleChunk[];
   routeClosures: Record<string, BundleRouteClosure>;
 }
 
-/**
- * Lazy routes whose static closure the budget check ratchets, keyed by the
- * name used in bundle-budget.json. The value is the route module's source
- * path suffix, matched against the output chunk's `facadeModuleId`.
- */
 const MEASURED_ROUTE_CLOSURES: Record<string, string> = {
   SplitWorkspaceRoute: "/src/views/SplitWorkspaceRoute.tsx",
 };
 
-/**
- * A minimal view of Rollup's output bundle: enough for the closure walk, and
- * simple enough for a test to hand-build.
- */
 export interface BundleStatsChunkInput {
   fileName: string;
   isEntry: boolean;
@@ -63,14 +41,6 @@ export interface BundleStatsChunkInput {
   code: string;
 }
 
-/**
- * Computes the boot payload (the entry chunk plus its static-import closure),
- * the full chunk graph (static edges only, so the budget check can verify that
- * on-demand packages such as KaTeX are only ever reached through a dynamic
- * `import()`), and, for each measured lazy route, the route chunk's static
- * closure minus the boot chunks. Returns null when the bundle has no entry
- * chunk.
- */
 export function computeBundleStats(
   chunks: readonly BundleStatsChunkInput[],
   measuredRouteClosures: Record<string, string>,
@@ -165,19 +135,6 @@ export function computeBundleStats(
   };
 }
 
-/**
- * Writes `bundle-stats.json` describing the boot payload: the entry chunk and
- * its static-import closure, with the npm packages each one contains — plus
- * the full chunk graph (static edges only), so the budget check can also
- * verify that on-demand packages such as KaTeX are only ever reached through a
- * dynamic `import()`. Also records the static closure of each measured lazy
- * route, minus the boot chunks, so the thread route's payload is ratcheted
- * like the boot payload.
- *
- * scripts/check-bundle-budget.mjs reads this instead of pattern-matching
- * minified output, so the budget check knows exactly which packages block
- * first paint.
- */
 export function bundleStats(): Plugin {
   return {
     name: "bb:bundle-stats",
@@ -208,7 +165,6 @@ export function bundleStats(): Plugin {
   };
 }
 
-/** `.../node_modules/@scope/name/dist/x.js` -> `@scope/name`; app code -> null. */
 function packageNameOf(moduleId: string): string | null {
   const marker = moduleId.lastIndexOf("node_modules/");
   if (marker < 0) return null;

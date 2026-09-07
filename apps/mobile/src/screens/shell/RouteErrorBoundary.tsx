@@ -9,10 +9,6 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-/**
- * System-ish colors for the one screen that cannot read the theme: the
- * platform's label / secondary-label / background / tint in both modes.
- */
 const PALETTE = {
   light: {
     background: "#ffffff",
@@ -32,11 +28,6 @@ const PALETTE = {
 
 const MONO_FAMILY = Platform.select({ ios: "Menlo", default: "monospace" });
 
-/**
- * Fallback for uncaught render errors (exported as `ErrorBoundary` from the
- * root layout). Deliberately theme-free: it renders when the providers
- * themselves may have failed, so it only reads the system color scheme.
- */
 export function RouteErrorBoundary({ error, retry }: ErrorBoundaryProps) {
   const insets = useSafeAreaInsets();
   const colors = PALETTE[useColorScheme() === "dark" ? "dark" : "light"];

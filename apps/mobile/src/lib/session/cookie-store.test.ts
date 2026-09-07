@@ -21,8 +21,6 @@ describe("sessionCookieSpec", () => {
       httpOnly: true,
       expires: "2026-08-18T11:00:00.000Z",
     });
-    // A plain-http gate (local stub) must not get a Secure cookie: the jar
-    // would never send it and every request would look unauthenticated.
     expect(
       sessionCookieSpec(
         { cookie: { ...session.cookie, domain: "127.0.0.1" } },
@@ -32,16 +30,12 @@ describe("sessionCookieSpec", () => {
   });
 
   it("rejects a cookie domain the server host does not domain-match", () => {
-    // iOS's cookie manager only substring-checks the domain against the URL
-    // host, so a rogue gate at a host that merely contains `getbb.app` could
-    // otherwise plant cookies for real profiles in the shared jars.
     const rogue = "https://bee.getbb.app.evil.example";
     for (const domain of ["bee.getbb.app", ".getbb.app", "getbb.app"]) {
       expect(() =>
         sessionCookieSpec({ cookie: { ...session.cookie, domain } }, rogue),
       ).toThrow(/does not match bee\.getbb\.app\.evil\.example/u);
     }
-    // A sibling host is not a match either, dot or no dot.
     expect(() =>
       sessionCookieSpec(
         { cookie: { ...session.cookie, domain: "ant.getbb.app" } },

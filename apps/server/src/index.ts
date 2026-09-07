@@ -21,9 +21,7 @@ function reportStartupFailure(error: unknown): void {
       processName: "server",
       error,
     });
-  } catch {
-    // Keep the original startup failure visible even if diagnostic logging fails.
-  }
+  } catch {}
 
   const message =
     error instanceof Error ? (error.stack ?? error.message) : String(error);
@@ -32,7 +30,6 @@ function reportStartupFailure(error: unknown): void {
 }
 
 async function main(): Promise<void> {
-  // Keep this import after diagnostics so ESM evaluation failures are reported.
   const serverModule = await import("./start-server.js");
   await serverModule.runServer(serverConfig);
 }

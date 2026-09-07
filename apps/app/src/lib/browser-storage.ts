@@ -1,6 +1,7 @@
 import { atomWithStorage } from "jotai/utils";
 
 type StringValueGuard<T extends string> = (value: string) => value is T;
+type StoredValueGuard<T> = (value: unknown) => value is T;
 type StoredValueListener = (storedValue: string | null) => void;
 
 export interface SyncStorage<T> {
@@ -30,10 +31,21 @@ interface StoredValueCodec<T> {
 }
 
 export function getLocalStorage(): Storage | null {
+  return withLocalStorage((storage) => storage, null);
+}
+
+export function withLocalStorage<T>(
+  operation: (storage: Storage) => T,
+  fallback: T,
+): T {
   if (typeof window === "undefined") {
-    return null;
+    return fallback;
   }
-  return window.localStorage;
+  try {
+    return operation(window.localStorage);
+  } catch {
+    return fallback;
+  }
 }
 
 function getSessionStorage(): Storage | null {
@@ -69,12 +81,13 @@ function subscribeToLocalStorageKey(
 }
 
 const localStorageStringStorage: SyncStringStorage = {
-  getItem: (key: string) => getLocalStorage()?.getItem(key) ?? null,
+  getItem: (key: string) =>
+    withLocalStorage((storage) => storage.getItem(key), null),
   setItem: (key: string, value: string) => {
-    getLocalStorage()?.setItem(key, value);
+    withLocalStorage((storage) => storage.setItem(key, value), undefined);
   },
   removeItem: (key: string) => {
-    getLocalStorage()?.removeItem(key);
+    withLocalStorage((storage) => storage.removeItem(key), undefined);
   },
   subscribe: (key: string, callback: StoredValueListener) =>
     subscribeToLocalStorageKey(key, callback),
@@ -85,7 +98,9 @@ export const rawStringLocalStorage = createLocalStorageSyncStorage<string>({
   serialize: (value) => value,
 });
 
-export function createJsonLocalStorage<T>(): SyncStorage<T> {
+export function createJsonLocalStorage<T>(
+  isValue?: StoredValueGuard<T>,
+): SyncStorage<T> {
   return createLocalStorageSyncStorage<T>({
     parse: (storedValue, initialValue) => {
       if (storedValue === null) {
@@ -93,7 +108,10 @@ export function createJsonLocalStorage<T>(): SyncStorage<T> {
       }
 
       try {
-        return JSON.parse(storedValue) as T;
+        const parsedValue: unknown = JSON.parse(storedValue);
+        return isValue === undefined || isValue(parsedValue)
+          ? (parsedValue as T)
+          : initialValue;
       } catch {
         return initialValue;
       }
@@ -114,24 +132,11 @@ export function createBooleanPreferenceAtom(
   );
 }
 
-/**
- * Storage for state that belongs to one tab rather than to the user, such as
- * the split workspace layout.
- *
- * Reads prefer `sessionStorage` (per tab, survives that tab's reload) and fall
- * back to `localStorage` so a newly opened tab still starts from the most
- * recent arrangement. Writes go to both. There is deliberately no `storage`
- * subscription: that event fires in *other* tabs, so subscribing would make one
- * tab adopt another tab's value mid-session — the cross-tab thread bleed in
- * issue #873.
- */
 export function createTabScopedStorage<T>(
   codec: StoredValueCodec<T>,
 ): SyncStorage<T> {
   return {
     getItem: (key: string, initialValue: T) => {
-      // An empty-but-present tab value is a real value (a cleared layout
-      // serializes to ""), so only a missing key falls back to the seed.
       const tabValue = getSessionStorage()?.getItem(key) ?? null;
       const storedValue = tabValue ?? getLocalStorage()?.getItem(key) ?? null;
       return codec.parse(storedValue, initialValue);

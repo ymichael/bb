@@ -1,5 +1,6 @@
 import {
   createConnection,
+  heartbeatSession,
   migrate,
   noopNotifier,
   openSession,
@@ -72,11 +73,12 @@ describe("HostSharedPortCoordinator", () => {
       ports: [],
     });
 
-    const first = sharedPorts.declareSharedPorts({
+    sharedPorts.declareSharedPorts({
       ownerId: "connect",
       hostId: host.id,
       ports: [8080, 3000, 8080],
     });
+    const first = sharedPorts.reconcileSharedPortsForHost(host.id);
     expect(first).toEqual({ generation: 1, ports: [3000, 8080] });
     expect(
       hostDaemonServerWsMessageSchema.parse(
@@ -84,28 +86,27 @@ describe("HostSharedPortCoordinator", () => {
       ),
     ).toEqual({ type: "connect-shares.replace", ...first });
 
-    // Current-state replacement for one owner removes 3000 while another
-    // owner contributes 4173.
     sharedPorts.declareSharedPorts({
       ownerId: "other-plugin",
       hostId: host.id,
       ports: [4173],
     });
-    const replacement = sharedPorts.declareSharedPorts({
+    sharedPorts.declareSharedPorts({
       ownerId: "connect",
       hostId: host.id,
       ports: [8080],
     });
+    const replacement = sharedPorts.reconcileSharedPortsForHost(host.id);
     expect(replacement).toEqual({ generation: 3, ports: [4173, 8080] });
 
-    // Identical replacement is a no-op and retains generation.
-    expect(
-      sharedPorts.declareSharedPorts({
-        ownerId: "connect",
-        hostId: host.id,
-        ports: [8080],
-      }),
-    ).toEqual(replacement);
+    sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: host.id,
+      ports: [8080],
+    });
+    expect(sharedPorts.reconcileSharedPortsForHost(host.id)).toEqual(
+      replacement,
+    );
     expect(daemonSocket.messages).toHaveLength(3);
 
     sharedPorts.clearDeclarationsForOwner("connect");
@@ -141,7 +142,132 @@ describe("HostSharedPortCoordinator", () => {
     ]);
   });
 
-  it("distinguishes unknown, unenrolled, and enrolled-but-offline hosts", () => {
+  it("delivers changed ports over a registered credentialed socket after its lease stales", () => {
+    const { db, host, hub, session, sharedPorts } = setup();
+    if (!session) throw new Error("expected an online host session");
+    const daemonSocket = createMockHubSocket();
+    hub.registerDaemon(session.id, host.id, daemonSocket);
+
+    sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: host.id,
+      ports: [3000],
+    });
+    heartbeatSession(db, session.id, Date.now() - 1);
+    sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: host.id,
+      ports: [],
+    });
+
+    expect(daemonSocket.messages.map((message) => JSON.parse(message))).toEqual(
+      [
+        {
+          type: "connect-shares.replace",
+          generation: 1,
+          ports: [3000],
+        },
+        {
+          type: "connect-shares.replace",
+          generation: 2,
+          ports: [],
+        },
+      ],
+    );
+  });
+
+  it("rejects a registered credentialless session after its lease stales", () => {
+    const { db, host, hub, session, sharedPorts } = setup();
+    if (!session) throw new Error("expected an online host session");
+    hub.registerDaemon(session.id, host.id, createMockHubSocket());
+    sharedPorts.recordHostConnectCapability({
+      hostId: host.id,
+      sessionId: session.id,
+      hasMachineCredential: false,
+    });
+    heartbeatSession(db, session.id, Date.now() - 1);
+
+    let declarationError: unknown;
+    try {
+      sharedPorts.declareSharedPorts({
+        ownerId: "connect",
+        hostId: host.id,
+        ports: [3000],
+      });
+    } catch (error) {
+      declarationError = error;
+    }
+
+    expect(declarationError).toBeInstanceOf(ApiError);
+    expect(declarationError).toMatchObject({
+      body: { code: "connect_host_unenrolled" },
+    });
+    expect(sharedPorts.reconcileSharedPortsForHost(host.id)).toEqual({
+      generation: 0,
+      ports: [],
+    });
+  });
+
+  it("retains changed generations through a full disconnect and reconnect", () => {
+    const { db, host, hub, session, sharedPorts } = setup();
+    if (!session) throw new Error("expected an online host session");
+    const firstSocket = createMockHubSocket();
+    hub.registerDaemon(session.id, host.id, firstSocket);
+    sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: host.id,
+      ports: [3000],
+    });
+
+    hub.unregisterDaemon(session.id);
+    sharedPorts.clearHostConnectCapability(session.id);
+    sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: host.id,
+      ports: [4173],
+    });
+    expect(firstSocket.messages.map((message) => JSON.parse(message))).toEqual([
+      {
+        type: "connect-shares.replace",
+        generation: 1,
+        ports: [3000],
+      },
+    ]);
+
+    const reconnected = openSession(db, {
+      hostId: host.id,
+      instanceId: "reconnected-instance",
+      hostName: host.name,
+      hostType: host.type,
+      dataDir: "/tmp/host-data",
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      heartbeatIntervalMs: 30_000,
+      leaseTimeoutMs: 90_000,
+    });
+    sharedPorts.recordHostConnectCapability({
+      hostId: host.id,
+      sessionId: reconnected.id,
+      hasMachineCredential: true,
+    });
+    const secondSocket = createMockHubSocket();
+    hub.registerDaemon(reconnected.id, host.id, secondSocket);
+
+    expect(sharedPorts.pushCurrentSharedPortsForHost(host.id)).toEqual({
+      generation: 2,
+      ports: [4173],
+    });
+    expect(secondSocket.messages.map((message) => JSON.parse(message))).toEqual(
+      [
+        {
+          type: "connect-shares.replace",
+          generation: 2,
+          ports: [4173],
+        },
+      ],
+    );
+  });
+
+  it("retains declarations for offline enrolled hosts and delivers them on reconnect", () => {
     const { sharedPorts } = setup();
     expect(() =>
       sharedPorts.declareSharedPorts({
@@ -171,27 +297,44 @@ describe("HostSharedPortCoordinator", () => {
     });
 
     const offline = setup({ online: false });
-    let offlineError: unknown;
-    try {
+    expect(() =>
       offline.sharedPorts.declareSharedPorts({
         ownerId: "connect",
         hostId: offline.host.id,
         ports: [3000],
-      });
-    } catch (error) {
-      offlineError = error;
-    }
-    expect(offlineError).toBeInstanceOf(ApiError);
-    expect(offlineError).toMatchObject({
-      body: {
-        code: "connect_host_offline",
-        message: expect.stringContaining("bring the host online"),
-      },
+      }),
+    ).not.toThrow();
+
+    const session = openSession(offline.db, {
+      hostId: offline.host.id,
+      instanceId: "reconnected-instance",
+      hostName: offline.host.name,
+      hostType: offline.host.type,
+      dataDir: "/tmp/host-data",
+      protocolVersion: HOST_DAEMON_PROTOCOL_VERSION,
+      heartbeatIntervalMs: 30_000,
+      leaseTimeoutMs: 90_000,
     });
-    if (!(offlineError instanceof ApiError)) {
-      throw new Error("expected an ApiError for the offline host");
-    }
-    expect(offlineError.body.message).not.toMatch(/remove and re-add|enroll/i);
+    offline.sharedPorts.recordHostConnectCapability({
+      hostId: offline.host.id,
+      sessionId: session.id,
+      hasMachineCredential: true,
+    });
+    const daemonSocket = createMockHubSocket();
+    offline.hub.registerDaemon(session.id, offline.host.id, daemonSocket);
+
+    expect(
+      offline.sharedPorts.pushCurrentSharedPortsForHost(offline.host.id),
+    ).toEqual({ generation: 1, ports: [3000] });
+    expect(daemonSocket.messages.map((message) => JSON.parse(message))).toEqual(
+      [
+        {
+          type: "connect-shares.replace",
+          generation: 1,
+          ports: [3000],
+        },
+      ],
+    );
   });
 
   it("always accepts empty declarations for offline, unenrolled, and removed hosts", () => {
@@ -203,21 +346,23 @@ describe("HostSharedPortCoordinator", () => {
       ports: [3000],
     });
     offline.sharedPorts.clearHostConnectCapability(offline.session.id);
+    offline.sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: offline.host.id,
+      ports: [],
+    });
     expect(
-      offline.sharedPorts.declareSharedPorts({
-        ownerId: "connect",
-        hostId: offline.host.id,
-        ports: [],
-      }),
+      offline.sharedPorts.reconcileSharedPortsForHost(offline.host.id),
     ).toEqual({ generation: 2, ports: [] });
 
     const unenrolled = setup({ enrolled: false });
+    unenrolled.sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: unenrolled.host.id,
+      ports: [],
+    });
     expect(
-      unenrolled.sharedPorts.declareSharedPorts({
-        ownerId: "connect",
-        hostId: unenrolled.host.id,
-        ports: [],
-      }),
+      unenrolled.sharedPorts.reconcileSharedPortsForHost(unenrolled.host.id),
     ).toEqual({ generation: 0, ports: [] });
 
     const removed = setup();
@@ -229,20 +374,22 @@ describe("HostSharedPortCoordinator", () => {
     updateHost(removed.db, noopNotifier, removed.host.id, {
       destroyedAt: Date.now(),
     });
+    removed.sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: removed.host.id,
+      ports: [],
+    });
     expect(
-      removed.sharedPorts.declareSharedPorts({
-        ownerId: "connect",
-        hostId: removed.host.id,
-        ports: [],
-      }),
+      removed.sharedPorts.reconcileSharedPortsForHost(removed.host.id),
     ).toEqual({ generation: 2, ports: [] });
 
+    removed.sharedPorts.declareSharedPorts({
+      ownerId: "connect",
+      hostId: "missing-host",
+      ports: [],
+    });
     expect(
-      removed.sharedPorts.declareSharedPorts({
-        ownerId: "connect",
-        hostId: "missing-host",
-        ports: [],
-      }),
+      removed.sharedPorts.reconcileSharedPortsForHost("missing-host"),
     ).toEqual({ generation: 0, ports: [] });
   });
 
@@ -351,8 +498,6 @@ describe("daemon session connect shares", () => {
       );
       expect(session.connectShares).toEqual({ generation: 0, ports: [] });
 
-      // No daemon socket exists yet, so this immediate publication cannot be
-      // delivered. Socket-open reconciliation must recover it.
       harness.deps.sharedPorts.declareSharedPorts({
         ownerId: "connect",
         hostId: "host-1",
@@ -389,7 +534,7 @@ describe("daemon session connect shares", () => {
     });
   });
 
-  it("rejects declarations when the current session lacks its persisted machine credential", async () => {
+  it("rejects declarations while the current session lacks its machine credential", async () => {
     await withTestHarness(async (harness) => {
       upsertHost(harness.db, harness.hub, {
         id: "host-1",

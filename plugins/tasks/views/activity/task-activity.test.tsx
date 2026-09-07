@@ -43,11 +43,9 @@ vi.mock("../../editor/tasks-editor.js", () => ({
       value={props.value}
       onChange={(event) => props.onChange(event.currentTarget.value)}
       onKeyDown={(event) => {
-        // Mirror the real TasksEditor submit-on-Enter contract for unit tests.
         if (event.key !== "Enter" || !props.onSubmit) return;
         if (event.nativeEvent.isComposing || event.keyCode === 229) return;
         if (event.shiftKey || event.altKey) return;
-        // Bare Enter or Cmd/Ctrl+Enter submits.
         event.preventDefault();
         props.onSubmit();
       }}
@@ -160,8 +158,6 @@ describe("AgentNotificationControl", () => {
       />,
     );
 
-    // Icon-only: the destination lives in the accessible name (and tooltip),
-    // not inline text, so it never stretches the composer row.
     const toggle = screen.getByRole("switch", {
       name: "Notify Fix the login bug",
     });
@@ -201,8 +197,6 @@ describe("AgentNotificationControl", () => {
       />,
     );
 
-    // No inline text to truncate: the whole destination is the accessible name,
-    // so screen readers and the tooltip always get the complete title.
     expect(
       screen.getByRole("switch", { name: `Notify ${title}` }),
     ).toBeTruthy();
@@ -222,8 +216,6 @@ describe("AgentNotificationControl", () => {
       name: "Latest responding agent can’t be notified",
     });
     expect(toggle.getAttribute("aria-disabled")).toBe("true");
-    // `checked` is ignored when there is no valid target: the control must not
-    // advertise an armed notification it can't deliver, and clicking is inert.
     expect(toggle.getAttribute("aria-checked")).toBe("false");
     fireEvent.click(toggle);
     expect(onCheckedChange).not.toHaveBeenCalled();

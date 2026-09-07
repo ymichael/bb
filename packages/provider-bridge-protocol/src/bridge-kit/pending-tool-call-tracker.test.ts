@@ -145,7 +145,6 @@ describe("createPendingToolCallTracker", () => {
       isError: true,
     });
 
-    // Session B's call is still pending and settles from its response.
     expect(
       tracker.handleToolCallResponse({
         jsonrpc: "2.0",
@@ -183,8 +182,6 @@ describe("createPendingToolCallTracker send failures", () => {
     });
     expect(result).toEqual({ content: "transport closed", isError: true });
 
-    // The failed call must not linger: a later scope-wide resolution finds
-    // nothing to settle, proving the pending entry was removed.
     tracker.resolvePendingToolCalls(scope, "closing");
     const response = tracker.handleToolCallResponse({
       jsonrpc: "2.0",

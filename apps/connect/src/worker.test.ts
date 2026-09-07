@@ -15,8 +15,6 @@ import {
   TUNNEL_TARGET_HEADER,
 } from "./protocol-headers";
 
-// ── pure helpers ────────────────────────────────────────────────────────────
-
 describe("connect sign-in page", () => {
   it("points unauthenticated visitors at the dashboard auth flow with returnTo", () => {
     expect(
@@ -103,9 +101,8 @@ describe("parseClientProtocolVersion", () => {
   });
 });
 
-// ── gate worker (mocked session + DO stub) ──────────────────────────────────
-
-vi.mock("./session.js", () => ({
+vi.mock("./session.js", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./session.js")>()),
   invalidateSessionCookie: vi.fn(),
   markMachineSeen: vi.fn(),
   parseCookie: vi.fn(),
@@ -190,7 +187,6 @@ function sessionDetails(userId = OWNER, needsRefresh = false) {
   return { userId, needsRefresh };
 }
 
-/** A resolved server row; overrides let a test tweak one field. */
 function resolvedServer(
   over: Partial<{
     lastSeenAt: Date | null;
@@ -305,8 +301,6 @@ describe("GET /api/connect/servers", () => {
   });
 
   it("handles the path even on an unknown host label", async () => {
-    // Apex is not routed to this worker in prod, but the handler is path-based
-    // so a future apex binding or local wrangler still works.
     const { env, ctx } = makeEnv(() => new Response("origin"));
     mockHandleListAccountServers.mockResolvedValue(
       new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }),
@@ -507,8 +501,6 @@ describe("gate tunnel authentication", () => {
     const hash = [...new Uint8Array(digest)]
       .map((byte) => byte.toString(16).padStart(2, "0"))
       .join("");
-    // resolveLabel itself may hold an older negative cache entry; the worker's
-    // first and only tunnel lookup must explicitly bypass it.
     mockResolveLabel.mockResolvedValueOnce(null);
     const firstEnv = makeEnv(() => new Response("origin"));
     const stale = await worker.fetch(
@@ -701,7 +693,6 @@ describe("machine gate auth", () => {
 describe("bb mobile app-link association files", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // No cookie, no machine header: these must never reach the session gate.
     mockParseCookie.mockReturnValue(null);
     mockResolveLabel.mockResolvedValue(resolvedServer());
   });
@@ -763,8 +754,6 @@ describe("bb mobile app-link association files", () => {
         env as never,
         ctx,
       );
-      // Anonymous (Apple CDN / Android) fetch → 401 sign-in page, i.e. no
-      // association for `<label>--<port>` hosts; never proxied without a session.
       expect(share.status).toBe(401);
       expect(share.headers.get("content-type")).not.toBe("application/json");
       expect(captured).toHaveLength(0);
@@ -1104,9 +1093,6 @@ describe("gate worker share hosts", () => {
   });
 
   it("forwards a share host on a non-primary label (single-dash subdomain)", async () => {
-    // `sawyer-desktop` is a second bb's own subdomain, not the account handle;
-    // `--3000` nests its port share. parseVisitorHost splits on the first `--`
-    // only, so the base label stays `sawyer-desktop` and resolves per-bb.
     mockResolveLabel.mockResolvedValue(resolvedServer());
     const { env, ctx, captured } = makeEnv(() => new Response("ok"));
     const res = await worker.fetch(
@@ -1259,7 +1245,6 @@ describe("gate worker share hosts", () => {
 
   it("forwards websocket upgrades on share hosts with the target header", async () => {
     mockVerifySessionDetails.mockResolvedValue(sessionDetails(OWNER, true));
-    // Node's Response rejects status 101; the gate only needs the upgrade path.
     const { env, ctx, captured } = makeEnv(
       () => new Response("upgraded", { status: 200 }),
     );
@@ -1307,8 +1292,6 @@ describe("gate worker share hosts", () => {
     expect(await res.text()).toContain("unknown host");
   });
 });
-
-// ── gate offline page (styled 503 vs plain 503) ─────────────────────────────
 
 const OFFLINE_BODY =
   "bb connect: this server is offline (no tunnel connected)\n";
@@ -1426,7 +1409,6 @@ describe("gate page helpers", () => {
     expect(relativeTime(new Date(now - 3 * 60 * 60_000), now)).toBe(
       "3 hours ago",
     );
-    // Beyond a day → calendar date, not "N hours ago".
     expect(
       relativeTime(new Date(now - 3 * 24 * 60 * 60_000), now),
     ).not.toContain("ago");
@@ -1459,9 +1441,6 @@ describe("gate page helpers", () => {
   });
 });
 
-// ── TunnelDO protocol-version + target stamping ─────────────────────────────
-
-// Node lacks Workers globals used by TunnelDO's constructor.
 class FakeWebSocketRequestResponsePair {
   constructor(
     readonly request: string,
@@ -1530,7 +1509,7 @@ function makeDoEnv() {
 
 function fakeTunnelSocket(
   send?: (data: ArrayBuffer | ArrayBufferView | string) => void,
-  readyState = 1, // READY_STATE_OPEN
+  readyState = 1,
 ) {
   return {
     send: send ?? vi.fn(),
@@ -1579,7 +1558,6 @@ describe("TunnelDO targeted request with old client", () => {
     const dob = new TunnelDO(state.api, makeDoEnv());
     await state.restore;
 
-    // Tunnel must look connected for the version gate (vs 503 offline).
     state.addSocket(fakeTunnelSocket(), ["tunnel"]);
 
     const res = await dob.fetch(
@@ -1647,7 +1625,6 @@ describe("TunnelDO targeted request with old client", () => {
         frame.headers.every(([n]) => n.toLowerCase() !== TUNNEL_TARGET_HEADER),
       ).toBe(true);
 
-      // Resolve the hung proxyHttp promise via its resp-head timeout.
       vi.advanceTimersByTime(30_000);
       const timedOut = await pending;
       expect(timedOut.status).toBe(504);
@@ -1657,9 +1634,6 @@ describe("TunnelDO targeted request with old client", () => {
   });
 });
 
-// ── TunnelDO response relay ─────────────────────────────────────────────────
-
-/** Tunnel-socket send handler that records binary frames into `sent`. */
 function captureSent(sent: Uint8Array[]) {
   return (data: ArrayBuffer | ArrayBufferView | string) => {
     if (typeof data === "string") return;
@@ -1671,7 +1645,6 @@ function captureSent(sent: Uint8Array[]) {
   };
 }
 
-/** Encode a frame as the ArrayBuffer webSocketMessage receives on the wire. */
 function frameBuffer(frame: Frame): ArrayBuffer {
   const u8 = encodeFrame(frame);
   return u8.buffer.slice(
@@ -1777,7 +1750,6 @@ describe("TunnelDO response relay", () => {
     const tunnel = fakeTunnelSocket(captureSent(sent));
     state.addSocket(tunnel, ["tunnel"]);
 
-    // A browser revalidating a cached asset (the dev-server reload path).
     for (const [index, status] of [304, 204].entries()) {
       const pending = dob.fetch(
         new Request("https://do.internal/app.js", {
@@ -1802,7 +1774,6 @@ describe("TunnelDO response relay", () => {
       expect(res.status).toBe(status);
       expect(res.body).toBeNull();
       expect(res.headers.get("etag")).toBe('W/"abc"');
-      // Hop headers stay filtered on this path too.
       expect(res.headers.get("connection")).toBeNull();
     }
   });
@@ -1836,8 +1807,6 @@ describe("TunnelDO response relay", () => {
     const visitor = fakeTunnelSocket();
     state.addSocket(visitor, ["visitor:41"]);
 
-    // One request still awaiting resp-head, one mid-body (its resp-head
-    // timeout is already cleared — the state that used to hang forever).
     const pendingHead = dob.fetch(new Request("https://do.internal/pending"));
     const pendingBody = dob.fetch(new Request("https://do.internal/mid-body"));
     const bodyStreamId = openHttpStreamId(sent, 1);
@@ -1853,9 +1822,6 @@ describe("TunnelDO response relay", () => {
     const midBodyResponse = await pendingBody;
     expect(midBodyResponse.status).toBe(200);
 
-    // The client reconnects: acceptTunnel replaces the old socket. Node lacks
-    // WebSocketPair and rejects `new Response(null, {status: 101})`, so both
-    // are emulated for the accept call only.
     const RealResponse = globalThis.Response;
     class FakeWebSocketPair {
       0 = fakeTunnelSocket();
@@ -1906,18 +1872,9 @@ describe("TunnelDO response relay", () => {
     expect(await headResponse.text()).toContain(
       "tunnel reconnected mid-request",
     );
-    // The mid-body response's stream errors out instead of hanging forever.
     await expect(midBodyResponse.text()).rejects.toBeTruthy();
   });
 });
-
-// ── TunnelDO dead tunnel sockets ────────────────────────────────────────────
-//
-// A tunnel socket can die without webSocketClose ever being delivered, leaving
-// it tagged in getWebSockets() while send() throws "Can't call WebSocket
-// send() after close()". This took getbb.app down: every authenticated request
-// crashed with an uncaught exception (Cloudflare 1101) while the reconnected
-// client — heartbeat-acked on its own live socket — never re-dialed.
 
 describe("TunnelDO dead tunnel sockets", () => {
   const READY_STATE_CLOSED = 3;
@@ -1944,8 +1901,6 @@ describe("TunnelDO dead tunnel sockets", () => {
     const state = mockDoState({ protocolVersion: 1 });
     const dob = new TunnelDO(state.api, makeDoEnv());
     await state.restore;
-    // The dead socket was accepted first, so it sits ahead of the live one in
-    // getWebSockets() — the ordering that made [0] the outage.
     state.addSocket(deadTunnelSocket(), ["tunnel"]);
     state.addSocket(fakeTunnelSocket(captureSent(sent)), ["tunnel"]);
 
@@ -1955,8 +1910,6 @@ describe("TunnelDO dead tunnel sockets", () => {
   });
 
   it("answers 503 offline when send() throws despite an open readyState", async () => {
-    // The socket can close between the liveness check and send() — the throw
-    // must degrade to the offline response, not crash the request.
     const state = mockDoState({ protocolVersion: 1 });
     const dob = new TunnelDO(state.api, makeDoEnv());
     await state.restore;

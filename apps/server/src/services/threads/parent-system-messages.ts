@@ -16,7 +16,7 @@ import type {
 import type { HostDaemonCommand } from "@bb/host-daemon-contract";
 import type { LoggedPendingInteractionWorkSessionDeps } from "../../types.js";
 import { requireThreadEnvironment } from "../lib/entity-lookup.js";
-import { deferThreadMessage } from "./deferred-thread-messages.js";
+import { createQueuedThreadMessage } from "@bb/db";
 import {
   addRequestIdToTurnSubmitCommandPayload,
   buildExecutionOptions,
@@ -46,13 +46,15 @@ import {
   LIVE_DAEMON_COMMAND_TIMEOUT_MS,
   startLiveHostCommand,
 } from "../hosts/live-command.js";
+import { queueInputForStartingTurn } from "./thread-turn-starting.js";
+import {
+  ThreadContextClearInProgressError,
+  withThreadSendGuard,
+} from "./thread-context-mutation-guard.js";
+import { requestQueuedMessageDispatch } from "./queued-message-dispatch.js";
 
 const PARENT_SYSTEM_MESSAGE_SOURCE = "tell";
 
-// Family-B taxonomy stamping carried alongside the message input from each emit
-// site to the persisted `client/turn/requested` event. `senderThreadId` is null
-// for these `initiator: "system"` messages, so the subject must be stamped at
-// emit time.
 export interface ParentSystemMessageTaxonomy {
   systemMessageKind: SystemMessageKind;
   systemMessageSubject: SystemMessageSubject | null;
@@ -176,12 +178,6 @@ export function buildParentSystemInputFromTemplateSlot(
   });
 }
 
-/**
- * Canonical display label for a thread that is the subject of a parent-facing
- * system message: the trimmed title, or the thread id when untitled. Shared by
- * the stamped `systemMessageSubject.threadName` and the body's `@thread`
- * mention label so the two can't drift.
- */
 export function parentSystemThreadLabel(thread: {
   id: string;
   title: string | null;
@@ -253,6 +249,39 @@ async function queueActiveParentSystemMessage(
   args: QueueReadyParentSystemMessageArgs,
 ): Promise<boolean> {
   const expectedSteerTurnId = getActiveTurnId(deps, args.thread.id);
+  if (expectedSteerTurnId === null) {
+    const outcome = queueInputForStartingTurn(deps, {
+      claimed: null,
+      input: {
+        input: args.input,
+        execution: args.execution,
+        payload: { kind: "inline" },
+        senderThreadId: null,
+        systemNotice: {
+          kind: args.systemMessageKind,
+          subject: args.systemMessageSubject,
+        },
+      },
+      threadId: args.thread.id,
+    });
+    if (outcome.kind === "queued") return true;
+    if (outcome.kind === "dispatched") return false;
+    if (outcome.kind === "retry") {
+      const currentThread = outcome.thread;
+      if (
+        currentThread === null ||
+        currentThread.archivedAt !== null ||
+        currentThread.deletedAt !== null ||
+        currentThread.status === "stopping"
+      ) {
+        return false;
+      }
+      return queueReadyParentSystemMessage(deps, {
+        ...args,
+        thread: currentThread,
+      });
+    }
+  }
   const permissionEscalation = resolvePermissionEscalation({
     initiator: "system",
   });
@@ -321,8 +350,6 @@ async function queueReadyParentSystemMessage(
 
   const command = await prepareReadyThreadTurnCommand(deps, {
     thread: args.thread,
-    // A parent system message targets an already-started thread; forking only
-    // happens at create time.
     fork: null,
     input: args.input,
     requestId,
@@ -339,7 +366,6 @@ async function queueReadyParentSystemMessage(
     providerId: args.thread.providerId,
     syncGeneratedTitle: false,
   });
-  // The post-transition row when dispatching the message activated the thread.
   const activeThread: Thread | null = deps.db.transaction(
     (tx) => {
       ensureThreadCanStartRequest(args.thread);
@@ -407,26 +433,81 @@ export async function queueParentSystemMessage(
   ) {
     return false;
   }
-  if (deps.pendingInteractions.hasPendingThreadInteraction(parentThread.id)) {
-    // A prompt cannot interrupt an open question or approval, and dropping the
-    // notice left the parent believing its child had gone silent (#1650). It
-    // waits and flushes when the parent's interactions settle.
-    deferThreadMessage(deps, {
-      threadId: parentThread.id,
-      payload: {
-        kind: "parent-system",
+  const hasPendingInteraction =
+    deps.pendingInteractions.hasPendingThreadInteraction(parentThread.id);
+  if (!hasPendingInteraction) {
+    try {
+      return await deliverParentSystemMessage(deps, {
         input: args.input,
+        parentThread,
         systemMessageKind: args.systemMessageKind,
         systemMessageSubject: args.systemMessageSubject,
-      },
-    });
-    return true;
+      });
+    } catch (error) {
+      if (!(error instanceof ThreadContextClearInProgressError)) throw error;
+    }
   }
 
-  const { environment } = requireThreadEnvironment(
-    deps.db,
-    args.parentThreadId,
+  const execution = await buildExecutionOptions(
+    deps,
+    {},
+    {
+      threadId: parentThread.id,
+    },
   );
+  createQueuedThreadMessage(deps.db, deps.hub, {
+    threadId: parentThread.id,
+    content: args.input,
+    senderThreadId: null,
+    model: execution.model,
+    reasoningLevel: execution.reasoningLevel,
+    permissionMode: execution.permissionMode,
+    serviceTier: execution.serviceTier,
+    waitingOn: { kind: hasPendingInteraction ? "interaction" : "thread-busy" },
+    sendAt: null,
+    payload: { kind: "inline" },
+    systemNotice: {
+      kind: args.systemMessageKind,
+      subject: args.systemMessageSubject,
+    },
+  });
+  if (!hasPendingInteraction) {
+    requestQueuedMessageDispatch(deps, {
+      kind: "thread-ready",
+      threadId: parentThread.id,
+    });
+  }
+  return true;
+}
+
+interface DeliverParentSystemMessageArgs extends ParentSystemMessageTaxonomy {
+  input: PromptInput[];
+  parentThread: Thread;
+}
+
+/**
+ * Dispatches a parent-system notice, with no interaction check of its own.
+ *
+ * Split out so the queue drain can deliver a notice that QUEUED on an
+ * interaction without re-entering the check that queued it — which, on a
+ * thread whose interaction settled a moment ago, would otherwise be a race
+ * that could queue a second copy of the same notice.
+ */
+export async function deliverParentSystemMessage(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: DeliverParentSystemMessageArgs,
+): Promise<boolean> {
+  return withThreadSendGuard(args.parentThread.id, () =>
+    deliverParentSystemMessageWithContextGuard(deps, args),
+  );
+}
+
+async function deliverParentSystemMessageWithContextGuard(
+  deps: LoggedPendingInteractionWorkSessionDeps,
+  args: DeliverParentSystemMessageArgs,
+): Promise<boolean> {
+  const { parentThread } = args;
+  const { environment } = requireThreadEnvironment(deps.db, parentThread.id);
   const execution = await buildExecutionOptions(
     deps,
     {},

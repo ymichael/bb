@@ -91,8 +91,6 @@ describe("marketplace publisher labels", () => {
     );
     const labels = marketplacePublisherLabels(db);
 
-    // A marketplace names itself, so without this a third-party manifest wears
-    // the badge that means "ships inside the app".
     expect(
       pluginPublisherLabel({
         sourceKind: "git",
@@ -107,7 +105,6 @@ describe("marketplace publisher labels", () => {
         displayName: "BB Community",
       }),
     ).toBe("acme");
-    // The curated marketplace keeps its own name.
     expect(
       marketplacePublisherLabel({
         marketplaceName: "bb-community",
@@ -121,8 +118,6 @@ describe("marketplace publisher labels", () => {
     register(db, "acme", "{ not json");
     const labels = marketplacePublisherLabels(db);
 
-    // The row is still a real marketplace, so the plugin keeps a publisher —
-    // it just falls back to the name bb keys the marketplace on.
     expect(
       pluginPublisherLabel({
         sourceKind: "git",
@@ -147,8 +142,6 @@ describe("marketplace publisher labels", () => {
     );
     const labels = marketplacePublisherLabels(db);
 
-    // An opt-in bundled plugin records a catalog install of the bundled entry,
-    // so reading provenance alone flipped its badge the moment it installed.
     expect(
       pluginPublisherLabel({
         sourceKind: "builtin",
@@ -181,8 +174,6 @@ describe("marketplace publisher labels", () => {
   });
 
   it("does not reuse BB Official for the marketplace bb curates", () => {
-    // The two labels are the whole point of the split: a bundled plugin and a
-    // registry listing must not badge the same.
     expect(BUNDLED_CURATED_MARKETPLACE.displayName).toBe("BB Community");
   });
 });

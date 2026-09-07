@@ -94,8 +94,7 @@ function SortChip({
           ) : null}
         </button>
       </DropdownMenuTrigger>
-      {/* Checkbox items with exactly-one-checked semantics: the shared radio
-          primitives render nothing on compact viewports. */}
+      {}
       <DropdownMenuContent
         align="end"
         className="min-w-44"
@@ -153,14 +152,9 @@ export function ListFilterBar({
   taskCount: number | undefined;
 }) {
   const keepOpen = (event: Event) => event.preventDefault();
-  // Show the Label chip whenever there are options or a remembered selection
-  // (including stale names that no longer exist in the catalog).
   const showLabelChip =
     labelOptions.length > 0 || filters.labelNames.length > 0;
   return (
-    // The chips live in their own horizontal scroller while the task count is
-    // pinned outside it, so the count never wraps and stays visible however
-    // many chips overflow a narrow container.
     <div className="flex shrink-0 items-center gap-1.5 border-b border-border-hairline px-3.5 py-1.5">
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         <FilterChip
@@ -294,8 +288,7 @@ export function ListFilterBar({
           </button>
         ) : null}
       </div>
-      {/* Sort and the count sit outside the scroller so they stay visible and
-          aligned however far the filter chips overflow. */}
+      {}
       <SortChip sort={sort} onChange={onSortChange} />
       <span className="shrink-0 whitespace-nowrap text-xs tabular-nums text-subtle-foreground">
         {taskCount === undefined

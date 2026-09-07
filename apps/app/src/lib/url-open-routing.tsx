@@ -35,8 +35,6 @@ export function openUrlInExternalBrowser(url: string): void {
     desktopInfo.openExternalUrl(url);
     return;
   }
-  // The mobile shell opens the system browser. A `window.open` inside a
-  // WebView either gets blocked or opens a chrome-less view with no way back.
   if (shellOpenExternal(url)) return;
   if (typeof window !== "undefined") {
     window.open(url, "_blank", "noopener,noreferrer");
@@ -54,7 +52,6 @@ export function UrlOpenRoutingProvider({
   );
 }
 
-/** Installs URL opening for a window or a nested browser-capable surface. */
 export function AppNavigationUrlHost({ children }: { children: ReactNode }) {
   const openUrl = useOpenUrlByPreference();
   const capabilities = useMemo(

@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useState, type RefObject } from "react";
 
-/**
- * The one treatment for every horizontal scroller in the Guide: the native
- * scrollbar is hidden and each overflowing edge fades, so cut content reads
- * as "more this way" instead of rendering damage. The chip-bar convention
- * (YouTube's chip row, the App Store's category rows): fade only the edges
- * that actually have overflow behind them.
- */
 export const SCROLLBAR_HIDDEN_CLASS =
   "[scrollbar-width:none] [&::-webkit-scrollbar]:hidden";
 
@@ -41,7 +34,6 @@ export function scrollEdgeState(element: {
   };
 }
 
-/** Tracks a horizontal scroller's overflow edges through scroll and resize. */
 export function useScrollEdges(
   ref: RefObject<HTMLElement | null>,
 ): ScrollEdgeState {

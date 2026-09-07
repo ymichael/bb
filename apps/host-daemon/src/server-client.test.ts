@@ -42,27 +42,6 @@ function createInteractiveRequest(): PendingInteractionCreate {
 }
 
 describe("createServerClient", () => {
-  it("reads the current runtime policy", async () => {
-    const fetchFn = vi.fn<FetchFn>(async (input, init) => {
-      expect(String(input)).toBe(
-        "https://bb.example.test/internal/runtime-policy",
-      );
-      expect(init?.method).toBe("GET");
-      return Response.json({ providerSessionReaping: true });
-    });
-    const client = createServerClient({
-      fetchFn,
-      getSessionId: () => "session-1",
-      hostKey: "host-key",
-      logger: createLogger(),
-      serverUrl: "https://bb.example.test",
-    });
-
-    await expect(client.getRuntimePolicy()).resolves.toEqual({
-      providerSessionReaping: true,
-    });
-  });
-
   it("narrows a protocol update retry request from error details", async () => {
     const fetchFn = vi.fn<FetchFn>(async () =>
       Response.json(

@@ -1,9 +1,3 @@
-// bb-plugin-memory — durable, progressively disclosed memory for BB agents.
-//
-// The model sees a compact global + current-project catalog in its standing
-// instructions. Full records stay in SQLite and are read or changed through
-// the `bb memory` CLI command; this plugin intentionally registers no native
-// agent tools.
 import { randomBytes } from "node:crypto";
 import {
   defineRpcContract,

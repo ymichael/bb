@@ -106,8 +106,6 @@ describe("createSessionScheduler", () => {
     fetchSession.mockResolvedValueOnce(session(Date.now() + HOUR, "one"));
     await scheduler.start(profile);
 
-    // A query came back 401 (cookie lost): re-minting succeeds and the new
-    // cookie lands in both stores; the renewal timer follows the new expiry.
     vi.setSystemTime(Date.now() + 10 * MINUTE);
     fetchSession.mockResolvedValueOnce(session(Date.now() + HOUR, "two"));
     expect(await scheduler.verifySession()).toEqual({
@@ -118,7 +116,6 @@ describe("createSessionScheduler", () => {
       "two",
       "two",
     ]);
-    // No "authenticating" flash for a verification.
     expect(states).toEqual([
       "idle",
       "authenticating",
@@ -126,19 +123,16 @@ describe("createSessionScheduler", () => {
       "authenticated",
     ]);
 
-    // The gate is briefly unreachable: the current session is kept as is.
     fetchSession.mockRejectedValueOnce(new TypeError("Network request failed"));
     expect(await scheduler.verifySession()).toEqual({
       status: "authenticated",
       expiresAt: Date.now() + HOUR,
     });
     expect(scheduler.getState().status).toBe("authenticated");
-    // …and the regular renewal still fires 5 minutes before that expiry.
     fetchSession.mockResolvedValueOnce(session(Date.now() + 2 * HOUR, "three"));
     await vi.advanceTimersByTimeAsync(55 * MINUTE);
     expect(cookies.at(-1)?.cookie.value).toBe("three");
 
-    // Credential revoked in the dashboard: auth-required, timers stop.
     fetchSession.mockRejectedValueOnce(
       new ConnectListError("unauthorized", "revoked"),
     );
@@ -149,7 +143,6 @@ describe("createSessionScheduler", () => {
     const calls = fetchSession.mock.calls.length;
     await vi.advanceTimersByTimeAsync(3 * HOUR);
     expect(fetchSession).toHaveBeenCalledTimes(calls);
-    // Further verifications are no-ops until the profile is re-paired.
     expect(await scheduler.verifySession()).toEqual({
       status: "auth-required",
       detail: "revoked",
@@ -204,7 +197,6 @@ describe("createSessionScheduler", () => {
     await vi.advanceTimersByTimeAsync(30_000);
     expect(fetchSession).toHaveBeenCalledTimes(2);
 
-    // App comes to the foreground while in error: retry immediately.
     fetchSession.mockResolvedValueOnce(session(Date.now() + HOUR));
     scheduler.renewIfDue();
     await vi.advanceTimersByTimeAsync(0);
@@ -219,7 +211,6 @@ describe("createSessionScheduler", () => {
     scheduler.renewIfDue();
     expect(fetchSession).toHaveBeenCalledTimes(1);
 
-    // Phone slept for 57 minutes: timers did not fire, session is nearly spent.
     vi.setSystemTime(Date.now() + 57 * MINUTE);
     fetchSession.mockResolvedValueOnce(session(Date.now() + HOUR));
     scheduler.renewIfDue();
@@ -271,12 +262,10 @@ describe("createSessionScheduler", () => {
       status: "authenticated",
       expiresAt: Date.now() + HOUR,
     });
-    // The retired mint resolves later: its cookie is never installed.
     resolveFirst(session(Date.now() + HOUR, "one"));
     await first;
     expect(cookies.map((c) => c.cookie.value)).toEqual(["two", "two"]);
     expect(scheduler.getState().status).toBe("authenticated");
-    // A renewal for the live profile is still possible afterwards.
     fetchSession.mockResolvedValueOnce(session(Date.now() + 2 * HOUR, "three"));
     await scheduler.renewNow();
     expect(cookies.at(-1)?.cookie.value).toBe("three");
@@ -294,7 +283,6 @@ describe("createSessionScheduler", () => {
       credential: "bbcm_2",
     });
     await vi.advanceTimersByTimeAsync(56 * MINUTE);
-    // Only the second profile's renewal (at 1h55m) is pending; nothing fired yet.
     expect(fetchSession).toHaveBeenCalledTimes(2);
     fetchSession.mockResolvedValueOnce(session(Date.now() + 3 * HOUR));
     await vi.advanceTimersByTimeAsync(HOUR);

@@ -8,7 +8,6 @@ import {
   type ModelReasoningEffort,
 } from "@get-bb/plugin-sdk/provider-bridge";
 
-/** Pi's "off" thinking level: no extended thinking. */
 const NONE_REASONING_EFFORT: ModelReasoningEffort = {
   reasoningEffort: "none",
   description: "No extended thinking",
@@ -25,6 +24,8 @@ export interface PiCatalogModel {
 
 interface BuildPiAvailableModelsArgs {
   models: readonly PiCatalogModel[];
+  scopedModelIds?: readonly string[];
+  preferredDefaultId?: string;
 }
 
 interface BuildPiAvailableModelsResult {
@@ -32,17 +33,6 @@ interface BuildPiAvailableModelsResult {
   selectedOnlyModels: AvailableModel[];
 }
 
-/**
- * Model IDs ending with a `-YYYYMMDD` date suffix are pinned versions; we
- * exclude them from the picker and surface aliases only. Dated versions are
- * returned in the selected-only bucket so a previously stored selection can
- * still render with its catalog metadata. Pi uses this heuristic for resolution
- * preference (preferring aliases over dated versions when multiple models
- * match a pattern); we go further and exclude dated versions from the active
- * picker since our UI is a picker not a fuzzy resolver.
- * See `isAlias` in Pi's model-resolver.ts:
- * https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/model-resolver.ts
- */
 const DATE_SUFFIX_PATTERN = /-\d{8}$/;
 
 function isModelAlias(id: string): boolean {
@@ -66,8 +56,6 @@ function buildPiAvailableModel(model: PiCatalogModel): AvailableModel {
     id: canonicalId,
     model: canonicalId,
     displayName: model.name,
-    // Pi is the selected agent provider; this is the nested model route that
-    // determines authentication, billing, and where workspace content is sent.
     routeProviderId: model.provider,
     description: describePiModel(model),
     supportedReasoningEfforts,
@@ -79,18 +67,36 @@ function buildPiAvailableModel(model: PiCatalogModel): AvailableModel {
 export function buildPiAvailableModels(
   args: BuildPiAvailableModelsArgs,
 ): BuildPiAvailableModelsResult {
+  const scopedModelIds = args.scopedModelIds;
+  const scopedIds =
+    scopedModelIds && scopedModelIds.length > 0
+      ? new Set(scopedModelIds)
+      : undefined;
+  const sourceModels = scopedIds
+    ? [...scopedIds].flatMap((id) => {
+        const match = args.models.find(
+          (model) => toCanonicalPiModelId(model.provider, model.id) === id,
+        );
+        return match ? [match] : [];
+      })
+    : args.models;
+
   const models: AvailableModel[] = [];
   const selectedOnlyModels: AvailableModel[] = [];
-  for (const model of args.models) {
+  for (const model of sourceModels) {
     const built = buildPiAvailableModel(model);
-    if (isModelAlias(model.id)) {
+    if (isModelAlias(model.id) || scopedIds?.has(built.id)) {
       models.push(built);
     } else {
       selectedOnlyModels.push(built);
     }
   }
 
-  const defaultId = resolveDefaultPiModelId(models);
+  const defaultId =
+    (args.preferredDefaultId &&
+    models.some((model) => model.id === args.preferredDefaultId)
+      ? args.preferredDefaultId
+      : undefined) ?? resolveDefaultPiModelId(models);
   return {
     models: models.map((model) =>
       model.id === defaultId ? { ...model, isDefault: true } : model,
@@ -99,18 +105,6 @@ export function buildPiAvailableModels(
   };
 }
 
-/**
- * bb identifies a Pi model by `<provider>/<model id>`.
- *
- * Aggregator providers such as OpenRouter and the Vercel AI Gateway use model
- * ids that already contain a slash (`deepseek/deepseek-v4-flash`), so the
- * provider prefix is always added. Without it,
- * `openrouter/deepseek/deepseek-v4-flash` collapses to
- * `deepseek/deepseek-v4-flash`, which names a different provider's model.
- *
- * The model id keeps its own slashes, so consumers must split on the FIRST
- * slash only.
- */
 export function toCanonicalPiModelId(
   provider: string,
   modelId: string,
@@ -119,13 +113,6 @@ export function toCanonicalPiModelId(
 }
 
 function getPiReasoningEfforts(model: PiCatalogModel): ModelReasoningEffort[] {
-  // Derive the picker ladder from the model's supported thinking levels rather
-  // than treating non-reasoning models specially: a non-reasoning model reports
-  // only "off", so it surfaces a single "No extended thinking" entry, and a
-  // reasoning model that can disable thinking (e.g. Ollama Cloud's
-  // `kimi-k2.7-code` with `off: "none"`) gets "none" at the bottom of its
-  // ladder. Pi's `getSupportedThinkingLevels` is the source of truth for which
-  // levels are usable, so honor "off" here instead of silently dropping it.
   const supportedLevels = new Set(model.supportedThinkingLevels);
   const efforts: ModelReasoningEffort[] = [];
   if (supportedLevels.has("off")) efforts.push(NONE_REASONING_EFFORT);
@@ -151,11 +138,6 @@ function describePiModel(model: PiCatalogModel): string {
   return `${provider} ${capabilities.join(", ")} model via Pi`;
 }
 
-/**
- * Best default model per upstream provider. Subset of Pi's
- * `defaultModelPerProvider`:
- * https://github.com/earendil-works/pi/blob/main/packages/coding-agent/src/core/model-resolver.ts
- */
 const PI_DEFAULT_MODEL_PER_PROVIDER: Partial<Record<string, string>> = {
   anthropic: "claude-opus-4-8",
   openai: "gpt-5.4",
@@ -175,7 +157,6 @@ function resolvePiDefaultModelId(providerId: string): string | undefined {
 }
 
 function resolveDefaultPiModelId(models: AvailableModel[]): string | undefined {
-  // Try the per-provider default for each provider represented in the list
   for (const model of models) {
     const provider = model.id.split("/")[0];
     const defaultId = resolvePiDefaultModelId(provider);

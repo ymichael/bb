@@ -32,10 +32,6 @@ import {
 } from "./preset-dialog.js";
 import { ColorSwatchPicker, DEFAULT_COLOR } from "./shared.js";
 
-// ---------------------------------------------------------------------------
-// Labels
-// ---------------------------------------------------------------------------
-
 function LabelEditorRow({
   initialName,
   initialColor,
@@ -266,10 +262,6 @@ function LabelsSection() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Presets
-// ---------------------------------------------------------------------------
-
 function PresetsSection() {
   const rpc = useTasksRpc();
   const presets = usePresets();
@@ -277,7 +269,6 @@ function PresetsSection() {
     async (rpc) => (await rpc.call("listMachines", {})).machines,
     [],
   );
-  // Keyed remount resets the dialog draft per open/target.
   const [dialog, setDialog] = useState<{
     key: number;
     editing: Preset | null;
@@ -429,10 +420,6 @@ function PresetsSection() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Folders
-// ---------------------------------------------------------------------------
-
 const ROOT_PARENT = "__root__";
 
 function FolderRow({
@@ -548,7 +535,6 @@ function FoldersSection() {
   const [error, setError] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Folder | null>(null);
   const folderList = folders.data ?? [];
-  // The sidebar nests folders one level deep, so only roots can be parents.
   const rootFolders = useMemo(
     () => folderList.filter((folder) => folder.parentFolderId === null),
     [folderList],
@@ -563,11 +549,6 @@ function FoldersSection() {
     }
   };
 
-  // The folder and project queries load independently, so the impact text
-  // waits for both rather than treating a still-loading project list as "no
-  // projects". A failed refresh keeps the previous rows in `data`, and those
-  // may be stale, so an error on either query also withholds the impact and
-  // blocks confirming until a refresh succeeds.
   const impactError = folders.error ?? projects.error;
   const impactReady =
     impactError === null &&
@@ -576,9 +557,6 @@ function FoldersSection() {
     projects.data !== undefined &&
     !projects.isLoading;
 
-  // Deleting a folder only unfiles what it held: the schema's ON DELETE SET
-  // NULL moves its projects and subfolders to the top level. Nothing else is
-  // removed, so the confirmation names the move rather than warning about loss.
   function describeDeleteImpact(folder: Folder): string {
     if (!impactReady) {
       return impactError !== null
@@ -660,9 +638,6 @@ function FoldersSection() {
                 folderId: target.id,
               });
               if (!result.deleted) {
-                // Another client removed the folder first. The server publishes
-                // nothing in that case, so pull fresh rows and surface the
-                // conflict instead of reporting a silent success.
                 folders.refresh();
                 projects.refresh();
                 throw new Error(`Folder “${target.name}” was already deleted.`);
@@ -675,17 +650,6 @@ function FoldersSection() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Panel
-// ---------------------------------------------------------------------------
-
-/**
- * Settings-ish management surface: labels, agent presets, and folders.
- *
- * The shell does not yet reserve a manage route or sidebar-footer slot, so
- * this is exported unmounted; when the shell grows one (e.g. a `manage`
- * subPath or a sidebar "Manage" button), render <ManagePanel /> there.
- */
 export function ManagePanel({ className }: { className?: string }) {
   return (
     <div

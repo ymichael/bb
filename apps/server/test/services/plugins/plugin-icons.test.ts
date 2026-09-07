@@ -1,11 +1,3 @@
-/**
- * Plugin-declared icons (`bb.branding.experimental_icons`): the manifest
- * validation names the icon on every violation, the icon asset route serves
- * the snapshot with immutable caching and defensive headers, the inventory
- * advertises the hashed URLs (identity-backed, so a disabled plugin still
- * resolves and an uninstalled one 404s), a tool presentation and a provider
- * icon may name a declared icon and nothing else.
- */
 import { mkdir, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -24,7 +16,6 @@ async function writeIconPluginFixture(
   rootDir: string,
   options: {
     name: string;
-    /** `bb.branding.icon`; a host glyph by default. */
     brandingIcon?: string;
     icons?: Record<string, string>;
     files?: Record<string, string | Buffer>;
@@ -104,7 +95,11 @@ describe("plugin-declared icons", () => {
   });
 
   it("serves a declared icon hashed and immutable, advertises it in the inventory, and keeps it while disabled", async () => {
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-iconed");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-iconed",
+    );
     await writeIconPluginFixture(rootDir, {
       name: "bb-plugin-iconed",
       icons: { receipt: "./icons/receipt.svg", mark: "./icons/mark.svg" },
@@ -130,7 +125,6 @@ describe("plugin-declared icons", () => {
     );
     expect(await icon.text()).toBe(SVG);
 
-    // A stale or absent hash still serves the current bytes, uncached.
     const noHash = await harness.app.request(
       `${BASE}/api/v1/plugins/iconed/assets/icons/mark.svg`,
     );
@@ -138,7 +132,6 @@ describe("plugin-declared icons", () => {
     expect(noHash.headers.get("cache-control")).toBe("no-store");
     expect(await noHash.text()).toBe(OTHER_SVG);
 
-    // Unknown name, unknown plugin, and a non-svg file name: 404.
     for (const path of [
       "/api/v1/plugins/iconed/assets/icons/missing.svg",
       "/api/v1/plugins/nope/assets/icons/receipt.svg",
@@ -153,7 +146,6 @@ describe("plugin-declared icons", () => {
       });
     }
 
-    // Identity, not runtime: a disabled plugin's icons still resolve.
     const disabled = await harness.pluginService.setEnabled("iconed", false);
     expect(disabled?.icons).toEqual(entry.icons);
     const disabledIcon = await harness.app.request(
@@ -161,7 +153,6 @@ describe("plugin-declared icons", () => {
     );
     expect(disabledIcon.status).toBe(200);
 
-    // Uninstall drops the identity: the row's glyph is simply not found.
     await harness.pluginService.remove("iconed");
     const gone = await harness.app.request(`${BASE}${entry.icons.receipt}`);
     expect(gone.status).toBe(404);
@@ -227,7 +218,11 @@ describe("plugin-declared icons", () => {
   ])(
     "fails the load naming the icon for %s",
     async (_case, icons, files, expected) => {
-      const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-badicon");
+      const rootDir = join(
+        harness.config.dataDir,
+        "fixtures",
+        "bb-plugin-badicon",
+      );
       await writeIconPluginFixture(rootDir, {
         name: "bb-plugin-badicon",
         icons,
@@ -240,11 +235,11 @@ describe("plugin-declared icons", () => {
   );
 
   it("fails the load when bb.branding.icon is a namespaced glyph, even the plugin's own", async () => {
-    // Were it carried, every tool the plugin registers without a
-    // presentation.icon would inherit "branded/logo" as its row glyph, and
-    // ingest would replace each call row with provider/unhandled because the
-    // glyph names the tool's plugin rather than the thread's provider.
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-branded");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-branded",
+    );
     await writeIconPluginFixture(rootDir, {
       name: "bb-plugin-branded",
       brandingIcon: "branded/logo",
@@ -263,13 +258,20 @@ describe("plugin-declared icons", () => {
     const outside = join(tmpdir(), `bb-plugin-icon-outside-${Date.now()}`);
     await mkdir(outside, { recursive: true });
     await writeFile(join(outside, "receipt.svg"), SVG);
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-linked");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-linked",
+    );
     await writeIconPluginFixture(rootDir, {
       name: "bb-plugin-linked",
       icons: { receipt: "./icons/receipt.svg" },
     });
     await mkdir(join(rootDir, "icons"), { recursive: true });
-    await symlink(join(outside, "receipt.svg"), join(rootDir, "icons", "receipt.svg"));
+    await symlink(
+      join(outside, "receipt.svg"),
+      join(rootDir, "icons", "receipt.svg"),
+    );
     await expect(
       harness.pluginService.installPath(rootDir),
     ).rejects.toThrowError(
@@ -278,7 +280,11 @@ describe("plugin-declared icons", () => {
   });
 
   it("lets a tool presentation name one of the plugin's own declared icons and nothing else", async () => {
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-tooled");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-tooled",
+    );
     await writeIconPluginFixture(rootDir, {
       name: "bb-plugin-tooled",
       icons: { stamp: "./icons/stamp.svg" },
@@ -326,7 +332,11 @@ describe("plugin-declared icons", () => {
   });
 
   it("serves a provider whose icon names a declared icon through the provider logo route", async () => {
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-marked");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-marked",
+    );
     await writeIconPluginFixture(rootDir, {
       name: "bb-plugin-marked",
       icons: { agent: "./icons/agent.svg" },
@@ -338,8 +348,10 @@ describe("plugin-declared icons", () => {
     expect(entry.status, entry.statusDetail ?? "").toBe("running");
 
     const registration = harness.deps.providerRegistry.get("marked-agent");
+    const iconHash = registration?.icon?.hash;
+    expect(iconHash).toBeTypeOf("string");
     expect(registration?.info.logoUrl).toBe(
-      "/api/v1/system/providers/marked-agent/logo",
+      `/api/v1/system/providers/marked-agent/logo?h=${iconHash}`,
     );
     expect(registration?.info.icon).toBeUndefined();
     expect(registration?.iconNames).toEqual(new Set(["agent"]));
@@ -355,10 +367,28 @@ describe("plugin-declared icons", () => {
     );
     expect(logo.headers.get("cache-control")).toBe("no-store");
     expect(await logo.text()).toBe(SVG);
+
+    const hashedLogo = await harness.app.request(
+      `${BASE}/api/v1/system/providers/marked-agent/logo?h=${iconHash}`,
+    );
+    expect(hashedLogo.status).toBe(200);
+    expect(hashedLogo.headers.get("cache-control")).toBe(
+      "public, max-age=31536000, immutable",
+    );
+    expect(await hashedLogo.text()).toBe(SVG);
+
+    const staleLogo = await harness.app.request(
+      `${BASE}/api/v1/system/providers/marked-agent/logo?h=stale`,
+    );
+    expect(staleLogo.headers.get("cache-control")).toBe("no-store");
   });
 
   it("fails the load when a provider icon names an icon the plugin did not declare", async () => {
-    const rootDir = join(harness.config.dataDir, "fixtures", "bb-plugin-unmarked");
+    const rootDir = join(
+      harness.config.dataDir,
+      "fixtures",
+      "bb-plugin-unmarked",
+    );
     await writeIconPluginFixture(rootDir, {
       name: "bb-plugin-unmarked",
       icons: { agent: "./icons/agent.svg" },

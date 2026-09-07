@@ -201,8 +201,6 @@ interface KeyboardCommandRowProps {
 }
 
 interface KeyboardCommandRowModel {
-  // Keep every value read while rendering a row in this model so the memo
-  // comparison can safely ignore whole-config identity churn.
   availableOnClient: boolean;
   command: AppCommandId;
   conflicts: readonly AppCommandId[];
@@ -523,8 +521,6 @@ export function KeyboardSettingsSection() {
     platform,
     serverOverridesKey,
   });
-  // The stable row dispatcher must read the latest committed draft while
-  // preserving one shared mutation owner for serialized writes and rollback.
   useLayoutEffect(() => {
     latestSettingsRef.current = {
       defaults,
@@ -633,12 +629,10 @@ export function KeyboardSettingsSection() {
           placeholder="Search shortcuts"
           value={search}
         />
-        {/* Native disabled propagation keeps pending state out of unrelated rows. */}
+        {}
         <fieldset
           className={cn(
             "m-0 min-w-0 space-y-5 border-0 p-0",
-            // Preserve the interaction lock without visually flashing every
-            // otherwise-enabled row while a shortcut mutation is pending.
             isKeyboardSettingsPending &&
               "[&:disabled_button:not([disabled])]:opacity-100",
           )}

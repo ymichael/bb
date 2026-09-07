@@ -28,9 +28,7 @@ interface CreateAppVersionServiceArgs {
   config: Pick<ServerRuntimeConfig, "appVersion" | "isDevelopment">;
   fetchImpl?: typeof fetch;
   logger: ServerLogger;
-  /** Override the cache TTL. Tests use this; production uses the default. */
   cacheTtlMs?: number;
-  /** Inject a custom clock for cache invalidation tests. */
   now?: () => number;
 }
 
@@ -91,11 +89,6 @@ export function createAppVersionService(
     }
   }
 
-  // Per Sawyer's iteration decision (2026-05-20, plan §"Iteration
-  // decisions"): once the TTL has expired we always re-fetch, and a failed
-  // fetch returns null even if a stale cached value exists. This is choice
-  // "A" (null on failure) and overrides the plan body's earlier suggestion
-  // to fall back to the stale cached value with a warning.
   async function getLatestVersion(args?: {
     forceRefresh?: boolean;
   }): Promise<string | null> {

@@ -11,8 +11,8 @@ import {
   resetPluginSlotStoreForTest,
   setPluginSlotRegistrations,
   subscribePluginSlots,
-  type PluginRegistrationSet,
 } from "./plugin-slots";
+import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
 
 function SectionComponent(_props: Partial<PluginHomepageSectionProps>) {
   return null;
@@ -22,22 +22,6 @@ function PanelComponent(_props: PluginNavPanelProps) {
 }
 function DirectiveComponent(_props: PluginMessageDirectiveProps) {
   return null;
-}
-
-function registrationSet(
-  overrides: Partial<PluginRegistrationSet> = {},
-): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    composerCustomizations: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    ...overrides,
-  };
 }
 
 afterEach(() => {
@@ -87,7 +71,6 @@ describe("plugin slot store", () => {
         ],
       }),
     );
-    // Re-registering (as a P3.4 reload would) must drop the old entries.
     setPluginSlotRegistrations(
       "demo",
       registrationSet({
@@ -101,8 +84,6 @@ describe("plugin slot store", () => {
     expect(snapshot.homepageSections.map((section) => section.id)).toEqual([
       "three",
     ]);
-    // The generation bumps per replacement so mount sites can remount slot
-    // components (fresh error-boundary state) on reload.
     expect(snapshot.homepageSections[0]?.generation).toBe(2);
   });
 
@@ -175,7 +156,6 @@ describe("plugin slot store", () => {
     expect(getPluginSlotSnapshot().navPanels).toHaveLength(0);
     expect(listener).toHaveBeenCalledTimes(2);
 
-    // Removing an unknown plugin is a no-op (no extra notification).
     removePluginSlotRegistrations("demo");
     expect(listener).toHaveBeenCalledTimes(2);
     unsubscribe();
@@ -272,13 +252,9 @@ describe("plugin slot store structural sharing", () => {
 
     expect(after).not.toBe(before);
     expect(after.navPanels).toHaveLength(1);
-    // Kinds the new plugin did not touch keep their arrays, so consumers keyed
-    // on `messageActions`/`messageDirectives` (timeline static context,
-    // markdown directive registry) do not re-render or re-parse.
     expect(after.messageActions).toBe(before.messageActions);
     expect(after.messageDirectives).toBe(before.messageDirectives);
     expect(after.composerCustomizations).toBe(before.composerCustomizations);
-    // Slot objects of untouched plugins keep identity too.
     expect(after.messageActions[0]).toBe(before.messageActions[0]);
   });
 
@@ -337,7 +313,6 @@ describe("plugin slot batches", () => {
       }),
     );
     expect(listener).not.toHaveBeenCalled();
-    // Reads inside the batch see the current registrations.
     expect(getPluginSlotSnapshot().messageActions.map((a) => a.id)).toEqual([
       "a",
       "b",
@@ -365,7 +340,6 @@ describe("plugin slot batches", () => {
       expect(listener).not.toHaveBeenCalled();
       vi.advanceTimersByTime(1);
       expect(listener).toHaveBeenCalledTimes(1);
-      // Nothing new since the flush: closing does not notify again.
       close();
       expect(listener).toHaveBeenCalledTimes(1);
       unsubscribe();

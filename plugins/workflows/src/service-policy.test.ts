@@ -1,9 +1,12 @@
 import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import {
-  deleteExpiredTerminalRuns,
+  type Db,
+  deleteTerminalRuns,
   getCall,
+  getRun,
   getRunRequired,
+  listExpiredTerminalRuns,
   migrations,
 } from "./data.js";
 import plugin from "./server.js";
@@ -68,6 +71,8 @@ function setup(
   let childCount = 0;
   let originDeleted = false;
   const workers = new Map<string, WorkerState>();
+  const archived: string[] = [];
+  const archiveFailures = new Set<string>();
   const { bb, harness } = createFakePluginHost({
     pluginId: "workflows",
     sdk: {
@@ -119,6 +124,13 @@ function setup(
         },
         send: async () => ({ ok: true }),
         stop: async () => ({ ok: true }),
+        archive: async ({ threadId }) => {
+          if (archiveFailures.has(threadId)) {
+            throw new Error("Host unavailable");
+          }
+          archived.push(threadId);
+          return { ok: true } as never;
+        },
       },
       providers: {
         list: async () => [
@@ -189,11 +201,57 @@ function setup(
     service,
     workers,
     start,
+    archived,
+    failArchive: (threadId: string) => archiveFailures.add(threadId),
     childCount: () => childCount,
     deleteOrigin: () => {
       originDeleted = true;
     },
   };
+}
+
+function expiredRunWithWorkers(
+  db: Db,
+  runId: string,
+  threadIds: readonly string[],
+): string {
+  const finishedAt = Date.now() - 3 * 86_400_000;
+  db.prepare(
+    `INSERT INTO workflow_runs (
+      id, project_id, origin_thread_id, environment_id, origin_provider,
+      origin_model, origin_reasoning_level, origin_permission_mode,
+      name, source, source_hash, args_json, settings_json, status,
+      resumed_from_run_id, result_json, notification_sent, created_at,
+      started_at, finished_at
+    ) VALUES (?, 'project-test', 'origin', 'environment-1', 'codex',
+      'gpt-test', 'medium', 'full', 'sweep', 'source', ?, 'null', ?,
+      'succeeded', NULL, 'null', 1, ?, ?, ?)`,
+  ).run(
+    runId,
+    runId,
+    JSON.stringify({ ...DEFAULT_WORKFLOW_SETTINGS, retentionDays: 1 }),
+    finishedAt,
+    finishedAt,
+    finishedAt,
+  );
+  threadIds.forEach((threadId, index) => {
+    db.prepare(
+      `INSERT INTO workflow_calls (
+        id, run_id, call_index, cache_key, prompt, options_json,
+        resolved_provider, resolved_model, resolved_reasoning_level,
+        resolved_permission_mode, status, child_thread_id, created_at
+      ) VALUES (?, ?, ?, ?, 'prompt', '{}', 'codex', 'gpt-test', 'medium',
+        'full', 'succeeded', ?, ?)`,
+    ).run(
+      `${runId}-call-${index}`,
+      runId,
+      index,
+      `${runId}-key-${index}`,
+      threadId,
+      finishedAt,
+    );
+  });
+  return runId;
 }
 
 describe("workflow service policy integration", () => {
@@ -206,12 +264,12 @@ describe("workflow service policy integration", () => {
 
   it("applies live settings to future run snapshots without mutating existing runs", async () => {
     const initial = {
-      maxActiveRuns: "1",
-      maxConcurrentAgents: "2",
-      maxAgentCalls: "3",
-      totalRunTimeoutMs: "120000",
-      retentionDays: "7",
-      maxNotificationBytes: "2048",
+      maxActiveRuns: 1,
+      maxConcurrentAgents: 2,
+      maxAgentCalls: 3,
+      totalRunTimeoutMs: 120_000,
+      retentionDays: 7,
+      maxNotificationBytes: 2048,
     };
     const { bb, harness } = createFakePluginHost({
       pluginId: "workflows",
@@ -245,12 +303,12 @@ describe("workflow service policy integration", () => {
       })) as string,
     ) as { runId: string };
     const next = {
-      maxActiveRuns: "2",
-      maxConcurrentAgents: "4",
-      maxAgentCalls: "8",
-      totalRunTimeoutMs: "180000",
-      retentionDays: "14",
-      maxNotificationBytes: "4096",
+      maxActiveRuns: 2,
+      maxConcurrentAgents: 4,
+      maxAgentCalls: 8,
+      totalRunTimeoutMs: 180_000,
+      retentionDays: 14,
+      maxNotificationBytes: 4096,
     };
     await harness.setSettings(next);
     const second = JSON.parse(
@@ -279,16 +337,8 @@ describe("workflow service policy integration", () => {
     const secondStatus = JSON.parse(secondStatusResult.stdout!) as {
       settings: Record<string, number>;
     };
-    expect(firstStatus.settings).toEqual(
-      Object.fromEntries(
-        Object.entries(initial).map(([key, value]) => [key, Number(value)]),
-      ),
-    );
-    expect(secondStatus.settings).toEqual(
-      Object.fromEntries(
-        Object.entries(next).map(([key, value]) => [key, Number(value)]),
-      ),
-    );
+    expect(firstStatus.settings).toEqual(initial);
+    expect(secondStatus.settings).toEqual(next);
   });
 
   it("resolves named and path children on the origin host", async () => {
@@ -896,8 +946,6 @@ describe("workflow service policy integration", () => {
   });
 
   it("publishes a workflow-runs signal for the origin thread on start, claim, and cancel", async () => {
-    // The composer banner polls only while it shows an active run; these
-    // signals are how an idle thread learns that a run appeared or ended.
     const test = setup();
     harnesses.push(test.harness);
     const signalsFor = (threadId: string) =>
@@ -913,12 +961,10 @@ describe("workflow service policy integration", () => {
     const controller = new AbortController();
     const worker = test.service.runWorker(controller.signal);
     await eventually(() => expect(test.childCount()).toBe(1));
-    // Claim (queued -> running).
     expect(signalsFor("origin").length).toBeGreaterThanOrEqual(2);
     const beforeStop = signalsFor("origin").length;
     await expect(test.service.stop(run.id)).resolves.toBe(true);
     expect(signalsFor("origin").length).toBeGreaterThan(beforeStop);
-    // A second stop of an already-cancelled run publishes nothing.
     const afterStop = signalsFor("origin").length;
     await expect(test.service.stop(run.id)).resolves.toBe(false);
     expect(signalsFor("origin")).toHaveLength(afterStop);
@@ -1288,6 +1334,43 @@ describe("workflow service policy integration", () => {
     await worker;
   });
 
+  it("archives worker threads before it deletes their expired run", async () => {
+    const test = setup();
+    harnesses.push(test.harness);
+    const expired = expiredRunWithWorkers(test.db, "sweep-archive", [
+      "worker-a",
+      "worker-b",
+    ]);
+
+    const controller = new AbortController();
+    const worker = test.service.runWorker(controller.signal);
+    await eventually(() => {
+      expect(test.archived).toEqual(["worker-a", "worker-b"]);
+      expect(getRun(test.db, expired)).toBeNull();
+    });
+
+    controller.abort();
+    await worker;
+  });
+
+  it("keeps an expired run when one of its workers does not archive", async () => {
+    const test = setup();
+    harnesses.push(test.harness);
+    const expired = expiredRunWithWorkers(test.db, "sweep-retry", [
+      "worker-ok",
+      "worker-broken",
+    ]);
+    test.failArchive("worker-broken");
+
+    const controller = new AbortController();
+    const worker = test.service.runWorker(controller.signal);
+    await eventually(() => expect(test.archived).toContain("worker-ok"));
+    expect(getRunRequired(test.db, expired).id).toBe(expired);
+
+    controller.abort();
+    await worker;
+  });
+
   it("deletes expired resume chains leaf-first across bounded batches", () => {
     const test = setup();
     harnesses.push(test.harness);
@@ -1320,7 +1403,12 @@ describe("workflow service policy integration", () => {
       }
     })();
 
-    expect(deleteExpiredTerminalRuns(test.db, Date.now(), 100)).toBe(100);
+    expect(
+      deleteTerminalRuns(
+        test.db,
+        listExpiredTerminalRuns(test.db, Date.now(), 100).runIds,
+      ),
+    ).toBe(100);
     expect(
       test.db
         .prepare(
@@ -1333,7 +1421,12 @@ describe("workflow service policy integration", () => {
         .prepare(`SELECT id FROM workflow_runs WHERE id = 'chain-0'`)
         .get(),
     ).toEqual({ id: "chain-0" });
-    expect(deleteExpiredTerminalRuns(test.db, Date.now(), 100)).toBe(50);
+    expect(
+      deleteTerminalRuns(
+        test.db,
+        listExpiredTerminalRuns(test.db, Date.now(), 100).runIds,
+      ),
+    ).toBe(50);
   });
 
   it("bounds UTF-8 notifications while preserving the stable run marker", async () => {

@@ -31,3 +31,32 @@
   --sh-entity: oklch(0.78 0.12 292);
   --sh-jsxliterals: oklch(0.78 0.12 292);
 }
+
+.bb-code-highlight .sh__line {
+  display: inline-block;
+  min-width: 100%;
+}
+
+.bb-code-highlight .sh__line--diff-add {
+  background-color: color-mix(in oklab, var(--diff-added) 14%, transparent);
+}
+
+.bb-code-highlight .sh__line--diff-remove {
+  background-color: color-mix(in oklab, var(--diff-removed) 14%, transparent);
+}
+
+.bb-code-highlight .sh__line--diff-hunk {
+  background-color: color-mix(
+    in oklab,
+    var(--muted-foreground) 8%,
+    transparent
+  );
+}
+
+.bb-code-highlight .sh__line--diff-meta {
+  background-color: color-mix(
+    in oklab,
+    var(--muted-foreground) 4%,
+    transparent
+  );
+}

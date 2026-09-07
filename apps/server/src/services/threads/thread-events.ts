@@ -59,8 +59,24 @@ interface ThreadEventTransactionDeps {
   hub: DbNotifier;
 }
 
+/**
+ * What makes a dispatched turn a retry of an earlier one. Both halves travel
+ * together because either alone is useless: the id without the count cannot
+ * tell a second attempt from a fifth, and the count without the id cannot say
+ * what is being retried.
+ */
+export interface TurnRequestRetryMarker {
+  requestId: ClientTurnRequestId;
+  attempt: number;
+}
+
 interface ClientTurnRequestedEventArgs {
-  continuationOfRequestId?: ClientTurnRequestId;
+  /**
+   * Set only when a `turn.failed` retry row is dispatching, marking this turn
+   * as attempt N of an earlier request rather than something the user just
+   * asked for.
+   */
+  retryOf?: TurnRequestRetryMarker;
   environmentId: string | null;
   execution: ResolvedThreadExecutionOptions;
   initiator: ThreadTurnInitiator;
@@ -69,10 +85,6 @@ interface ClientTurnRequestedEventArgs {
   requestMethod: "thread/start" | "turn/start";
   senderThreadId: string | null;
   source: "spawn" | "tell";
-  // Family-B taxonomy stamping for `initiator: "system"` messages. Omitted for
-  // user/agent turns (legacy/non-system messages project as unlabeled/null).
-  // `senderThreadId` is null for system messages, so the subject is stamped
-  // here at emit time or it is unrecoverable downstream.
   systemMessageKind?: SystemMessageKind;
   systemMessageSubject?: SystemMessageSubject | null;
   target: TurnRequestTarget;
@@ -238,13 +250,13 @@ function buildClientTurnRequestedEventData(
   return {
     ...buildClientTurnBaseEventData(args),
     requestId,
-    ...(args.continuationOfRequestId !== undefined
-      ? { continuationOfRequestId: args.continuationOfRequestId }
+    ...(args.retryOf !== undefined
+      ? {
+          retryOfRequestId: args.retryOf.requestId,
+          retryAttempt: args.retryOf.attempt,
+        }
       : {}),
     senderThreadId: args.senderThreadId,
-    // Stamp the Family-B taxonomy fields when present. Omitted entirely for
-    // non-system turns so legacy events keep parsing via the schema's optional
-    // defaults (unlabeled / null) rather than carrying redundant payload.
     ...(args.systemMessageKind !== undefined
       ? { systemMessageKind: args.systemMessageKind }
       : {}),
@@ -335,11 +347,6 @@ function isThreadReadStateUpdate(
   return result !== null;
 }
 
-// A user-initiated turn request implies the user has eyes on the thread, so
-// `lastReadAt` advances alongside the event. Without this, the unread divider
-// would later be placed against a stale read floor: the user's own message
-// would land past the cutoff when the thread eventually
-// replies and re-arms the snapshot.
 function applyUserTurnReadForEvent(
   db: DbTransaction,
   args: AppendThreadEventArgs,
@@ -459,8 +466,6 @@ function assertStoredTurnStartedForEvents(
   db: DbQueryConnection,
   eventArgs: readonly AppendThreadEventArgs[],
 ): void {
-  // Same-batch satisfaction is ordered: turn/started only unlocks later events
-  // in this append list. Daemon batches enforce the same invariant separately.
   const existingTurnKeys = listExistingTurnStartKeys(
     db,
     collectTurnStartRequirements(eventArgs),
@@ -639,25 +644,12 @@ export function parseStoredTurnRequestEvent(
   }
 
   if (event.type === "client/turn/requested") {
-    return {
-      direction: event.direction,
-      requestId: event.requestId,
-      ...(event.continuationOfRequestId !== undefined
-        ? { continuationOfRequestId: event.continuationOfRequestId }
-        : {}),
-      source: event.source,
-      initiator: event.initiator,
-      senderThreadId: event.senderThreadId,
-      systemMessageKind: event.systemMessageKind,
-      systemMessageSubject: event.systemMessageSubject,
-      input: event.input,
-      ...(event.inputGroups !== undefined
-        ? { inputGroups: event.inputGroups }
-        : {}),
-      target: event.target,
-      request: event.request,
-      execution: event.execution,
-    };
+    // Strip only the envelope. A field-by-field copy used to live here and
+    // silently dropped every field added after it was written (the gate
+    // provenance pair, then the retry marker), which is exactly the kind of
+    // loss a reader cannot detect: the event parses, it is just missing things.
+    const { type: _type, threadId: _threadId, scope: _scope, ...data } = event;
+    return data;
   }
 
   if (row.type === "client/thread/start" || row.type === "client/turn/start") {

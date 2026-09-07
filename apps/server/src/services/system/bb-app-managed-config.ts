@@ -101,7 +101,6 @@ export function applyBbAppManagedConfig(
   const managedConfig = args.managedConfig.config ?? {};
   const managedEnv = args.managedEnvFile.env ?? {};
 
-  // providerId validity is enforced by customProviderModelSchema at parse time.
   args.targetConfig.customModels =
     args.managedConfig.customModels ?? args.baseConfig.customModels;
   args.targetConfig.sharedSkillRoots =

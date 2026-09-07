@@ -34,10 +34,6 @@ describe("local API server", () => {
     server = null;
   });
 
-  // The in-app browser can now reach any loopback port bb does not reserve, and
-  // a second bb daemon on this machine sits on one. CORS only hides a response:
-  // a `no-cors` POST with a simple content type skips the preflight and still
-  // runs `/open-in-target`. The origin must be rejected, not just unanswered.
   it("rejects a foreign browser origin instead of only withholding CORS", async () => {
     const openInTarget = vi.fn(async () => undefined);
     server = await startLocalApiServer({
@@ -68,14 +64,12 @@ describe("local API server", () => {
       return response.status;
     }
 
-    // A blind cross-origin POST: simple content type, so no preflight guards it.
     expect(
       await postOpenInTarget({
         "content-type": "text/plain",
         origin: "http://127.0.0.1:3009",
       }),
     ).toBe(403);
-    // A DNS-rebound page presents its own public origin.
     expect(
       await postOpenInTarget({
         "content-type": "text/plain",
@@ -84,7 +78,6 @@ describe("local API server", () => {
     ).toBe(403);
     expect(openInTarget).not.toHaveBeenCalled();
 
-    // The bb app's own origin still works, as does a caller sending none.
     expect(
       await postOpenInTarget({
         "content-type": "application/json",
@@ -116,10 +109,6 @@ describe("local API server", () => {
     );
   });
 
-  // A rebound page sends a matching Origin and Host pair, which the self-origin
-  // branch previously accepted as the daemon's own origin. This API binds
-  // loopback, so a genuine caller always addresses it by a loopback name or a
-  // bare address.
   it("rejects a DNS-rebound origin that matches its own Host", async () => {
     const openInTarget = vi.fn(async () => undefined);
     server = await startLocalApiServer({
@@ -132,8 +121,6 @@ describe("local API server", () => {
       openInTarget,
     });
     const { port } = server;
-    // Connect to the address the API actually bound: `localhost` resolves to
-    // ::1 on some hosts, so a hardcoded 127.0.0.1 is refused there.
     const { bindHost } = server;
 
     function post(headers: Record<string, string>): Promise<number> {
@@ -172,7 +159,6 @@ describe("local API server", () => {
     ).toBe(403);
     expect(openInTarget).not.toHaveBeenCalled();
 
-    // The loopback authority a real local caller sends still works.
     expect(
       await post({
         origin: `http://${bindHost}:${port}`,

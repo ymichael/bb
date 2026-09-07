@@ -108,7 +108,6 @@ describe("environment cache effects", () => {
       shortstat: "1 file changed",
       mergeBaseRef: "base-ref",
     });
-    // Seeded imperatively (no observer) just like production.
     queryClient.setQueryData(removedDiffPatchKey, {
       path: "file.ts",
       patch: "diff --git a/file.ts b/file.ts\n",
@@ -133,7 +132,6 @@ describe("environment cache effects", () => {
 
     expect(queryClient.getQueryData(removedDiffFilesKey)).toBeUndefined();
     expect(queryClient.getQueryData(removedDiffPatchKey)).toBeUndefined();
-    // A different environment's diff caches are untouched.
     expect(queryClient.getQueryData(retainedDiffFilesKey)).toBeDefined();
     expect(queryClient.getQueryData(retainedDiffPatchKey)).toBeDefined();
   });

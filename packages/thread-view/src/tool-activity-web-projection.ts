@@ -21,10 +21,6 @@ function buildWebActivityKey(kind: WebActivityKind, callId: string): string {
   return `${kind}:${callId}`;
 }
 
-/**
- * The settled status of a begin/end item. The web kinds carry no status and
- * settle as completed; the v3 kinds carry the item's own terminal status.
- */
 function settledStatus(
   payload: WebActivityLifecycleEvent,
 ): ViewWebActivityMessage["status"] {
@@ -149,9 +145,6 @@ function mergeWebActivityMessage(
   if (!target.parentToolCallId && payload.parentToolCallId) {
     target.parentToolCallId = payload.parentToolCallId;
   }
-  // The close's presentation wins over the opened one (the assembler echoes
-  // the open presentation onto a close that carries none, so a close always
-  // has the latest).
   if (payload.presentation) {
     target.presentation = payload.presentation;
   }
@@ -206,7 +199,6 @@ function settleWebActivityMessage(
   payload: WebActivityLifecycleEvent,
 ): void {
   const status = settledStatus(payload);
-  // The web kinds never fail; keep their narrower status union honest.
   if (
     target.kind === "web-search" ||
     target.kind === "web-fetch" ||

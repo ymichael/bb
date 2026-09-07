@@ -4,40 +4,9 @@ import type {
   BbDesktopWindowState,
 } from "@bb/desktop-contract";
 
-// The macOS traffic-light cluster sits in a fixed strip on the left of the
-// frameless window. In-flow chrome clears it with left padding; the pinned
-// sidebar trigger clears it with a matching left offset (`left: 84px`). These
-// are fixed px geometry values because they are paired with Electron/macOS
-// window-control coordinates, not app typography.
-//
-// One shared target: when the main sidebar is collapsed the pinned sidebar
-// trigger (84px + a 28px button + an 8px gap = the strip ends at 120px) is the
-// last thing on the title-bar row, so a surface that owns the window's
-// top-left must land its leading content at x = 120px — just right of the
-// trigger, not merely past the lights. Both such surfaces start from the same
-// `px-4` (16px) base inset, so one reserve serves both; 16 + 104 = 120. It is
-// folded into a single left padding (rather than padding + a spacer element) so
-// it can transition in lockstep with the sidebar slide instead of snapping
-// on/off while the inset animates. The two surfaces are:
-//  - the page header content row.
-//  - the secondary panel's top chrome, while the conversation is collapsed and
-//    the panel is flush at the window top-left. That happens on both thread
-//    surfaces, not just the split-workspace host: collapsing takes the
-//    conversation column to zero width and the thread header rides inside it,
-//    so inline thread detail hands over the top-left too. Assuming otherwise is
-//    what once left its tab strip sitting under the lights. Root compose is
-//    genuinely exempt — it keeps the panel to the right of the main content.
 export const MACOS_TRAFFIC_LIGHT_RESERVE_OFFSET_CLASS = "left-[84px]";
 export const MACOS_COLLAPSED_TOP_LEFT_RESERVE_CLASS = "pl-[104px]";
 
-// Browser-chrome analogs of the macOS reserve above. The web build has no
-// traffic lights, so it pins the sidebar toggle flush at the app's top-left with
-// a small inset (see AppLayout's SidebarTriggerOverlay), and the collapsed page
-// header reserves that footprint as left padding so its content clears the
-// pinned toggle — the same trick as macOS, just smaller. Keep the inset and the
-// reserve in sync: `padding-left: 32px` on top of the header's own `px-4` (16px) sums to
-// 48px, which clears the 12px inset + the 28px trigger + an 8px gap;
-// `max-md:pointer-coarse:pl-[40px]` covers the larger 36px touch trigger.
 export const BROWSER_SIDEBAR_TRIGGER_INSET_CLASS = "pl-[12px]";
 export const BROWSER_COLLAPSED_HEADER_RESERVE_CLASS =
   "pl-[32px] max-md:pointer-coarse:pl-[40px]";
@@ -47,27 +16,9 @@ export const MACOS_APP_REGION_NO_DRAG_CLASS =
   "[app-region:no-drag] [-webkit-app-region:no-drag]";
 export const MACOS_WINDOW_NO_DRAG_CLASS = `relative z-50 ${MACOS_APP_REGION_NO_DRAG_CLASS}`;
 
-// Single source of truth for the top chrome row — the titlebar axis shared by
-// the macOS traffic lights, the pinned sidebar collapse trigger, and the
-// sidebar's route-history arrows. The native traffic-light inset
-// (`MACOS_TRAFFIC_LIGHT_DIAGONAL_INSET` in apps/desktop's window factory) is
-// tuned to vertically center the lights within this height and to sit on the
-// sidebar icon column's left rail. Electron main and the renderer are separate
-// bundles, so they cannot share one runtime value — keep this height and that
-// inset in sync as a paired geometry contract.
-export const CHROME_ROW_HEIGHT_CLASS = "h-[48px]";
-// Base layout for an in-flow chrome row: the shared height, laid out as a flex
-// row and vertically centered so its contents share the titlebar axis.
+export const CHROME_ROW_HEIGHT_CLASS = "h-(--bb-app-chrome-row-height)";
 export const CHROME_ROW_CLASS = `flex ${CHROME_ROW_HEIGHT_CLASS} items-center`;
 
-// Single adjustment point for macOS titlebar controls that visually align with
-// the native traffic lights. The traffic-light top inset is 18px and the chrome
-// row is 48px, so 28px header controls share the same mathematical center; the
-// 2px optical nudge below keeps the lucide glyphs visually on the traffic-light
-// axis. Keep the offset as a token instead of sprinkling ad hoc translate
-// classes; if Electron/macOS geometry changes, the collapse trigger,
-// route-history arrows, and page/thread header content can move together from
-// here.
 export const MACOS_CHROME_CONTROL_AXIS_CLASS =
   "[--bb-macos-chrome-control-y:2px] [transform:translateY(var(--bb-macos-chrome-control-y))]";
 export const MACOS_CHROME_CONTROL_NO_DRAG_CLASS = `${MACOS_WINDOW_NO_DRAG_CLASS} ${MACOS_CHROME_CONTROL_AXIS_CLASS}`;
@@ -102,12 +53,6 @@ export function shouldReserveMacosTrafficLights({
   return shouldUseMacosDesktopChrome(desktopInfo) && !windowState.isFullScreen;
 }
 
-/**
- * The desktop browser control surface, or `null` on the web build (where
- * `window.bbDesktop` is undefined). Also tolerates a desktop build whose
- * preload predates the browser surface. This is the single gate for the
- * desktop-only browser tab entry and the `WebContentsView` host.
- */
 export function getDesktopBrowserApi(): BbDesktopBrowserApi | null {
   return getBbDesktopInfo()?.browser ?? null;
 }

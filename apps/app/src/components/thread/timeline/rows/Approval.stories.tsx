@@ -16,27 +16,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Approval rows aren't persisted as their own events in ~/.bb-dev/bb.db — the
-// server projects pending-interaction state into TimelineApprovalWorkRows on
-// the fly. So these fixtures inline the projected shape directly, but the
-// `interactionId` / `target.itemId` / `target.toolName` values are real
-// references pulled from live threads:
-//
-//   - thr_8fziwbu655 / toolu_01PmsrQXiBWMmdU5Ub2HmZUt — Agent (delegation tool)
-//   - thr_86exnrrjpq / toolu_015GS2aek3sXDpDQFKt8aL4x — bash
-//   - thr_yn2i6jeaca / toolu_01EoPNLPpnjDWJvvVChb8cc9 — TodoWrite
-//   - thr_j6783aj3qb / call_yQY9t94mwzZaswKUZVxAOEqQ — fileChange (Edit)
-//   - thr_m8dsv5hjpi / call_jv9vabbTnmbjcBXLfwaQRjjG — bash (zsh -lc)
-//
-// `pi_<n>` is the canonical pending-interaction id shape used end to end
-// (see packages/server-contract/test/contract.test.ts).
-// ---------------------------------------------------------------------------
-
-// File-edit, waiting — the agent issued a tool call that requires approval
-// before any file changes get persisted. The projection emits an approval row
-// with toolName=null because file-edit approvals gate the whole edit, not a
-// specific tool.
 const fileEditWaiting: TimelineRow = approvalRow({
   id: "thr_j6783aj3qb:approval:call_yQY9t94mwzZaswKUZVxAOEqQ",
   threadId: "thr_j6783aj3qb",
@@ -53,8 +32,6 @@ const fileEditWaiting: TimelineRow = approvalRow({
   toolName: null,
 });
 
-// File-edit, denied — user rejected the edit; the projection holds onto the
-// approval row at status=completed so the timeline shows the outcome.
 const fileEditDenied: TimelineRow = approvalRow({
   id: "thr_j6783aj3qb:approval:call_denied_file_edit",
   threadId: "thr_j6783aj3qb",
@@ -71,7 +48,6 @@ const fileEditDenied: TimelineRow = approvalRow({
   toolName: null,
 });
 
-// Permission-grant, pending — Bash approval gate, no scope chosen yet.
 const permissionGrantPending: TimelineRow = approvalRow({
   id: "thr_86exnrrjpq:approval:toolu_015GS2aek3sXDpDQFKt8aL4x",
   threadId: "thr_86exnrrjpq",
@@ -90,8 +66,6 @@ const permissionGrantPending: TimelineRow = approvalRow({
   toolName: "bash",
 });
 
-// Permission-grant, resolving — user clicked grant; the resolution command
-// is in-flight to the host daemon.
 const permissionGrantResolving: TimelineRow = approvalRow({
   id: "thr_86exnrrjpq:approval:toolu_resolving",
   threadId: "thr_86exnrrjpq",
@@ -110,7 +84,6 @@ const permissionGrantResolving: TimelineRow = approvalRow({
   toolName: "bash",
 });
 
-// Permission-grant, granted (turn scope) — granted only for the current turn.
 const permissionGrantGrantedTurn: TimelineRow = approvalRow({
   id: "thr_yn2i6jeaca:approval:toolu_01EoPNLPpnjDWJvvVChb8cc9",
   threadId: "thr_yn2i6jeaca",
@@ -129,8 +102,6 @@ const permissionGrantGrantedTurn: TimelineRow = approvalRow({
   toolName: "TodoWrite",
 });
 
-// Permission-grant, granted (session scope) — granted for the rest of the
-// session; the agent won't re-prompt for this tool.
 const permissionGrantGrantedSession: TimelineRow = approvalRow({
   id: "thr_8fziwbu655:approval:toolu_01PmsrQXiBWMmdU5Ub2HmZUt",
   threadId: "thr_8fziwbu655",
@@ -149,8 +120,6 @@ const permissionGrantGrantedSession: TimelineRow = approvalRow({
   toolName: "Agent",
 });
 
-// Permission-grant, denied — user rejected; statusReason carries the human
-// note recorded by the resolver.
 const permissionGrantDenied: TimelineRow = approvalRow({
   id: "thr_m8dsv5hjpi:approval:call_jv9vabbTnmbjcBXLfwaQRjjG",
   threadId: "thr_m8dsv5hjpi",
@@ -169,8 +138,6 @@ const permissionGrantDenied: TimelineRow = approvalRow({
   toolName: "bash",
 });
 
-// Permission-grant, interrupted — turn was interrupted while the approval was
-// still pending, so the gate never resolved.
 const permissionGrantInterrupted: TimelineRow = approvalRow({
   id: "thr_86exnrrjpq:approval:toolu_interrupted",
   threadId: "thr_86exnrrjpq",
@@ -189,8 +156,6 @@ const permissionGrantInterrupted: TimelineRow = approvalRow({
   toolName: "bash",
 });
 
-// Permission-grant, interrupted — the daemon/session stopped before the user
-// could answer, so the lifecycle records the explicit interruption reason.
 const permissionGrantInterruptedBySession: TimelineRow = approvalRow({
   id: "thr_yn2i6jeaca:approval:toolu_interrupted_session",
   threadId: "thr_yn2i6jeaca",

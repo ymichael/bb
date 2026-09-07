@@ -10,33 +10,13 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import {
-  buildPluginApp,
-  resolvePluginBuildToolchain,
-} from "@bb/plugin-build";
+import { buildPluginApp, resolvePluginBuildToolchain } from "@bb/plugin-build";
 
-/**
- * The monorepo's own toolchain: resolved from `@bb/plugin-build`'s
- * devDependencies, so tests never download one.
- */
 function testToolchain() {
   return resolvePluginBuildToolchain(
     path.join(os.tmpdir(), "bb-toolchain-unused"),
   );
 }
-
-/**
- * The registry's CI gate (plugin design §5.5 exit criteria): vendor EVERY
- * registry item into one fixture plugin and run the real `bb plugin build`
- * over it. Catches items whose source no longer compiles outside the app
- * (missing registryDependency links, an app-internal import that escaped the
- * closure walker, a dep missing from the item), and asserts the compiled CSS
- * carries the host token bridge the components rely on.
- *
- * The fixture must live INSIDE this package (not os.tmpdir()) so esbuild's
- * node_modules walk-up resolves the vendored items' npm deps from this
- * package's devDependencies — which mirror the union of item `dependencies`.
- */
 
 const packageRoot = path.join(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -81,7 +61,6 @@ describe("plugin component registry", () => {
     }
     expect(itemNames.length).toBeGreaterThanOrEqual(50);
 
-    // Entry importing every vendored module, so esbuild compiles them all.
     const uiFiles = (
       await readdir(path.join(fixtureDir, "components", "ui"))
     ).filter((name) => name.endsWith(".tsx") || name.endsWith(".ts"));
@@ -123,8 +102,6 @@ describe("plugin component registry", () => {
       path.join(fixtureDir, "server.ts"),
       "export default function plugin() {}\n",
     );
-    // esbuild reads tsconfig paths for the "@/*" alias the vendored source
-    // uses — the same file `bb plugin new` scaffolds.
     await writeFile(
       path.join(fixtureDir, "tsconfig.json"),
       JSON.stringify(
@@ -147,21 +124,13 @@ describe("plugin component registry", () => {
     );
 
     const js = await readFile(result.jsPath, "utf8");
-    // Shared singletons resolve through the runtime, never bundled copies.
     expect(js).toContain("globalThis.__bbPluginRuntime");
-    // (sonner has no vendored component — plugins import { toast } directly;
-    // that shim is asserted in apps/cli plugin-build.test.ts.)
     for (const slot of ["radixDialog", "radixAlertDialog", "vaul"]) {
       expect(js).toContain(`.${slot}`);
     }
     expect(js).not.toMatch(/from\s*["']react["']/);
-    // Non-singleton deps (lucide, cmdk, hugeicons, non-portal radix) bundle
-    // from this package's devDependencies — esbuild hard-errors on any
-    // unresolved import, so a successful build proves the closure is whole.
 
     const css = await readFile(result.cssPath, "utf8");
-    // Utilities scope to this plugin's own mounts (id derived from the
-    // package name), with a generic-root fallback for pre-id hosts.
     expect(css).toContain(
       ":where([data-bb-plugin=registry-fixture],[data-bb-plugin-root]:not([data-bb-plugin]))",
     );

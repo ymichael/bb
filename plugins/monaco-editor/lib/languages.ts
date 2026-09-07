@@ -1,26 +1,4 @@
-/**
- * The extensions this plugin claims as a file opener, and their Monaco
- * language ids.
- *
- * Claiming an extension makes Monaco the *default* viewer for it the moment
- * the plugin is installed: BB picks the first registration matching an
- * extension whenever the user has no per-extension preference. Users opt back
- * out one extension at a time under Settings → File openers, and that
- * settings page renders one row per distinct claimed extension — so this list
- * is deliberately "common text and code" rather than exhaustive.
- *
- * Two kinds of file can never reach us regardless of what is listed here:
- * binaries we deliberately leave out (png, pdf, zip — BB's preview renders
- * them properly), and files BB reads as having no extension at all, which
- * includes dotfiles: its `getFileExtension` returns null when the last dot is
- * at index 0 or absent, so `Makefile`, `LICENSE`, and `.gitignore` always use
- * the built-in preview.
- *
- * Extensions must be lowercase alphanumerics with no dot — the SDK rejects
- * the registration otherwise.
- */
 const LANGUAGE_BY_EXTENSION: Record<string, string> = {
-  // Web
   js: "javascript",
   jsx: "javascript",
   mjs: "javascript",
@@ -37,7 +15,6 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   vue: "html",
   svelte: "html",
 
-  // Data and config
   json: "json",
   jsonc: "json",
   yaml: "yaml",
@@ -51,7 +28,6 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   csv: "plaintext",
   tsv: "plaintext",
 
-  // Docs
   md: "markdown",
   mdx: "markdown",
   markdown: "markdown",
@@ -60,7 +36,6 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   rst: "plaintext",
   adoc: "plaintext",
 
-  // Systems
   c: "c",
   h: "c",
   cc: "cpp",
@@ -75,7 +50,6 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   m: "objective-c",
   mm: "objective-c",
 
-  // JVM / .NET
   java: "java",
   kt: "kotlin",
   kts: "kotlin",
@@ -84,7 +58,6 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   cs: "csharp",
   fs: "fsharp",
 
-  // Scripting
   py: "python",
   pyi: "python",
   rb: "ruby",
@@ -100,19 +73,16 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   bat: "bat",
   cmd: "bat",
 
-  // Query and schema
   sql: "sql",
   graphql: "graphql",
   gql: "graphql",
   proto: "plaintext",
 
-  // Infra
   tf: "hcl",
   tfvars: "hcl",
   hcl: "hcl",
   dockerfile: "dockerfile",
 
-  // Other
   dart: "dart",
   ex: "plaintext",
   exs: "plaintext",
@@ -125,11 +95,10 @@ const LANGUAGE_BY_EXTENSION: Record<string, string> = {
   log: "plaintext",
 };
 
-/** Every extension this plugin claims, for `app.slots.fileOpener`. */
-export const CLAIMED_EXTENSIONS: readonly string[] =
-  Object.keys(LANGUAGE_BY_EXTENSION);
+export const CLAIMED_EXTENSIONS: readonly string[] = Object.keys(
+  LANGUAGE_BY_EXTENSION,
+);
 
-/** The Monaco language id for a path, defaulting to plaintext. */
 export function languageForPath(path: string): string {
   const name = path.split("/").at(-1) ?? path;
   const dotIndex = name.lastIndexOf(".");

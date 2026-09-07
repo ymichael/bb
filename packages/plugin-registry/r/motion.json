@@ -7,7 +7,7 @@
   "files": [
     {
       "path": "registry/components/ui/motion.ts",
-      "content": "/**\n * Shared hover-motion heuristic for primitives, so the whole UI speaks one\n * timing language instead of ad-hoc per-component transitions:\n *\n * - CONTROL_HOVER_TRANSITION — interactive controls (buttons, icon buttons):\n *   the hover/active fill snaps IN instantly (0ms) and eases OUT lazily (150ms).\n *   Immediate feedback on the way in, never twitchy on the way out. The trick:\n *   CSS applies the *end state's* transition-duration for each direction, so a\n *   base `duration-150` governs hover-out while `hover:duration-0` makes\n *   hover-in instant.\n * - LIST_HOVER_TRANSITION — dense list/menu rows (menu items, list rows): no\n *   transition at all (instant both ways), so the highlight tracks the pointer\n *   and arrow keys exactly, with no lag during fast navigation.\n *\n * Reach for one of these rather than a bare `transition-colors` on anything with\n * a hover/active state.\n */\nexport const CONTROL_HOVER_TRANSITION =\n  \"transition-colors duration-150 hover:duration-0\";\n\nexport const LIST_HOVER_TRANSITION = \"transition-none\";\n",
+      "content": "export const CONTROL_HOVER_TRANSITION =\n  \"transition-colors duration-150 hover:duration-0\";\n\nexport const LIST_HOVER_TRANSITION = \"transition-none\";\n",
       "type": "registry:ui",
       "target": "components/ui/motion.ts"
     }

@@ -16,17 +16,6 @@ const baseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// Real tool work rows pulled from live threads in ~/.bb-dev/bb.db. These are
-// the catch-all "tool" rows — tools that aren't classified as activity intents
-// on a command row (Read/Grep/Glob/list_files/search go on commands instead).
-// Common tools that surface here: TodoWrite, ToolSearch, notify_user, Skill,
-// ScheduleWakeup. Real toolName, toolArgs, and output JSON are inlined below.
-// ---------------------------------------------------------------------------
-
-// thr_yn2i6jeaca, seq 760/761, turn turn_8840389c92b04db7_1 — ToolSearch
-// resolving a deferred TodoWrite schema. Tiny arguments object, one-line
-// result. Different visual shape from TodoWrite (no arrays, scalar args).
 const toolSearchTool: TimelineRow = toolRow({
   id: "thr_yn2i6jeaca:tool:toolu_0191NxebN8QhTioHDkJ3awer",
   threadId: "thr_yn2i6jeaca",
@@ -45,6 +34,26 @@ const toolSearchTool: TimelineRow = toolRow({
   output: "Matched tools: TodoWrite",
   approvalStatus: null,
   durationMs: 105,
+});
+
+const nativeSkillTool: TimelineRow = toolRow({
+  id: "thr_skill_native:tool:toolu_skill_native",
+  threadId: "thr_skill_native",
+  turnId: "turn_skill_native_1",
+  sourceSeqStart: 1,
+  sourceSeqEnd: 2,
+  status: "completed",
+  callId: "toolu_skill_native",
+  toolName: "Skill",
+  toolArgs: { skill: "visual-qa-loop" },
+  output: "Skill loaded",
+  approvalStatus: null,
+  durationMs: 120,
+  presentation: {
+    label: { pending: "Loading skill", completed: "Loaded skill" },
+    icon: { glyph: "Zap" },
+    title: "visual-qa-loop",
+  },
 });
 
 const longOutputTool: TimelineRow = toolRow({
@@ -67,9 +76,6 @@ const longOutputTool: TimelineRow = toolRow({
   durationMs: 100,
 });
 
-// thr_bj3p5vk9py, seq 13, turn 019de9bd-c299-7053-b11d-11b1f40e8b83 —
-// parent thread sending an introductory notify_user. Free-form text
-// arg, "Notification delivered" result.
 const notifyUserShort: TimelineRow = toolRow({
   id: "thr_bj3p5vk9py:tool:call_MZFh9Lp2X4LkW9gQteoyDB2F",
   threadId: "thr_bj3p5vk9py",
@@ -89,10 +95,6 @@ const notifyUserShort: TimelineRow = toolRow({
   durationMs: 0,
 });
 
-// thr_bj3p5vk9py, seq 28209 — parent merge-evaluation summary. Long
-// markdown body in args.text (multi-section, tables, code-fence-ish lists).
-// Useful for the "expanded" story so we can see how long tool-arg payloads
-// render inside the row body.
 const notifyUserLong: TimelineRow = toolRow({
   id: "thr_bj3p5vk9py:tool:call_llaogf7VfpS1YkeQ2iIPUuL7",
   threadId: "thr_bj3p5vk9py",
@@ -112,10 +114,6 @@ const notifyUserLong: TimelineRow = toolRow({
   durationMs: 50,
 });
 
-// Running tool — status=pending, output empty, completedAt null. Reuses the
-// real TodoWrite arg shape from above (the agent often issues TodoWrites
-// mid-turn) and parks it as in-flight using Date.now() so the relative-time
-// formatting stays sensible whenever the storybook is rendered.
 const runningTool: TimelineRow = toolRow({
   id: "thr_yn2i6jeaca:tool:toolu_running",
   threadId: "thr_yn2i6jeaca",
@@ -142,10 +140,6 @@ const runningTool: TimelineRow = toolRow({
   durationMs: null,
 });
 
-// Errored tool — reuses a real ToolSearch shape but with status=error and a
-// failure result string standing in for the captured error message. Real
-// errored ToolSearch payloads are rare in the local DB, so we hold the
-// toolName/toolArgs constant from a real call and only swap the status.
 const errorTool: TimelineRow = toolRow({
   id: "thr_yn2i6jeaca:tool:toolu_error",
   threadId: "thr_yn2i6jeaca",
@@ -166,10 +160,6 @@ const errorTool: TimelineRow = toolRow({
   durationMs: 100,
 });
 
-// Interrupted tool — reuses a real notify_user shape but with
-// status=interrupted (the user steered/aborted before the message was
-// delivered). Real interrupted notify_user payloads are rare; the
-// toolName/toolArgs are real, only the status is adjusted.
 const interruptedTool: TimelineRow = toolRow({
   id: "thr_bj3p5vk9py:tool:call_interrupted",
   threadId: "thr_bj3p5vk9py",
@@ -189,9 +179,6 @@ const interruptedTool: TimelineRow = toolRow({
   durationMs: 200,
 });
 
-// Waiting for approval — ScheduleWakeup parked on the approval gate before
-// the daemon ever scheduled it. Real arg shape, status=pending,
-// approvalStatus=waiting_for_approval.
 const waitingApprovalTool: TimelineRow = toolRow({
   id: "thr_4z2watgfgm:tool:toolu_waiting_approval",
   threadId: "thr_4z2watgfgm",
@@ -213,8 +200,6 @@ const waitingApprovalTool: TimelineRow = toolRow({
   durationMs: null,
 });
 
-// Denied — same ScheduleWakeup, but the user rejected the approval and the
-// tool never ran.
 const deniedTool: TimelineRow = toolRow({
   id: "thr_4z2watgfgm:tool:toolu_denied",
   threadId: "thr_4z2watgfgm",
@@ -248,9 +233,6 @@ interface SkillReadStoryState {
   row: TimelineRow;
 }
 
-// A Read of a SKILL.md projects as a `file-read` row (the legacy Read tool
-// call upgrades to the same row at read time); the title compacts the path to
-// the skill it names.
 function createSkillReadRow(args: SkillReadRowArgs): TimelineRow {
   return fileReadRow({
     id: `thr_skill_read:file-read:toolu_skill_read_${args.idSuffix}`,
@@ -431,7 +413,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="waiting for approval"
-        hint="approvalStatus=waiting_for_approval, parked before execution"
+        hint="approvalStatus=waiting_for_approval, queued before execution"
       >
         <TimelineStage>
           <ThreadTimelineRows
@@ -470,6 +452,21 @@ export function SkillReads() {
           </TimelineStage>
         </StoryRow>
       ))}
+    </StoryCard>
+  );
+}
+
+export function NativeSkillCall() {
+  return (
+    <StoryCard>
+      <StoryRow
+        label="Claude native Skill call"
+        hint="provider presentation uses the established lightning glyph"
+      >
+        <TimelineStage>
+          <ThreadTimelineRows {...baseProps} timelineRows={[nativeSkillTool]} />
+        </TimelineStage>
+      </StoryRow>
     </StoryCard>
   );
 }

@@ -31,8 +31,6 @@ describe("parseCustomAcpAgents", () => {
     ]);
   });
 
-  // Every rejection is reported: an agent that vanishes without a word is a
-  // support ticket.
   it("reports a malformed entry, a shadowed built-in, and a duplicate", () => {
     const parsed = parseCustomAcpAgents({
       entries: [
@@ -52,9 +50,6 @@ describe("parseCustomAcpAgents", () => {
     expect(parsed.problems[2]).toContain("configured more than once");
   });
 
-  // `logo` belonged to the old config file and the plugin never had it. The
-  // setting schema stays strict about it; legacy-config.ts strips the field
-  // before a migrating entry reaches this parser (see its own test).
   it("rejects the legacy logo field the setting never had", () => {
     const parsed = parseCustomAcpAgents({
       entries: [
@@ -72,10 +67,6 @@ describe("parseCustomAcpAgents", () => {
     expect(parsed.problems[0]).toContain("is not a valid agent");
   });
 
-  // The whole point of building the setting schema out of the launch spec's
-  // own fields: whatever this accepts, the bridge accepts. A drift here used
-  // to mean the agent registered fine and then failed at every thread start
-  // with INVALID_PARAMS and nothing naming the entry.
   it("only accepts entries whose launch spec the bridge will parse", () => {
     const parsed = parseCustomAcpAgents({
       entries: [
@@ -117,9 +108,6 @@ describe("parseCustomAcpAgents", () => {
     });
   });
 
-  // The shapes the wire rejects have to be rejected here, where the entry can
-  // still be named: an absolute skill root, a reasoning level outside bb's
-  // ladder, and a default the entry does not support.
   it.each([
     ["an absolute skill root", { nativeSkillRoots: { user: ["/etc/skills"] } }],
     [
@@ -150,8 +138,6 @@ describe("parseCustomAcpAgents", () => {
 
 describe("customAcpAgentDefinition", () => {
   it("carries the launch spec and drops a model CLI with nothing to list", () => {
-    // Through the schema, because dropping an empty model CLI is the launch
-    // spec schema's own rule, not something the definition builder does.
     const [agent] = parseCustomAcpAgents({
       entries: [
         {
@@ -179,17 +165,11 @@ describe("customAcpAgentDefinition", () => {
       cwd: "/srv/amp",
     });
     expect(definition.supportsManualCompaction).toBe(true);
-    // bb has not verified a configured agent's session/fork support, and the
-    // bridge only refuses a fork after bb created the fork thread (#1833).
     expect(definition.fork).toBe("none");
   });
 });
 
 describe("acpProviderDeclaration", () => {
-  // The whole path a configured agent's skill roots travel: the setting, the
-  // launch spec the bridge parses, and the declaration core reads to fill
-  // `host.list_commands`. Before this they reached the launch spec and
-  // nothing else, so the documented native skills never appeared.
   it("declares a configured agent's native skill roots", () => {
     const [agent] = parseCustomAcpAgents({
       entries: [
@@ -234,12 +214,8 @@ describe("acpProviderDeclaration", () => {
       ]),
     );
 
-    // Neither Cursor nor grok advertises session/fork; declaring "tip" for
-    // the whole tier is what #1833 was.
     expect(byId.get("acp-cursor")?.capabilities.fork).toBe("none");
     expect(byId.get("acp-grok")?.capabilities.fork).toBe("none");
-    // The agents bb has not verified keep the value the ACP tier declared
-    // for them until Q21's probe reads their `initialize` reply.
     expect(byId.get("acp-opencode")?.capabilities.fork).toBe("tip");
     expect(byId.get("acp-cursor")?.experimental_bridgeOptions).toMatchObject({
       acpDialect: "cursor",
@@ -256,6 +232,10 @@ describe("acpProviderDeclaration", () => {
       acpLaunchSpec: {
         command: "cursor-agent",
         args: ["acp"],
+        modelCli: {
+          listArgs: ["--list-models"],
+          primaryModels: [],
+        },
       },
     });
     expect(byId.get("acp-grok")?.experimental_bridgeOptions).toMatchObject({

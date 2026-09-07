@@ -44,9 +44,6 @@ interface DispatchTurnDuringReprovisionArgs {
   input: PromptInput[];
   inputGroups?: PromptInput[][];
   senderThreadId: string | null;
-  // Family-B taxonomy fields for `initiator: "system"` reprovision dispatches.
-  // Threaded onto the deferred `client/turn/requested` event the reprovision
-  // queues once the workspace is ready.
   systemMessageKind?: SystemMessageKind;
   systemMessageSubject?: SystemMessageSubject | null;
   thread: Thread;
@@ -104,10 +101,6 @@ export async function dispatchTurnDuringReprovision(
     return false;
   }
 
-  // A destroying/destroyed environment is gone and is never reprovisioned.
-  // Surface the "environment is gone" condition the frontend banner keys off
-  // instead of dispatching a reprovision. Error-recovery reprovision for an
-  // `error`-status environment is still legitimate and falls through.
   const goneDetails = goneThreadEnvironmentDetails(args.environment);
   if (goneDetails) {
     throwThreadEnvironmentUnavailable(goneDetails);
@@ -131,9 +124,6 @@ export async function dispatchTurnDuringReprovision(
     hostId: args.environment.hostId,
   });
 
-  // Stronger than the run.preparing table cell on purpose: an errored
-  // thread may reprovision only when it never started (no provider thread id),
-  // an event-log condition the thread row cannot express.
   if (
     args.thread.status === "idle" ||
     canRecoverPreStartErroredThread(args.deps, args.thread)
@@ -178,6 +168,13 @@ export async function dispatchTurnDuringReprovision(
           systemMessageKind: args.systemMessageKind,
           systemMessageSubject: args.systemMessageSubject,
         });
+        // The turn above is queued, not sent: it replays when the workspace is
+        // ready, driven by the provisioning machinery that owns that ordering.
+        // It deliberately does NOT become a queued row — the queue carries
+        // dispatches core will re-ATTEMPT, and this one is already committed
+        // to a specific replay. Messages that arrive DURING the reprovision do
+        // queue, on `waitingOn: provisioning`, and the workspace-ready drain
+        // releases them.
       },
       environment: args.environment,
       projectId: args.thread.projectId,

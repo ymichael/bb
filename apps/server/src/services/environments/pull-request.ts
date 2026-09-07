@@ -174,11 +174,6 @@ function assemblePullRequestAttention(
   return "none";
 }
 
-/**
- * Server-owned product policy: fold the raw `gh` state plus `isDraft` from the
- * host daemon into the product-facing pull request state. An open PR marked as
- * a draft becomes `draft`; otherwise the open/merged/closed state carries over.
- */
 export function assembleThreadPullRequest(
   raw: GitHostPullRequest,
 ): ThreadPullRequest {

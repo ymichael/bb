@@ -146,6 +146,19 @@ describe("buildSpawnEnvironment", () => {
     });
   });
 
+  it("returns personal for --new-environment personal with host", () => {
+    const result = buildSpawnEnvironment({
+      defaultPersonalWorkspace: false,
+      newEnvironmentKind: "personal",
+      hostId: HOST_ID,
+    });
+    expect(result).toEqual({
+      type: "host",
+      hostId: HOST_ID,
+      workspace: { type: "personal" },
+    });
+  });
+
   it("returns named base branch for --base-branch with managed worktrees", () => {
     const result = buildSpawnEnvironment({
       defaultPersonalWorkspace: false,

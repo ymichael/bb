@@ -1,15 +1,3 @@
-/**
- * The "Used by" row: the shipped plugins that ship on a surface.
- *
- * A short list renders as one plain row, exactly as it always has. A list too
- * long for the row keeps its single line and scrolls sideways, driven by the
- * reader: carets page through it, and the trackpad, wheel, drag, and arrow
- * keys all work because the row is an ordinary scroll container.
- *
- * Nothing moves on its own, so there is no motion to suppress under
- * `prefers-reduced-motion`; that setting only decides whether a caret click
- * animates or jumps.
- */
 import {
   useCallback,
   useEffect,
@@ -23,11 +11,8 @@ import { ArrowLeft01Icon, ArrowRight01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "./cn";
 import { SCROLLBAR_HIDDEN_CLASS, scrollEdgeFadeStyle } from "./scroll-edges";
 
-/** Sub-pixel slack: a 0.5px remainder is not something left to scroll to. */
 const SCROLL_EPSILON_PX = 1;
-/** Kept on screen across a paged scroll, so the eye has an anchor. */
 const SCROLL_OVERLAP_PX = 32;
-/** Floor for the step, so a very narrow row still advances usefully. */
 const MIN_SCROLL_STEP_PX = 80;
 
 export interface UsedByScrollState {
@@ -35,19 +20,12 @@ export interface UsedByScrollState {
   canScrollRight: boolean;
 }
 
-/** Geometry of a scroll container, as much of it as these helpers need. */
 export interface UsedByScrollMetrics {
   scrollLeft: number;
   scrollWidth: number;
   clientWidth: number;
 }
 
-/**
- * Which carets to offer. Both false means everything fits and the row shows
- * no scroll affordance at all.
- *
- * Pure so the extents are testable without a layout engine.
- */
 export function usedByScrollState({
   scrollLeft,
   scrollWidth,
@@ -63,18 +41,15 @@ export function usedByScrollState({
   };
 }
 
-/** Roughly one visible width, less an overlap so nothing jumps past unread. */
 export function usedByScrollStep(clientWidth: number): number {
   return Math.max(clientWidth - SCROLL_OVERLAP_PX, MIN_SCROLL_STEP_PX);
 }
 
-/** The minimum a caret needs from its viewport, so tests can stand one in. */
 export interface UsedByScrollTarget {
   clientWidth: number;
   scrollBy(options: { left: number; behavior: ScrollBehavior }): void;
 }
 
-/** One caret press: a page in `direction`, instant when motion is reduced. */
 export function scrollUsedBy(
   viewport: UsedByScrollTarget,
   direction: -1 | 1,
@@ -113,8 +88,6 @@ function Caret({
   return (
     <button
       type="button"
-      // The scroll region itself is focusable and arrow-key scrollable, so
-      // these stay out of the tab order rather than adding two stops per row.
       tabIndex={-1}
       aria-label={`Scroll ${direction}`}
       aria-hidden={!shown}
@@ -122,8 +95,6 @@ function Caret({
       onClick={onClick}
       className={cn(
         "inline-flex size-4 shrink-0 cursor-pointer items-center justify-center rounded text-subtle-foreground transition-colors hover:bg-state-hover hover:text-foreground",
-        // Hidden carets keep their slot, so the row does not jitter as the
-        // ends come in and out of reach.
         !shown && "invisible",
       )}
     >
@@ -162,8 +133,6 @@ export function UsedByList({
       return;
     }
     sync();
-    // The viewport resizes with the card; the row inside it resizes with the
-    // items. Either changes what is left to scroll to.
     const observer = new ResizeObserver(sync);
     observer.observe(viewport);
     const row = viewport.firstElementChild;
@@ -197,15 +166,9 @@ export function UsedByList({
       ) : null}
       <div
         ref={viewportRef}
-        // Focusable only while there is something to scroll, so a row that
-        // fits adds no tab stop. Focus makes it arrow-key scrollable.
         {...(scrollable
           ? { tabIndex: 0, role: "group", "aria-label": "Used by" }
           : {})}
-        // A focused scroll container scrolls itself on arrow keys, but the
-        // carousel above also steers on them and would pan the whole slide
-        // out from under the row. Keep horizontal arrows here; the native
-        // scroll still happens because nothing calls preventDefault.
         onKeyDown={(event) => {
           if (
             scrollable &&
@@ -214,9 +177,6 @@ export function UsedByList({
             event.stopPropagation();
           }
         }}
-        // The shared chip-bar treatment: hidden scrollbar plus an edge fade
-        // on whichever side has overflow, so a cut entry reads as "more this
-        // way" rather than a torn glyph beside the caret.
         className={cn(
           "min-w-0 flex-1 overflow-x-auto focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           SCROLLBAR_HIDDEN_CLASS,

@@ -1,20 +1,6 @@
 import type { PostHog } from "posthog-js";
 import type { CtaPlacement } from "./site";
 
-/**
- * PostHog wiring for the landing page.
- *
- * Autocapture is off; the page emits only the explicit events below. UTM
- * parameters and the referrer are captured automatically by posthog-js on
- * `$pageview` and persisted as initial person properties, which is what links
- * ad campaigns to the download/install funnel.
- *
- * posthog-js is loaded lazily so it stays out of the critical-path bundle of
- * the ad landing page. Events fired before it finishes loading are queued and
- * flushed on init. Everything is a no-op unless VITE_POSTHOG_KEY is set at
- * build time, so local dev and forks ship with analytics disabled by default.
- */
-
 type LandingEvent =
   | {
       name: "landing_github_clicked";
@@ -35,16 +21,28 @@ type LandingEvent =
   | {
       name: "landing_email_subscribed";
       properties: { placement: CtaPlacement };
+    }
+  | {
+      name: "marketplace_page_viewed";
+      properties: {
+        category?: string;
+        sort: "featured" | "recently-added" | "most-installed";
+        author?: string;
+      };
+    }
+  | {
+      name: "marketplace_plugin_detail_viewed";
+      properties: { plugin_id: string };
+    }
+  | {
+      name: "marketplace_install_command_copied";
+      properties: { plugin_id: string };
     };
 
 let client: PostHog | null = null;
 let loading = false;
 const pendingEvents: LandingEvent[] = [];
 
-/**
- * Load and initialize PostHog in the browser. Safe to call repeatedly; does
- * nothing during prerendering or when no key is configured.
- */
 export function initAnalytics(): void {
   if (loading || typeof window === "undefined") {
     return;
@@ -54,11 +52,9 @@ export function initAnalytics(): void {
     return;
   }
   loading = true;
-  // Lazy import keeps posthog-js out of the landing page's main bundle.
   void import("posthog-js").then(({ default: posthog }) => {
     posthog.init(key, {
-      api_host:
-        import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com",
+      api_host: import.meta.env.VITE_POSTHOG_HOST ?? "https://us.i.posthog.com",
       autocapture: false,
       capture_pageview: true,
       capture_pageleave: true,

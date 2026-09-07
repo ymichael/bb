@@ -2,13 +2,11 @@ import {
   Suspense,
   useCallback,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-// Route views render icons outside the shell's core set. Importing the
-// extended registry here ships it as a static dependency of this route chunk,
-// so those icons never flash blank waiting for an on-demand load.
+import { Navigate, useLocation, useNavigate } from "react-router-dom";
 import "@bb/shared-ui/icon-extended";
 import { useMutation } from "@tanstack/react-query";
 import { buildPluginEditThreadPrompt } from "@bb/shared-ui/resource-edit-prompt";
@@ -46,9 +44,12 @@ import {
   type PluginListItem,
 } from "@/hooks/queries/plugin-settings-queries";
 import { useLocalOpenTargets } from "@/hooks/useLocalOpenTargets";
+import { pluginAdminErrorMessage } from "@/lib/plugin-admin-error";
 import {
   TOOLS_REGISTRY_SKILLS_ROUTE_PATH,
   TOOLS_SKILLS_ROUTE_PATH,
+  getPluginDetailRoutePath,
+  getPluginsRoutePath,
   getRootComposeRoutePath,
 } from "@/lib/route-paths";
 import {
@@ -58,6 +59,11 @@ import {
 } from "@/components/tools/tools-navigation";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { SkillsLibrary } from "@/components/tools/SkillsLibrary";
+import { PluginIcon } from "@/components/plugin/PluginIcon";
+import { pluginToast } from "@/components/plugin/PluginNotificationDescription";
+import { SecondaryPanelLayout } from "@/components/secondary-panel/SecondaryPanelLayout";
+import { ThreadSecondaryPanel } from "@/components/secondary-panel/ThreadSecondaryPanel";
+import type { SecondaryPanelRenderableTab } from "@/components/secondary-panel/secondaryPanelTab";
 
 function ToolsBodyFallback() {
   return (
@@ -88,10 +94,6 @@ function ToolsScrollPage({
     belowOverflow,
   } = useScrollOverflowState<HTMLDivElement>({ measureOverflow: true });
   if (fillViewport) {
-    // The child owns the only scrollable region (a ResourceCollectionViewport),
-    // so this page must NOT constrain its width: the scroller has to span the
-    // whole pane for the wheel to work from the gutters, and each band inside
-    // it centers itself with TOOLS_PAGE_BAND_CLASSES instead.
     return (
       <div className="box-border h-full w-full pb-4 pt-3 md:pt-4">
         {children}
@@ -128,12 +130,12 @@ function ToolsScrollPage({
 
 function ToolsSectionBody({
   activeSection,
-  pluginId,
   pathname,
+  onOpenPlugin,
 }: {
   activeSection: ToolsSectionId;
-  pluginId: string | undefined;
   pathname: string;
+  onOpenPlugin: (pluginId: string, trigger: HTMLButtonElement) => void;
 }) {
   if (activeSection === "skills") {
     const isCollection =
@@ -145,26 +147,29 @@ function ToolsSectionBody({
       </ToolsScrollPage>
     );
   }
-  return <PluginsToolView pluginId={pluginId} />;
+  return <PluginsToolView onOpenPlugin={onOpenPlugin} />;
 }
 
-function PluginsToolView({ pluginId }: { pluginId: string | undefined }) {
-  return pluginId === undefined ? (
+function PluginsToolView({
+  onOpenPlugin,
+}: {
+  onOpenPlugin: (pluginId: string, trigger: HTMLButtonElement) => void;
+}) {
+  return (
     <ToolsScrollPage fillViewport>
-      <PluginsOverview />
+      <PluginsOverview onOpenPlugin={onOpenPlugin} />
     </ToolsScrollPage>
-  ) : (
-    <PluginDetailToolView pluginId={pluginId} />
   );
 }
 
 function PluginDetailToolView({ pluginId }: { pluginId: string }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [deleteTarget, setDeleteTarget] = useState<PluginListItem | null>(null);
   const [installTarget, setInstallTarget] =
     useState<PluginCatalogSearchEntry | null>(null);
   const listQuery = usePluginList({ enabled: true });
-  const catalogQuery = usePluginCatalogSearch(pluginId, { enabled: true });
+  const catalogQuery = usePluginCatalogSearch("", { enabled: true });
   const plugins = useMemo(
     () => listQuery.data?.plugins ?? [],
     [listQuery.data],
@@ -178,6 +183,7 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
     ),
   });
   const pluginToggle = useMutation({
+    meta: { showErrorToast: false },
     mutationFn: async (plugin: PluginListItem) => {
       const action = plugin.enabled ? "disable" : "enable";
       try {
@@ -192,32 +198,35 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
     },
   });
   const pluginDelete = useMutation({
-    mutationFn: async (plugin: PluginListItem) => {
-      try {
-        await removePlugin(fetch, plugin.id);
-      } catch {
-        throw new Error("Failed to delete plugin");
-      }
-    },
+    meta: { showErrorToast: false },
+    mutationFn: (plugin: PluginListItem) => removePlugin(fetch, plugin.id),
     onSuccess: (_data, deletedPlugin) => {
-      appToast.success(
-        pluginIsLocalSource(deletedPlugin)
-          ? "Plugin removed from bb"
-          : "Plugin uninstalled",
+      const isLocal = pluginIsLocalSource(deletedPlugin);
+      pluginToast.success(
+        isLocal ? "Plugin removed from bb" : "Plugin uninstalled",
+        deletedPlugin,
+        "catalog",
       );
       setDeleteTarget(null);
       navigate(getToolsOwnedCollectionRoutePath("plugins"));
       return listQuery.refetch();
     },
-    onError: (error) => {
-      appToast.error(error instanceof Error ? error.message : String(error));
+    onError: (error, plugin) => {
+      const isLocal = pluginIsLocalSource(plugin);
+      pluginToast.error(
+        isLocal ? "Plugin removal failed" : "Plugin uninstall failed",
+        plugin,
+        "installed",
+        pluginAdminErrorMessage(error),
+      );
     },
   });
   const isLoading = listQuery.isFetching && listQuery.data === undefined;
   const selectedPlugin =
     plugins.find((plugin) => plugin.id === pluginId) ?? null;
   const selectedCatalogEntry =
-    catalogQuery.data?.find((entry) => entry.pluginId === pluginId) ?? null;
+    catalogQuery.data?.entries.find((entry) => entry.pluginId === pluginId) ??
+    null;
   useResourceRouteLabel(
     selectedPlugin?.name ??
       selectedPlugin?.id ??
@@ -255,6 +264,15 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
     },
     [canOpenPreferredDirectoryTarget, openPathInPreferredDirectoryTarget],
   );
+  const handleOpenCatalogPlugin = useCallback(
+    (nextPluginId: string) => {
+      navigate({
+        pathname: getPluginDetailRoutePath({ pluginId: nextPluginId }),
+        search: location.search,
+      });
+    },
+    [location.search, navigate],
+  );
 
   let detailContent: ReactNode;
   if (listQuery.isError) {
@@ -287,6 +305,18 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
         onEdit={handleEditPlugin}
         onOpenSource={handleOpenPluginSource}
         onDelete={setDeleteTarget}
+        catalogEntry={selectedCatalogEntry ?? undefined}
+        catalogEntries={catalogQuery.data?.entries ?? []}
+        onOpenPlugin={handleOpenCatalogPlugin}
+      />
+    );
+  } else if (selectedCatalogEntry !== null && !selectedCatalogEntry.installed) {
+    detailContent = (
+      <CatalogPluginDetail
+        entry={selectedCatalogEntry}
+        onInstall={setInstallTarget}
+        catalogEntries={catalogQuery.data?.entries ?? []}
+        onOpenPlugin={handleOpenCatalogPlugin}
       />
     );
   } else if (catalogQuery.isError) {
@@ -306,13 +336,6 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
         message="Loading plugin"
         layout="detail"
         maxWidthClassName="max-w-5xl"
-      />
-    );
-  } else if (selectedCatalogEntry !== null && !selectedCatalogEntry.installed) {
-    detailContent = (
-      <CatalogPluginDetail
-        entry={selectedCatalogEntry}
-        onInstall={setInstallTarget}
       />
     );
   } else if (selectedCatalogEntry?.installed) {
@@ -337,9 +360,6 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
   }
 
   return (
-    // The priority notice sits outside the scroll page so runtime conditions
-    // and acquisition blockers share the pane-wide alignment and stay with the
-    // controls that resolve them.
     <div className="flex h-full min-h-0 flex-col">
       {selectedPlugin !== null ? (
         <PluginDetailBanners plugin={selectedPlugin} />
@@ -378,6 +398,7 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
                 : {
                     entryId: installTarget.entryId,
                     marketplace: installTarget.marketplace,
+                    pluginId: installTarget.pluginId,
                     publisherLabel: installTarget.publisherLabel,
                     displayName: installTarget.displayName,
                     icon: installTarget.icon,
@@ -397,45 +418,177 @@ function PluginDetailToolView({ pluginId }: { pluginId: string }) {
   );
 }
 
-/**
- * The Extensions detail page, rendered from an explicit plugin id.
- *
- * A split pane cannot read the id from `useParams`: only the focused pane
- * owns the URL, so an unfocused plugin-detail pane would otherwise show
- * whatever plugin the focused pane happens to name.
- */
 export function PluginDetailPaneView({ pluginId }: { pluginId: string }) {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
       <div className="min-h-0 flex-1 overflow-hidden">
         <Suspense fallback={<ToolsBodyFallback />}>
-          <PluginsToolView pluginId={pluginId} />
+          <PluginDetailToolView pluginId={pluginId} />
         </Suspense>
       </div>
     </div>
   );
 }
 
-/**
- * `pluginId` must come from the caller: every mount of this view sits under
- * a `path="*"` route (or a paramless one), so `useParams` never carries the
- * plugin-detail id — `SplitWorkspaceRoute` derives it from the URL itself.
- */
 export function ToolsView({ pluginId }: { pluginId?: string } = {}) {
   const location = useLocation();
+  const navigate = useNavigate();
   const activeSection = resolveToolsSection(location.pathname);
+  const focusReturnRef = useRef<HTMLButtonElement | null>(null);
+  const [isPluginDetailFullPage, setIsPluginDetailFullPage] = useState(false);
+  const catalogQuery = usePluginCatalogSearch("", {
+    enabled: activeSection === "plugins",
+  });
+  const listQuery = usePluginList({ enabled: activeSection === "plugins" });
+  const isPanelOpen = activeSection === "plugins" && pluginId !== undefined;
+
+  const openPlugin = useCallback(
+    (nextPluginId: string, trigger: HTMLButtonElement) => {
+      focusReturnRef.current = trigger;
+      navigate({
+        pathname: getPluginDetailRoutePath({ pluginId: nextPluginId }),
+        search: location.search,
+      });
+    },
+    [location.search, navigate],
+  );
+  const closePanel = useCallback(() => {
+    setIsPluginDetailFullPage(false);
+    navigate({
+      pathname: getPluginsRoutePath(),
+      search: location.search,
+    });
+    const focusTarget = focusReturnRef.current;
+    window.requestAnimationFrame(() => {
+      if (focusTarget?.isConnected) focusTarget.focus({ preventScroll: true });
+    });
+  }, [location.search, navigate]);
+  const catalogEntry = catalogQuery.data?.entries.find(
+    (entry) => entry.pluginId === pluginId,
+  );
+  const installedPlugin = listQuery.data?.plugins.find(
+    (entry) => entry.id === pluginId,
+  );
+  const panelLabel =
+    catalogEntry?.displayName ??
+    installedPlugin?.name ??
+    installedPlugin?.id ??
+    pluginId ??
+    "Plugin";
+  const panelTab = useMemo<SecondaryPanelRenderableTab | null>(() => {
+    if (pluginId === undefined) return null;
+    return {
+      contentFillsRegion: true,
+      label: panelLabel,
+      leadingVisual: (
+        <PluginIcon
+          pluginId={pluginId}
+          icon={catalogEntry?.icon ?? installedPlugin?.icon ?? null}
+          compactIconUrl={installedPlugin?.compactIconUrl}
+          className="size-3.5"
+        />
+      ),
+      onClose: closePanel,
+      onSelect: () => undefined,
+      renderContent: () => <PluginDetailToolView pluginId={pluginId} />,
+      statusLabel: null,
+      tab: {
+        id: `marketplace-plugin:${pluginId}`,
+        kind: "marketplace-plugin-detail",
+      },
+    };
+  }, [
+    catalogEntry?.icon,
+    closePanel,
+    installedPlugin?.compactIconUrl,
+    installedPlugin?.icon,
+    panelLabel,
+    pluginId,
+  ]);
+  const panelTabs = useMemo<readonly SecondaryPanelRenderableTab[]>(
+    () => (panelTab === null ? [] : [panelTab]),
+    [panelTab],
+  );
+  const mainContent = (
+    <div className="min-h-0 flex-1 overflow-hidden">
+      <Suspense fallback={<ToolsBodyFallback />}>
+        <ToolsSectionBody
+          activeSection={activeSection}
+          pathname={location.pathname}
+          onOpenPlugin={openPlugin}
+        />
+      </Suspense>
+    </div>
+  );
+  const renderPanel = useCallback(
+    ({
+      presentation,
+      isMainCollapsed,
+      onToggleMainCollapse,
+      resizablePanelId,
+    }: {
+      presentation: "inline" | "drawer";
+      isMainCollapsed: boolean;
+      onToggleMainCollapse: () => void;
+      resizablePanelId?: string;
+    }) => (
+      <ThreadSecondaryPanel
+        activeTab={panelTab?.tab ?? null}
+        canUseGitUi={false}
+        metadataContent={null}
+        tabs={panelTabs}
+        fixedTabs={[]}
+        onTabReorder={() => undefined}
+        isOpen={isPanelOpen}
+        showConversationCollapseControl
+        showNewTabButton={false}
+        onPanelFocus={() => undefined}
+        onCollapse={closePanel}
+        onClose={closePanel}
+        onOpenNewTab={() => undefined}
+        isConversationCollapsed={isMainCollapsed}
+        onToggleConversationCollapse={onToggleMainCollapse}
+        renderAsDrawer={presentation === "drawer"}
+        resizablePanelId={resizablePanelId}
+      />
+    ),
+    [closePanel, isPanelOpen, panelTab?.tab, panelTabs],
+  );
+
+  if (
+    activeSection === "plugins" &&
+    pluginId !== undefined &&
+    new URLSearchParams(location.search).get("view") === "installed"
+  ) {
+    return (
+      <Navigate
+        replace
+        to={`${getPluginDetailRoutePath({ pluginId, view: "installed" })}${location.hash}`}
+      />
+    );
+  }
 
   return (
     <div className="-mx-4 -mb-4 -mt-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:-mx-5 md:-mb-5 md:-mt-5">
-      <div className="min-h-0 flex-1 overflow-hidden">
-        <Suspense fallback={<ToolsBodyFallback />}>
-          <ToolsSectionBody
-            activeSection={activeSection}
-            pluginId={pluginId}
-            pathname={location.pathname}
-          />
-        </Suspense>
-      </div>
+      <SecondaryPanelLayout
+        open={isPanelOpen}
+        onToggle={isPanelOpen ? closePanel : () => undefined}
+        onClose={closePanel}
+        panelGroupKey="extensions-plugin-details"
+        resetKey="extensions-plugin-details"
+        contentKey={pluginId ?? "extensions-plugins"}
+        drawerLabel="Plugin details"
+        drawerFallback={<ToolsBodyFallback />}
+        mainPanelId="extensions-main-panel"
+        main={mainContent}
+        collapse={{
+          active: isPluginDetailFullPage,
+          onToggle: () => setIsPluginDetailFullPage((current) => !current),
+        }}
+        renderPanel={renderPanel}
+        composerHost={null}
+        compactPresentation="full"
+      />
     </div>
   );
 }

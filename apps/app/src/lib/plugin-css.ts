@@ -2,10 +2,6 @@ import { useInsertionEffect } from "react";
 
 const CSS_MARKER = "data-bb-plugin-css";
 const CSS_PRELOAD_MARKER = "data-bb-plugin-css-preload";
-// Thread-to-thread navigation remounts the composer: the old slot releases the
-// sheet and the new one retains it 150-1,000 ms later. Detaching in between
-// costs two full style recalcs plus a re-activation, so the final release
-// waits this long before it removes the <link>.
 const CSS_RELEASE_GRACE_MS = 1_500;
 
 interface PluginCssRecord {
@@ -105,18 +101,9 @@ function activateStylesheet(
   link.onload = () => {
     if (record.pendingStylesheet !== link || record.url !== url) {
       link.remove();
-      // Mirror onerror: a link discarded because the URL flipped back while it
-      // was in flight must not stay referenced. linkUrl() reads the href of a
-      // detached node too, so a stale reference makes every later activation
-      // of this URL early-return with the previous sheet still attached.
       if (record.pendingStylesheet === link) record.pendingStylesheet = null;
       return;
     }
-    // A sheet that lands inside the release grace (consumers === 0) is still
-    // adopted: the grace timer detaches it if nobody retains, and a retain in
-    // the meantime reuses it. Discarding it here would leave pendingStylesheet
-    // pointing at a detached link, and every later activation of this URL
-    // would early-return on that stale reference with no sheet attached.
     previous?.remove();
     record.stylesheet = link;
     record.pendingStylesheet = null;
@@ -163,16 +150,6 @@ function deactivateAfterFinalRelease(
   }, CSS_RELEASE_GRACE_MS);
 }
 
-/**
- * Publish the stylesheet URL for the current frontend generation.
- *
- * An inactive bundle warms its immutable response with a low-priority preload
- * and removes that link after it settles. Mounted plugin UI owns a real
- * stylesheet through {@link retainPluginCss}; the final release removes it
- * after a short grace so a remount across navigation reuses the active sheet.
- * A changed URL loads beside the active sheet and replaces it only after the
- * new response succeeds, so a failed live reload leaves the old CSS usable.
- */
 export function applyPluginCss(pluginId: string, url: string | null): void {
   const record = recordFor(pluginId);
   if (url === null) {
@@ -205,7 +182,6 @@ export function applyPluginCss(pluginId: string, url: string | null): void {
   startPreload(pluginId, record, url);
 }
 
-/** Keep one plugin stylesheet active until the returned release is called. */
 export function retainPluginCss(pluginId: string): () => void {
   const record = recordFor(pluginId);
   cancelDeferredDeactivate(record);
@@ -222,7 +198,6 @@ export function retainPluginCss(pluginId: string): () => void {
   };
 }
 
-/** Activate cached plugin CSS before React lays out or paints a scoped slot. */
 export function usePluginCss(pluginId: string | null): void {
   useInsertionEffect(
     () => (pluginId === null ? undefined : retainPluginCss(pluginId)),
@@ -230,7 +205,6 @@ export function usePluginCss(pluginId: string | null): void {
   );
 }
 
-/** Test-only. */
 export function resetPluginCssForTest(): void {
   for (const record of recordsByPluginId.values()) {
     cancelDeferredDeactivate(record);

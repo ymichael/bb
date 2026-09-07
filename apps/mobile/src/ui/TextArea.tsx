@@ -5,7 +5,6 @@ import { useInputFieldProps, type InputFieldOptions } from "./Input";
 
 export interface TextAreaProps extends TextInputProps, InputFieldOptions {}
 
-/** Multi-line text field with the `Input` appearance (min height 60). */
 export const TextArea = forwardRef<TextInput, TextAreaProps>(function TextArea(
   { invalid, editable = true, mono, grouped, className, style, ...props },
   ref,
@@ -24,7 +23,6 @@ export const TextArea = forwardRef<TextInput, TextAreaProps>(function TextArea(
       textAlignVertical="top"
       editable={editable}
       {...field}
-      // The clear button only applies to single-line fields.
       clearButtonMode="never"
       style={[field.style, style]}
       {...props}

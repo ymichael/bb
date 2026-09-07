@@ -87,8 +87,6 @@ describe("useChildThreadPendingAttention", () => {
     ];
     const { result, rerender } = renderAttention(children);
     expect(result.current).toBe(EMPTY_CHILD_THREAD_PENDING_ATTENTION);
-    // ThreadDetailView re-renders constantly; the value it memoizes the prompt
-    // stack on must not change identity when nothing changed.
     rerender({ items: children });
     expect(result.current).toBe(EMPTY_CHILD_THREAD_PENDING_ATTENTION);
     expect(mocks.list).not.toHaveBeenCalled();

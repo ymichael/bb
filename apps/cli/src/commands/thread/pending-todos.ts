@@ -10,14 +10,6 @@ interface FetchThreadPendingTodosArgs {
   threadId: string;
 }
 
-/**
- * Best-effort fetch — returns null if the timeline endpoint is unreachable or
- * fails. Pending TODOs are a context surface, not a primary signal, so a
- * failure here should not break the wrapping command.
- *
- * Uses `summaryOnly=true` so the server skips row generation/serialization;
- * the CLI only consumes `pendingTodos`, not the full timeline.
- */
 export async function fetchThreadPendingTodos(
   args: FetchThreadPendingTodosArgs,
 ): Promise<ThreadTimelinePendingTodos | null> {
@@ -59,12 +51,6 @@ function countTodos(
   return { completed, total: items.length };
 }
 
-/**
- * Prints the pending-TODOs section to stdout. The projection only emits a
- * snapshot during an active turn; once items exist we keep the section
- * visible (showing `M/M done` if every item is completed) until the turn
- * ends — matches the banner UI behavior.
- */
 export function printPendingTodos(
   pendingTodos: ThreadTimelinePendingTodos | null,
 ): void {

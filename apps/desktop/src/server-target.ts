@@ -5,7 +5,6 @@ import { z } from "zod";
 export const SERVER_TARGET_FILE_NAME = "server-target.json";
 export const BUILTIN_SERVER_NAME = "This Mac";
 
-/** The Connect account server the app targets, snapshotted at selection time. */
 export interface ConnectServerRef {
   handle: string;
   name: string;
@@ -32,29 +31,13 @@ interface CreateServerTargetStoreArgs {
 }
 
 export interface ServerTargetStore {
-  /** The selected Connect server, whether or not it is the active target. */
   getConnectServer(): ConnectServerRef | null;
-  /** The custom server URL, whether or not it is the active target. */
   getCustomServerUrl(): string | null;
   getTarget(): DesktopServerTarget;
   load(): Promise<void>;
-  /**
-   * Update the selected Connect server's name/url after an account sync
-   * (matched by handle). Does not change the active target. Returns whether
-   * anything changed.
-   */
   refreshConnectServer(server: ConnectServerRef): Promise<boolean>;
-  /** Select a Connect server and make it the active target. */
   setConnectServer(server: ConnectServerRef): Promise<void>;
-  /**
-   * Set the custom server URL and make it the active target. Passing null
-   * clears the custom entry and re-targets the builtin server.
-   */
   setCustomServerUrl(url: string | null): Promise<void>;
-  /**
-   * Switch the active target. Returns false (no-op) when asked to target
-   * "custom"/"connect" while no such server is set.
-   */
   setTarget(kind: "builtin" | "connect" | "custom"): Promise<boolean>;
 }
 
@@ -68,8 +51,6 @@ const persistedConnectServerSchema = z
 
 const persistedServerTargetSchema = z
   .object({
-    // Absent on files written before connect targets → treated as null at
-    // the load boundary.
     connectServer: persistedConnectServerSchema.nullable().optional(),
     customServerUrl: z.string().min(1).nullable(),
     target: z.enum(["builtin", "connect", "custom"]),
@@ -84,7 +65,6 @@ const defaultFs: ServerTargetFs = {
   writeFile,
 };
 
-/** Trimmed http(s) URL without hash or trailing slash, or null when invalid. */
 export function normalizeCustomServerUrl(rawUrl: string): string | null {
   const trimmed = rawUrl.trim();
   if (trimmed.length === 0) {
@@ -171,8 +151,6 @@ export function createServerTargetStore(
         persisted.customServerUrl === null
           ? null
           : normalizeCustomServerUrl(persisted.customServerUrl);
-      // A custom/connect target without a valid server falls back to builtin
-      // at the load boundary so getTarget() never returns a dangling target.
       if (persisted.target === "custom" && customServerUrl !== null) {
         target = "custom";
       } else if (persisted.target === "connect" && connectServer !== null) {

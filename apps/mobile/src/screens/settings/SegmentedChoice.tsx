@@ -2,10 +2,6 @@ import { View } from "react-native";
 import { Button } from "@/ui";
 import type { SegmentedChoiceProps } from "./segmented-choice-types";
 
-/**
- * A small single-choice control. Android / default: a row of compact
- * buttons (`SegmentedChoice.ios.tsx` renders the native segmented control).
- */
 export function SegmentedChoice<T extends string>({
   options,
   value,

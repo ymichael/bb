@@ -1,6 +1,6 @@
 ---
 name: inline-vis
-description: Emit a sandboxed inline HTML visualization in an assistant message when a workspace .html file should render in-thread. Use after writing or updating a demo/chart/report HTML file the user should see without opening a panel.
+description: "Render a workspace HTML artifact inline in BB chat using the inline-vis directive."
 ---
 
 # Inline HTML visualizations
@@ -32,23 +32,6 @@ block):
   stays literal text.
 - Incomplete streaming syntax stays literal until the closing `}` arrives — emit
   a complete directive in one piece when possible.
-
-## Example turn
-
-1. Write `demo.html` with a simple visualization (inline styles, no remote JS).
-2. Reply with a short caption and the directive:
-
-```text
-Here is the chart:
-
-::inline-vis{file="demo.html"}
-```
-
-For a taller visualization, emit for example:
-
-```text
-::inline-vis{file="demo.html" height="640"}
-```
 
 The bb app replaces the directive with a sandboxed preview. If the plugin is
 disabled or the path is invalid, users see the original directive source or an

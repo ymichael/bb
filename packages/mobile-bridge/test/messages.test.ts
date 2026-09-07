@@ -59,8 +59,6 @@ describe("parsePageToShellMessage", () => {
   });
 
   it("drops a message type an older shell does not know", () => {
-    // A newer page will post kinds this build never learned. The shell has to
-    // ignore them, not crash the WebView screen.
     const parsed = parsePageToShellMessage(
       json({ type: "open-camera", lens: "front" }),
     );
@@ -68,8 +66,6 @@ describe("parsePageToShellMessage", () => {
   });
 
   it("refuses a native screen the shell does not own", () => {
-    // The page names a screen from a closed list. A free-form route string
-    // would let any script on the origin drive the shell's navigator.
     expect(
       parsePageToShellMessage(
         json({ type: "open-native", screen: "/settings/servers" }),
@@ -97,8 +93,6 @@ describe("parsePageToShellMessage", () => {
   });
 
   it("refuses any external link that is not http or https", () => {
-    // The shell hands this straight to the system link opener, and
-    // `z.string().url()` on its own accepts `javascript:` and `data:`.
     for (const url of [
       "javascript:alert(1)",
       "data:text/html,<script>alert(1)</script>",

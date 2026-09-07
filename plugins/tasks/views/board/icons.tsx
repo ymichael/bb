@@ -1,10 +1,6 @@
 import type { TaskPriority, TaskStatus } from "../../shared/contract.js";
 import { cn } from "@bb/shared-ui/lib/utils";
 
-// Linear-style status/priority glyphs from the design mock. Hugeicons has no
-// progress-pie or priority-bars artwork, so these inline the mock's SVGs
-// (same approach as the custom glyphs in components/ui/icon.tsx).
-
 const STATUS_CLASS: Record<TaskStatus, string> = {
   backlog: "text-muted-foreground",
   todo: "text-muted-foreground",

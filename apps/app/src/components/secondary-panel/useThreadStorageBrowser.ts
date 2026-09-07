@@ -1,25 +1,12 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { WorkspaceFile } from "@bb/server-contract";
 import { createRetryingModuleLoader } from "@/lib/plugin-frontend-lazy";
-// Type-only: the runtime edge to `@pierre/trees` is the dynamic `import()`
-// below, so the tree library stays out of the thread route's static closure
-// (bundle-budget.json forbids it there).
 import type { ThreadStorageTreeModel } from "./ThreadStorageFileTree";
 
 const EMPTY_STORAGE_FILES: readonly WorkspaceFile[] = [];
 
 type ThreadStorageFileTreeModule = typeof import("./ThreadStorageFileTree");
 
-/**
- * Loads the tree chunk once and re-tries after a failed fetch, so a flaky
- * network cannot leave the storage browser without a tree for good.
- */
 const loadThreadStorageFileTree =
   createRetryingModuleLoader<ThreadStorageFileTreeModule>(
     () => import("./ThreadStorageFileTree"),
@@ -38,7 +25,6 @@ export interface ThreadStorageBrowserController {
   filteredFiles: readonly WorkspaceFile[];
   isSearchOpen: boolean;
   loadedFiles: readonly WorkspaceFile[];
-  /** `null` until the lazily loaded tree chunk has created the model. */
   model: ThreadStorageTreeModel | null;
   openSearch: () => void;
   searchQuery: string;
@@ -61,21 +47,6 @@ function buildDirectoryPaths(paths: readonly string[]): string[] {
   return Array.from(directoryPaths);
 }
 
-/**
- * Owns the thread storage browser's tree model and related UI state.
- *
- * The tree model is destroyed when this hook's owner unmounts
- * (`model.cleanUp()` unsubscribes the selection listener and destroys the
- * controller — see render/FileTree.ts in pierrecomputer/pierre). The storage
- * tab content unmounts whenever a file tab covers it, so this hook must live
- * in a parent that survives that toggle (e.g., ThreadDetailView), with the
- * model and search state passed down to the presentational browser.
- *
- * The model arrives asynchronously: the tree chunk is imported on demand,
- * and only once there are files to show (with no files the browser
- * renders an empty state and never mounts a tree). `model` is `null` until
- * then and the sync effects below wait for it.
- */
 export function useThreadStorageBrowser({
   files,
   onSelectPath,
@@ -101,10 +72,6 @@ export function useThreadStorageBrowser({
   const filePathSet = useMemo(() => new Set(filePaths), [filePaths]);
   const filePathSetRef = useRef<ReadonlySet<string>>(filePathSet);
   const onSelectPathRef = useRef(onSelectPath);
-  // Pierre tree's item.select() is additive (selectPath, not selectOnlyPath),
-  // so reconciling React state into the tree requires deselect+select pairs
-  // that re-emit onSelectionChange. Suppress those echoes here so they don't
-  // bounce back through onSelectPath and revert the caller's state.
   const isApplyingSelectionRef = useRef(false);
 
   useEffect(() => {
@@ -171,11 +138,10 @@ export function useThreadStorageBrowser({
     const selectedPathIsVisible =
       selectedPath !== null && filePathSet.has(selectedPath);
 
-    const alreadyMatches =
-      selectedPathIsVisible
-        ? currentSelectedPaths.length === 1 &&
-          currentSelectedPaths[0] === selectedPath
-        : currentSelectedPaths.length === 0;
+    const alreadyMatches = selectedPathIsVisible
+      ? currentSelectedPaths.length === 1 &&
+        currentSelectedPaths[0] === selectedPath
+      : currentSelectedPaths.length === 0;
     if (alreadyMatches) return;
 
     isApplyingSelectionRef.current = true;

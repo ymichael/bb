@@ -638,7 +638,7 @@ describe("pending interaction lifecycle", () => {
     });
   });
 
-  it("interrupts resolving interactions when a replacement session reuses the same instance id", async () => {
+  it("preserves pending interactions when the same daemon instance reconnects", async () => {
     await withTestHarness(async (harness) => {
       const { host, session } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-same-instance-reconnect",
@@ -671,14 +671,6 @@ describe("pending interaction lifecycle", () => {
           `Expected interaction registration to succeed: ${created.reason}`,
         );
       }
-      harness.deps.pendingInteractions.resolvePendingInteraction({
-        threadId: thread.id,
-        interactionId: created.interaction.id,
-        resolution: createUserAnswerResolution({
-          freeText: "Use the existing branch.",
-        }),
-      });
-
       const replacementSession = seedSession(harness.deps, host.id);
       await handleHostSessionOpened(harness.deps, {
         activeThreads: [],
@@ -693,9 +685,8 @@ describe("pending interaction lifecycle", () => {
         .where(eq(pendingInteractionTable.id, created.interaction.id))
         .get();
       expect(row).toMatchObject({
-        status: "interrupted",
-        statusReason:
-          "Host daemon disconnected while awaiting user interaction; retry the thread to continue",
+        status: "pending",
+        statusReason: null,
       });
     });
   });
@@ -984,9 +975,6 @@ describe("pending interaction lifecycle", () => {
   });
 
   it("allows a permission grant whose request has nothing to grant", async () => {
-    // A provider can ask about an action it cannot describe as a permission.
-    // The prompt still reaches the user, so the user must still be able to
-    // answer it. Rejecting the empty grant here wedged the thread (#1041).
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-no-grantable",
@@ -1048,10 +1036,6 @@ describe("pending interaction lifecycle", () => {
   });
 
   it("accepts tool-use approvals without a timeline item of their own", async () => {
-    // The ACP bridge raises tool_use for every permission that is neither a
-    // command nor a file change. The provider's own tool call is the timeline
-    // record, so the lifecycle appends no item event for the subject, and a
-    // denial settles it like any other approval.
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
         id: "host-pending-interaction-tool-use",
@@ -1141,7 +1125,6 @@ describe("pending interaction lifecycle", () => {
             interaction: JSON.parse(row.data).interaction,
           }));
 
-      // A permission grant: pending, then resolved with its decision.
       const grant = registerPendingInteraction(
         harness.deps,
         harness.deps.pendingInteractions,
@@ -1213,12 +1196,10 @@ describe("pending interaction lifecycle", () => {
           }),
         },
       ]);
-      // The record keeps the ask, never the live options.
       expect(lifecycleEvents()[0]?.interaction.payload).not.toHaveProperty(
         "availableDecisions",
       );
 
-      // A plugin request rides the same event, thread-scoped, without its data.
       const pending = requestPluginInteraction(harness.deps, {
         threadId: thread.id,
         name: "SENTINEL_FIELD",
@@ -1262,10 +1243,6 @@ describe("pending interaction lifecycle", () => {
     });
   });
 
-  // A command approval's item write follows its lifecycle record in the same
-  // sequence and carries the interaction's turn, environment and provider
-  // thread — on the plain append path (registration) and the transactional
-  // one (completion) alike. `resolving` is transient and writes no item.
   it("writes a command approval's lifecycle record before its item at every status that touches the item", async () => {
     await withTestHarness(async (harness) => {
       const { host } = seedHostSession(harness.deps, {
@@ -1282,8 +1259,6 @@ describe("pending interaction lifecycle", () => {
         projectId: project.id,
         environmentId: environment.id,
       });
-      // The registration also opens the turn; only the interaction's own
-      // writes are under test.
       const writes = () =>
         harness.db
           .select()
@@ -1378,7 +1353,6 @@ describe("pending interaction lifecycle", () => {
           data: { fields: ["SENTINEL_TOKEN"] },
         },
       };
-      // Only a loaded plugin can render the form: the bridge sees the refusal.
       expect(
         registerPendingInteraction(
           harness.deps,
@@ -1401,7 +1375,6 @@ describe("pending interaction lifecycle", () => {
         throw new Error(`Expected registration to succeed: ${created.reason}`);
       }
 
-      // The answer is capped like the form's data, on either answer path.
       const oversized = { blob: "x".repeat(64 * 1024) };
       expect(() =>
         harness.deps.pendingInteractions.respondToInteraction({
@@ -1428,7 +1401,6 @@ describe("pending interaction lifecycle", () => {
         }),
       );
 
-      // Neither an approval decision nor a cancel fits a provider's request.
       expect(() =>
         harness.deps.pendingInteractions.resolvePendingInteraction({
           threadId: thread.id,
@@ -1444,7 +1416,6 @@ describe("pending interaction lifecycle", () => {
         }),
       ).toThrow("stop the turn instead");
 
-      // The form's value travels to the bridge as the request answer.
       const answer = { kind: "request_answer", value: { TOKEN: "sentinel-x" } };
       const responding = harness.deps.pendingInteractions.respondToInteraction({
         threadId: thread.id,
@@ -1469,7 +1440,6 @@ describe("pending interaction lifecycle", () => {
         resolution: answer,
       });
 
-      // The lifecycle record keeps the ask and the fact of an answer only.
       const lifecycle = harness.db
         .select()
         .from(eventTable)

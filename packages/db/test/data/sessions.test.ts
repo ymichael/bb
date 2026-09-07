@@ -123,12 +123,10 @@ describe("sessions", () => {
 
     expect(session2.id).not.toBe(session1.id);
 
-    // Old session should be closed with reason "replaced"
     expect(getLatestSessionForHost(db, { hostId: host.id })?.id).toBe(
       session2.id,
     );
 
-    // Verify session1 is closed
     const old = db
       .select()
       .from(hostDaemonSessions)

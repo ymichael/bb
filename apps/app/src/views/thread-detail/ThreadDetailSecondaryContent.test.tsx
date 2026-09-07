@@ -188,12 +188,6 @@ const hostedPaneRegistration = {
   },
 };
 
-/**
- * Mirrors ThreadDetailPromptArea's host construction over the real draft
- * store: an identity-stable host publishing into the pane scope from the
- * footer slot, plus an actual draft consumer, exactly where the composer
- * sits in the app tree.
- */
 function FooterComposerHostPublisher({ threadId }: { threadId: string }) {
   const promptDraft = usePromptDraftStorage({
     kind: "thread",
@@ -372,8 +366,6 @@ afterEach(() => {
   window.localStorage.clear();
 });
 
-// The secondary panel chunk loads lazily, so the panel appears one tick
-// after the first render.
 describe("ThreadDetailSecondaryContent", () => {
   it("keeps the standalone panel hide control in the panel toolbar", async () => {
     renderThreadDetail(false);
@@ -512,8 +504,6 @@ describe("ThreadDetailSecondaryContent", () => {
       </MemoryRouter>,
     );
 
-    // Navigation swaps content identity but must not remount the physical
-    // panel host: same DOM nodes for the group and the realized side panel.
     expect(screen.getByTestId("panel-group")).toBe(panelGroup);
     expect(screen.getByTestId("inline-secondary-panel")).toBe(sidePanel);
     expect(
@@ -561,9 +551,6 @@ describe("ThreadDetailSecondaryContent", () => {
     });
   });
 
-  // Regression probe for the 19.6s mobile keystroke hang: the body holds the
-  // published composer host, so a per-keystroke host identity re-rendered
-  // SecondaryPanelLayout and the timeline pane per character.
   it("does not re-render the timeline pane while the composer draft changes", async () => {
     const props = createProps();
     props.footer = <FooterComposerHostPublisher threadId="thread-1" />;
@@ -577,12 +564,10 @@ describe("ThreadDetailSecondaryContent", () => {
       </MemoryRouter>,
     );
 
-    // Let the lazy secondary panel and the host publication settle first.
     await screen.findByTestId("inline-secondary-panel", {}, { timeout: 5_000 });
     expect(screen.getByTestId("footer-composer-draft").textContent).toBe("");
     const paneRendersAfterMount = timelinePaneRenders.mock.calls.length;
 
-    // Keystrokes hit the same store the composer writes through.
     const accessor = getPromptDraftAccessor({
       kind: "thread",
       projectId: "proj-test",

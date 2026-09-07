@@ -17,9 +17,7 @@ type CreateViaPromptKind = "skill" | "plugin";
 interface Example {
   label: string;
   icon: IconName;
-  /** Completes the "Create a new bb {kind} …" prompt; also shown on the card. */
   description: string;
-  /** Full prompt override when the description alone is not the brief. */
   prompt?: string;
 }
 
@@ -28,9 +26,6 @@ interface KindConfig {
   examples: readonly Example[];
 }
 
-// The description completes the prompt prefix, so each card both teaches and
-// seeds the composer. Skills are standard Agent Skills whose bb edge is being
-// cross-provider; automations run scripts and can escalate to threads.
 const CONFIG: Record<CreateViaPromptKind, KindConfig> = {
   skill: {
     prefix: CREATE_SKILL_PROMPT,
@@ -57,9 +52,6 @@ const CONFIG: Record<CreateViaPromptKind, KindConfig> = {
   },
   plugin: {
     prefix: CREATE_PLUGIN_PROMPT,
-    // The Browse hero's use-case archetypes verbatim, so the New plugin menu
-    // and the Browse page can never show two divergent example lists. The
-    // one-line hook is the card text; the full brief rides in `prompt`.
     examples: BROWSE_ARCHETYPES.map((archetype) => ({
       label: archetype.title,
       icon: archetype.icon,
@@ -73,15 +65,9 @@ interface CreateExample {
   label: string;
   icon: IconName;
   description: string;
-  /** Full composer prompt seeded when this example is picked. */
   prompt: string;
 }
 
-/**
- * The shared create-via-prompt content for a kind: the examples with their
- * full seeded prompts. Surfaces render it how they like (cards, chips) without
- * duplicating the copy.
- */
 export function getCreateExamples(kind: CreateViaPromptKind): {
   examples: CreateExample[];
 } {
@@ -98,18 +84,11 @@ export function getCreateExamples(kind: CreateViaPromptKind): {
 
 interface CreateWithTemplatesButtonProps {
   kind: CreateViaPromptKind;
-  /** Main-button text, e.g. "New automation" or "New bb skill". */
   label: string;
   menuActions?: readonly ResourceCreateMenuAction[];
-  /** Blank when called with no argument; seeded when given an example prompt. */
   onCreate: (prompt?: string) => void;
 }
 
-/**
- * Split (combo) button: the left half opens the composer with the kind's base
- * prompt; the right half opens examples that seed a more specific prompt.
- * Shared by the resource library toolbars.
- */
 export function CreateWithTemplatesButton({
   kind,
   label,
@@ -117,9 +96,6 @@ export function CreateWithTemplatesButton({
   onCreate,
 }: CreateWithTemplatesButtonProps) {
   const { examples } = getCreateExamples(kind);
-  // Plugins carry a second tier: the per-capability briefs the Browse page
-  // shows under "Explore plugin capabilities". The menu mirrors both tiers so
-  // it never under-promises what the examples surface offers.
   const templateGroups: readonly ResourceCreateTemplateGroup[] | undefined =
     kind === "plugin"
       ? [

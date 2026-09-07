@@ -157,9 +157,6 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
     serveRawFilesystemHtmlFile(deps, context.req.param("id"), query.path),
   );
 
-  // Host file primitives (plugin design §4.1): read/write/list against a
-  // connected host. Omitted hostId resolves to the primary (local) host here,
-  // once, at the product boundary — daemon commands always get explicit values.
   const fileRoutes = publicApiRoutes.files;
   const previewRoutes = publicApiRoutes.filePreviews;
   const previewLeases = new Map<string, FilePreviewLease>();
@@ -199,10 +196,6 @@ export function registerFileRoutes(app: Hono, deps: AppDeps): void {
     });
   }
 
-  // A host file write may land inside an environment checkout. The daemon
-  // watcher event for it arrives asynchronously, and only when someone is
-  // subscribed, so drop the host's cached workspace reads before responding
-  // (whether the write succeeded or failed midway).
   const runHostFileMutation = async <T>(
     hostId: string,
     run: () => Promise<T>,

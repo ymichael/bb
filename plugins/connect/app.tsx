@@ -1,12 +1,3 @@
-// bb-plugin-connect — the frontend bundle.
-//
-// One settingsSection "Remote access", driven by the `status` rpc and live
-// `connect` realtime pushes. Four states, each matched to the redesign mock:
-// not paired (promise + two numbered steps + auto-submitting code field),
-// pairing (inline typed-code errors), connected (URL hero chip +
-// mobile-app pairing + shared ports + isolated disconnect), reconnecting
-// (amber wash + dimmed body). Disconnect confirms in a dialog, then lands on
-// the unpaired card with a transient receipt.
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   definePluginApp,
@@ -38,14 +29,8 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-// Danger-quiet: a ghost button that carries the destructive tone (Disconnect,
-// Revoke). Isolated from benign quiet buttons so it never looks like a peer.
 const DANGER_QUIET_CLASS =
   "text-destructive-text hover:text-destructive-text hover:bg-surface-destructive";
-
-// ---------------------------------------------------------------------------
-// Typed pair errors → human copy (never raw RPC text; see rpc.ts).
-// ---------------------------------------------------------------------------
 
 type PairErrorCode =
   | "invalid_code"
@@ -92,13 +77,8 @@ function toPairErrorCode(error: unknown): PairErrorCode {
   ) {
     return message;
   }
-  // Anything unexpected reads as a bad code rather than leaking wire text.
   return "invalid_code";
 }
-
-// ---------------------------------------------------------------------------
-// Status parsing + small formatters.
-// ---------------------------------------------------------------------------
 
 function asStatus(payload: unknown): ConnectStatus | null {
   if (payload === null || typeof payload !== "object") return null;
@@ -177,7 +157,6 @@ function asStatus(payload: unknown): ConnectStatus | null {
   };
 }
 
-/** "5:33 PM" when the timestamp is today, else "Jul 6" — never seconds. */
 function formatSince(sinceMs: number): string {
   const at = new Date(sinceMs);
   const now = new Date();
@@ -190,14 +169,12 @@ function formatSince(sinceMs: number): string {
     : at.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-/** Retry countdown from the backoff timer; computed at render (no live tick). */
 function retryHint(nextRetryAt: number | null): string {
   if (nextRetryAt === null) return "retrying automatically";
   const seconds = Math.max(0, Math.round((nextRetryAt - Date.now()) / 1000));
   return seconds > 0 ? `retrying in ${seconds}s` : "retrying…";
 }
 
-/** Host-only display of a URL (drop the scheme); the raw string if unparsable. */
 function hostOf(url: string): string {
   try {
     return new URL(url).host;
@@ -206,12 +183,6 @@ function hostOf(url: string): string {
   }
 }
 
-/**
- * Normalize a pasted/typed connect code to the canonical `XXXX-XXXX` shape:
- * uppercase, strip whitespace and any dash variant, group 4-4. Partial input
- * returns a partial canonical value (used both for the field display and the
- * complete-code check that drives auto-submit).
- */
 function formatConnectCode(raw: string): string {
   const cleaned = raw
     .toUpperCase()
@@ -226,17 +197,12 @@ function isCompleteCode(formatted: string): boolean {
   return /^[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(formatted);
 }
 
-// ---------------------------------------------------------------------------
-// Shared bits.
-// ---------------------------------------------------------------------------
-
 function StatusDot({ tone }: { tone: "ok" | "warn" | "muted" }) {
   return (
     <span
       aria-hidden="true"
       className={cn(
         "size-2 shrink-0 rounded-full",
-        // Soft halo mixed from the tone anchor so it survives custom palettes.
         tone === "ok" &&
           "bg-success shadow-[0_0_0_3px_color-mix(in_oklab,var(--success)_18%,transparent)]",
         tone === "warn" &&
@@ -295,12 +261,6 @@ function QrCodeImage({
   );
 }
 
-/**
- * The URL hero chip: recessed, single-line with ellipsis (never wraps
- * mid-address), Copy + optional Open attached. Copy has a real failure path —
- * on clipboard rejection it selects the URL text and flips to "Press ⌘C"
- * rather than failing silently.
- */
 function UrlHero({ url, showOpen }: { url: string; showOpen: boolean }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">(
     "idle",
@@ -333,7 +293,6 @@ function UrlHero({ url, showOpen }: { url: string; showOpen: boolean }) {
         timerRef.current = setTimeout(() => setCopyState("idle"), 1500);
       },
       () => {
-        // Locked-down / insecure contexts reject: keep the user unblocked.
         selectUrl();
         setCopyState("manual");
       },
@@ -394,9 +353,7 @@ function QuietCopyButton({ text, label }: { text: string; label: string }) {
         if (timerRef.current !== null) clearTimeout(timerRef.current);
         timerRef.current = setTimeout(() => setCopied(false), 1500);
       },
-      () => {
-        // Quiet copy has no inline hint; leave the label unchanged.
-      },
+      () => {},
     );
   }, [text]);
   return (
@@ -413,10 +370,6 @@ function QuietCopyButton({ text, label }: { text: string; label: string }) {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Pairing (paste-a-code) form — used unpaired and for re-pair.
-// ---------------------------------------------------------------------------
-
 function PairForm({
   dashboardUrl,
   onPaired,
@@ -428,8 +381,6 @@ function PairForm({
   const [code, setCode] = useState("");
   const [pending, setPending] = useState(false);
   const [errorCode, setErrorCode] = useState<PairErrorCode | null>(null);
-  // The last code we fired so a completed value auto-submits once, not on
-  // every keystroke — and a rejected code doesn't loop until it's edited.
   const submittedRef = useRef<string | null>(null);
 
   const submit = useCallback(
@@ -449,7 +400,6 @@ function PairForm({
         },
         (rpcError: unknown) => {
           setPending(false);
-          // Inline, never a toast: it must survive a trip to the dashboard.
           setErrorCode(toPairErrorCode(rpcError));
         },
       );
@@ -462,7 +412,6 @@ function PairForm({
       const formatted = formatConnectCode(raw);
       setCode(formatted);
       if (errorCode !== null) setErrorCode(null);
-      // "It connects automatically": fire as soon as a fresh 4-4 lands.
       if (isCompleteCode(formatted) && formatted !== submittedRef.current) {
         submit(formatted);
       }
@@ -520,25 +469,14 @@ function PairForm({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Add mobile device: mint a one-time machine code for the bb mobile app.
-//
-// The phone enrolls as a connect *machine* (its own revocable credential, the
-// desktop-app model), so this reuses the `createMachineCode` rpc. The QR
-// carries the pairing payload (code + server + apex + expiry) and the code is
-// shown as copyable text for manual entry. Mirrors `bb connect machine-code`.
-// ---------------------------------------------------------------------------
-
 type MachineCodeErrorCode = "machine_limit" | "network" | "not_paired";
 
 function toMachineCodeErrorCode(error: unknown): MachineCodeErrorCode {
   const message = errorText(error);
   if (message === "machine_limit" || message === "not_paired") return message;
-  // Unknown failures read as transient; the user can retry.
   return "network";
 }
 
-/** "9:58" — minutes:seconds left on a code, clamped at 0:00. */
 function formatCountdown(remainingMs: number): string {
   const totalSeconds = Math.max(0, Math.floor(remainingMs / 1000));
   const minutes = Math.floor(totalSeconds / 60);
@@ -546,7 +484,6 @@ function formatCountdown(remainingMs: number): string {
   return `${minutes}:${seconds.toString().padStart(2, "0")}`;
 }
 
-/** Ticks once a second while a deadline is set; returns ms left (or null). */
 function useCountdown(expiresAt: number | null): number | null {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -635,15 +572,6 @@ function MobilePairingCard({
   );
 }
 
-/**
- * Mobile pairing ships behind the `mobileApp` experiment (Settings →
- * Experiments) until the app is generally available. The backend owns the
- * gate (the `mobilePairing` rpc, also honoured by `bb connect machine-code`);
- * this hook only decides whether to render the section. False while the
- * answer is unknown or on error, so the panel never flashes the section for
- * an install that has it off. `createMachineCode` itself is not gated: the
- * desktop app and the "Add machine" dialog mint machine codes through it.
- */
 function useMobilePairingEnabled(): boolean {
   const rpc = useRpc<typeof connectRpcContract>();
   const [enabled, setEnabled] = useState(false);
@@ -738,7 +666,6 @@ function AddMobileDeviceSectionContent({
 
       {payload !== null ? (
         <MobilePairingCard
-          // A renewed code is a fresh card: restart its clock from now.
           key={payload.code}
           payload={payload}
           dashboardHost={dashboardHost}
@@ -776,17 +703,12 @@ function AddMobileDeviceSectionContent({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Shared ports subsection (restyled into the section grammar).
-// ---------------------------------------------------------------------------
-
 interface ShareHostGroup {
   hostId: string;
   hostName: string;
   shares: ConnectStatus["shares"];
 }
 
-/** Group shares under their host, preserving the backend's host/port order. */
 function groupSharesByHost(shares: ConnectStatus["shares"]): ShareHostGroup[] {
   const groups: ShareHostGroup[] = [];
   const byHostId = new Map<string, ShareHostGroup>();
@@ -885,9 +807,6 @@ function SharedPortsSection({
       {shares.length > 0 ? (
         <div className="space-y-2.5">
           {groupSharesByHost(shares).map((group) => {
-            // A host whose shares all lack a URL is unreachable right now
-            // (offline daemon, removed host, …) — the whole group reads
-            // degraded, but Revoke stays live since removal works offline.
             const hostDown = group.shares.every((share) => share.url === "");
             return (
               <div key={group.hostId} className="space-y-1">
@@ -1013,10 +932,6 @@ function SharedPortsSection({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Disconnect confirm dialog (names the concrete URL + pending state).
-// ---------------------------------------------------------------------------
-
 function DisconnectDialog({
   open,
   onOpenChange,
@@ -1073,10 +988,6 @@ function DisconnectDialog({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Not paired (p1).
-// ---------------------------------------------------------------------------
-
 function NotPairedContent({
   dashboardUrl,
   onPaired,
@@ -1129,10 +1040,6 @@ function NotPairedContent({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Connected (p4) + reconnecting (p5).
-// ---------------------------------------------------------------------------
 
 function ConnectedContent({
   status,
@@ -1276,8 +1183,7 @@ function ReconnectingContent({
 
   return (
     <div className="space-y-4">
-      {/* Amber wash bleeds to the card edges — the whole card changes
-          temperature without moving the layout (no jump when it recovers). */}
+      {}
       <div className="-mx-4 -mt-3.5 flex items-center gap-2.5 rounded-t-lg border-b border-warning/40 bg-warning/10 px-4 py-3">
         <StatusDot tone="warn" />
         <span className="shrink-0 text-sm font-semibold text-warning-text">
@@ -1331,10 +1237,6 @@ function ReconnectingContent({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Section root.
-// ---------------------------------------------------------------------------
-
 function ConnectSettingsSection() {
   const rpc = useRpc<typeof connectRpcContract>();
   const [status, setStatus] = useState<ConnectStatus | null>(null);
@@ -1361,8 +1263,6 @@ function ConnectSettingsSection() {
     refetch();
   }, [refetch]);
 
-  // The backend pushes a full status snapshot on every transition; apply it
-  // directly so the card updates live without polling.
   useRealtime(CONNECT_REALTIME_CHANNEL, (payload) => {
     const next = asStatus(payload);
     if (next !== null) {
@@ -1372,8 +1272,6 @@ function ConnectSettingsSection() {
   });
 
   const showDisconnected = useCallback(() => {
-    // Transient inline receipt (the SDK exposes no toast on this surface):
-    // the silhouette-identical card swap no longer passes silently.
     setFlash("Remote access disconnected");
     if (flashTimerRef.current !== null) clearTimeout(flashTimerRef.current);
     flashTimerRef.current = setTimeout(() => setFlash(null), 4000);
@@ -1437,12 +1335,13 @@ export default definePluginApp((app) => {
       "Use this bb from any device, anywhere — powered by getbb.app.",
     component: ConnectSettingsSection,
   });
-  app.slots.sidebarFooterAction({
+  app.experimental_sidebarFooter.register({
+    kind: "action",
     id: "remote-access",
-    title: "Remote access",
+    label: "Remote access",
     icon: "Smartphone",
-    run({ openSettings }) {
-      openSettings();
+    onActivate({ openPluginDetails }) {
+      openPluginDetails();
     },
   });
 });

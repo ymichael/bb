@@ -247,17 +247,12 @@ describe("workflow composer banner", () => {
 
     await act(async () => Promise.resolve());
     expect(slot.rpcCalls).toHaveLength(1);
-    // Idle thread: no standing 1 s poll (this is what kept a phone's radio
-    // and main thread busy on every open thread with the plugin enabled).
     await act(async () => vi.advanceTimersByTimeAsync(5_000));
     expect(slot.rpcCalls).toHaveLength(1);
 
-    // A signal about a different thread is ignored.
     await slot.emitRealtime("workflow-runs", { threadId: "thr_other" });
     expect(slot.rpcCalls).toHaveLength(1);
 
-    // The service's signal for this thread refreshes once, and the banner
-    // starts polling because the refreshed set has an active run.
     runs = [run];
     await slot.emitRealtime("workflow-runs", { threadId: "thr_idle" });
     await act(async () => Promise.resolve());
@@ -266,7 +261,6 @@ describe("workflow composer banner", () => {
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(slot.rpcCalls).toHaveLength(3);
 
-    // Once the run set is empty again, polling stops.
     runs = [];
     await act(async () => vi.advanceTimersByTimeAsync(1_000));
     expect(slot.rpcCalls).toHaveLength(4);
@@ -310,7 +304,6 @@ describe("workflow composer banner", () => {
         setVisibility("visible");
       });
       await act(async () => Promise.resolve());
-      // Catch-up refresh on return, then the 1 s cadence resumes.
       expect(slot.rpcCalls).toHaveLength(3);
       await act(async () => vi.advanceTimersByTimeAsync(1_000));
       expect(slot.rpcCalls).toHaveLength(4);
@@ -400,8 +393,6 @@ describe("workflow-preview directive", () => {
     expect(slot.getAllByText("Review")).toHaveLength(1);
     expect(slot.getByText("Adversarial review")).toBeTruthy();
     expect(slot.getByText("claude · opus-4-6 · high")).toBeTruthy();
-    // A live run has no "Running" pill, and only the top-level header
-    // shimmers — phase and agent rows stay static (agents have spinners).
     expect(slot.queryByText("Running")).toBeNull();
     expect(
       slot.getByText("Review the release").className.includes("animate-shine"),
@@ -653,7 +644,6 @@ describe("workflow-preview directive", () => {
     );
 
     await slot.findByText("Cancelled");
-    // One Pause in the status pill, one on the cancelled call row.
     expect(slot.container.querySelectorAll('[data-icon="Pause"]')).toHaveLength(
       2,
     );
@@ -690,7 +680,6 @@ describe("workflow thread panel", () => {
     );
     expect(scrollArea?.className).toContain("p-4");
     expect(scrollArea?.parentElement?.className).toContain("bg-border");
-    // The settled Discover phase starts collapsed; the active phase is open.
     expect(slot.queryByText("Inspect implementation")).toBeNull();
     expect(slot.getByText("Adversarial review")).toBeTruthy();
     fireEvent.click(slot.getByRole("button", { name: /Discover1\/1/ }));
@@ -707,6 +696,28 @@ describe("workflow thread panel", () => {
         slot.rpcCalls.some((call) => call.method === "workflowStopRun"),
       ).toBe(true);
       expect(slot.getByText("Cancelled")).toBeTruthy();
+    });
+  });
+
+  it.each([
+    ["loading", () => new Promise<never>(() => undefined)],
+    ["an initial RPC error", () => Promise.reject(new Error("Unavailable"))],
+    ["no matching run", () => ({ run: null })],
+  ])("keeps local spacing while showing %s", async (_name, workflowRunView) => {
+    const slot = renderSlot(
+      app.threadPanelActions[0]!,
+      { threadId: "thr_origin", params: { runId: run.id } },
+      { rpc: { workflowRunView } },
+    );
+
+    await waitFor(() => {
+      const state =
+        slot.container.querySelector('[aria-busy="true"]') ??
+        slot.container.querySelector('[role="alert"]');
+      expect(state?.parentElement?.className).toContain("p-4");
+      expect(state?.className).not.toMatch(
+        /\b(?:bg-muted|border|p-3|px-3|rounded-lg|rounded-md)\b/,
+      );
     });
   });
 

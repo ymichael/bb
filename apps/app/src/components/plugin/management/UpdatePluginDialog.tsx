@@ -11,7 +11,7 @@ import {
   DialogTitle,
 } from "@bb/shared-ui/dialog";
 import { Icon } from "@bb/shared-ui/icon";
-import { appToast } from "@/components/ui/app-toast.js";
+import { pluginToast } from "@/components/plugin/PluginNotificationDescription";
 import { pluginAdminErrorMessage } from "@/lib/plugin-admin-error";
 import { invalidatePluginList } from "@/hooks/cache-owners/plugin-cache-owner";
 import {
@@ -34,13 +34,6 @@ interface UpdatePluginDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-/**
- * Layer 3 update confirmation (sketch v2, dialogs C): verdict first, checks
- * collapsed, rollback promise always visible. The incompatible variant
- * arrives with details pre-expanded and Update disabled — the details are
- * the story. Persisted and in-session rolled-back outcomes render in place
- * with their recovery action instead of being reduced to tooltip history.
- */
 export function UpdatePluginDialog({
   plugin,
   open,
@@ -73,6 +66,7 @@ function UpdatePluginDialogContent({
   const [rolledBack, setRolledBack] = useState<PluginUpdateResult | null>(null);
 
   const update = useMutation({
+    meta: { showErrorToast: false },
     mutationFn: () => applyPluginUpdate(fetch, plugin.id),
     onSuccess: (result) => {
       invalidatePluginList({ queryClient });
@@ -81,21 +75,26 @@ function UpdatePluginDialogContent({
         return;
       }
       if (result.applied) {
-        appToast.success(`${name} updated`, {
-          description:
-            result.to !== null
-              ? `Now running ${displayPluginVersion(result.to.display)}.`
-              : undefined,
-        });
+        pluginToast.success(
+          "Plugin updated",
+          plugin,
+          "installed",
+          result.to !== null
+            ? `Now running ${displayPluginVersion(result.to.display)}.`
+            : undefined,
+        );
       } else {
-        appToast.message(`${name} is already up to date`);
+        pluginToast.message("Plugin is up to date", plugin, "installed");
       }
       onOpenChange(false);
     },
     onError: (error) => {
-      appToast.error(`Updating ${name} failed`, {
-        description: pluginAdminErrorMessage(error),
-      });
+      pluginToast.error(
+        "Plugin update failed",
+        plugin,
+        "installed",
+        pluginAdminErrorMessage(error),
+      );
     },
   });
 
@@ -195,7 +194,7 @@ function UpdatePluginDialogContent({
       <>
         <DialogHeader>
           <DialogTitle>
-            {/* Hashes shorten here; the details grid keeps the full value. */}
+            {}
             Update {name} to {displayPluginVersion(candidate)}?
           </DialogTitle>
           <DialogDescription>{fromLine}</DialogDescription>
@@ -270,7 +269,7 @@ function UpdatePluginDialogContent({
               bb
             </span>
           </div>
-          {/* Failure case: the details ARE the story, so they arrive open. */}
+          {}
           <DetailsDisclosure summary="Details" defaultExpanded>
             <div className="space-y-1.5">
               {state.blockedReasons.length > 0 ? (

@@ -1,8 +1,3 @@
-/**
- * The scripted echo bridge passes the canonical protocol suite exactly like
- * the echo example it extends: the scripted directives add behaviour on top
- * of a conformant bridge, never instead of one.
- */
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -49,7 +44,6 @@ it("passes the canonical protocol suite", async () => {
   expect(report.results.filter((result) => result.status !== "pass")).toEqual(
     [],
   );
-  // The echo archives, so the kit must have exercised the typed rejection.
   expect(report.results.map((result) => result.id)).toEqual(
     expect.arrayContaining([
       "recovery/session-archived",

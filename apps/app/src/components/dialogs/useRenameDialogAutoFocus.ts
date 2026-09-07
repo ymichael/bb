@@ -2,17 +2,10 @@ import { useCallback, useRef } from "react";
 import { usePointerCoarse } from "@bb/shared-ui/hooks/use-pointer-coarse";
 
 interface RenameDialogAutoFocus {
-  /** Attach to the rename `Input`. */
   inputRef: React.RefObject<HTMLInputElement | null>;
-  /** Pass to `DialogContent`'s `onOpenAutoFocus`. */
   handleOpenAutoFocus: (event: Event) => void;
 }
 
-/**
- * Radix focuses the dialog content container on open, which overrides the
- * `autoFocus` attribute on a child input. Prevent that default and focus the
- * rename input ourselves, selecting its prefilled text so typing replaces it.
- */
 export function useRenameDialogAutoFocus(): RenameDialogAutoFocus {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const isPointerCoarse = usePointerCoarse();

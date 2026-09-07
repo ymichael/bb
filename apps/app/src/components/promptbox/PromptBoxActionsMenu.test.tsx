@@ -43,10 +43,9 @@ describe("PromptBoxActionsMenu", () => {
     const onAttach = vi.fn();
     render(<PromptBoxActionsMenu onAction={() => {}} onAttach={onAttach} />);
 
-    fireEvent.pointerDown(
-      screen.getByRole("button", { name: "Prompt actions" }),
-      { button: 0 },
-    );
+    const trigger = screen.getByRole("button", { name: "Prompt actions" });
+    expect(trigger.classList).toContain("text-subtle-foreground/75");
+    fireEvent.pointerDown(trigger, { button: 0 });
     fireEvent.click(
       await screen.findByRole("menuitem", { name: "Attach files" }),
     );
@@ -54,7 +53,7 @@ describe("PromptBoxActionsMenu", () => {
     expect(onAttach).toHaveBeenCalledOnce();
   });
 
-  it("keeps attachment upload progress visible on the menu trigger", () => {
+  it("keeps the plus menu trigger stable during attachment uploads", () => {
     render(
       <PromptBoxActionsMenu
         isAttaching
@@ -64,7 +63,8 @@ describe("PromptBoxActionsMenu", () => {
     );
 
     const trigger = screen.getByRole("button", { name: "Prompt actions" });
-    expect(trigger.querySelector('[data-icon="Spinner"]')).not.toBeNull();
+    expect(trigger.querySelector('[data-icon="Plus"]')).not.toBeNull();
+    expect(trigger.querySelector('[data-icon="Spinner"]')).toBeNull();
   });
 
   it("seeds the composer with the plugin prompt after the provider actions", async () => {

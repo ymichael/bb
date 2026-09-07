@@ -181,7 +181,5 @@ export function resolveThreadTimelinePlaceholder(
     THREAD_TIMELINE_QUERY_KEY,
   );
 
-  return previousThreadId === nextThreadId
-    ? previousData
-    : undefined;
+  return previousThreadId === nextThreadId ? previousData : undefined;
 }

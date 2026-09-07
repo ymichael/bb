@@ -1,46 +1,3 @@
-/**
- * Identity-based classification of row-snapshot changes.
- *
- * The pointer diff in `corpus-harness.ts` is exact for field-level changes
- * but useless when a projection change ADDS or REMOVES rows: every later
- * sibling shifts and the diff reports the whole turn. This engine matches
- * rows by identity instead (`callId`, `itemId`, `interactionId`, the turn id,
- * or the row id) and buckets each change into a named class from a JSON
- * file the PR carries. A change no class claims fails the gate, so a PR
- * that intentionally changes rows proves its change is exactly the classes
- * it named and nothing else.
- *
- * Class file shape (see `allowlists/README.md`):
- *   { "name", "reason", "match": Matcher }[]
- * where Matcher is exactly one of
- *   { "added": Shape }        a row only the candidate has
- *   { "removed": Shape }      a row only the baseline has
- *   { "changed": Shape & { "fields": string[] } }
- *                             a matched row whose changed field set is within
- *                             `fields` (`id:prefix` stands for an id whose
- *                             only difference is the nesting prefix)
- *   { "reshaped": { "from": Shape, "to": Shape, "fields"?: string[] } }
- *                             a matched row whose kind/workKind changed;
- *                             with `fields`, the other fields that changed
- *                             must be within it
- *   { "moved": Shape }        a row that left one nesting level and appeared
- *                             at another
- *   { "resegmented": Shape }  an identity the two sides project a different
- *                             number of times (a turn split into fewer
- *                             visible segments)
- *   { "pageField": { "field" } }
- *                             a page-level field beside `rows` (pendingTodos,
- *                             goal, activePromptMode, …) whose value changed
- * and Shape narrows by `kind`, `workKind`, `role` and `nested` (whether the
- * row id carries a `:child:` prefix).
- *
- * Container fields (`children`, `childRows`) are recursed into, never
- * compared as values. A turn whose only changed fields are its bounds
- * (`summaryCount`, `sourceSeq*`, timestamps) is reported under the built-in
- * `container-bounds` class when a child of that turn changed. A turn's
- * `status` is not a bound: it passes through from the turn event, so a
- * status change must be claimed by a class of its own.
- */
 import fs from "node:fs";
 import { z } from "zod";
 import { resolveRepoRelativeFile } from "./env-file-path.js";
@@ -76,7 +33,9 @@ const matcherSchema = z.union([
     .strict(),
   z.object({ moved: shapeSchema }).strict(),
   z.object({ resegmented: shapeSchema }).strict(),
-  z.object({ pageField: z.object({ field: z.string().min(1) }).strict() }).strict(),
+  z
+    .object({ pageField: z.object({ field: z.string().min(1) }).strict() })
+    .strict(),
 ]);
 
 const rowClassSchema = z
@@ -91,7 +50,9 @@ export type RowDiffClass = z.infer<typeof rowClassSchema>;
 export const ROW_CLASSES_FILE_ENV = "BB_PROVIDER_CORPUS_ROW_CLASSES";
 
 export function readRowDiffClasses(filePath: string): RowDiffClass[] {
-  return z.array(rowClassSchema).parse(JSON.parse(fs.readFileSync(filePath, "utf8")));
+  return z
+    .array(rowClassSchema)
+    .parse(JSON.parse(fs.readFileSync(filePath, "utf8")));
 }
 
 export function resolveRowDiffClassesPath(
@@ -103,7 +64,6 @@ export function resolveRowDiffClassesPath(
     : resolveRepoRelativeFile(ROW_CLASSES_FILE_ENV, value);
 }
 
-/** A timeline row as the snapshot stores it: a JSON object we read loosely. */
 export type SnapshotRow = Record<string, unknown>;
 
 export interface RowSnapshotVariants {
@@ -127,7 +87,6 @@ export type RowChange =
       id: string;
       before: SnapshotRow;
       after: SnapshotRow;
-      /** The changed fields beside `kind`/`workKind`, sorted. */
       fields: string[];
     }
   | {
@@ -169,12 +128,6 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" ? value : undefined;
 }
 
-/**
- * A row nested under a delegation carries its parent's id as a prefix
- * (`<delegation-row-id>:child:<own-id>`); the own id is the stable part,
- * because a change to how the parent row is identified re-prefixes every
- * descendant.
- */
 function ownRowId(id: string): string {
   const marker = ":child:";
   const index = id.lastIndexOf(marker);
@@ -197,10 +150,14 @@ export function rowShape(row: SnapshotRow): string {
     : String(row.kind);
 }
 
-function matchesShape(spec: RowShapeSpec | undefined, row: SnapshotRow): boolean {
+function matchesShape(
+  spec: RowShapeSpec | undefined,
+  row: SnapshotRow,
+): boolean {
   if (!spec) return true;
   if (spec.kind !== undefined && row.kind !== spec.kind) return false;
-  if (spec.workKind !== undefined && row.workKind !== spec.workKind) return false;
+  if (spec.workKind !== undefined && row.workKind !== spec.workKind)
+    return false;
   if (spec.role !== undefined && row.role !== spec.role) return false;
   if (
     spec.nested !== undefined &&
@@ -232,7 +189,8 @@ function classMatches(cls: RowDiffClass, change: RowChange): boolean {
       change.type === "reshaped" &&
       matchesShape(m.reshaped.from, change.before) &&
       matchesShape(m.reshaped.to, change.after) &&
-      (allowed === undefined || change.fields.every((field) => allowed.includes(field)))
+      (allowed === undefined ||
+        change.fields.every((field) => allowed.includes(field)))
     );
   }
   if ("moved" in m) {
@@ -266,23 +224,9 @@ export function describeRowChange(change: RowChange): string {
 }
 
 export interface RowDiffReport {
-  /** Changes per class name, including the built-in `container-bounds`. */
   claims: Map<string, number>;
-  /**
-   * The entries of the class list that claimed at least one change, by
-   * index. A class file may spread one name over several matchers, so
-   * liveness is tracked per entry, not per name: every report merged into
-   * another must come from the same class list.
-   */
   claimedEntries: Set<number>;
-  /** One representative change per class, for the run log. */
   examples: Map<string, RowChange>;
-  /**
-   * Which child classes explain the `container-bounds` claims: a turn whose
-   * bounds moved counts once under every class its changed children fell
-   * into, so the reader can tell which side of the ledger the bounds
-   * changes belong to.
-   */
   containerBoundsBy: Map<string, number>;
   unclassified: RowChange[];
 }
@@ -297,13 +241,19 @@ export function createRowDiffReport(): RowDiffReport {
   };
 }
 
-export function mergeRowDiffReport(into: RowDiffReport, from: RowDiffReport): void {
+export function mergeRowDiffReport(
+  into: RowDiffReport,
+  from: RowDiffReport,
+): void {
   for (const [name, count] of from.claims) {
     into.claims.set(name, (into.claims.get(name) ?? 0) + count);
   }
   for (const index of from.claimedEntries) into.claimedEntries.add(index);
   for (const [name, count] of from.containerBoundsBy) {
-    into.containerBoundsBy.set(name, (into.containerBoundsBy.get(name) ?? 0) + count);
+    into.containerBoundsBy.set(
+      name,
+      (into.containerBoundsBy.get(name) ?? 0) + count,
+    );
   }
   for (const [name, example] of from.examples) {
     if (!into.examples.has(name)) into.examples.set(name, example);
@@ -313,12 +263,10 @@ export function mergeRowDiffReport(into: RowDiffReport, from: RowDiffReport): vo
 
 interface SharedThreadState {
   turnsWithChildChanges: Set<string>;
-  /** The classes the changed children of each turn fell into. */
   turnChildClasses: Map<string, Set<string>>;
   movedRows: Map<string, SnapshotRow>;
 }
 
-/** A row pooled for later pairing, with the turns it was nested under. */
 interface PooledRow {
   row: SnapshotRow;
   turns: string[];
@@ -331,9 +279,7 @@ interface VariantDiff {
   removed: Map<string, PooledRow[]>;
   added: Map<string, PooledRow[]>;
   shared: SharedThreadState;
-  /** The turn ids whose children are being diffed right now (outermost first). */
   turnStack: string[];
-  /** Bounds-only turn changes awaiting attribution (see claimContainerBounds). */
   pendingBounds: { turnId: string | undefined; change: RowChange }[];
 }
 
@@ -351,7 +297,9 @@ function claim(diff: VariantDiff, name: string, change: RowChange): void {
 }
 
 function classify(diff: VariantDiff, change: RowChange): void {
-  const index = diff.classes.findIndex((candidate) => classMatches(candidate, change));
+  const index = diff.classes.findIndex((candidate) =>
+    classMatches(candidate, change),
+  );
   const cls = diff.classes[index];
   if (cls) {
     diff.report.claimedEntries.add(index);
@@ -369,21 +317,26 @@ function classify(diff: VariantDiff, change: RowChange): void {
   }
 }
 
-/**
- * Bounds claims are attributed after the variant settles: a child that was
- * pooled (added or removed) is classified only then, and the turn's bounds
- * follow that child.
- */
-function claimContainerBounds(diff: VariantDiff, turnId: string | undefined, change: RowChange): void {
+function claimContainerBounds(
+  diff: VariantDiff,
+  turnId: string | undefined,
+  change: RowChange,
+): void {
   diff.pendingBounds.push({ turnId, change });
 }
 
 function settleContainerBounds(diff: VariantDiff): void {
   for (const { turnId, change } of diff.pendingBounds) {
     claim(diff, CONTAINER_BOUNDS_CLASS, change);
-    const causes = turnId === undefined ? undefined : diff.shared.turnChildClasses.get(turnId);
+    const causes =
+      turnId === undefined
+        ? undefined
+        : diff.shared.turnChildClasses.get(turnId);
     for (const name of causes ?? ["(unknown)"]) {
-      diff.report.containerBoundsBy.set(name, (diff.report.containerBoundsBy.get(name) ?? 0) + 1);
+      diff.report.containerBoundsBy.set(
+        name,
+        (diff.report.containerBoundsBy.get(name) ?? 0) + 1,
+      );
     }
   }
   diff.pendingBounds = [];
@@ -404,14 +357,21 @@ function hasContainer(row: SnapshotRow): boolean {
   return CONTAINER_FIELDS.some((key) => Array.isArray(row[key]));
 }
 
-function pool(diff: VariantDiff, map: Map<string, PooledRow[]>, id: string, row: SnapshotRow): void {
+function pool(
+  diff: VariantDiff,
+  map: Map<string, PooledRow[]>,
+  id: string,
+  row: SnapshotRow,
+): void {
   const entry = { row, turns: [...diff.turnStack] };
   const rows = map.get(id);
   if (rows) rows.push(entry);
   else map.set(id, [entry]);
 }
 
-function groupByIdentity(rows: readonly SnapshotRow[]): Map<string, SnapshotRow[]> {
+function groupByIdentity(
+  rows: readonly SnapshotRow[],
+): Map<string, SnapshotRow[]> {
   const groups = new Map<string, SnapshotRow[]>();
   for (const row of rows) {
     const id = rowIdentity(row);
@@ -422,7 +382,6 @@ function groupByIdentity(rows: readonly SnapshotRow[]): Map<string, SnapshotRow[
   return groups;
 }
 
-/** Runs `fn` with the turn stack a pooled row was collected under. */
 function underTurns<T>(diff: VariantDiff, turns: string[], fn: () => T): T {
   const saved = diff.turnStack;
   diff.turnStack = turns;
@@ -433,7 +392,12 @@ function underTurns<T>(diff: VariantDiff, turns: string[], fn: () => T): T {
   }
 }
 
-function diffRow(diff: VariantDiff, b: SnapshotRow, a: SnapshotRow, id: string): number {
+function diffRow(
+  diff: VariantDiff,
+  b: SnapshotRow,
+  a: SnapshotRow,
+  id: string,
+): number {
   const { thread } = diff;
   const reshaped = rowShape(a) !== rowShape(b);
   const fields: string[] = [];
@@ -443,7 +407,12 @@ function diffRow(diff: VariantDiff, b: SnapshotRow, a: SnapshotRow, id: string):
     if (JSON.stringify(a[key]) === JSON.stringify(b[key])) continue;
     const aId = str(a.id);
     const bId = str(b.id);
-    if (key === "id" && aId !== undefined && bId !== undefined && ownRowId(aId) === ownRowId(bId)) {
+    if (
+      key === "id" &&
+      aId !== undefined &&
+      bId !== undefined &&
+      ownRowId(aId) === ownRowId(bId)
+    ) {
       fields.push("id:prefix");
       continue;
     }
@@ -452,15 +421,15 @@ function diffRow(diff: VariantDiff, b: SnapshotRow, a: SnapshotRow, id: string):
   }
   fields.sort();
   if (reshaped) {
-    // The shape change is the matcher's from/to; the rest of the changed
-    // field set is what a class's `fields` may restrict.
     classify(diff, {
       type: "reshaped",
       thread,
       id,
       before: b,
       after: a,
-      fields: fields.filter((field) => field !== "kind" && field !== "workKind"),
+      fields: fields.filter(
+        (field) => field !== "kind" && field !== "workKind",
+      ),
     });
   }
   const turnId = b.kind === "turn" ? str(b.turnId) : undefined;
@@ -487,7 +456,14 @@ function diffRow(diff: VariantDiff, b: SnapshotRow, a: SnapshotRow, id: string):
         fields,
       });
     } else {
-      classify(diff, { type: "changed", thread, id, before: b, after: a, fields });
+      classify(diff, {
+        type: "changed",
+        thread,
+        id,
+        before: b,
+        after: a,
+        fields,
+      });
       own = 1;
     }
   }
@@ -513,7 +489,13 @@ function diffRows(
     if (bs.length !== as.length) {
       const turnId = as[0]?.kind === "turn" ? str(as[0].turnId) : undefined;
       if (turnId !== undefined) diff.turnStack.push(turnId);
-      classify(diff, { type: "resegmented", thread, id, before: bs, after: as });
+      classify(diff, {
+        type: "resegmented",
+        thread,
+        id,
+        before: bs,
+        after: as,
+      });
       changes += 1 + diffRows(diff, childRowsOf(bs), childRowsOf(as));
       if (turnId !== undefined) {
         diff.turnStack.pop();
@@ -522,7 +504,12 @@ function diffRows(
       continue;
     }
     for (let index = 0; index < bs.length; index += 1) {
-      changes += diffRow(diff, bs[index] as SnapshotRow, as[index] as SnapshotRow, id);
+      changes += diffRow(
+        diff,
+        bs[index] as SnapshotRow,
+        as[index] as SnapshotRow,
+        id,
+      );
     }
   }
   for (const [id, as] of afterById) {
@@ -533,12 +520,6 @@ function diffRows(
   return changes;
 }
 
-/**
- * Pairs the variant's pooled removals and additions by identity: a pair is
- * one "moved" change. The default variant carries no turn children, so a
- * row the nested variant showed moving INTO a turn is simply absent there —
- * the same move, looked up through the shared per-thread state.
- */
 function settleVariantDiff(diff: VariantDiff): void {
   const { thread, removed, added, shared } = diff;
   for (const [id, removedRows] of removed) {
@@ -550,9 +531,14 @@ function settleVariantDiff(diff: VariantDiff): void {
         const b = removedRows[index] as PooledRow;
         const a = addedRows[index] as PooledRow;
         shared.movedRows.set(id, a.row);
-        // A move belongs to the turn it arrived in.
         underTurns(diff, a.turns, () => {
-          classify(diff, { type: "moved", thread, id, before: b.row, after: a.row });
+          classify(diff, {
+            type: "moved",
+            thread,
+            id,
+            before: b.row,
+            after: a.row,
+          });
           diffRows(diff, childRowsOf([b.row]), childRowsOf([a.row]));
         });
       }
@@ -572,7 +558,13 @@ function settleVariantDiff(diff: VariantDiff): void {
     for (const b of removedRows) {
       underTurns(diff, b.turns, () => {
         if (movedTo) {
-          classify(diff, { type: "moved", thread, id, before: b.row, after: movedTo });
+          classify(diff, {
+            type: "moved",
+            thread,
+            id,
+            before: b.row,
+            after: movedTo,
+          });
         } else {
           classify(diff, { type: "removed", thread, id, row: b.row });
         }
@@ -599,10 +591,6 @@ function variantRows(
   return rows;
 }
 
-/**
- * Classifies every change between two snapshots of one thread into
- * `report`. Returns the number of changes found (classified or not).
- */
 export function classifyRowSnapshotDiff(
   thread: string,
   before: RowSnapshotVariants,
@@ -610,9 +598,6 @@ export function classifyRowSnapshotDiff(
   classes: readonly RowDiffClass[],
   report: RowDiffReport,
 ): number {
-  // The nested variant is walked first so a turn whose children changed
-  // there explains the bounds-only change of the same turn row in the
-  // default variant, where turn rows carry no children.
   const variants = [
     ...new Set([
       ...Object.keys(before.variants ?? {}),
@@ -636,7 +621,11 @@ export function classifyRowSnapshotDiff(
       turnStack: [],
       pendingBounds: [],
     };
-    changes += diffRows(diff, variantRows(before, variant), variantRows(after, variant));
+    changes += diffRows(
+      diff,
+      variantRows(before, variant),
+      variantRows(after, variant),
+    );
     settleVariantDiff(diff);
     settleContainerBounds(diff);
     changes += diffPageFields(diff, before, after, variant);
@@ -644,11 +633,6 @@ export function classifyRowSnapshotDiff(
   return changes;
 }
 
-/**
- * Everything on a page beside `rows` (pendingTodos, goal, activePromptMode,
- * …) is compared whole: a class file must claim those too, or the gate
- * would pass a projection change that only touched the banner state.
- */
 function diffPageFields(
   diff: VariantDiff,
   before: RowSnapshotVariants,
@@ -679,26 +663,26 @@ function diffPageFields(
   return changes;
 }
 
-/**
- * The entries that claimed nothing: stale entries or wrong matchers. Judged
- * per entry, not per name, so a matcher that never fires cannot hide behind
- * a sibling that shares its name. A unique name is reported as is; a shared
- * one as `name#index` with its matcher, so the reader can tell which entry
- * is dead.
- */
 export function idleRowDiffClasses(
   classes: readonly RowDiffClass[],
   report: RowDiffReport,
 ): string[] {
   const sharedNames = new Set(
     classes
-      .filter((cls, index) => classes.findIndex((other) => other.name === cls.name) !== index)
+      .filter(
+        (cls, index) =>
+          classes.findIndex((other) => other.name === cls.name) !== index,
+      )
       .map((cls) => cls.name),
   );
   return classes.flatMap((cls, index) =>
     report.claimedEntries.has(index)
       ? []
-      : [sharedNames.has(cls.name) ? `${cls.name}#${index} ${JSON.stringify(cls.match)}` : cls.name],
+      : [
+          sharedNames.has(cls.name)
+            ? `${cls.name}#${index} ${JSON.stringify(cls.match)}`
+            : cls.name,
+        ],
   );
 }
 
@@ -710,7 +694,9 @@ export function formatRowDiffReport(
   const lines: string[] = [];
   for (const [name, count] of [...report.claims].sort((x, y) => y[1] - x[1])) {
     const cls = classes.find((candidate) => candidate.name === name);
-    lines.push(`  ${count.toString().padStart(6)}  ${name}${cls ? ` — ${cls.reason}` : ""}`);
+    lines.push(
+      `  ${count.toString().padStart(6)}  ${name}${cls ? ` — ${cls.reason}` : ""}`,
+    );
     const example = report.examples.get(name);
     if (options.examples && example) {
       lines.push(`          e.g. ${JSON.stringify(example).slice(0, 300)}`);
@@ -718,7 +704,9 @@ export function formatRowDiffReport(
   }
   if (report.containerBoundsBy.size > 0) {
     lines.push(
-      `  ${CONTAINER_BOUNDS_CLASS} by child class: ${[...report.containerBoundsBy]
+      `  ${CONTAINER_BOUNDS_CLASS} by child class: ${[
+        ...report.containerBoundsBy,
+      ]
         .sort((x, y) => y[1] - x[1])
         .map(([name, count]) => `${name} ${count}`)
         .join(", ")}`,
@@ -735,7 +723,9 @@ export function formatRowDiffReport(
       const key = describeRowChange(change);
       byShape.set(key, (byShape.get(key) ?? 0) + 1);
     }
-    for (const [key, count] of [...byShape].sort((x, y) => y[1] - x[1]).slice(0, 40)) {
+    for (const [key, count] of [...byShape]
+      .sort((x, y) => y[1] - x[1])
+      .slice(0, 40)) {
       lines.push(`  ${count.toString().padStart(6)}  ${key}`);
     }
   }

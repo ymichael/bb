@@ -55,9 +55,25 @@ describe("desktop browser bounds containment", () => {
 });
 
 describe("desktop browser IPC schemas", () => {
+  it.each([undefined, "", 42])(
+    "rejects invalid attach ownership: %s",
+    (threadId) => {
+      expect(
+        bbDesktopBrowserAttachRequestSchema.safeParse({
+          tabId: "browser:abc",
+          threadId,
+          url: "",
+          bounds: { x: 0, y: 0, width: 800, height: 600 },
+          visible: false,
+        }).success,
+      ).toBe(false);
+    },
+  );
+
   it("accepts a well-formed attach request and rejects bad shapes", () => {
     expect(
       bbDesktopBrowserAttachRequestSchema.safeParse({
+        threadId: "thread-1",
         tabId: "browser:abc",
         url: "",
         bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -67,6 +83,7 @@ describe("desktop browser IPC schemas", () => {
 
     expect(
       bbDesktopBrowserAttachRequestSchema.safeParse({
+        threadId: "thread-1",
         tabId: "",
         url: "",
         bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -81,6 +98,7 @@ describe("desktop browser IPC schemas", () => {
     ).toBe(false);
     expect(
       bbDesktopBrowserAttachRequestSchema.safeParse({
+        threadId: "thread-1",
         tabId: "browser:abc",
         url: "",
         bounds: { x: 0, y: 0, width: 800, height: 600 },
@@ -117,6 +135,7 @@ describe("desktop browser IPC schemas", () => {
     )}`;
     expect(
       bbDesktopBrowserAttachRequestSchema.safeParse({
+        threadId: "thread-1",
         tabId: "browser:abc",
         url: longUrl,
         bounds: { x: 0, y: 0, width: 800, height: 600 },

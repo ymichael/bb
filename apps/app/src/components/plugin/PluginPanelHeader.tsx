@@ -7,19 +7,6 @@ import { PluginContext } from "./plugin-context";
 import { useOptionalPaneContext } from "@/views/thread-detail/PaneContext";
 import { getPluginPagePanelStateId } from "./plugin-page-panel-state";
 
-/**
- * The plugin navPanel slices of the shared app header (AppPageHeader via
- * AppLayout's AppHeader): plugin panels get the SAME chrome as
- * Settings — compact plugin icon + panel title in the header center, the
- * registration's optional `headerContent` component in the header actions.
- * PluginPanelView renders only the panel body.
- */
-
-/**
- * Containment for `headerContent`: plugin code inside host chrome. A throw
- * hides the accessory (warn only) — never the header itself or the panel
- * body, whose own boundary latch stays untouched.
- */
 class HeaderContentBoundary extends Component<
   { pluginId: string; children: ReactNode },
   { crashed: boolean }
@@ -41,11 +28,6 @@ class HeaderContentBoundary extends Component<
   }
 }
 
-/**
- * Header center for a plugin panel route: compact plugin icon + panel title.
- * Takes only the panel's chrome so it can paint from a live registration or
- * from the chrome remembered before plugin frontends have booted.
- */
 export function PluginPanelHeaderCenter({
   chrome,
 }: {
@@ -63,11 +45,6 @@ export function PluginPanelHeaderCenter({
   );
 }
 
-/**
- * Header actions for a plugin panel route: the registration's
- * `headerContent`, in its own boundary. Every panel uses this shared title bar
- * while its component owns the full-bleed body below.
- */
 export function PluginPanelHeaderActions({
   panel,
   paneId,
@@ -89,14 +66,11 @@ export function PluginPanelHeaderActions({
     <div className="flex shrink-0 items-center gap-2">
       {HeaderContent === undefined ? null : (
         <HeaderContentBoundary
-          // Generation in the key: a P3.4 reload remounts the accessory with
-          // fresh error-boundary state.
           key={`${panel.pluginId}/${panel.id}/${panel.generation}`}
           pluginId={panel.pluginId}
         >
           <PluginContext.Provider value={panel.pluginId}>
-            {/* data-bb-plugin-root: the accessory is plugin code, so the
-                plugin's scoped stylesheet must apply here too. */}
+            {}
             <div
               data-bb-plugin-root=""
               data-bb-plugin={panel.pluginId}

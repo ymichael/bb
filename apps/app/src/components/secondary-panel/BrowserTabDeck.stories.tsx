@@ -25,8 +25,6 @@ const NARROW_TAB_THREAD_ID = "thr_browser_tab_narrow_story";
 const RECENTS_TAB_THREAD_ID = "thr_browser_tab_recents_story";
 const LOADING_TAB_THREAD_ID = "thr_browser_tab_loading_story";
 
-// `url` is empty so the tab shows its in-tab new-tab screen rather than a live
-// page — the native WebContentsView only exists in the packaged desktop app.
 function makeBrowserTab(id: string): BrowserFixedPanelTab {
   return { environmentId: null, id, kind: "browser", title: null, url: "" };
 }
@@ -74,9 +72,6 @@ const RECENT_VISITS: readonly BrowserHistoryEntry[] = [
   },
 ];
 
-// Story-only: seed the per-thread browser history before the tab mounts so the
-// new-tab screen's "Recently visited" list reads fixtures (atomWithStorage uses
-// getOnInit). Mirrors the New tab story's recent-items seeding.
 function seedBrowserHistory(
   threadId: string,
   entries: readonly BrowserHistoryEntry[],

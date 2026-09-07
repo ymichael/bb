@@ -24,19 +24,16 @@ export interface CompatibilityProblem {
 }
 
 export interface PluginResolvedUpdateVersion {
-  /** Exact npm version or git commit. */
   version: string;
   display: string;
 }
 
 interface ResolutionFlags {
   devMode?: true;
-  /** A newer allowed version was rejected while an older one was selected. */
   blocked?: {
     version: PluginResolvedUpdateVersion;
     reasons: CompatibilityProblem[];
   };
-  /** In dev mode, what engines.bb would decide if 0.0.0 were enforced. */
   packagedBuildProblems?: CompatibilityProblem[];
 }
 
@@ -49,11 +46,6 @@ export type PluginUpdateResolution =
       outcome: "update-available";
       current: PluginResolvedUpdateVersion;
       candidate: PluginResolvedUpdateVersion;
-      /**
-       * Release tag a git semver range resolved to. Absent for every other
-       * source, which has no tag to record. Activation stores exactly this
-       * pair rather than asking the remote a second time.
-       */
       candidateGitTag?: string;
     } & ResolutionFlags)
   | ({
@@ -111,12 +103,7 @@ export interface NpmResolverRun {
 }
 
 export function createNpmResolverRun(options?: {
-  /**
-   * Narrower than `typeof fetch` on purpose: a caller can hand in a guarded
-   * transport that only speaks (url, init), such as the marketplace fetch.
-   */
   fetch?: (input: string, init: RequestInit) => Promise<Response>;
-  /** Optional bounded JSON reader for untrusted marketplace registries. */
   readJson?: (response: Response) => Promise<unknown>;
 }): NpmResolverRun {
   const fetchImpl = options?.fetch ?? fetch;
@@ -172,8 +159,6 @@ function requestedRangeIncludesPrerelease(spec: string): boolean {
   const range = new semver.Range(spec);
   return range.set.some((comparators) =>
     comparators.some((comparator) => {
-      // A comparator of "*" carries semver's ANY sentinel where its type
-      // promises a version, so read it as the unknown it is.
       const version: unknown = comparator.semver;
       return version instanceof semver.SemVer && version.prerelease.length > 0;
     }),
@@ -279,7 +264,6 @@ function npmDisplay(packageName: string, version: string): string {
   return `${packageName}@${version}`;
 }
 
-/** Select the newest allowed compatible npm artifact from one cached run. */
 export async function selectNpmCandidate(args: {
   intent: NpmSourceIntentForResolution;
   appVersion: string;
@@ -521,39 +505,21 @@ export function gitResolvedVersion(args: {
   };
 }
 
-/** One `[tagPrefix]vX.Y.Z` release tag of a repository. */
 export interface GitSemverTag {
-  /** Full tag name, e.g. `notes/v1.2.3`. */
   tag: string;
-  /** Canonical semver the tag names, e.g. `1.2.3`. */
   version: string;
-  /** Commit the tag points at; an annotated tag is peeled first. */
   commit: string;
 }
 
-/**
- * Cap on `git ls-remote --tags` output. A repository with more than ~130,000
- * release tags is a mistake, not a plugin source, and silently reading a
- * truncated listing would resolve a range to the wrong release.
- */
 const MAX_LS_REMOTE_TAG_BYTES = 8 * 1024 * 1024;
 
 const GIT_NOT_FOUND_HINT =
   '"git" was not found on PATH — git plugin updates require git';
 
-/**
- * Release tags of `url` under `tagPrefix`, newest first. Tags that do not
- * parse as `[tagPrefix]vX.Y.Z` are ignored: a repository may tag anything.
- */
 export async function listGitSemverTags(args: {
   url: string;
   tagPrefix: string;
 }): Promise<GitSemverTag[]> {
-  // The remote does the filtering. A repository can carry thousands of tags
-  // bb would discard, and downloading them wastes the byte cap that keeps a
-  // truncated listing from resolving a range to the wrong release. The prefix
-  // pattern rejects glob characters, so this expands to exactly the release
-  // tags and their peeled "^{}" refs.
   const output = await runInstallCommand(
     "git",
     [
@@ -571,8 +537,6 @@ export async function listGitSemverTags(args: {
   const refs = parseLsRemote(output);
   const tags: GitSemverTag[] = [];
   for (const [ref, commit] of refs) {
-    // An annotated tag also lists a peeled "^{}" ref naming the commit it
-    // tags; that peeled commit is the one a checkout lands on.
     if (!ref.startsWith("refs/tags/") || ref.endsWith("^{}")) continue;
     const tag = ref.slice("refs/tags/".length);
     const version = gitSemverTagVersion(tag, args.tagPrefix);
@@ -584,11 +548,6 @@ export async function listGitSemverTags(args: {
   );
 }
 
-/**
- * Highest release satisfying `range`. Prereleases are excluded unless the
- * range itself names one, exactly as {@link allowedNpmVersions} decides it
- * for npm.
- */
 export function selectGitSemverTag(args: {
   tags: readonly GitSemverTag[];
   range: string;
@@ -596,11 +555,6 @@ export function selectGitSemverTag(args: {
   return satisfyingGitSemverTags(args)[0] ?? null;
 }
 
-/**
- * Every release satisfying `range`, newest first. A caller that must check
- * each release against the running bb walks this list from the top, exactly
- * as {@link selectNpmCandidate} walks the allowed npm versions.
- */
 function satisfyingGitSemverTags(args: {
   tags: readonly GitSemverTag[];
   range: string;
@@ -614,12 +568,6 @@ function satisfyingGitSemverTags(args: {
     .sort((left, right) => semver.rcompare(left.version, right.version));
 }
 
-/**
- * Tags are mutable and commits are not, so a recorded resolution is the only
- * evidence of what was installed. A tag that now names another commit is a
- * rewritten release: refuse it and let a person decide, rather than pulling
- * different code under a version the user already approved.
- */
 function movedGitTagDetail(args: {
   url: string;
   tag: string;
@@ -634,23 +582,15 @@ function movedGitTagDetail(args: {
   );
 }
 
-/** What an installed git plugin tracks, as recorded at install time. */
 type GitUpdateIntent =
   | { kind: "ref"; ref: string; refKind: GitRefKind }
   | {
       kind: "range";
       range: string;
-      /** "" for repository-wide `vX.Y.Z` tags. */
       tagPrefix: string;
-      /** Tag the range resolved to when the plugin was installed or updated. */
       resolvedTag: string;
     };
 
-/**
- * Whether the running bb can load one release. Only the caller can answer
- * this: a git release declares its engine ranges in the checked-out
- * package.json, not in the ref listing.
- */
 export type GitCandidateProbeResult =
   | {
       outcome: "compatible";
@@ -668,11 +608,6 @@ export type GitCandidateProbe = (
   candidate: GitSemverTag,
 ) => Promise<GitCandidateProbeResult>;
 
-/**
- * Releases probed before bb gives up. Each probe checks out one release, so
- * an unbounded walk down a long range would clone a repository many times on
- * every scheduled check.
- */
 const MAX_GIT_CANDIDATE_PROBES = 10;
 
 async function resolveGitRangeUpdate(args: {
@@ -729,9 +664,6 @@ async function resolveGitRangeUpdate(args: {
       }),
     };
   }
-  // Walk down from the newest release, exactly as selectNpmCandidate walks
-  // the allowed npm versions: an engine-incompatible newest release must not
-  // hide the newest release this bb can actually run.
   let blocked: ResolutionFlags["blocked"] | undefined;
   let invalidDetail: string | undefined;
   let probes = 0;
@@ -796,7 +728,6 @@ export async function resolveGitUpdate(args: {
   url: string;
   intent: GitUpdateIntent;
   currentCommit: string;
-  /** Supplied for a range intent so bb can skip incompatible releases. */
   probeCandidate?: GitCandidateProbe;
 }): Promise<PluginUpdateResolution> {
   const current = gitResolvedVersion({
@@ -819,8 +750,6 @@ export async function resolveGitUpdate(args: {
   if (args.intent.refKind === "commit") return { outcome: "pinned", current };
   const resolved = await resolveGitRef({ url: args.url, ref: args.intent.ref });
   if (resolved.outcome === "unavailable") return resolved;
-  // A tag install stays pinned, but the pin only means anything while the tag
-  // still names the commit bb installed.
   if (args.intent.refKind === "tag") {
     const moved = movedGitTagDetail({
       url: args.url,
@@ -843,15 +772,10 @@ export async function resolveGitUpdate(args: {
   return { outcome: "update-available", current, candidate };
 }
 
-/**
- * Resolve a semver range over a repository's tags for an install. Returns the
- * exact tag and commit to record.
- */
 export async function resolveGitRange(args: {
   url: string;
   range: string;
   tagPrefix: string;
-  /** Initial installs use this to skip releases that this bb cannot run. */
   probeCandidate?: GitCandidateProbe;
 }): Promise<
   | { outcome: "resolved"; tag: string; version: string; commit: string }

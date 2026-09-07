@@ -35,30 +35,10 @@ export { ConformanceClient } from "./client.js";
 export interface RunBridgeConformanceOptions {
   transport: BridgeConformanceTransport;
   session: ConformanceSessionFixture;
-  /**
-   * The provider id the bridge's plugin registers. The kit assembles the
-   * bridge's `thread/delta` stream through the runtime's real delta
-   * assembler, and the canonical events it builds carry this id, as the
-   * runtime's would.
-   */
   providerId: string;
-  /** Per-wait timeout. Conformant bridges answer fast; keep this tight. */
   timeoutMs?: number;
 }
 
-/**
- * Drive one bridge through the conformance scenarios: JSON-RPC hygiene, the
- * initialize handshake, then a shared session lifecycle (start → turn →
- * grammar checks → release stop → resume with its identity → id-uniqueness
- * → fork with its identity when the handshake declares fork → the opt-in
- * rules), released at the end the way the runtime releases a thread it
- * detaches. One transport for the whole run, mirroring a real bridge
- * lifetime.
- *
- * Against a conformant bridge every result passes. Against a bridge that is
- * not yet protocol-pure, the failures ARE the migration work list — run it
- * before migrating and pin the report, then make it shrink.
- */
 export async function runBridgeConformance(
   options: RunBridgeConformanceOptions,
 ): Promise<ConformanceReport> {
@@ -77,12 +57,8 @@ export async function runBridgeConformance(
     ...(await runSessionLifecycleScenarios({
       client,
       fixture: options.session,
-      // The same reverse mapping the runtime applies when it names a turn
-      // to the bridge: the assembler's provider↔bb turn-id map.
       resolveProviderTurnId: (threadId, bbTurnId) =>
         collector.assembler.getProviderTurnId(threadId, bbTurnId),
-      // A failed handshake reads as the definite absences the schema
-      // defaults to: no fork, so the fork rule is not attempted.
       fork: handshake.capabilities?.fork ?? "none",
     })),
   );
@@ -91,7 +67,6 @@ export async function runBridgeConformance(
   return { results, passed: reportPassed(results) };
 }
 
-/** Compact single-line-per-rule rendering for test snapshots and logs. */
 export function formatConformanceReport(report: ConformanceReport): string {
   return report.results
     .map(

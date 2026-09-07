@@ -8,8 +8,6 @@ const healthResponseSchema = z
 
 const systemConfigResponseSchema = z
   .object({
-    // Optional on purpose: the probed server can be an older bb that predates
-    // this field, and it is still compatible enough to attach to.
     dataDir: z.string().min(1).optional(),
     hostDaemonPort: z.number().int().min(1).max(65_535),
     voiceTranscriptionEnabled: z.boolean(),
@@ -27,7 +25,6 @@ export type ServerProbeFetch = (
 ) => Promise<Response>;
 
 export interface CompatibleServerProbeResult {
-  /** Data directory the probed server reports, or null on an older bb. */
   dataDir: string | null;
   kind: "compatible";
   serverUrl: string;

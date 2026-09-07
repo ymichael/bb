@@ -85,19 +85,16 @@ describe("thread delta schemas", () => {
 
   it("rejects unknown kinds and malformed members", () => {
     expect(threadDeltaSchema.safeParse({ kind: "nope" }).success).toBe(false);
-    // input.accepted requires a well-formed client request id, not any string.
     expect(
       threadDeltaSchema.safeParse({
         kind: "input.accepted",
         clientRequestId: "not-a-creq",
       }).success,
     ).toBe(false);
-    // turn.boundary status is the canonical turn-status enum.
     expect(
       threadDeltaSchema.safeParse({ kind: "turn.boundary", status: "done" })
         .success,
     ).toBe(false);
-    // item.open needs a parsed shape, not free-form data.
     expect(
       threadDeltaSchema.safeParse({
         kind: "item.open",
@@ -105,7 +102,6 @@ describe("thread delta schemas", () => {
         item: { type: "mystery" },
       }).success,
     ).toBe(false);
-    // unhandled must carry a raw JSON-RPC envelope.
     expect(
       threadDeltaSchema.safeParse({
         kind: "unhandled",
@@ -131,8 +127,6 @@ describe("thread delta schemas", () => {
         item: { type: "compaction" },
       }).success,
     ).toBe(true);
-    // Anonymous text streams are keyed too: an empty channel would collide
-    // with another empty-keyed stream.
     expect(
       threadDeltaSchema.safeParse({
         kind: "item.textDelta",
@@ -144,9 +138,6 @@ describe("thread delta schemas", () => {
   });
 
   it("rejects key members containing the internal separator", () => {
-    // The assembler joins key parts with THREAD_DELTA_KEY_SEPARATOR; a part
-    // containing it could make two unrelated key tuples collide. A bridge
-    // that smuggles one fails loudly at the schema boundary.
     const poisoned = `tc${THREAD_DELTA_KEY_SEPARATOR}1`;
     expect(
       threadDeltaSchema.safeParse({

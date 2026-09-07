@@ -63,7 +63,6 @@ describe("createAgentRuntime input accepted events", () => {
       runtime,
       threadId: "t1",
     });
-    // Nothing has been accepted for the steer's request id yet.
     expect(inputAcceptedEvents(events, "creq_23456789ae")).toHaveLength(0);
 
     await expect(
@@ -134,7 +133,6 @@ describe("createAgentRuntime input accepted events", () => {
     ).rejects.toThrow(/No active session/);
 
     expect(inputAcceptedEvents(events, "creq_222222222w")).toHaveLength(0);
-    // A generic rejection is not a stale turn: the turn stays live.
     expect(runtime.getActiveTurnId("t1")).toBe(turnId);
 
     await runtime.shutdown();
@@ -150,9 +148,6 @@ describe("createAgentRuntime input accepted events", () => {
         onEvent: (event) => events.push(event),
       },
       launch: {
-        // The provider's view of the turn has gone while the runtime still
-        // holds it live: the bridge answers the steer with NO_ACTIVE_TURN and
-        // the staleTurn hint the runtime acts on (the ACP bridge's shape).
         scripted: {
           failMethods: [
             {
@@ -195,15 +190,12 @@ describe("createAgentRuntime input accepted events", () => {
         options: fullRuntimeOptions,
       }),
     ).resolves.toEqual({ status: "stale", activeTurnId: null });
-    // The provider's answer cleared the runtime's active-turn state.
     expect(runtime.getActiveTurnId("t1")).toBeNull();
     const steersSentSoFar = record
       .read()
       .filter((request) => request.method === "turn/steer").length;
     expect(steersSentSoFar).toBe(1);
 
-    // With no live turn the next steer is stale before it reaches the
-    // provider.
     await expect(
       runtime.steerTurn({
         clientRequestId: "creq_222222222z",

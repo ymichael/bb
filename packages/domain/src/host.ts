@@ -13,12 +13,6 @@ export const hostSchema = z.object({
   name: z.string(),
   type: hostTypeSchema,
   status: hostStatusSchema,
-  /**
-   * Permission ceiling for work that runs on this machine. Threads resolve
-   * down to this mode, so a sandbox machine can stay at "full" while a
-   * personal laptop refuses to go above "accept-edits". Only an owner session
-   * changes it; machine credentials cannot (see the hosts routes).
-   */
   maxPermissionMode: permissionModeSchema,
   lastSeenAt: z.number().nullable(),
   lastRejectedProtocolVersion: z.number().int().positive().nullable(),

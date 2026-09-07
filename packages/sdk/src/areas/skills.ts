@@ -47,11 +47,6 @@ export interface SkillDeleteArgs extends SkillWorkspaceArgs {
   skillId: string;
 }
 
-/**
- * Registry calls proxy out to skills.sh and GitHub, and the browse grid fans
- * out one per card. Callers pass their query's AbortSignal so abandoning a
- * page cancels its requests instead of leaving them in flight.
- */
 export interface AbortableArgs {
   signal?: AbortSignal;
 }
@@ -79,17 +74,15 @@ export interface RegistryRepositoryArgs extends AbortableArgs {
   source: string;
 }
 
-/**
- * Install is a mutation and deliberately takes no signal: its body is parsed
- * with a strict schema, so an extra key would throw at runtime.
- */
 export interface RegistrySkillInstallArgs {
   registrySkillId: string;
 }
 
 export interface SkillsRegistryArea {
   detail(args: RegistrySkillSourceArgs): Promise<RegistrySkillDetail>;
-  entries(args: RegistrySkillEntriesArgs): Promise<RegistrySkillEntriesResponse>;
+  entries(
+    args: RegistrySkillEntriesArgs,
+  ): Promise<RegistrySkillEntriesResponse>;
   get(args: RegistrySkillIdArgs): Promise<RegistrySkill>;
   install(
     args: RegistrySkillInstallArgs,

@@ -25,8 +25,6 @@ const bridgePermissionEscalationSchema = z
   .enum(permissionEscalationValues)
   .nullable();
 const bridgePermissionScopeSchema = z.enum(runtimePermissionScopeValues);
-// Omission means the session has no extra writable roots; this keeps older
-// bridge messages compatible and avoids sending an empty protocol field.
 const bridgeAdditionalWorkspaceWriteRootsSchema = z
   .array(z.string())
   .optional();
@@ -46,11 +44,6 @@ export const claudeThreadStartParamsSchema = z.object({
   additionalWorkspaceWriteRoots: bridgeAdditionalWorkspaceWriteRootsSchema,
   plugins: bridgeClaudePluginsSchema,
   permissionMode: claudePermissionModeSchema,
-  // The mode the session returns to once the user approves a plan. `/plan`
-  // overrides `permissionMode` for the whole session, so without this the
-  // thread would keep Plan mode's gating after the plan is approved and
-  // prompt for edits the user's preset already allows. Equal to
-  // `permissionMode` whenever the session does not start in Plan mode.
   approvedPlanPermissionMode: claudePermissionModeSchema,
   permissionScope: bridgePermissionScopeSchema,
   permissionEscalation: bridgePermissionEscalationSchema,
@@ -58,6 +51,8 @@ export const claudeThreadStartParamsSchema = z.object({
   model: z.string().optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   workflowsEnabled: z.boolean(),
+  idleQueryReleaseEnabled: z.boolean(),
+  chromeEnabled: z.boolean(),
   memoryEnabled: z.boolean().optional(),
   providerSubagentsEnabled: z.boolean().optional(),
   instructionMode: bridgeInstructionModeSchema,
@@ -85,12 +80,12 @@ export const claudeTurnStartParamsSchema = z.object({
   model: z.string().optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   workflowsEnabled: z.boolean().optional(),
+  idleQueryReleaseEnabled: z.boolean().optional(),
+  chromeEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
   providerSubagentsEnabled: z.boolean().optional(),
   config: z.record(z.string(), z.unknown()).optional(),
   permissionEscalation: bridgePermissionEscalationSchema,
-  // `/plan` on a later turn: the live session switches into Plan mode before
-  // the prompt is pushed. Undefined keeps the session's current mode.
   claudeCodePermissionMode: z.literal("plan").optional(),
 });
 
@@ -102,13 +97,14 @@ export const claudeTurnSteerParamsSchema = z.object({
   model: z.string().optional(),
   reasoningLevel: reasoningLevelSchema.optional(),
   workflowsEnabled: z.boolean().optional(),
+  idleQueryReleaseEnabled: z.boolean().optional(),
+  chromeEnabled: z.boolean().optional(),
   memoryEnabled: z.boolean().optional(),
   providerSubagentsEnabled: z.boolean().optional(),
   permissionEscalation: bridgePermissionEscalationSchema,
   claudeCodePermissionMode: z.literal("plan").optional(),
 });
 
-/** The canonical Provider Bridge Protocol params, per method. */
 const claudeCodeCommandSchema = z.discriminatedUnion("method", [
   z.object({
     method: z.literal("initialize"),
@@ -191,11 +187,6 @@ const claudeCodeCommandMethods = new Set<string>(
   claudeCodeCommandSchema.options.map((option) => option.shape.method.value),
 );
 
-/**
- * A decode failure on a well-formed envelope is a caller-visible error, not
- * something to drop: the caller is waiting on `id` and would otherwise learn
- * nothing until its request timed out.
- */
 type ClaudeCodeJsonRpcRequestDecodeResult =
   | { kind: "request"; request: ClaudeCodeJsonRpcRequest }
   | { kind: "not_a_request" }

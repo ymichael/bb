@@ -179,7 +179,6 @@ describe("task attachments", () => {
       const { attachmentId } = (await uploaded.json()) as {
         attachmentId: string;
       };
-      // sanitizeFileName keeps the em dash, so the stored name is unchanged.
       expect(store.getAttachment(attachmentId)?.fileName).toBe(emDashName);
 
       const response = await harness.fetchHttp(
@@ -200,7 +199,6 @@ describe("task attachments", () => {
   it("percent-encodes every non attr-char in filename* (RFC 5987)", async () => {
     const { harness, task } = setup();
     try {
-      // encodeURIComponent keeps ( ) and ', which RFC 5987 excludes from attr-char.
       const name = "\u5831\u544a (final)'.txt";
       const uploaded = await upload(
         harness,
@@ -233,7 +231,6 @@ describe("task attachments", () => {
   it("strips Unicode bidirectional controls that could spoof the extension", async () => {
     const { harness, store, task } = setup();
     try {
-      // RIGHT-TO-LEFT OVERRIDE makes "photo<RLO>gnp.exe" render as "photoexe.png".
       const uploaded = await upload(
         harness,
         task.id,

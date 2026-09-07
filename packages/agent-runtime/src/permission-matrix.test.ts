@@ -1,27 +1,3 @@
-/**
- * A5 / G12 — the permission-decision matrix, pinned before the provider-plugin
- * migration changes any of the unions involved.
- *
- * The runtime decides an approval request in exactly one place:
- * `handleRuntimeProviderRequest` (runtime-provider-requests.ts), which defers
- * to the bridge kit's `shouldAutoDenyInteractiveRequest`. Every other input the
- * server could vary (permission mode, subject, the provider's `approvalEnforcedBy`)
- * either reaches that function or is translated into provider-native settings
- * that the provider enforces itself. The matrix below is the literal outcome
- * for every cell today; a row that changes is a behavior change that needs a
- * PR of its own.
- *
- * The request travels the real path: a canonical `interaction/request` is
- * decoded by the bridge-protocol adapter built for the scripted echo bridge
- * (the same adapter every plugin bridge gets), whose initialize handshake sets
- * `approvalEnforcedBy`, and a pipe child echoes the runtime's answer back.
- *
- * Outcomes:
- * - `forward`   the request reaches `onInteractiveRequest` (the user decides)
- * - `auto-deny` the runtime answers `deny` without asking
- * - `encode-error` the runtime wanted to auto-deny but `deny` is not an
- *   available decision, so the provider gets a JSON-RPC error instead
- */
 import { spawn, type ChildProcess } from "node:child_process";
 import readline from "node:readline";
 import {
@@ -55,14 +31,6 @@ import {
 } from "./test/runtime-test-harness.js";
 import type { AgentRuntimeExecutionOptions } from "./types.js";
 
-// ---------------------------------------------------------------------------
-// Dimensions
-// ---------------------------------------------------------------------------
-
-/**
- * The policy union is a discriminated union on permissionMode: accept-edits and
- * auto carry an escalation, full carries null. These five are every member.
- */
 const POLICY_KEYS = [
   "accept-edits/ask",
   "accept-edits/deny",
@@ -91,22 +59,7 @@ type CellKey = `${PolicyKey}|${SubjectKind}|${Enforcer}|${DenyAvailability}`;
 
 type Outcome = "forward" | "auto-deny" | "encode-error";
 
-// ---------------------------------------------------------------------------
-// The pinned matrix (100 cells)
-// ---------------------------------------------------------------------------
-
-/**
- * Read this as: the runtime auto-denies only when the provider lets the
- * runtime enforce policy AND the turn's escalation is `deny`. Permission mode
- * on its own never auto-decides anything here; `full` has no escalation at all.
- * The subject kind never matters to the runtime.
- *
- * The first 80 cells are the pin taken on `main` before the v3 contract; the
- * `tool_use` cells were added when that contract added the subject (no bridge
- * produces it until WS5) and were measured the same way.
- */
 const EXPECTED = {
-  // accept-edits, escalation ask
   "accept-edits/ask|command|runtime|deny-available": "forward",
   "accept-edits/ask|command|runtime|deny-unavailable": "forward",
   "accept-edits/ask|command|provider|deny-available": "forward",
@@ -123,7 +76,6 @@ const EXPECTED = {
   "accept-edits/ask|plan|runtime|deny-unavailable": "forward",
   "accept-edits/ask|plan|provider|deny-available": "forward",
   "accept-edits/ask|plan|provider|deny-unavailable": "forward",
-  // accept-edits, escalation deny
   "accept-edits/deny|command|runtime|deny-available": "auto-deny",
   "accept-edits/deny|command|runtime|deny-unavailable": "encode-error",
   "accept-edits/deny|command|provider|deny-available": "forward",
@@ -140,7 +92,6 @@ const EXPECTED = {
   "accept-edits/deny|plan|runtime|deny-unavailable": "encode-error",
   "accept-edits/deny|plan|provider|deny-available": "forward",
   "accept-edits/deny|plan|provider|deny-unavailable": "forward",
-  // auto, escalation ask
   "auto/ask|command|runtime|deny-available": "forward",
   "auto/ask|command|runtime|deny-unavailable": "forward",
   "auto/ask|command|provider|deny-available": "forward",
@@ -157,7 +108,6 @@ const EXPECTED = {
   "auto/ask|plan|runtime|deny-unavailable": "forward",
   "auto/ask|plan|provider|deny-available": "forward",
   "auto/ask|plan|provider|deny-unavailable": "forward",
-  // auto, escalation deny
   "auto/deny|command|runtime|deny-available": "auto-deny",
   "auto/deny|command|runtime|deny-unavailable": "encode-error",
   "auto/deny|command|provider|deny-available": "forward",
@@ -194,7 +144,6 @@ const EXPECTED = {
   "full/-|tool_use|runtime|deny-unavailable": "forward",
   "full/-|tool_use|provider|deny-available": "forward",
   "full/-|tool_use|provider|deny-unavailable": "forward",
-  // full (no escalation)
   "full/-|command|runtime|deny-available": "forward",
   "full/-|command|runtime|deny-unavailable": "forward",
   "full/-|command|provider|deny-available": "forward",
@@ -213,11 +162,6 @@ const EXPECTED = {
   "full/-|plan|provider|deny-unavailable": "forward",
 } satisfies Record<CellKey, Outcome>;
 
-// ---------------------------------------------------------------------------
-// Exhaustiveness: the local dimension arrays must equal the domain unions
-// ---------------------------------------------------------------------------
-
-/** Resolves to `true` only when `A` and `B` are the same union. */
 type SameUnion<A, B> = [A] extends [B]
   ? [B] extends [A]
     ? true
@@ -244,10 +188,6 @@ void policyKeyCoversPolicyUnion;
 void subjectKindCoversUnion;
 void enforcerCoversUnion;
 void permissionModeCoversUnion;
-
-// ---------------------------------------------------------------------------
-// Cell construction
-// ---------------------------------------------------------------------------
 
 function policyFor(key: PolicyKey): RuntimePermissionPolicy {
   switch (key) {
@@ -342,10 +282,6 @@ function buildPayload(
   };
 }
 
-/**
- * The adapter every plugin bridge gets, built for the scripted echo launch,
- * after an initialize handshake that sets where approvals are enforced.
- */
 function adapterFor(enforcer: Enforcer): BridgeProtocolAdapter {
   const adapter = createProviderForId("fake", {
     additionalWorkspaceWriteRoots: [],
@@ -367,7 +303,6 @@ function adapterFor(enforcer: Enforcer): BridgeProtocolAdapter {
   return adapter;
 }
 
-/** A canonical `interaction/request`, as a bridge sends it on the wire. */
 function interactionRequest(
   id: number,
   payload: ApprovalPendingInteractionPayload,
@@ -520,14 +455,8 @@ const CELLS = POLICY_KEYS.flatMap((policyKey) =>
   ),
 );
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
-
 describe("permission decision matrix", () => {
   it("enumerates every cell of the cross product", () => {
-    // The subject union is private to the domain; every local kind must be a
-    // member (the type-level SameUnion guard above proves there are no others).
     for (const kind of SUBJECT_KINDS) {
       expect(
         pendingInteractionPayloadSchema.safeParse(

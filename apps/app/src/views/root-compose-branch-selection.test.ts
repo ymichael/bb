@@ -48,7 +48,6 @@ describe("carryBranchSelectionAcrossScope", () => {
     const localKey = "proj_1\u0000host:host_1:local";
     const picked = { name: "origin/feature", isNew: true };
 
-    // Switching to Working Locally drops the worktree pick.
     const afterLeavingWorktree = carryBranchSelectionAcrossScope({
       previousScopeKey: worktreeKey,
       currentScopeKey: localKey,
@@ -56,8 +55,6 @@ describe("carryBranchSelectionAcrossScope", () => {
     });
     expect(afterLeavingWorktree).toBeNull();
 
-    // Returning to New Worktree does not restore it — the picker re-seeds from
-    // the fresh smart default instead.
     expect(
       carryBranchSelectionAcrossScope({
         previousScopeKey: localKey,

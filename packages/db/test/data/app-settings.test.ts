@@ -46,9 +46,6 @@ describe("app settings data", () => {
     expect(getAppKeybindingOverrides(db)).toEqual(overrides);
   });
 
-  // Rows outlive the schema: a preference can be retired, and a value written
-  // by a newer build can be a shape this one no longer accepts. Neither may
-  // take the rest of the settings down with it.
   it("ignores retired keys and falls back per key on an unreadable value", () => {
     setAppSettings(db, {
       ...defaultAppSettings,

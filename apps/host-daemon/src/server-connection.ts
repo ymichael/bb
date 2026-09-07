@@ -73,8 +73,6 @@ type SessionCloseHandler = (
 
 const SERVER_MESSAGE_PAYLOAD_PREVIEW_CHARS = 512;
 const TERMINAL_SOCKET_HIGH_WATER_BYTES = 1024 * 1024;
-// A 16 MiB raw burst expands to about 21.4 MiB as base64 + JSON. Keep
-// enough bounded headroom for that workload while preventing unbounded growth.
 const TERMINAL_SOCKET_MAX_QUEUE_BYTES = 32 * 1024 * 1024;
 const TERMINAL_SOCKET_DRAIN_POLL_MS = 10;
 
@@ -83,14 +81,6 @@ interface PendingTerminalSocketPayload {
   payload: string;
 }
 
-/**
- * Returns the dedup key for messages that survive a disconnect, or null for
- * message kinds that are dropped when the websocket is down. Buffered
- * messages coalesce per key to the latest value and replay in insertion
- * order after reconnect. To make a new message kind recoverable, add a case
- * here — buffering, success-clearing, shutdown clearing, and flushing all
- * key off this function.
- */
 function recoverableMessageKey(
   message: HostDaemonDaemonWsMessage,
 ): string | null {
@@ -129,8 +119,6 @@ function isTerminalDaemonLifecycleMessage(
 function summarizeServerMessagePayload(
   data: unknown,
 ): ServerMessagePayloadSummary {
-  // Authenticated server-protocol payloads are useful diagnostics; keep the
-  // preview bounded so malformed messages cannot flood logs.
   const text = decodeWebSocketMessageData(data);
   return {
     payloadLength: text.length,
@@ -189,7 +177,6 @@ export class ServerConnection {
     if (this.websocket) {
       const websocket = this.websocket;
       this.websocket = null;
-      // Suppress handlers so an intentional close cannot start reconnect work.
       websocket.onmessage = null;
       websocket.onclose = null;
       websocket.close();
@@ -219,10 +206,6 @@ export class ServerConnection {
       isTerminalDaemonLifecycleMessage(parsed) &&
       this.pendingTerminalSocketPayloads.length > 0
     ) {
-      // Lifecycle replies cannot survive a daemon-session replacement. Push
-      // bounded output into the WebSocket's own ordered buffer before sending
-      // opened/replay/exited, rather than acknowledging an in-memory queue
-      // that would be discarded on reconnect.
       this.flushTerminalSocketPayloads(true);
       if (
         this.pendingTerminalSocketPayloads.length > 0 ||
@@ -553,8 +536,6 @@ export class ServerConnection {
   }
 
   private flushPendingRecoverableMessages(): void {
-    // Snapshot before sending: each send mutates the map (delete on
-    // success, re-set on failure), so don't iterate it live.
     for (const message of Array.from(
       this.pendingRecoverableMessages.values(),
     )) {
@@ -748,8 +729,6 @@ export class ServerConnection {
         const gapMs = now - lastTickAt;
         const thresholdMs = session.leaseTimeoutMs / 2;
         if (gapMs > session.leaseTimeoutMs) {
-          // The timer could not test liveness while it was delayed. Give the
-          // return path one fresh lease regardless of how the gap is logged.
           this.lastHeartbeatAcknowledgedAt = now;
         }
         const resumedAfterSuspension = isLikelySystemSuspensionDelay({

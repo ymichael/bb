@@ -3,7 +3,6 @@ import type { ConnectCredential } from "./credential.js";
 import { deriveConnectBaseUrl, serverUrlForHandle } from "./urls.js";
 import { ConnectListError } from "./errors.js";
 
-/** One server row from `GET /api/connect/servers` (worker boundary). */
 const accountServerSchema = z.object({
   handle: z.string().min(1),
   name: z.string().min(1),
@@ -16,21 +15,15 @@ const accountServersResponseSchema = z.object({
 
 type AccountServer = z.infer<typeof accountServerSchema>;
 
-/** Account server enriched with the connect public URL for that handle. */
 export type AccountServerWithUrl = AccountServer & {
   url: string;
 };
 
 export type ListAccountServersResult = {
   servers: AccountServerWithUrl[];
-  /** This bb's routing label so callers can dedupe self. */
   selfHandle: string;
 };
 
-/**
- * Build public URLs for account servers from the pairing credential's base
- * (`https://getbb.app` / self-hosted apex) and each server's handle.
- */
 function withAccountServerUrls(
   servers: AccountServer[],
   credential: ConnectCredential,
@@ -42,10 +35,6 @@ function withAccountServerUrls(
   }));
 }
 
-/**
- * Call the connect gate `GET /api/connect/servers` with the stored pairing
- * credential. Zod-parses the worker response at the boundary.
- */
 async function fetchAccountServers(
   credential: ConnectCredential,
   fetchImpl: typeof fetch = globalThis.fetch,
@@ -95,10 +84,6 @@ async function fetchAccountServers(
   return parsed.data.servers;
 }
 
-/**
- * The gate call plus the URL enrichment and self label, so a caller holding
- * only a credential gets the same result as the plugin's RPC.
- */
 export async function listAccountServers(
   credential: ConnectCredential,
   fetchImpl: typeof fetch = globalThis.fetch,

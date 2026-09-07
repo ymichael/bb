@@ -44,7 +44,6 @@ interface BoardCardMeta {
 }
 
 interface BoardData {
-  /** Top-level tasks in server order (status, then ascending position). */
   tasks: Task[];
   labelsById: Map<string, Label>;
   metaByTaskId: Map<string, BoardCardMeta>;
@@ -64,7 +63,6 @@ async function fetchBoard(
   const tasks = await listAllTasks(rpc, { projectId });
   const topLevel = tasks.filter((task) => task.parentTaskId === null);
 
-  // Everything below decorates cards; a failure hides chips, never the board.
   const labels = await rpc.call("listLabels", { projectId }).then(
     (result) => result.labels,
     () => [],
@@ -287,8 +285,6 @@ export function BoardView({ projectId }: BoardViewProps) {
     [projectId],
   );
 
-  // Local column state renders instantly on drop; realtime refetches replace
-  // it with the server's authoritative fractional-position order.
   const [columns, setColumns] = useState<ColumnMap | undefined>(undefined);
   useEffect(() => {
     setColumns(undefined);
@@ -315,8 +311,6 @@ export function BoardView({ projectId }: BoardViewProps) {
   ): { status: TaskStatus; index: number } | null => {
     const current = columnsRef.current;
     if (!current) return null;
-    // Each column's drop zone is its full-height strip of the board, so a
-    // pointer below a short column's last card still targets that column.
     const boardRect = boardRef.current?.getBoundingClientRect();
     if (
       boardRect &&
@@ -432,7 +426,6 @@ export function BoardView({ projectId }: BoardViewProps) {
         if (target) commitDrop(task.id, target.status, target.index);
       }
       setDrag(null);
-      // The click event fires right after pointerup; swallow that one only.
       suppressClickRef.current = true;
       setTimeout(() => {
         suppressClickRef.current = false;
@@ -482,8 +475,6 @@ export function BoardView({ projectId }: BoardViewProps) {
   const renderColumn = (status: TaskStatus) => {
     const cards = columns[status];
     const isDragOver = drag !== null && drag.overStatus === status;
-    // The dragged card stays in place (dimmed), so the insertion indicator is
-    // positioned among the remaining cards.
     const remaining = drag
       ? cards.filter((task) => task.id !== drag.taskId)
       : cards;

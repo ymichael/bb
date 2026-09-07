@@ -60,12 +60,18 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
   {
     reason:
       "Unmanaged workspaces may omit branch checkout intent when the daemon should leave HEAD untouched.",
-    fields: ["createThreadRequestSchema.environment.workspace.branch"],
+    fields: [
+      "createThreadRequestSchema.environment.workspace.branch",
+      "forkThreadRequestSchema.environment.workspace.branch",
+    ],
   },
   {
     reason:
       "Personal workspace requests may omit hostId so the server can use the default connected local host.",
-    fields: ["createThreadRequestSchema.environment.hostId"],
+    fields: [
+      "createThreadRequestSchema.environment.hostId",
+      "forkThreadRequestSchema.environment.hostId",
+    ],
   },
   {
     reason:
@@ -82,6 +88,7 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
       "Fork creation requires only a source thread; all other fields either select an optional behavior or receive an explicit server-boundary default.",
     fields: [
       "forkThreadRequestSchema.agentContextSeed",
+      "forkThreadRequestSchema.environment",
       "forkThreadRequestSchema.input",
       "forkThreadRequestSchema.originPluginId",
       "forkThreadRequestSchema.permissionMode",
@@ -271,6 +278,37 @@ const OPTIONAL_SERVER_FIELD_GROUPS: readonly OptionalServerFieldGroup[] = [
     reason:
       "Uploaded attachments may omit mime type when the client could not determine one.",
     fields: ["uploadedPromptAttachmentSchema.mimeType"],
+  },
+  {
+    reason:
+      "sendAt is present only when the caller is scheduling the dispatch; omission means attempt the dispatch now, which allocates no queued row at all when nothing blocks it.",
+    fields: [
+      "createThreadRequestSchema.sendAt",
+      "sendMessageRequestSchema.sendAt",
+    ],
+  },
+  {
+    reason:
+      "GET /threads/count filters are all genuinely absent by default: omitting one does not filter on it, and groups is present only when groupBy was asked for.",
+    fields: [
+      "threadCountQuerySchema.status",
+      "threadCountQuerySchema.hostId",
+      "threadCountQuerySchema.providerId",
+      "threadCountQuerySchema.projectId",
+      "threadCountQuerySchema.parentThreadId",
+      "threadCountQuerySchema.groupBy",
+      "threadCountQuerySchema.includeArchived",
+      "threadCountQuerySchema.includeHidden",
+      "threadCountResponseSchema.groups",
+    ],
+  },
+  {
+    reason:
+      "The cross-thread queue list is unfiltered by default: omitting threadId or waitHolder means every live queued row, which is what a workspace-wide pending view asks for.",
+    fields: [
+      "queuedMessageListQuerySchema.threadId",
+      "queuedMessageListQuerySchema.waitHolder",
+    ],
   },
 ];
 
@@ -489,17 +527,13 @@ describe("git branch name contract", () => {
     expect(
       contract.projectBranchesQuerySchema.safeParse({
         hostId: "host_123",
-        selectedBranch: "upstream/main lock",
+        refresh: "blocking",
       }).success,
     ).toBe(false);
     expect(
-      contract.squashMergeOptionsSchema.safeParse({
-        mergeBaseBranch: "origin/main",
-      }).success,
-    ).toBe(true);
-    expect(
-      contract.squashMergeOptionsSchema.safeParse({
-        mergeBaseBranch: "origin/main lock",
+      contract.projectBranchesQuerySchema.safeParse({
+        hostId: "host_123",
+        selectedBranch: "upstream/main lock",
       }).success,
     ).toBe(false);
     expect(
@@ -865,6 +899,7 @@ describe("server-contract canonical schemas", () => {
           environmentHostId: "host_123",
           environmentName: null,
           environmentBranchName: "bb/test",
+          queuedWork: "none",
           environmentWorkspaceDisplayKind: "managed-worktree",
         },
       ]),
@@ -875,6 +910,7 @@ describe("server-contract canonical schemas", () => {
         environmentHostId: "host_123",
         environmentName: null,
         environmentBranchName: "bb/test",
+        queuedWork: "none",
         environmentWorkspaceDisplayKind: "managed-worktree",
       },
     ]);
@@ -963,6 +999,13 @@ describe("server-contract canonical schemas", () => {
 
     expect(() =>
       environmentActionRequestSchema.parse({
+        action: "squash_merge",
+        options: { mergeBaseBranch: "main" },
+      }),
+    ).toThrow();
+
+    expect(() =>
+      environmentActionRequestSchema.parse({
         action: "pull_request_merge",
         options: { method: "admin" },
       }),
@@ -991,7 +1034,7 @@ describe("server-contract canonical schemas", () => {
         commitSha: "sha",
         commitSubject: "subject",
         merged: true,
-        message: "",
+        message: "Squash merge completed",
         ok: true,
       }),
     ).toThrow();
@@ -1231,7 +1274,6 @@ describe("server-contract canonical schemas", () => {
     });
     expect(parsed.input[0]).toMatchObject({ mentions: [pluginMention] });
 
-    // All plugin resource fields are required — a partial resource fails.
     expect(() =>
       sendMessageRequestSchema.parse({
         input: [
@@ -1406,21 +1448,18 @@ describe("server-contract canonical schemas", () => {
         workspace: { type: "unmanaged" as const, path: null },
       },
     };
-    // Missing senderThreadId.
     expect(() =>
       createThreadRequestSchema.parse({
         ...baseRequest,
         startedOnBehalfOf: { initiator: "agent" },
       }),
     ).toThrow();
-    // Empty senderThreadId.
     expect(() =>
       createThreadRequestSchema.parse({
         ...baseRequest,
         startedOnBehalfOf: { initiator: "agent", senderThreadId: "" },
       }),
     ).toThrow();
-    // "user" is not a valid started-on-behalf-of initiator.
     expect(() =>
       createThreadRequestSchema.parse({
         ...baseRequest,
@@ -1467,18 +1506,6 @@ describe("server-contract canonical schemas", () => {
 });
 
 describe("server-contract clients", () => {
-  // The browser app and @bb/sdk import createApiClient at boot. The route
-  // table in public-api.ts drags ~85 zod schemas into the boot chunk, so the
-  // client must reach PublicApiRoutes through a type-only import and nothing
-  // else from that module graph. Typecheck cannot tell `import type` from a
-  // value import here, so pin the source form: every module api-client.ts
-  // imports or re-exports from, flagged type-only or not, so a new value
-  // edge (a sibling zod module, a value re-export of the route table) fails
-  // by construction. Walk the TypeScript AST instead of regexing the text: a
-  // `;` inside a comment in a multi-line import block, or a bare
-  // `import "./x.js"` with no `from`, adds a real edge that a statement
-  // regex never sees, and statement order or a trailing comment must not
-  // matter because neither changes the module graph.
   it("keeps the api client off the route table's value import graph", () => {
     const source = readFileSync(
       fileURLToPath(new URL("../src/api-client.ts", import.meta.url)),
@@ -1499,9 +1526,6 @@ describe("server-contract clients", () => {
         return [
           {
             specifier: statement.moduleSpecifier.text,
-            // Only `import type` is type-only: a bare `import "./x.js"` has
-            // no clause, and `import { type X }` keeps a value clause that
-            // verbatimModuleSyntax-style emit preserves as a live edge.
             typeOnly:
               statement.importClause?.phaseModifier ===
               ts.SyntaxKind.TypeKeyword,
@@ -1532,12 +1556,6 @@ describe("server-contract clients", () => {
     ).toEqual([{ specifier: "./public-api.js", typeOnly: true }]);
   });
 
-  // index.ts re-exports public-api.ts with `export *`, which stays a live
-  // module-graph edge no matter how api-client.ts imports it. Bundlers only
-  // drop the route table (and the schema modules behind it) from that edge
-  // because the package declares itself side-effect free; without the flag
-  // the whole table returns to the browser boot chunk while the test above
-  // stays green.
   it("declares the package side-effect free so the barrel's route-table edge is droppable", () => {
     const manifest = readFileSync(
       fileURLToPath(new URL("../package.json", import.meta.url)),
@@ -1640,8 +1658,6 @@ describe("server-contract clients", () => {
         query: { path: "/Users/me/notes/plan.md" },
       }).pathname,
     ).toBe("/api/v1/threads/thr_123/host-files/content");
-    // Path-suffix file routes: `:filePath{.+}` spans slashes and the caller
-    // passes a pre-encoded value ($url substitutes params verbatim).
     expect(
       publicClient.threads[":id"]["thread-storage"].files[":filePath{.+}"].$url(
         {
@@ -1796,6 +1812,7 @@ describe("server-contract clients", () => {
       createQueuedMessageRequestSchema:
         contract.createQueuedMessageRequestSchema,
       createThreadRequestSchema: contract.createThreadRequestSchema,
+      queuedMessageListQuerySchema: contract.queuedMessageListQuerySchema,
       forkThreadRequestSchema: contract.forkThreadRequestSchema,
       environmentActionApiErrorSchema: contract.environmentActionApiErrorSchema,
       environmentStatusResponseSchema: contract.environmentStatusResponseSchema,
@@ -1809,11 +1826,12 @@ describe("server-contract clients", () => {
       sendQueuedMessageRequestSchema: contract.sendQueuedMessageRequestSchema,
       sendQueuedMessageResponseSchema: contract.sendQueuedMessageResponseSchema,
       sendMessageRequestSchema: contract.sendMessageRequestSchema,
-      squashMergeActionResponseSchema: contract.squashMergeActionResponseSchema,
       systemExecutionOptionsQuerySchema:
         contract.systemExecutionOptionsQuerySchema,
       systemProvidersQuerySchema: contract.systemProvidersQuerySchema,
       threadEventsQuerySchema: contract.threadEventsQuerySchema,
+      threadCountQuerySchema: contract.threadCountQuerySchema,
+      threadCountResponseSchema: contract.threadCountResponseSchema,
       threadListQuerySchema: contract.threadListQuerySchema,
       threadPendingInteractionsResponseSchema:
         contract.threadPendingInteractionsResponseSchema,

@@ -1,12 +1,3 @@
-/**
- * Returns a connection that behaves exactly like the real one (every read and
- * write hits the real SQLite database) but runs `onFirstRead` immediately
- * after the first `.select()…\.get()` resolves — the only point where a
- * concurrent writer could interleave under an async executor. Used to
- * exercise the compare-and-set branch of the lifecycle writers, which
- * better-sqlite3's synchronous transactions make unreachable through the
- * public API alone.
- */
 export function withWriteAfterFirstRead<T extends object>(
   connection: T,
   onFirstRead: () => void,

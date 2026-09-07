@@ -1,14 +1,3 @@
-// Metro config for the bb mobile app inside the pnpm monorepo.
-//
-// Workspace packages (`@bb/*`) publish TypeScript source through
-// `exports` conditions (`source` → `./src/*.ts`) and use NodeNext-style
-// relative specifiers (`./foo.js` for `./foo.ts`). Metro needs:
-//   1. package `exports` resolution (on by default in RN ≥ 0.79),
-//   2. the `source` condition — applied ONLY to `@bb/*` packages here, because
-//      third-party packages built with builder-bob also ship a `source`
-//      condition and we do not want Metro compiling their raw sources,
-//   3. a `.js` → `.ts(x)` fallback for relative imports inside workspace
-//      sources.
 const path = require("node:path");
 const fs = require("node:fs");
 const { getDefaultConfig } = require("expo/metro-config");
@@ -51,7 +40,6 @@ function fileWithTsExtension(base) {
   return null;
 }
 
-/** Split `@scope/name/sub/path` into package name and `./sub/path` subpath. */
 function splitScopedSpecifier(moduleName) {
   const parts = moduleName.split("/");
   const packageName = parts.slice(0, 2).join("/");
@@ -76,7 +64,6 @@ function findWorkspacePackageDir(packageName) {
   return found;
 }
 
-/** Resolve a `@bb/*` specifier through its `exports[subpath].source` entry. */
 function resolveWorkspaceSource(moduleName) {
   const { packageName, subpath } = splitScopedSpecifier(moduleName);
   const packageDir = findWorkspacePackageDir(packageName);
@@ -104,7 +91,6 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
-  // NodeNext `./x.js` → `./x.ts` inside workspace TS sources.
   if (
     moduleName.startsWith(".") &&
     moduleName.endsWith(".js") &&
@@ -121,8 +107,4 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   return resolve(context, moduleName, platform);
 };
 
-// `inlineRem: 16` matches the browser default the web app's Tailwind values
-// assume (react-native-css defaults to 14, which would shrink every spacing
-// utility to a 3.5px grid). global.css also declares `:root { font-size:
-// 16px }` for the runtime `rem` variable.
 module.exports = withNativewind(config, { inlineRem: 16 });

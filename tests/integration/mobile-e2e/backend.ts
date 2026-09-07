@@ -1,22 +1,3 @@
-// Long-lived harness backend for the mobile app's Maestro flows.
-//
-// Starts the in-process integration server + host daemon with the fake
-// provider adapter (user questions enabled) on a fixed port, seeds a project
-// with a few threads, prints the connection details as JSON on stdout, and
-// keeps running until SIGINT/SIGTERM.
-//
-// Usage (from the repo root):
-//   pnpm --filter @bb/integration-tests e2e:mobile-backend
-//   BB_MOBILE_E2E_PORT=41999 BB_MOBILE_E2E_BIND_HOST=0.0.0.0 pnpm ... (physical phone)
-//
-// The iOS Simulator shares the Mac loopback, so the app can use
-// http://127.0.0.1:<port> directly. The Android emulator uses 10.0.2.2.
-//
-// SECURITY: BB_MOBILE_E2E_BIND_HOST=0.0.0.0 exposes the unauthenticated
-// harness server and a real host daemon (terminal sessions and file reads as
-// your user) to everyone on the network, the same exposure as
-// `bb --server-bind-host 0.0.0.0`. Use it only on a trusted network and stop
-// the backend when you are done.
 import { existsSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -39,13 +20,6 @@ const DEFAULT_PORT = 41999;
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../..");
 
-/**
- * The built web app, when it exists. The WebView shell flow renders this
- * page, so the harness has to serve it like a real bb server does. Every
- * other flow drives native screens and does not care.
- *
- * Build it with `pnpm exec turbo run build --filter=@bb/app`.
- */
 function readStaticDir(): string | undefined {
   if (process.env.BB_MOBILE_E2E_SERVE_APP !== "1") return undefined;
   const dist = resolve(repoRoot, "apps/app/dist");
@@ -74,7 +48,6 @@ function readBindHost(): "127.0.0.1" | "0.0.0.0" {
   throw new Error(`Invalid BB_MOBILE_E2E_BIND_HOST: ${raw}`);
 }
 
-/** Non-internal IPv4 addresses a phone on the same network could reach. */
 function listLanIpv4Addresses(): string[] {
   return Object.values(networkInterfaces())
     .flatMap((entries) => entries ?? [])
@@ -82,7 +55,6 @@ function listLanIpv4Addresses(): string[] {
     .map((entry) => entry.address);
 }
 
-/** Mirrors the server's wildcard-bind warning (apps/server start-server). */
 function warnWildcardBind(port: number): void {
   const lanUrls = listLanIpv4Addresses().map(
     (address) => `http://${address}:${port}`,
@@ -105,7 +77,6 @@ function warnWildcardBind(port: number): void {
 const TURN_TIMEOUT_MS = 15_000;
 const INTERACTION_POLL_INTERVAL_MS = 100;
 
-/** First pending interaction of `threadId`, polling until one appears. */
 async function waitForPendingInteraction(
   harness: IntegrationHarness,
   threadId: string,
@@ -129,7 +100,6 @@ async function waitForPendingInteraction(
   }
 }
 
-/** Sends one message and waits for the turn to finish. */
 async function runTurn(
   harness: IntegrationHarness,
   threadId: string,
@@ -139,10 +109,6 @@ async function runTurn(
   await waitForThreadStatus(harness.api, threadId, "idle", TURN_TIMEOUT_MS);
 }
 
-// ≥60 lines of markdown with a heading, a code block, a table, a list, and a
-// link so every Phase 4a renderer has content to show. Must not contain the
-// fake provider's control tokens (`approve:`, `call_tool:`, `ask_user`,
-// `delay:`) anywhere as whitespace-delimited words.
 const LONG_MARKDOWN_MESSAGE = [
   "# Release checklist overview",
   "",
@@ -234,7 +200,6 @@ async function main(): Promise<void> {
     name: "Mobile E2E Project",
   });
 
-  // Thread 1: a completed exchange the app can render read-only.
   const completed = await createReadyHostThread(harness, {
     projectId: project.id,
     title: "Completed thread",
@@ -245,17 +210,12 @@ async function main(): Promise<void> {
   });
   await waitForThreadStatus(harness.api, completed.thread.id, "idle", 15_000);
 
-  // Thread 2: idle, for the app to send into (fake adapter echoes
-  // `Response to: ...`, honors `delay:<ms>` and `ask_user`).
   const idle = await createReadyHostThread(harness, {
     projectId: project.id,
     title: "Idle thread",
     workspace: { type: "unmanaged", path: null },
   });
 
-  // Thread 3: several turns so the timeline has content for every Phase 4a
-  // row renderer. The `ask_user` turn goes last and is left pending on
-  // purpose (the thread stays "needs input").
   const rich = await createReadyHostThread(harness, {
     projectId: project.id,
     title: "Rich thread",
@@ -265,7 +225,6 @@ async function main(): Promise<void> {
   await runTurn(harness, richId, "Hello rich thread, first message");
   await runTurn(harness, richId, "delay:300 second message");
   await runTurn(harness, richId, "call_tool:my_test_tool");
-  // Approval: the fake adapter blocks until the command approval resolves.
   await sendTextMessage(harness.api, richId, {
     text: "approve:command echo hi",
   });
@@ -278,11 +237,8 @@ async function main(): Promise<void> {
   });
   await waitForThreadStatus(harness.api, richId, "idle", TURN_TIMEOUT_MS);
   await runTurn(harness, richId, LONG_MARKDOWN_MESSAGE);
-  // Left pending: the question row + "Needs input" state.
   await sendTextMessage(harness.api, richId, { text: "ask_user" });
   await waitForPendingInteraction(harness, richId);
-  // Sending through the API marks the thread read as the sender; the
-  // timeline flow expects to open this thread unread (divider at the top).
   const unreadResponse = await harness.api.threads[":id"].unread.$post({
     param: { id: richId },
   });
@@ -292,9 +248,6 @@ async function main(): Promise<void> {
     );
   }
 
-  // Thread 4: started on behalf of the idle thread (a fork seed anchor), so
-  // the first row is the generated "Forked from Idle thread" conversation row
-  // rather than a user bubble; one follow-up turn keeps it idle.
   const rowsThreadResponse = await harness.api.threads.$post({
     json: {
       environment: { type: "reuse", environmentId: completed.environment.id },
@@ -345,7 +298,6 @@ async function main(): Promise<void> {
     `mobile-e2e backend ready at ${harness.serverUrl} (Ctrl-C to stop)\n`,
   );
 
-  // Keep the process alive.
   await new Promise<never>(() => {});
 }
 

@@ -43,10 +43,6 @@ interface ResolveHostDaemonPortArgs {
   requiresExplicitPort: boolean;
 }
 
-function shouldAutoJoin(): boolean {
-  return process.argv.includes("--auto-join");
-}
-
 function resolveHostDaemonPort(args: ResolveHostDaemonPortArgs): number {
   if (
     args.requiresExplicitPort &&
@@ -214,7 +210,7 @@ export async function maybeAddAutoJoinEnv(
 
 async function main(): Promise<void> {
   const mode = resolveRuntimeMode();
-  const autoJoin = shouldAutoJoin();
+  const autoJoin = process.argv.includes("--auto-join");
   const env = await maybeAddAutoJoinEnv(
     resolveHostDaemonRuntimeEnvironment(mode),
     autoJoin,

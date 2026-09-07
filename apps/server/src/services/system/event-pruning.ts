@@ -69,13 +69,6 @@ const AGE_PRUNABLE_THREAD_EVENT_TYPES: readonly ThreadEventType[] = [
   "turn/diff/updated",
 ] as const;
 
-/**
- * Event types whose ingestion may trigger an opportunistic prune of the
- * thread's event history. Covers the age-prunable stream types plus
- * backgroundTask progress snapshots: workflows keep streaming progress after
- * their spawning turn completed, so without this trigger nothing would bound
- * the superseded snapshots until the next turn completes.
- */
 const ACTIVE_PRUNE_TRIGGER_THREAD_EVENT_TYPES: readonly ThreadEventType[] = [
   ...AGE_PRUNABLE_THREAD_EVENT_TYPES,
   "item/backgroundTask/progress",
@@ -227,9 +220,6 @@ export function maybePruneActiveThreadEventHistory(
   args: MaybePruneActiveThreadEventHistoryArgs,
 ): ThreadEventPruningResult | null {
   const thread = getThread(deps.db, args.threadId);
-  // Idle threads still ingest prunable streams: a backgrounded workflow keeps
-  // emitting thread-scoped progress snapshots after its spawning turn
-  // completed, which is exactly when nothing else would prune them.
   if (
     !thread ||
     (thread.status !== "active" && thread.status !== "idle") ||

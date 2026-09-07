@@ -51,11 +51,7 @@ function AlphaThreadList({
   );
 }
 
-function AlphaFileOpener({
-  Original,
-  path,
-  source,
-}: PluginFileOpenerProps) {
+function AlphaFileOpener({ Original, path, source }: PluginFileOpenerProps) {
   const [embedOriginal, setEmbedOriginal] = useState(false);
   const [shouldCrash, setShouldCrash] = useState(false);
   if (shouldCrash) throw new Error("Alpha file-opener test crash");

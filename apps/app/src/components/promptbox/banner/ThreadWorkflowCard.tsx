@@ -25,11 +25,6 @@ const WORKFLOW_HEADER_BUTTON_CLASS = activityRowClass(
   "flex min-h-8 w-full min-w-0 cursor-pointer items-center gap-1.5 rounded-none px-3 py-1.5 text-xs text-foreground transition-colors hover:bg-background/80",
 );
 
-/**
- * Live elapsed time since the workflow started, ticking every second. Mirrors
- * the timeline title's live duration; stays blank for the first second to avoid
- * sub-second flicker on entry.
- */
 function WorkflowDuration({ startedAt }: { startedAt: number }) {
   const elapsed = useSecondTick() - startedAt;
   if (elapsed <= 1_000) {
@@ -55,20 +50,6 @@ interface ThreadWorkflowCardProps {
   onToggle: () => void;
 }
 
-/**
- * Collapsible workflow card for the prompt stack above the composer. Surfaces a
- * running Workflow tool run the same way ThreadGoalCard surfaces the active
- * goal: collapsed shows the workflow name, agent progress, and live elapsed
- * time; expanded reveals the phase/agent tree (reusing WorkflowWorkRowBody so
- * there is a single rendering path). In the banner the tree caps at a max
- * height and scrolls, and each phase is its own collapse toggle whose expansion
- * follows the active phase as the run advances, so a long run stays glanceable.
- * Only rendered while the workflow is running — once it settles it drops out of
- * the prompt stack and its timeline row carries the terminal state.
- *
- * One card per running workflow: a thread can drive several concurrently, so
- * the caller maps over `activeWorkflows` and owns per-workflow expansion state.
- */
 export function ThreadWorkflowCard({
   workflow,
   isExpanded,

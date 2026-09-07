@@ -6,7 +6,6 @@ interface InvalidateHostProviderCliStatusArgs {
   hostId: string;
 }
 
-/** Re-fetch a host's provider CLI health after an install/update or a manual check. */
 export function invalidateHostProviderCliStatus(
   args: InvalidateHostProviderCliStatusArgs,
 ): Promise<void> {

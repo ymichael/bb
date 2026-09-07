@@ -12,7 +12,6 @@ const registrySkillProvenanceSchema = z
   })
   .strict();
 
-/** Persist the exact registry entry that owns an installed skill directory. */
 export async function writeRegistrySkillProvenance(args: {
   registrySkillId: string;
   skillDirectoryPath: string;
@@ -28,7 +27,6 @@ export async function writeRegistrySkillProvenance(args: {
   );
 }
 
-/** Read registry provenance conservatively; absent or malformed data is not registry-owned. */
 export function readRegistrySkillProvenance(
   skillDirectoryPath: string,
 ): string | null {

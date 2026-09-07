@@ -3,14 +3,12 @@ import { request } from "node:https";
 import { BlockList, isIP, type LookupFunction } from "node:net";
 import { Readable } from "node:stream";
 
-/** Injected so tests drive refreshes without real network access. */
 export type MarketplaceFetch = (
   input: string,
   init: RequestInit,
 ) => Promise<Response>;
 
 export const MARKETPLACE_FETCH_TIMEOUT_MS = 10_000;
-/** Registry metadata can be large, but it must not consume unbounded memory. */
 export const MARKETPLACE_PACKUMENT_MAX_BYTES = 8 * 1024 * 1024;
 
 const deniedMarketplaceIpv4Addresses = new BlockList();
@@ -55,7 +53,6 @@ function normalizedHostname(hostname: string): string {
     .toLowerCase();
 }
 
-/** Refuse an address that does not route only through the public internet. */
 export function assertPublicMarketplaceAddress(address: string): void {
   const family = isIP(address);
   if (family === 0) {
@@ -72,7 +69,6 @@ export function assertPublicMarketplaceAddress(address: string): void {
   }
 }
 
-/** Validate the URL policy before Node opens a socket. */
 export function assertPublicMarketplaceUrl(input: string): URL {
   const url = new URL(input);
   if (url.protocol !== "https:") {
@@ -107,7 +103,6 @@ const resolveMarketplaceDns: MarketplaceDnsResolver = (hostname, callback) =>
     callback(error, addresses),
   );
 
-/** Check the DNS answer used by the socket, which also blocks DNS rebinding. */
 export function createPublicMarketplaceLookup(
   resolveDns: MarketplaceDnsResolver = resolveMarketplaceDns,
 ): LookupFunction {
@@ -148,10 +143,6 @@ export function createPublicMarketplaceLookup(
 
 const publicMarketplaceLookup = createPublicMarketplaceLookup();
 
-/**
- * Fetch one marketplace resource through a public-network-only HTTPS socket.
- * Node's request API does not follow redirects, and the caller rejects 3xx.
- */
 export const publicMarketplaceFetch: MarketplaceFetch = async (input, init) => {
   const url = assertPublicMarketplaceUrl(input);
   if (init.body !== undefined && init.body !== null) {
@@ -206,12 +197,6 @@ export function marketplaceErrorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
-/**
- * Read a response body with a hard byte cap. The declared length is checked
- * first so an oversize body is refused before it is downloaded, and the stream
- * is cancelled as soon as the cap is passed — a hostile server cannot stream
- * unbounded bytes into memory.
- */
 export async function boundedResponseBytes(
   response: Response,
   maxBytes: number,
@@ -252,7 +237,6 @@ export async function boundedResponseBytes(
   return body;
 }
 
-/** Parse JSON only after the shared response reader enforces its byte cap. */
 export async function boundedResponseJson(
   response: Response,
   maxBytes: number,

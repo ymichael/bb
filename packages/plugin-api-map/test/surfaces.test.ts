@@ -26,20 +26,22 @@ function surfaceIds(groupId: string): string[] {
 }
 
 describe("product-map surfaces", () => {
-  it("keeps app-window annotations in their stable sequential order", () => {
+  it("keeps app-window annotations in column-major visual reading order", () => {
     const ordered = [
+      "sidebar-navigation",
       "nav-panel",
-      "thread-list",
       "thread-row-status",
+      "thread-list",
       "sidebar-footer",
       "thread-header",
+      "timeline-renderers",
       "message-directives",
       "message-actions",
       "pending-interaction",
       "code-renderers",
       "thread-panel",
       "file-opener",
-      "timeline-renderers",
+      "app-overlay",
       "content-scripts",
     ];
     expect(surfaceIds("app-shell")).toEqual(ordered);
@@ -60,8 +62,6 @@ describe("product-map surfaces", () => {
   });
 
   it("marks every visual-group surface on its fixture exactly once", () => {
-    // One surface fixture per carousel slide, so each group's surfaces must all
-    // be marked on that group's own fixture.
     expect([...APP_SHELL_MARKS].sort()).toEqual(surfaceIds("app-shell").sort());
     expect([...COMMAND_PALETTE_MARKS].sort()).toEqual(
       surfaceIds("command-palette").sort(),
@@ -75,8 +75,6 @@ describe("product-map surfaces", () => {
   });
 
   it("numbers the surfaces a fixture draws, and only those", () => {
-    // A numbered surface with no marker would print a number the diagram
-    // never shows; an unnumbered marked surface renders an empty chip.
     for (const group of SURFACE_GROUPS) {
       const numbers = group.surfaces.map((surface) =>
         SURFACE_NUMBERS.get(surface.id),
@@ -110,9 +108,6 @@ describe("product-map surfaces", () => {
   });
 
   it("renders every anatomy-manifest region and nothing else", () => {
-    // The fixtures draw these regions by mapping over the manifest, so a
-    // manifest key without a renderer would silently drop UI, and a stale
-    // renderer key would be dead code hiding a manifest drift.
     for (const area of [
       "appSidebar",
       "sidebarFooter",
@@ -144,17 +139,12 @@ describe("product-map surfaces", () => {
   });
 
   it("clusters every headless surface into exactly one named section", () => {
-    // The pixel-less slide renders FROM these sections, so a surface missing
-    // from them would silently vanish from the map.
     const headless = groupById.get("headless" as never);
     const sectioned = (headless?.sections ?? []).flatMap(
       (section) => section.surfaceIds,
     );
     expect([...sectioned].sort()).toEqual(surfaceIds("headless").sort());
     expect(new Set(sectioned).size).toBe(sectioned.length);
-    // The flat surface array drives card Previous/Next, and the sections
-    // drive the rendered grid — order equality keeps navigation from jumping
-    // between sections and back.
     expect(surfaceIds("headless")).toEqual(sectioned);
   });
 
@@ -175,8 +165,6 @@ describe("product-map surfaces", () => {
 
 describe("surface cross-references", () => {
   it("points every [label](id) at a real surface", () => {
-    // An id that no longer exists renders as plain prose — the reference just
-    // quietly disappears rather than failing, so nothing else would catch it.
     const dangling: string[] = [];
     for (const group of SURFACE_GROUPS) {
       for (const surface of group.surfaces) {
@@ -198,9 +186,6 @@ describe("surface cross-references", () => {
 
 describe("surface card copy", () => {
   it("follows the lead-then-bullets template", () => {
-    // Every card reads the same way: one lead sentence that the bullets hang
-    // off, then the capabilities. A lead that stops mid-thought (or bullets
-    // that have nothing to hang off) reads as a broken card.
     for (const group of SURFACE_GROUPS) {
       for (const surface of group.surfaces) {
         expect(surface.summary, surface.id).toMatch(
@@ -209,8 +194,6 @@ describe("surface card copy", () => {
         expect(surface.bullets.length, surface.id).toBeGreaterThanOrEqual(2);
         for (const bullet of surface.bullets) {
           expect(bullet.trim().length, surface.id).toBeGreaterThan(0);
-          // The lead-in already says "can"; a bullet that repeats it reads
-          // "a plugin can: Can register…". Bullets are bare verb phrases.
           expect(bullet, `${surface.id}: "${bullet}"`).not.toMatch(/^Can\b/);
         }
       }

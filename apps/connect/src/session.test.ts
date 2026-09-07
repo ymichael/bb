@@ -30,10 +30,6 @@ import {
 import { refreshAccountSessionCookies } from "./account-session.js";
 import { assignMachineLabel } from "./machine-label.js";
 
-// Real in-memory SQLite (never mock the DB). resolveLabel accepts any Drizzle
-// SQLite database (the widened ConnectDb type), so the better-sqlite3 driver
-// exercises the exact query the D1 worker runs. The migrations live in
-// connect-db; resolve them from that package rather than duplicating DDL.
 const MIGRATIONS_DIR = fileURLToPath(
   new URL("../../../packages/connect-db/migrations", import.meta.url),
 );
@@ -85,7 +81,6 @@ function seedServer(over: {
       userId: over.userId,
       name: over.name,
       subdomain: over.subdomain,
-      // Honor an explicit null (unpaired); default only when the key is absent.
       credentialHash: "credentialHash" in over ? over.credentialHash : "hash",
       revokedAt: over.revokedAt ?? null,
       lastSeenAt: over.lastSeenAt ?? null,
@@ -189,8 +184,6 @@ describe("resolveLabel — label → server row (multi-server)", () => {
 
     const primary = await resolveLabel("sawyer", db, { fresh: true });
     const desktop = await resolveLabel("sawyer-desktop", db, { fresh: true });
-    // Both belong to the one account, but each label resolves to ITS server row
-    // — not the account's "single" server. This is the multi-server change.
     if (primary?.kind !== "server" || desktop?.kind !== "server") {
       throw new Error("expected server labels");
     }
@@ -218,8 +211,6 @@ describe("resolveLabel — label → server row (multi-server)", () => {
 
     const a = await resolveLabel("sawyer", db, { fresh: true });
     const b = await resolveLabel("morgan", db, { fresh: true });
-    // The gate compares the visitor's session userId against `resolved.userId`,
-    // so this owner attribution is exactly what enforces isolation.
     expect(a?.userId).toBe("acct-a");
     expect(b?.userId).toBe("acct-b");
     if (a?.kind !== "server" || b?.kind !== "server") {
@@ -548,12 +539,6 @@ describe("account session refresh", () => {
   });
 });
 
-/**
- * Counts D1 round trips without mocking the database: every drizzle query
- * starts with `db.select(...)`, so counting reads of the `select` property
- * counts queries. Methods are bound to the real db so drizzle internals never
- * re-enter the proxy.
- */
 function countingDb(target: typeof db): {
   db: typeof db;
   counts: { select: number };
@@ -613,9 +598,9 @@ describe("single-flight gate caches", () => {
     await expect(resolveLabel("flight-retry", failingOnce)).rejects.toThrow(
       "d1 hiccup",
     );
-    await expect(resolveLabel("flight-retry", failingOnce)).resolves.toMatchObject(
-      { kind: "server", userId: "acct-flight-retry" },
-    );
+    await expect(
+      resolveLabel("flight-retry", failingOnce),
+    ).resolves.toMatchObject({ kind: "server", userId: "acct-flight-retry" });
   });
 
   it("collapses a cold burst of session verifications into one D1 round trip", async () => {
@@ -640,7 +625,6 @@ describe("single-flight gate caches", () => {
       .values({
         id: `sess-${token}`,
         token,
-        // Must be relative to wall clock: verifySessionCookie uses Date.now().
         expiresAt: new Date(Date.now() + 60_000),
         userId: "acct-cookie-flight",
         createdAt: now,
@@ -656,7 +640,9 @@ describe("single-flight gate caches", () => {
     );
 
     expect(counted.counts.select).toBe(1);
-    expect(verified).toEqual(Array.from({ length: 6 }, () => "acct-cookie-flight"));
+    expect(verified).toEqual(
+      Array.from({ length: 6 }, () => "acct-cookie-flight"),
+    );
   });
 });
 

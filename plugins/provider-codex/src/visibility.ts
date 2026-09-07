@@ -141,8 +141,6 @@ const CODEX_NOTIFICATION_COVERAGE = {
   "hook/completed": "unknown",
   "hook/started": "unknown",
   "item/agentMessage/delta": "normalized",
-  // Codex's automatic reviewer lifecycle is internal policy progress. The
-  // resulting tool/item lifecycle already carries the actionable outcome.
   "item/autoApprovalReview/completed": "noise",
   "item/autoApprovalReview/started": "noise",
   "item/commandExecution/outputDelta": "normalized",
@@ -161,18 +159,9 @@ const CODEX_NOTIFICATION_COVERAGE = {
   "model/verification": "unknown",
   "model/rerouted": "unknown",
   "model/safetyBuffering/updated": "unknown",
-  // Background-process gap: unlike Claude Code (which emits a task lifecycle for
-  // Bash run_in_background, materialized as a background-command timeline row),
-  // Codex has no model-facing "run in background" affordance. A model that
-  // backgrounds a command with a trailing `&` produces an ordinary, immediately
-  // completed commandExecution with no lifecycle. These process/* notifications
-  // belong to the client-initiated `process/spawn` API, which bb never calls, so
-  // there is nothing to surface — left "unknown" intentionally.
   "process/exited": "unknown",
   "process/outputDelta": "unknown",
   "project/changed": "unknown",
-  // Internal per-response accounting; thread/tokenUsage/updated carries the
-  // user-facing token state.
   "rawResponse/completed": "noise",
   "rawResponseItem/completed": "noise",
   "remoteControl/status/changed": "noise",
@@ -205,7 +194,6 @@ const CODEX_NOTIFICATION_COVERAGE = {
   "thread/unarchived": "noise",
   "turn/completed": "normalized",
   "turn/diff/updated": "normalized",
-  // Internal moderation accounting is not actionable thread output.
   "turn/moderationMetadata": "noise",
   "turn/plan/updated": "normalized",
   "turn/started": "normalized",
@@ -276,7 +264,6 @@ function describeParsedCodexRawEvent(
           event.method === "item/completed") &&
         isCodexUserMessageItemEvent(event)
       ) {
-        // User prompts render from client/turn/requested; Codex echoes are intentionally suppressed.
         return { kind: event.method, coverage: "noise" };
       }
       if (event.method === "item/commandExecution/terminalInteraction") {

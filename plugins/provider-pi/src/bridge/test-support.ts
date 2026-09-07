@@ -1,13 +1,3 @@
-/**
- * The preamble every pi bridge suite shares: a temp workspace with its
- * session dir, the fake `pi --mode rpc` child (fake-pi-rpc.mjs) behind the
- * launch seam a live run uses (`BB_PI_BRIDGE_COMMAND` / `_ARGS`), the
- * bridge's stdout captured through the SDK's JSON-RPC harness, and the
- * `initialize` handshake — plus the driver helpers the suites share: a
- * thread start, the 20 s waits over deltas and messages, and the fake's
- * process log. Suites stub their remaining fault knobs (`FAKE_PI_*`) after
- * `startFakePiBridge` returns; the handshake spawns nothing.
- */
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -28,7 +18,6 @@ export const fakePiPath = fileURLToPath(
   new URL("./fake-pi-rpc.mjs", import.meta.url),
 );
 
-/** The execution options a full-mode thread runs with. */
 export const FULL_PERMISSION_OPTIONS = {
   permissionMode: "full",
   permissionScope: "full",
@@ -36,20 +25,8 @@ export const FULL_PERMISSION_OPTIONS = {
   permissionEscalation: null,
 } as const;
 
-/** The handshake's request id; suites number their own requests from 1 or 1001. */
 const INITIALIZE_ID = 100;
-/** `startThread` numbers its requests from here, clear of any suite's own ids. */
 const FIRST_HARNESS_REQUEST_ID = 1_000_000;
-/** Longer than the kit's 15 s: every request here may cold-start a real child. */
-/**
- * How long a request may take before the harness calls it unanswered. A
- * construction the bridge retries (up to eight spawns through the
- * transient-auth window, each a node child that imports the extension) runs
- * several seconds per attempt on a starved CI runner, and the bridge's own
- * readiness budget per attempt is a minute: the harness must outlive what
- * the bridge is still legitimately waiting for, or it reports a response
- * that was on its way as missing.
- */
 const RESPONSE_DEADLINE_MS = 60_000;
 
 const threadDeltaParamsSchema = z.object({
@@ -58,63 +35,39 @@ const threadDeltaParamsSchema = z.object({
 });
 
 export interface StartFakePiBridgeOptions {
-  /** `mkdtemp` prefix of the workspace (a thread's cwd). */
   prefix: string;
-  /** Where the fake keeps session files; `<workspace>/sessions` when omitted. */
   sessionDir?: (workspaceDir: string) => string;
-  /** Send `initialize` before returning. The conformance kit sends its own. */
   initialize: boolean;
-  /**
-   * Have the fake record every child spawn and exit (`FAKE_PI_PROCESS_LOG`)
-   * for `readProcessLog`; without it the fake keeps no process log.
-   */
   processLog?: boolean;
 }
 
 export interface FakePiBridgeHarness {
   workspaceDir: string;
   sessionDir: string;
-  /** Every JSON-RPC message the bridge wrote to stdout, in order. */
   messages: BridgeJsonRpcOutputMessage[];
-  /** Every message since the last call: the conformance transport's drain. */
   takeMessages(): BridgeJsonRpcOutputMessage[];
-  /** Send a request and wait for its response. */
   request(
     id: BridgeJsonRpcId,
     method: string,
     params: BridgeJsonRpcObject,
   ): Promise<BridgeJsonRpcOutputMessage>;
-  /**
-   * `thread/start` on the workspace in full mode (`extra` overrides and
-   * extends the params), answered; the request id is the harness's own.
-   */
   startThread(
     threadId: string,
     extra?: BridgeJsonRpcObject,
   ): Promise<BridgeJsonRpcOutputMessage>;
-  /** The `thread/delta` payloads addressed to `threadId`, flattened in order. */
   deltasOf(threadId: string): Record<string, unknown>[];
-  /** Poll until `predicate` holds; `what` names the wait in the timeout error. */
   waitFor(predicate: () => boolean, what: string): Promise<void>;
-  /** Wait for a delta of `threadId` (from index `since`) matching `predicate`. */
   waitForDelta(
     threadId: string,
     predicate: (delta: Record<string, unknown>) => boolean,
     since?: number,
   ): Promise<void>;
-  /**
-   * Wait for a `turn.boundary` of `threadId` from delta index `since`;
-   * resolves with the delta count, the `since` of the next wait.
-   */
   waitForTurnBoundary(threadId: string, since?: number): Promise<number>;
-  /** Wait for the first captured message matching `predicate`. */
   waitForMessage(
     predicate: (message: BridgeJsonRpcOutputMessage) => boolean,
     what: string,
   ): Promise<BridgeJsonRpcOutputMessage>;
-  /** The pids the fake logged (`processLog: true`), by step. */
   readProcessLog(): { spawned: number[]; exited: number[] };
-  /** End every child, restore stdout and the env, remove the workspace. */
   teardown(): Promise<void>;
 }
 

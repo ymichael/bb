@@ -92,21 +92,6 @@ describe("builtin host artifacts", () => {
     });
   }, 20_000);
 
-  /**
-   * Each first-party host entry is built the way the daemon builds it —
-   * inlining the SDK's published bundle from the plugin's own node_modules —
-   * and the result is imported, so a subpath that only resolves through the
-   * workspace source condition cannot pass.
-   *
-   * The ACP plugin's whole host side is one re-export of the published kit
-   * (`@get-bb/plugin-sdk/provider-bridge/acp`), which is exactly what a
-   * third-party ACP plugin writes; its host entry serves the agent probe (Q21)
-   * and the per-host native-roots resolver core calls when it lists skills.
-   * The claude-code, codex and pi host entries import a host contract from
-   * `@get-bb/plugin-sdk/host` beside their bridge — a runtime stub that
-   * re-implemented `experimental_defineHostEntry` alone once broke exactly
-   * this import.
-   */
   it.each([
     {
       pluginDir: "provider-acp",
@@ -125,7 +110,6 @@ describe("builtin host artifacts", () => {
         await cp(join(source, fileName), join(root, fileName));
       }
       await cp(join(source, "src"), join(root, "src"), { recursive: true });
-      // The manifest's branding icon must resolve for the build to run.
       await cp(join(source, "icons"), join(root, "icons"), { recursive: true });
       await symlink(
         join(source, "node_modules"),
@@ -139,7 +123,10 @@ describe("builtin host artifacts", () => {
       const imported: unknown = await import(
         `${pathToFileURL(built.jsPath).href}?test=${Date.now()}`
       );
-      const bridge = Reflect.get(Object(imported), "experimental_providerBridge");
+      const bridge = Reflect.get(
+        Object(imported),
+        "experimental_providerBridge",
+      );
       expect(isBuiltProviderBridge(bridge)).toBe(true);
       const entry = Reflect.get(Object(imported), "default");
       const contract = Reflect.get(Object(entry), "contract");

@@ -34,9 +34,6 @@ describe("pluginProxyCandidate", () => {
   });
 
   it("proxies the builtin plugin commands the kernel no longer owns", () => {
-    // `automation` and `connect` moved into builtin plugins: they must not
-    // be reserved, and the real program must not register them, so the
-    // proxy resolves them against the running server.
     const names = new Set(CORE_COMMAND_GROUPS.map((group) => group.name));
     names.add("help");
     for (const moved of ["automation", "connect"]) {
@@ -61,8 +58,6 @@ describe("fetchPluginCliContributions", () => {
   });
 
   it("distinguishes an unreachable server from an old/invalid one", async () => {
-    // Unreachable (server down): fetch rejects → keep the thrown error so
-    // the caller can diagnose refused vs blocked vs timed out.
     const thrown = new Error("ECONNREFUSED");
     vi.stubGlobal(
       "fetch",
@@ -79,7 +74,6 @@ describe("fetchPluginCliContributions", () => {
       lastTimeoutMs: 2000,
     });
 
-    // Old server without the route: silent fallback to commander's error.
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("not found", { status: 404 })),
@@ -147,7 +141,6 @@ describe("fetchPluginCliContributions retries", () => {
     });
   }
 
-  /** Record the sleeps instead of taking them, so the test stays instant. */
   function recordingSleep() {
     const slept: number[] = [];
     return {
@@ -159,8 +152,6 @@ describe("fetchPluginCliContributions retries", () => {
   }
 
   it("recovers when a busy server answers on a later attempt", async () => {
-    // The regression: a single stalled probe used to fail the whole command,
-    // so `bb memory add` reported bb down and the write was simply lost.
     const fetchMock = vi
       .fn()
       .mockRejectedValueOnce(timeoutError())
@@ -229,8 +220,6 @@ describe("fetchPluginCliContributions retries", () => {
   });
 
   it("fails fast when nothing is listening", async () => {
-    // ECONNREFUSED is the one cause that really does mean bb is down;
-    // retrying it would only delay a correct, actionable answer.
     const fetchMock = vi.fn().mockRejectedValue(connectError("ECONNREFUSED"));
     vi.stubGlobal("fetch", fetchMock);
     const { slept, sleep } = recordingSleep();
@@ -293,8 +282,6 @@ describe("describeUnreachableServer", () => {
       }),
     );
     return new TypeError("fetch failed", {
-      // NodeAggregateError exposes the first attempt's code on the aggregate,
-      // even when later attempts failed for a different reason.
       cause: Object.assign(new AggregateError(errors), {
         code: errors[0]?.code,
       }),
@@ -342,8 +329,6 @@ describe("describeUnreachableServer", () => {
     const message = describeUnreachableServer(url, timeout, 2000);
     expect(message).toContain(`bb did not respond at ${url} within 2000ms`);
     expect(message).toContain("it may be busy or temporarily unreachable");
-    // The reader is usually an agent: a timeout must never read as "bb is
-    // down", and must say the work is still pending so it is not dropped.
     expect(message).not.toContain("not running at");
     expect(message).not.toContain("bb is running");
     expect(message).toContain("re-run it");
@@ -397,7 +382,6 @@ describe("findDisabledPluginForCommand", () => {
       status: null,
       statusDetail: null,
     });
-    // Enabled plugins and unknown names never match.
     await expect(
       findDisabledPluginForCommand("http://localhost", "automations"),
     ).resolves.toBeNull();
@@ -512,13 +496,48 @@ describe("runPluginCliCommand", () => {
     ]);
   });
 
-  // Issue #1621: `bb secret request` holds POST /plugins/secrets/cli open
-  // while a human fills the form. Node's default undici headersTimeout
-  // (300 s) rejected that fetch with a bare "fetch failed" and the server
-  // then aborted the interaction. The plugin dispatch must not inherit the
-  // global headers timeout, but it keeps its own finite deadline above the
-  // longest server interaction. The global timeout is scaled down here
-  // (undici timers have ~1 s granularity) so the test finishes in seconds.
+  it("materializes an arbitrary stdin flag only in the proxied request", async () => {
+    const requests: string[][] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init: RequestInit | undefined) => {
+        const parsed = JSON.parse(String(init?.body)) as { argv: string[] };
+        requests.push(parsed.argv);
+        return new Response(JSON.stringify({ exitCode: 0 }), { status: 200 });
+      }),
+    );
+    const writes: string[] = [];
+    const output = {
+      write(value: string, callback: (error?: Error | null) => void) {
+        writes.push(value);
+        callback();
+        return true;
+      },
+    };
+    const input = {
+      isTTY: false,
+      async *[Symbol.asyncIterator]() {
+        yield Buffer.from("opaque-credential\n");
+      },
+    };
+    const argv = ["deploy", "--credential-stdin", "--format", "json"];
+
+    await expect(
+      runPluginCliCommand(
+        "http://localhost",
+        "fixture",
+        argv,
+        { stdout: output, stderr: output },
+        input,
+      ),
+    ).resolves.toBe(0);
+    expect(argv).toEqual(["deploy", "--credential-stdin", "--format", "json"]);
+    expect(requests).toEqual([
+      ["deploy", "--credential", "opaque-credential", "--format", "json"],
+    ]);
+    expect(writes).toEqual([]);
+  });
+
   it("outlives the global fetch headers timeout while a plugin command waits on a human", async () => {
     const RESPONSE_DELAY_MS = 1500;
     const server: Server = createServer((request, response) => {
@@ -539,8 +558,6 @@ describe("runPluginCliCommand", () => {
     const previousDispatcher = getGlobalDispatcher();
     setGlobalDispatcher(new Agent({ headersTimeout: 200 }));
     try {
-      // The bare fetch every other CLI call uses dies on the shortened
-      // headers timeout, which is the failure the reporter saw at 300 s.
       await expect(
         fetch(`${baseUrl}/api/v1/plugins/secrets/cli`, { method: "POST" }),
       ).rejects.toMatchObject({
@@ -565,8 +582,6 @@ describe("runPluginCliCommand", () => {
 
       expect(exitCode).toBe(0);
       expect(writes).toEqual(["POST /api/v1/plugins/secrets/cli\n"]);
-      // Finite, and above ui.requestInput's 60-minute maximum so the server's
-      // interaction deadline (which resolves the form cleanly) fires first.
       expect(PLUGIN_CLI_HEADERS_TIMEOUT_MS).toBeGreaterThan(60 * 60 * 1000);
       expect(PLUGIN_CLI_HEADERS_TIMEOUT_MS).toBeLessThanOrEqual(
         2 * 60 * 60 * 1000,

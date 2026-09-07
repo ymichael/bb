@@ -68,8 +68,6 @@ export async function validateWorkflowSource(
           `Model-load error for provider ${provider.id}: ${models.modelLoadError.code}`,
         );
       }
-      // Literal selections are explicit. selectedOnlyModels are eligible only
-      // when execution inherits a selection already captured by the thread.
       const model = models.models.find(
         (candidate) =>
           candidate.id === selection.model ||

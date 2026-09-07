@@ -69,9 +69,7 @@ export function getFileChangeAction(change: FileChangeLike): FileChangeAction {
   return "edited";
 }
 
-export function getFileChangeActionPastTense(
-  action: FileChangeAction,
-): string {
+export function getFileChangeActionPastTense(action: FileChangeAction): string {
   switch (action) {
     case "created":
       return "Created";

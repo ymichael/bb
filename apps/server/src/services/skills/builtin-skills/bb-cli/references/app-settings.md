@@ -14,7 +14,7 @@ every window and client sees the same value.
 ## Keyboard shortcuts
 
 - `showKeyboardHints` defaults to true. Set it with
-  `bb settings keyboard hints <true|false>` to control whether
+  `bb settings keyboard hints <true|false|on|off>` to control whether
   delayed shortcut badges appear while holding Command or Control. It does not
   disable the shortcuts themselves.
 - Settings → Keyboard records sparse per-command chord overrides. `Mod` means
@@ -32,7 +32,7 @@ every window and client sees the same value.
 ## Unhandled provider events
 
 - `showUnhandledProviderEvents` defaults to false. Set it with
-  `bb settings general showUnhandledProviderEvents <true|false>`.
+  `bb settings general showUnhandledProviderEvents <true|false|on|off>`.
 - When enabled, packaged builds show raw provider events that bb has persisted
   but does not yet understand. These diagnostic payloads can be noisy.
 - Development builds always show unhandled provider events regardless of the
@@ -40,8 +40,9 @@ every window and client sees the same value.
 
 ## Active-thread Enter behavior
 
-- `steerActiveThreadOnEnter` defaults to false. Set it with
-  `bb settings general steerActiveThreadOnEnter <true|false>`.
+- `steerActiveThreadOnEnter` defaults to true for a new install. An earlier
+  install with saved settings or work keeps false. Set it with
+  `bb settings general steerActiveThreadOnEnter <true|false|on|off>`.
 - Outside an open composer typeahead menu, disabling it makes Enter queue a
   follow-up and Command+Enter steer the active turn. When enabled, those
   actions are reversed.
@@ -52,7 +53,7 @@ every window and client sees the same value.
 ## Streamer mode
 
 - `streamerMode` defaults to false. Set it with
-  `bb settings general streamerMode <true|false>`.
+  `bb settings general streamerMode <true|false|on|off>`.
 - When enabled, every `customModels` entry from `~/.bb/config.json` is hidden
   in all model lists: the pickers, `bb provider models`, and
   `sdk.providers.models`. Use it during a screen share so a private or
@@ -64,19 +65,58 @@ every window and client sees the same value.
   provider default, and the next send records that default. Select the custom
   model again after you turn streamer mode off.
 
+## Worktree branch prefix
+
+- `managedBranchPrefix` defaults to `bb/`. Set it with
+  `bb settings general managedBranchPrefix <prefix>`.
+- bb puts the prefix in front of every branch name it creates for a managed
+  worktree or a new checkout branch, so the default gives
+  `bb/fix-login-flow-thr_ab12cd34ef`.
+- A prefix does not need a trailing slash. `sawyer/wt-` gives
+  `sawyer/wt-fix-login-flow-thr_ab12cd34ef`, and an empty prefix gives
+  `fix-login-flow-thr_ab12cd34ef`.
+- bb rejects a prefix that cannot start a valid git branch name, such as one
+  with a space or a leading `-`. The maximum length is 64 characters.
+- The new prefix applies to branches bb creates after the change. It does not
+  rename an existing branch or worktree.
+
+## Provider order and default
+
+- `providerOrder` defaults to `[]`. Set it to a JSON array of provider IDs.
+- `defaultProviderId` defaults to `null`. Set a provider ID or use `null` to
+  clear it.
+
+## Message edits
+
+- The `editMessages` experiment defaults to true. It controls edits of
+  eligible accepted root user messages.
+
+## Provider session release
+
+- BB releases restorable provider sessions after 30 idle minutes.
+- Active turns, commands, agents, workflows, and monitors keep sessions loaded.
+
 ## Mobile app
 
 - The `mobileApp` experiment defaults to false while the bb mobile app is in
   early access.
 - Enable it with `bb settings experiment mobileApp true`. It shows the
-  **Add mobile device** card under Settings → Remote access and enables
-  `bb connect machine-code`.
+  **Add mobile device** card under Settings → Remote access.
 
 ## Changelog preview
 
 - The `changelogPreview` experiment defaults to false.
 - Enable it with `bb settings experiment changelogPreview true` to show the
   latest release notes on Settings → Updates.
+
+## Sidebar progressive disclosure
+
+- The `sidebarProgressiveDisclosure` experiment defaults to false.
+- Enable it with `bb settings experiment sidebarProgressiveDisclosure true`.
+- In **By project** and **By machine**, it shows the first five groups in the
+  current sort order, keeps attention groups visible, and reveals ten more per
+  **Show more** click. Revealed groups stay visible through activity and
+  sort-order changes. **Manually** is unchanged.
 
 ## Timeline windowing
 

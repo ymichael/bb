@@ -29,15 +29,10 @@ import type { PluginProviderDeclaration } from "@get-bb/plugin-sdk";
 
 const NO_RESOLVED_ROOTS = { skills: [], commands: [] };
 
-/** A declared root entry, as the server normalizes a bare path. */
 function root(path: string) {
   return { path, recursive: false, ancestors: false, namePrefix: "" };
 }
 
-/**
- * A provider whose plugin declares no roots but resolves them per host: the
- * daemon roundtrip is owed to the resolver alone.
- */
 function resolvingProvider(id: string): {
   declaration: PluginProviderDeclaration;
   pluginId: string;
@@ -76,16 +71,10 @@ interface RegisterCommandRpcArgs {
   sessionId: string;
   commands: HostProviderCommand[];
   skills?: DiscoveredSkill[];
-  /** What the plugin's `resolveNativeRoots` answers. */
   resolved?: ExperimentalNativeRootsResolveAnswer;
-  /** How long the plugin takes to answer `resolveNativeRoots`. */
   resolveDelayMs?: number;
 }
 
-/**
- * Mocks provider-native command discovery and an empty project skill root.
- * Only list-commands requests are recorded for concise assertions.
- */
 function registerCommandRpc(
   harness: Parameters<typeof registerHostRpcResponder>[0],
   args: RegisterCommandRpcArgs,
@@ -226,8 +215,6 @@ describe("public project command typeahead route", () => {
     );
   });
 
-  // Skill roots are a declared provider fact now: the plugin puts its agent's
-  // own roots on the registration and the server forwards exactly those.
   it("passes a provider's declared native skill roots to the target host", async () => {
     await withTestHarness(
       {
@@ -281,167 +268,155 @@ describe("public project command typeahead route", () => {
 
   it("asks a resolving plugin for roots on the workspace host and forwards them", async () => {
     const provider = resolvingProvider("resolving");
-    await withTestHarness(
-      { extraProviders: [provider] },
-      async (harness) => {
-        harness.deps.pluginHostArtifacts.set(
-          provider.pluginId,
-          stubHostArtifact(provider.pluginId),
-        );
-        const { host, session } = seedHostSession(harness.deps, {
-          id: "host-commands-resolving",
-        });
-        const { project } = seedProjectWithSource(harness.deps, {
-          hostId: host.id,
-          path: "/tmp/resolving-project",
-        });
-        const stub = registerCommandRpc(harness, {
-          hostId: host.id,
-          sessionId: session.id,
-          commands: [skill("vendor:review", "user")],
+    await withTestHarness({ extraProviders: [provider] }, async (harness) => {
+      harness.deps.pluginHostArtifacts.set(
+        provider.pluginId,
+        stubHostArtifact(provider.pluginId),
+      );
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-commands-resolving",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/resolving-project",
+      });
+      const stub = registerCommandRpc(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        commands: [skill("vendor:review", "user")],
+        resolved: {
+          skills: [
+            { path: "/home/me/.vendor/skills", origin: "user" },
+            {
+              path: "/home/me/.vendor/plugins/tools/skills",
+              origin: "user",
+              namePrefix: "tools:",
+              recursive: true,
+            },
+          ],
+          commands: [
+            {
+              path: "/tmp/resolving-project/.vendor/commands",
+              origin: "project",
+              ancestors: true,
+            },
+          ],
+        },
+      });
+
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/commands?provider=resolving`,
+      );
+
+      expect(response.status).toBe(200);
+      const body = commandListResponseSchema.parse(await readJson(response));
+      expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
+        "vendor:review",
+      ]);
+      expect(stub.resolveRequests.map((request) => request.command)).toEqual([
+        expect.objectContaining({
+          type: "plugin.host.call",
+          pluginId: provider.pluginId,
+          method: "resolveNativeRoots",
+          input: { providerId: "resolving", cwd: "/tmp/resolving-project" },
+        }),
+      ]);
+      expect(stub.requests[0]?.command).toEqual({
+        type: "host.list_commands",
+        providerId: "resolving",
+        cwd: "/tmp/resolving-project",
+        nativeRoots: {
+          skills: { user: [], project: [] },
+          commands: { user: [], project: [] },
           resolved: {
             skills: [
-              { path: "/home/me/.vendor/skills", origin: "user" },
+              {
+                path: "/home/me/.vendor/skills",
+                origin: "user",
+                recursive: false,
+                ancestors: false,
+                namePrefix: "",
+                shape: "skills",
+              },
               {
                 path: "/home/me/.vendor/plugins/tools/skills",
                 origin: "user",
-                namePrefix: "tools:",
                 recursive: true,
+                ancestors: false,
+                namePrefix: "tools:",
+                shape: "skills",
               },
             ],
             commands: [
               {
                 path: "/tmp/resolving-project/.vendor/commands",
                 origin: "project",
+                recursive: false,
                 ancestors: true,
+                namePrefix: "",
+                shape: "commands",
               },
             ],
           },
-        });
-
-        const response = await harness.app.request(
-          `/api/v1/projects/${project.id}/commands?provider=resolving`,
-        );
-
-        expect(response.status).toBe(200);
-        const body = commandListResponseSchema.parse(await readJson(response));
-        expect(body.commands.map((command) => command.name)).toEqual([
-          "vendor:review",
-        ]);
-        // The resolver is asked once, for this provider and workspace.
-        expect(
-          stub.resolveRequests.map((request) => request.command),
-        ).toEqual([
-          expect.objectContaining({
-            type: "plugin.host.call",
-            pluginId: provider.pluginId,
-            method: "resolveNativeRoots",
-            input: { providerId: "resolving", cwd: "/tmp/resolving-project" },
-          }),
-        ]);
-        // Its answer rides the daemon command, defaults filled per side.
-        expect(stub.requests[0]?.command).toEqual({
-          type: "host.list_commands",
-          providerId: "resolving",
-          cwd: "/tmp/resolving-project",
-          nativeRoots: {
-            skills: { user: [], project: [] },
-            commands: { user: [], project: [] },
-            resolved: {
-              skills: [
-                {
-                  path: "/home/me/.vendor/skills",
-                  origin: "user",
-                  recursive: false,
-                  ancestors: false,
-                  namePrefix: "",
-                  shape: "skills",
-                },
-                {
-                  path: "/home/me/.vendor/plugins/tools/skills",
-                  origin: "user",
-                  recursive: true,
-                  ancestors: false,
-                  namePrefix: "tools:",
-                  shape: "skills",
-                },
-              ],
-              commands: [
-                {
-                  path: "/tmp/resolving-project/.vendor/commands",
-                  origin: "project",
-                  recursive: false,
-                  ancestors: true,
-                  namePrefix: "",
-                  shape: "commands",
-                },
-              ],
-            },
-          },
-        });
-      },
-    );
+        },
+      });
+    });
   });
 
   it("shares one command timeout between the resolver call and the daemon scan", async () => {
     const provider = resolvingProvider("slow-resolver");
     const resolveDelayMs = 200;
-    await withTestHarness(
-      { extraProviders: [provider] },
-      async (harness) => {
-        harness.deps.pluginHostArtifacts.set(
-          provider.pluginId,
-          stubHostArtifact(provider.pluginId),
-        );
-        const { host, session } = seedHostSession(harness.deps, {
-          id: "host-commands-slow-resolver",
-        });
-        const { project } = seedProjectWithSource(harness.deps, {
-          hostId: host.id,
-          path: "/tmp/slow-resolver-project",
-        });
-        const stub = registerCommandRpc(harness, {
-          hostId: host.id,
-          sessionId: session.id,
-          commands: [skill("after-the-wait", "user")],
-          resolved: {
-            skills: [{ path: "/home/me/.slow/skills", origin: "user" }],
-          },
-          resolveDelayMs,
-        });
-        // The daemon scan's timeout is the hub's local timer, not a wire
-        // field, so it is read at the hub boundary.
-        const hubRpc = vi.spyOn(harness.hub, "requestHostOnlineRpc");
+    await withTestHarness({ extraProviders: [provider] }, async (harness) => {
+      harness.deps.pluginHostArtifacts.set(
+        provider.pluginId,
+        stubHostArtifact(provider.pluginId),
+      );
+      const { host, session } = seedHostSession(harness.deps, {
+        id: "host-commands-slow-resolver",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/slow-resolver-project",
+      });
+      const stub = registerCommandRpc(harness, {
+        hostId: host.id,
+        sessionId: session.id,
+        commands: [skill("after-the-wait", "user")],
+        resolved: {
+          skills: [{ path: "/home/me/.slow/skills", origin: "user" }],
+        },
+        resolveDelayMs,
+      });
+      const hubRpc = vi.spyOn(harness.hub, "requestHostOnlineRpc");
 
-        const response = await harness.app.request(
-          `/api/v1/projects/${project.id}/commands?provider=slow-resolver`,
-        );
+      const response = await harness.app.request(
+        `/api/v1/projects/${project.id}/commands?provider=slow-resolver`,
+      );
 
-        expect(response.status).toBe(200);
-        const body = commandListResponseSchema.parse(await readJson(response));
-        expect(body.commands.map((command) => command.name)).toEqual([
-          "after-the-wait",
-        ]);
-        // The resolver starts with the whole budget...
-        const resolverCommand = stub.resolveRequests[0]?.command;
-        if (resolverCommand?.type !== "plugin.host.call") {
-          throw new Error("expected the resolver call");
-        }
-        expect(resolverCommand.timeoutMs).toBeLessThanOrEqual(COMMAND_TIMEOUT_MS);
-        expect(resolverCommand.timeoutMs).toBeGreaterThan(
-          COMMAND_TIMEOUT_MS - 1_000,
-        );
-        // ...and the daemon scan gets only what the resolver left of it.
-        const scan = hubRpc.mock.calls
-          .map(([args]) => args)
-          .find((args) => args.message.command.type === "host.list_commands");
-        expect(scan).toBeDefined();
-        expect(scan?.timeoutMs).toBeGreaterThan(0);
-        expect(scan?.timeoutMs).toBeLessThanOrEqual(
-          COMMAND_TIMEOUT_MS - resolveDelayMs + 50,
-        );
-      },
-    );
+      expect(response.status).toBe(200);
+      const body = commandListResponseSchema.parse(await readJson(response));
+      expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
+        "after-the-wait",
+      ]);
+      const resolverCommand = stub.resolveRequests[0]?.command;
+      if (resolverCommand?.type !== "plugin.host.call") {
+        throw new Error("expected the resolver call");
+      }
+      expect(resolverCommand.timeoutMs).toBeLessThanOrEqual(COMMAND_TIMEOUT_MS);
+      expect(resolverCommand.timeoutMs).toBeGreaterThan(
+        COMMAND_TIMEOUT_MS - 1_000,
+      );
+      const scan = hubRpc.mock.calls
+        .map(([args]) => args)
+        .find((args) => args.message.command.type === "host.list_commands");
+      expect(scan).toBeDefined();
+      expect(scan?.timeoutMs).toBeGreaterThan(0);
+      expect(scan?.timeoutMs).toBeLessThanOrEqual(
+        COMMAND_TIMEOUT_MS - resolveDelayMs + 50,
+      );
+    });
   });
 
   it("skips the daemon roundtrip for a provider with no native roots and no resolver", async () => {
@@ -536,7 +511,10 @@ describe("public project command typeahead route", () => {
         type: "host.list_commands",
         providerId: "codex",
         cwd: "/tmp/remote-commands-env",
-        nativeRoots: declaredNativeRootSet(harness.deps.providerRegistry, "codex"),
+        nativeRoots: declaredNativeRootSet(
+          harness.deps.providerRegistry,
+          "codex",
+        ),
       });
     });
   });
@@ -559,13 +537,11 @@ describe("public project command typeahead route", () => {
         hostId: host.id,
         sessionId: session.id,
         commands: [
-          // (skill, review) collision: user first, project second → project wins.
           skill("review", "user", { description: "User review skill" }),
           skill("review", "project", {
             description: "Project review skill",
             argumentHint: "<path>",
           }),
-          // Same name as the skill but different source → both retained.
           legacyCommand("review", "project", {
             description: "Legacy review command",
           }),
@@ -580,12 +556,14 @@ describe("public project command typeahead route", () => {
 
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
-      // Section rank is primary (built-ins, skills, then legacy commands),
-      // with alphabetical ordering inside each section. The (skill review)
-      // collision keeps the
-      // project-origin entry over the user-origin one, while the cross-source
-      // (command review) is retained as a distinct invocation.
       expect(body.commands).toEqual([
+        {
+          name: "clear",
+          source: "command",
+          origin: "builtin",
+          description: "Start fresh context in this thread",
+          argumentHint: null,
+        },
         {
           name: "compact",
           source: "command",
@@ -623,16 +601,15 @@ describe("public project command typeahead route", () => {
         },
       ]);
 
-      // Exactly one RPC, carrying the requested provider + resolved env cwd.
       expect(stub.requests.map((request) => request.command)).toEqual([
         {
           type: "host.list_commands",
           providerId: "claude-code",
           cwd: "/tmp/claude-commands-env",
           nativeRoots: declaredNativeRootSet(
-          harness.deps.providerRegistry,
-          "claude-code",
-        ),
+            harness.deps.providerRegistry,
+            "claude-code",
+          ),
         },
       ]);
     });
@@ -668,6 +645,7 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "prd",
         "skill-installer",
@@ -676,7 +654,10 @@ describe("public project command typeahead route", () => {
         type: "host.list_commands",
         providerId: "codex",
         cwd: "/tmp/codex-commands-env",
-        nativeRoots: declaredNativeRootSet(harness.deps.providerRegistry, "codex"),
+        nativeRoots: declaredNativeRootSet(
+          harness.deps.providerRegistry,
+          "codex",
+        ),
       });
     });
   });
@@ -712,6 +693,7 @@ describe("public project command typeahead route", () => {
         expect(response.status).toBe(200);
         const body = commandListResponseSchema.parse(await readJson(response));
         expect(body.commands.map((command) => command.name)).toEqual([
+          "clear",
           "compact",
           "stories",
         ]);
@@ -719,7 +701,10 @@ describe("public project command typeahead route", () => {
           type: "host.list_commands",
           providerId: "codex",
           cwd: "/tmp/inherited-skills-project",
-          nativeRoots: declaredNativeRootSet(harness.deps.providerRegistry, "codex"),
+          nativeRoots: declaredNativeRootSet(
+            harness.deps.providerRegistry,
+            "codex",
+          ),
         });
       },
     );
@@ -756,6 +741,7 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "alpha-review-notes",
         "ottonomous:review",
@@ -789,7 +775,6 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body).toEqual({ commands: [] });
-      // No daemon roundtrip for a provider without a command surface.
       expect(stub.requests).toEqual([]);
     });
   });
@@ -820,11 +805,10 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "bb-cli",
       ]);
-      // Pi's roots are the plugin's declaration, forwarded as declared
-      // (the daemon holds no pi skill policy of its own).
       expect(stub.requests[0]?.command).toEqual({
         type: "host.list_commands",
         providerId: "pi",
@@ -850,8 +834,6 @@ describe("public project command typeahead route", () => {
         commands: [skill("user-only", "user", { description: "Home skill" })],
       });
 
-      // environmentId="" encodes null on the wire → the new-thread composer
-      // path, which has no environment yet.
       const response = await harness.app.request(
         `/api/v1/projects/${project.id}/commands?provider=claude-code&environmentId=`,
       );
@@ -859,11 +841,10 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "user-only",
       ]);
-      // Falls back to the project source path on the primary host, since the
-      // project has a local-path source even though no environment is given.
       expect(stub.requests[0]?.command).toEqual({
         type: "host.list_commands",
         providerId: "claude-code",
@@ -886,9 +867,6 @@ describe("public project command typeahead route", () => {
         hostId: host.id,
         path: "/tmp/provisioning-project",
       });
-      // Environment exists but is NOT ready — a freshly-created thread whose
-      // worktree is still provisioning. The route must not 409; it degrades to
-      // the project source path and still returns user-home entries.
       const environment = seedEnvironment(harness.deps, {
         hostId: host.id,
         projectId: project.id,
@@ -908,10 +886,10 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "user-only",
       ]);
-      // Not the provisioning env path; the project source path on the primary host.
       expect(stub.requests[0]?.command).toEqual({
         type: "host.list_commands",
         providerId: "claude-code",
@@ -930,8 +908,6 @@ describe("public project command typeahead route", () => {
         id: "host-commands-no-source",
       });
       seedPrimaryHost(harness.deps, host.id);
-      // Source-less (for the primary host) project: seed the project's source
-      // on a different host so the primary host has no local-path source.
       const otherHost = seedHost(harness.deps, { id: "host-commands-other" });
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: otherHost.id,
@@ -950,6 +926,7 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "user-only",
       ]);
@@ -984,6 +961,7 @@ describe("public project command typeahead route", () => {
       expect(response.status).toBe(200);
       const body = commandListResponseSchema.parse(await readJson(response));
       expect(body.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "home-skill",
       ]);
@@ -991,7 +969,10 @@ describe("public project command typeahead route", () => {
         type: "host.list_commands",
         providerId: "codex",
         cwd: null,
-        nativeRoots: declaredNativeRootSet(harness.deps.providerRegistry, "codex"),
+        nativeRoots: declaredNativeRootSet(
+          harness.deps.providerRegistry,
+          "codex",
+        ),
       });
     });
   });
@@ -1051,6 +1032,7 @@ describe("public project command typeahead route", () => {
         await readJson(fullResponse),
       );
       expect(full.commands.map((command) => command.name)).toEqual([
+        "clear",
         "compact",
         "alpha",
         "bravo",

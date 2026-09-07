@@ -11,5 +11,4 @@ export default function plugin(bb: any) {
       stdout: `builtin ${bb.pluginId}`,
     }),
   });
-
 }

@@ -10,15 +10,6 @@ import {
   type TimelinePathDisplayMode,
 } from "./timeline-path-display.js";
 
-/**
- * Rows that can read as exploration ("Read x", "Searched for y"): commands
- * through their parsed `activityIntents`, and the `file-read` / `search`
- * rows through the intent their structured fields derive to (see
- * {@link timelineRowActivityIntents}). A generic tool row never reads as
- * exploration: no producer derives an intent from a tool name, and the
- * legacy Read/Grep/Glob calls are upgraded to file-read/search items before
- * projection.
- */
 export type TimelineExplorationWorkRow =
   | TimelineCommandWorkRow
   | TimelineFileReadWorkRow
@@ -28,13 +19,6 @@ type TimelineReadActivityIntent = Extract<
   { type: "read" }
 >;
 
-/**
- * The activity intents a row contributes to exploration bundles. A v3
- * `file-read` is one read; a v3 `search` is one content search or, for the
- * path-match and listing modes, one listing rooted at its path (or, absent a
- * root, its pattern) — the same shape the legacy Read/Grep/Glob tool calls
- * projected to, so bundles, dedupe and counts treat both identically.
- */
 export function timelineRowActivityIntents(
   row: TimelineExplorationWorkRow,
 ): readonly TimelineActivityIntent[] {

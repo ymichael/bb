@@ -33,7 +33,9 @@ const automationRowSchema = z
     nextRunAt: z.number().int().nullable(),
     lastRunAt: z.number().int().nullable(),
     runCount: z.number().int().min(0),
-    lastRunStatus: z.enum(["running", "succeeded", "failed", "skipped"]).nullable(),
+    lastRunStatus: z
+      .enum(["running", "succeeded", "failed", "skipped"])
+      .nullable(),
     lastRunThreadId: z.string().min(1).nullable(),
     lastError: z.string().nullable(),
     createdAt: z.number().int(),
@@ -100,7 +102,9 @@ function containedPath(rootPath: string, pathFromRoot: string): string {
     candidatePath: resolve(rootPath, pathFromRoot),
   });
   if (candidate !== null) return candidate;
-  throw new Error(`Legacy automation script path escapes its directory: ${pathFromRoot}`);
+  throw new Error(
+    `Legacy automation script path escapes its directory: ${pathFromRoot}`,
+  );
 }
 
 function readLegacyAutomationScripts(args: {
@@ -120,10 +124,6 @@ function readLegacyAutomationScripts(args: {
     try {
       content = readFileSync(scriptPath, "utf8");
     } catch (err) {
-      // A dangling scriptFile reference must not brick startup: the kernel
-      // itself tolerated a missing stored script (the run failed at dispatch),
-      // so export the automation without its script and let it fail the same
-      // way post-import. Any other read error still aborts fail-closed.
       if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
       args.logger.error(
         { err },
@@ -156,13 +156,23 @@ const legacyAutomationExportFileSchema = z
   })
   .strict();
 
-type LegacyAutomationExportFile = z.infer<typeof legacyAutomationExportFileSchema>;
+type LegacyAutomationExportFile = z.infer<
+  typeof legacyAutomationExportFileSchema
+>;
 
 function legacyImportPath(dataDir: string): string {
-  return join(dataDir, "plugins", "automations", "import", "legacy-automations.json");
+  return join(
+    dataDir,
+    "plugins",
+    "automations",
+    "import",
+    "legacy-automations.json",
+  );
 }
 
-function listLegacyAutomations(db: DbConnection): LegacyAutomationExportFile["automations"] {
+function listLegacyAutomations(
+  db: DbConnection,
+): LegacyAutomationExportFile["automations"] {
   return z
     .array(automationRowSchema)
     .parse(
@@ -231,10 +241,6 @@ function listLegacyRuns(db: DbConnection): LegacyAutomationExportFile["runs"] {
   );
 }
 
-/**
- * One-shot bootstrap for the automations plugin cutover. Remove once released
- * fleets have migrated legacy kernel automation rows into the builtin plugin.
- */
 export function exportLegacyAutomationsForPluginImport(args: {
   dataDir: string;
   db: DbConnection;

@@ -37,7 +37,6 @@ export type GitDiffDisplayModeChangeHandler = (
 export interface GitDiffSelectionOption {
   value: string;
   label: string;
-  /** When set, rendered in monospace before the label (e.g. a short commit SHA). */
   monoPrefix?: string;
 }
 
@@ -46,7 +45,6 @@ interface GitDiffSelectorProps {
   options: readonly GitDiffSelectionOption[];
   onChange: (value: string) => void;
   disabled?: boolean;
-  /** Width of the surrounding diff panel, used to cap the open menu's width. */
   panelWidthPx: number;
 }
 
@@ -94,9 +92,6 @@ function GitDiffSelector({
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
-        // Match the panel width so the menu lines up with the diff cards below,
-        // but stay at least GIT_DIFF_SELECTOR_MENU_MIN_WIDTH so labels stay
-        // readable when the panel is narrow. Viewport-capped as a safety net.
         className="min-w-[var(--radix-dropdown-menu-trigger-width)]"
         style={{
           maxWidth: `min(var(--radix-popper-available-width), max(${GIT_DIFF_SELECTOR_MENU_MIN_WIDTH}, ${panelWidthPx}px))`,
@@ -141,16 +136,12 @@ interface GitDiffToolbarProps {
   selectionValue: string;
   selectionOptions: readonly GitDiffSelectionOption[];
   onSelectionChange: (value: string) => void;
-  /** Disables the selector while data is loading or unavailable. */
   isSelectorDisabled: boolean;
 
   stats: GitDiffStats;
-  /** True when stats cover only the bounded leading file slice. */
   isTruncated: boolean;
 
-  /** Whether the collapse-all action would expand or collapse next. */
   areAllFilesCollapsed: boolean;
-  /** Disabled when there are no parsed files (or while loading). */
   isCollapseAllDisabled: boolean;
   onToggleAllCollapsed: () => void;
 
@@ -193,10 +184,6 @@ export function GitDiffToolbar({
         data-testid="git-diff-toolbar-layout"
       >
         <div
-          // A readable basis makes the browser wrap this row according to the
-          // toolbar's own width instead of shrinking the selector to nothing.
-          // The high grow ratio gives the selector nearly all surplus width
-          // when both groups fit; each group still fills a line when wrapped.
           className="min-w-0 basis-48 grow-[999]"
           data-testid="git-diff-toolbar-selector-slot"
         >
@@ -209,8 +196,6 @@ export function GitDiffToolbar({
           />
         </div>
         <div
-          // Keep the summary and actions on the same flex line so compact
-          // layouts wrap into a predictable selector row and controls row.
           className="flex min-w-0 flex-1 basis-auto items-center"
           data-testid="git-diff-toolbar-details"
         >

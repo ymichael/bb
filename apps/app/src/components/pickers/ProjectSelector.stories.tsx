@@ -24,7 +24,7 @@ export function Overview() {
       </StoryRow>
       <StoryRow
         label="no project selected — required mode"
-        hint='allowNoProject=false (default): trigger falls back to the first project so it is never blank'
+        hint="allowNoProject=false (default): trigger falls back to the first project so it is never blank"
       >
         <ProjectSelector projects={projects} value={null} onChange={noop} />
       </StoryRow>

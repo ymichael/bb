@@ -59,7 +59,6 @@ describe("loadPluginFrontends", () => {
     expect(importModule).toHaveBeenCalledWith(
       "/api/v1/plugins/a/assets/app.js?h=abc123",
     );
-    // CSS only for the plugin that has one.
     expect(injectCss).toHaveBeenCalledTimes(1);
     expect(injectCss).toHaveBeenCalledWith(
       "a",
@@ -153,12 +152,6 @@ describe("installPluginRuntime", () => {
       string,
       unknown
     >;
-    // The shim slot names `bb plugin build` emits (react ×5 + SDK + the
-    // shared-singleton packages: portal radix families, sonner, vaul,
-    // @pierre/diffs + the host-resident libraries: clsx, tailwind-merge,
-    // class-variance-authority, the shared-ui icon). zod is deliberately
-    // absent: slotting its namespace would stop the boot chunk from
-    // tree-shaking it.
     expect(Object.keys(runtime).sort()).toEqual([
       "classVarianceAuthority",
       "clsx",
@@ -185,21 +178,14 @@ describe("installPluginRuntime", () => {
       "tailwindMerge",
       "vaul",
     ]);
-    // Library slots carry the host's own module namespaces: `import clsx
-    // from "clsx"` in a plugin must reach the callable default, and the
-    // Icon must be the host's (one hugeicons map, one IconName set).
     expect((runtime.clsx as { default: unknown }).default).toBe(clsx);
     expect((runtime.sharedUiIcon as { Icon: unknown }).Icon).toBe(Icon);
-    // Identity matters: plugins must get the app's own React, not a copy.
     expect((runtime.react as { useState: unknown }).useState).toBe(
       react.useState,
     );
     expect((runtime.jsxRuntime as { jsx: unknown }).jsx).toBe(jsxRuntime.jsx);
-    // The SDK slot carries the real implementation surface (kept in sync
-    // with the facade contract by `satisfies PluginSdkApp`).
     expect(runtime.pluginSdkApp).toBe(pluginSdkAppImplementation);
 
-    // A second call never replaces an installed runtime.
     installPluginRuntime();
     expect((globalThis as RuntimeHost).__bbPluginRuntime).toBe(runtime);
   });
@@ -212,58 +198,47 @@ describe("installPluginRuntime", () => {
     >;
     const pierreDiffsReact = await import("@pierre/diffs/react");
     const slot = runtime.pierreDiffsReact as Record<string, unknown>;
-    // The shim destructures the manifest's export list from this slot; a
-    // name missing here becomes `undefined` in every plugin bundle.
     expect(Object.keys(slot).sort()).toEqual(
       Object.keys(pierreDiffsReact).sort(),
     );
-    // Non-component exports pass through unchanged...
     expect(slot.useVirtualizer).toBe(pierreDiffsReact.useVirtualizer);
     expect(slot.WorkerPoolContext).toBe(pierreDiffsReact.WorkerPoolContext);
-    // ...while the diff components wait for the host's worker pool, so a
-    // plugin diff cannot capture "no pool" before the workspace builds it.
     expect(slot.FileDiff).not.toBe(pierreDiffsReact.FileDiff);
     expect(slot.File).not.toBe(pierreDiffsReact.File);
   });
 });
 
 describe("createPluginFrontendPageLifecycle", () => {
-  function createDeps(tornDown: boolean) {
+  function createDeps() {
     return {
-      isTornDown: vi.fn(() => tornDown),
-      reboot: vi.fn(),
-      reconcile: vi.fn(),
+      restore: vi.fn(),
       teardown: vi.fn(),
     };
   }
 
   it("keeps frontends mounted when the page enters the back/forward cache", () => {
-    const deps = createDeps(false);
+    const deps = createDeps();
     const lifecycle = createPluginFrontendPageLifecycle(deps);
     lifecycle.onPageHide({ persisted: true });
     expect(deps.teardown).not.toHaveBeenCalled();
 
-    // Restored from bfcache with plugins still mounted: only reconcile.
     lifecycle.onPageShow({ persisted: true });
-    expect(deps.reconcile).toHaveBeenCalledTimes(1);
-    expect(deps.reboot).not.toHaveBeenCalled();
+    expect(deps.restore).toHaveBeenCalledTimes(1);
   });
 
-  it("tears down on a real unload and reboots if a persisted restore follows a teardown", () => {
-    const deps = createDeps(true);
+  it("tears down on a real unload and delegates a later persisted restore", () => {
+    const deps = createDeps();
     const lifecycle = createPluginFrontendPageLifecycle(deps);
     lifecycle.onPageHide({ persisted: false });
     expect(deps.teardown).toHaveBeenCalledTimes(1);
 
     lifecycle.onPageShow({ persisted: true });
-    expect(deps.reboot).toHaveBeenCalledTimes(1);
-    expect(deps.reconcile).not.toHaveBeenCalled();
+    expect(deps.restore).toHaveBeenCalledTimes(1);
   });
 
   it("ignores the initial (non-persisted) pageshow", () => {
-    const deps = createDeps(false);
+    const deps = createDeps();
     createPluginFrontendPageLifecycle(deps).onPageShow({ persisted: false });
-    expect(deps.reboot).not.toHaveBeenCalled();
-    expect(deps.reconcile).not.toHaveBeenCalled();
+    expect(deps.restore).not.toHaveBeenCalled();
   });
 });

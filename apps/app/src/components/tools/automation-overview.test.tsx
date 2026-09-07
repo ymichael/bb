@@ -4,7 +4,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { AutomationOverviewView } from "bb-plugin-automations/overview-view";
-import type { AutomationsOverviewResponse } from "bb-plugin-automations/rpc-types";
+import type {
+  AutomationResponse,
+  AutomationsOverviewResponse,
+} from "bb-plugin-automations/rpc-types";
 
 function iconNames(element: HTMLElement): string[] {
   return [...element.querySelectorAll("[data-icon]")].map(
@@ -53,13 +56,17 @@ afterEach(cleanup);
 describe("AutomationOverviewView", () => {
   it("keeps lifecycle groups stable around the selected sort", () => {
     const baseEntry = INSTALLED_AUTOMATIONS[0]!;
+    if ("problem" in baseEntry.automation) {
+      throw new Error("Expected a canonical automation fixture");
+    }
+    const baseAutomation = baseEntry.automation;
     const entry = (
       name: string,
-      overrides: Partial<(typeof baseEntry)["automation"]> = {},
+      overrides: Partial<AutomationResponse> = {},
     ) => ({
       ...baseEntry,
       automation: {
-        ...baseEntry.automation,
+        ...baseAutomation,
         id: `auto_${name.toLowerCase().replaceAll(" ", "_")}`,
         name,
         ...overrides,
@@ -128,6 +135,81 @@ describe("AutomationOverviewView", () => {
     expect(screen.getByRole("button", { name: "New automation" })).toBeTruthy();
   });
 
+  it("opens a missing-prompt row in the standard editor", () => {
+    const onOpenDetail = vi.fn();
+    const healthyAutomation = INSTALLED_AUTOMATIONS[0]!.automation;
+    if (
+      "problem" in healthyAutomation ||
+      healthyAutomation.execution.mode !== "agent"
+    ) {
+      throw new Error("Expected an agent automation fixture");
+    }
+    const entries: AutomationsOverviewResponse["automations"] = [
+      {
+        automation: {
+          ...healthyAutomation,
+          id: "auto_repair",
+          name: "Needs a prompt",
+          execution: { ...healthyAutomation.execution, prompt: "" },
+          problem: "missing-agent-prompt",
+        },
+        project: { id: "proj_1", name: "bb" },
+      },
+      {
+        automation: {
+          id: "auto_invalid",
+          projectId: "proj_1",
+          name: "Unreadable automation",
+          problem: "invalid-stored-data",
+        },
+        project: { id: "proj_1", name: "bb" },
+      },
+      ...INSTALLED_AUTOMATIONS,
+    ];
+    render(
+      <AutomationOverviewView
+        entries={entries}
+        error={null}
+        onRetry={() => {}}
+        onOpenDetail={onOpenDetail}
+        onEnabledChange={async () => {}}
+        onCreateViaChat={() => {}}
+        activeMode="installed"
+        onModeChange={() => {}}
+      />,
+    );
+
+    expect(screen.getByText("Needs a prompt")).toBeTruthy();
+    expect(screen.getByText("Unreadable automation")).toBeTruthy();
+    expect(screen.getByText("Nightly digest")).toBeTruthy();
+    expect(screen.getAllByText("9AM")).toHaveLength(2);
+
+    const search = screen.getByPlaceholderText("Search automations");
+    fireEvent.change(search, { target: { value: "Prompt required" } });
+    expect(screen.getByText("Needs a prompt")).toBeTruthy();
+    expect(screen.queryByText("Unreadable automation")).toBeNull();
+    expect(screen.queryByText("Nightly digest")).toBeNull();
+
+    fireEvent.change(search, { target: { value: "Invalid data" } });
+    expect(screen.queryByText("Needs a prompt")).toBeNull();
+    expect(screen.getByText("Unreadable automation")).toBeTruthy();
+
+    fireEvent.change(search, { target: { value: "" } });
+    fireEvent.pointerDown(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Active" }));
+    expect(screen.getByText("Needs a prompt")).toBeTruthy();
+    expect(screen.queryByText("Unreadable automation")).toBeNull();
+    expect(screen.getByText("Nightly digest")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.click(screen.getByRole("button", { name: "Edit" }));
+    expect(onOpenDetail).toHaveBeenCalledWith(
+      { projectId: "proj_1", automationId: "auto_repair" },
+      { editing: true },
+    );
+    expect(screen.getAllByRole("button", { name: "Edit" })).toHaveLength(1);
+  });
+
   it("offers Projects and Status as groups inside one filter menu", async () => {
     render(
       <AutomationOverviewView
@@ -142,7 +224,6 @@ describe("AutomationOverviewView", () => {
       />,
     );
 
-    // One trigger replaces the separate Projects and Status dropdowns.
     expect(screen.queryByRole("button", { name: "Projects" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Status" })).toBeNull();
     const filtersTrigger = screen.getByRole("button", { name: "Filters" });
@@ -198,10 +279,8 @@ describe("AutomationOverviewView", () => {
     expect(
       screen.getByRole("menuitemcheckbox", { name: "bb" }).ariaChecked,
     ).toBe("true");
-    // The project selection on its own still matches the fixture.
     expect(rowTitles()).toEqual(["Nightly digest"]);
 
-    // Picking a Status option must not clear the Projects selection.
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Paused" }));
     expect(
       screen.getByRole("menuitemcheckbox", { name: "bb" }).ariaChecked,
@@ -212,9 +291,6 @@ describe("AutomationOverviewView", () => {
     expect(
       screen.getByRole("menuitemcheckbox", { name: "Active" }).ariaChecked,
     ).toBe("false");
-    // Groups AND together: the fixture is enabled, so "bb" and "Paused" cannot
-    // both be satisfied and the list empties rather than falling back to the
-    // union of the two selections.
     expect(rowTitles()).toEqual([]);
     expect(
       screen.getByText("No automations match these filters."),
@@ -227,8 +303,6 @@ describe("AutomationOverviewView", () => {
       }),
     ).toBeTruthy();
 
-    // Clearing just the status selection restores the row under the still-set
-    // project filter.
     fireEvent.pointerDown(screen.getByRole("button", { name: /^Filters/ }));
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "Paused" }));
     expect(
@@ -254,18 +328,12 @@ describe("AutomationOverviewView", () => {
       />,
     );
 
-    // Assert the treatment that is actually rendered. These triggers compose
-    // TooltipTrigger over DropdownMenuTrigger, so the tooltip's data-state wins
-    // on the shared element and any `data-[state=open]:` styling would be dead.
-    // The app-wide selection surface (CONTEXT_SELECTION_SURFACE_CLASS).
     const ENGAGED = ["bg-state-active", "text-foreground"];
     const classesOf = (el: HTMLElement) => new Set(el.className.split(/\s+/));
     const isEngaged = (el: HTMLElement) => {
       const classes = classesOf(el);
       return ENGAGED.every((engagedClass) => classes.has(engagedClass));
     };
-    // An open Radix menu marks the rest of the page aria-hidden, so query the
-    // triggers through the DOM rather than the accessibility tree.
     const byLabel = (prefix: string) => {
       const el = container.querySelector<HTMLElement>(
         `button[aria-label^="${prefix}"]`,
@@ -276,13 +344,11 @@ describe("AutomationOverviewView", () => {
     const filters = () => byLabel("Filters");
     const sort = () => byLabel("Sort:");
 
-    // At rest neither trigger carries a fill, so neither reads as pressed.
     for (const trigger of [filters(), sort()]) {
       expect(isEngaged(trigger)).toBe(false);
       expect(classesOf(trigger).has("bg-state-active")).toBe(false);
     }
 
-    // Opening either menu engages that trigger and only that trigger.
     fireEvent.pointerDown(filters());
     expect(isEngaged(filters())).toBe(true);
     expect(isEngaged(sort())).toBe(false);
@@ -295,7 +361,6 @@ describe("AutomationOverviewView", () => {
     fireEvent.keyDown(document, { key: "Escape" });
     expect(isEngaged(sort())).toBe(false);
 
-    // A filter holding a selection keeps the same treatment once closed.
     fireEvent.pointerDown(filters());
     fireEvent.click(screen.getByRole("menuitemcheckbox", { name: "bb" }));
     fireEvent.keyDown(document, { key: "Escape" });
@@ -319,7 +384,6 @@ describe("AutomationOverviewView", () => {
     const sortTrigger = screen.getByRole("button", {
       name: "Sort: Automation name, ascending",
     });
-    // Same sort glyph as the Plugins and Skills toolbars, in both directions.
     expect(sortTrigger.querySelector('[data-icon="ArrowUpDown"]')).toBeTruthy();
     fireEvent.pointerDown(sortTrigger);
     const projectOption = screen.getByRole("menuitemradio", {
@@ -331,7 +395,6 @@ describe("AutomationOverviewView", () => {
     expect(projectOption.getAttribute("aria-disabled")).toBe("true");
     expect(projectOption.getAttribute("aria-checked")).toBe("false");
     expect(nameOption.getAttribute("aria-checked")).toBe("true");
-    // Only the trailing direction arrow remains; no leading option icons.
     expect(iconNames(projectOption)).toEqual(["ArrowUp"]);
     expect(iconNames(nameOption)).toEqual(["ArrowUp"]);
     fireEvent.click(nameOption);

@@ -29,6 +29,10 @@ import {
   PLAN_HELP,
   parseServiceTier,
 } from "./helpers.js";
+import { SEND_AT_HELP, parseSendAt } from "./send-time.js";
+
+const PROVIDER_HELP =
+  "Provider ID for the thread. Omit to use the project's remembered provider choice";
 
 interface ThreadSpawnCommandOptions {
   prompt: string;
@@ -55,6 +59,7 @@ interface ThreadSpawnCommandOptions {
   sourceThread?: string;
   sourceSeqEnd?: string;
   visibility?: string;
+  sendAt?: string;
 }
 
 export function looksLikePath(value: string): boolean {
@@ -68,7 +73,9 @@ export function requireHostId(hostId: string | null): string {
   return hostId;
 }
 
-function resolveSpawnEnvironmentValue(flagValue?: string): string | undefined {
+export function resolveSpawnEnvironmentValue(
+  flagValue?: string,
+): string | undefined {
   const trimmedValue = flagValue?.trim();
   if (!trimmedValue) return undefined;
   if (looksLikePath(trimmedValue)) return trimmedValue;
@@ -120,6 +127,13 @@ export function buildSpawnEnvironment(args: {
     throw new Error("--base-branch requires --new-environment worktree.");
   }
   if (newEnvironmentKind) {
+    if (newEnvironmentKind === "personal") {
+      return {
+        type: "host",
+        hostId: requireHostId(args.hostId),
+        workspace: { type: "personal" },
+      };
+    }
     if (newEnvironmentKind === "worktree") {
       return {
         type: "host",
@@ -128,7 +142,7 @@ export function buildSpawnEnvironment(args: {
       };
     }
     throw new Error(
-      `Unknown environment kind '${newEnvironmentKind}'. Supported: worktree.`,
+      `Unknown environment kind '${newEnvironmentKind}'. Supported: personal, worktree.`,
     );
   }
   if (!environmentValue) {
@@ -176,11 +190,11 @@ export function registerSpawnCommand(
     )
     .option(
       "--new-environment <kind>",
-      "Create a new managed environment of the given kind (worktree)",
+      "Create a fresh environment of the given kind (personal or worktree)",
     )
     .option(
       "--base-branch <branch>",
-      "Base branch for new managed worktrees. Omit to let bb choose the project's default worktree base; naming the default branch fetches and prefers origin the same way.",
+      "Exact Git ref; omit for bb's project default (use origin/<branch> for a remote ref)",
     )
     .option(
       "--machine <id-or-name>",
@@ -189,10 +203,7 @@ export function registerSpawnCommand(
     .option("--host <id-or-name>", "Alias for --machine")
     .option("--parent-thread <id>", "Parent thread ID for worker thread links")
     .option("--parent-self", "Parent the new thread to BB_THREAD_ID")
-    .option(
-      "--provider <id>",
-      "Provider ID for the thread. Omit to use the project's remembered provider choice",
-    )
+    .option("--provider <id>", PROVIDER_HELP)
     .option(
       "--model <model>",
       "Model ID for the thread. Omit to use the project's remembered default for the resolved provider",
@@ -222,6 +233,7 @@ export function registerSpawnCommand(
       "--visibility <visibility>",
       "Thread visibility: visible or hidden (a child inherits its parent)",
     )
+    .option("--send-at <when>", SEND_AT_HELP)
     .option("--origin-kind <kind>", "Thread origin: fork")
     .option("--source-thread <id>", "Source thread for a fork")
     .option(
@@ -295,6 +307,9 @@ export function registerSpawnCommand(
         ) {
           throw new Error("--source-seq-end must be a non-negative integer.");
         }
+        const sendAt =
+          opts.sendAt === undefined ? undefined : parseSendAt(opts.sendAt);
+        const providerId = opts.provider?.trim();
 
         let thread: Thread;
         try {
@@ -302,7 +317,7 @@ export function registerSpawnCommand(
           thread = await sdk.threads.spawn({
             origin: "cli",
             projectId,
-            ...(opts.provider ? { providerId: opts.provider } : {}),
+            ...(providerId ? { providerId } : {}),
             ...(opts.model ? { model: opts.model } : {}),
             input: buildPromptInputs({
               message: opts.prompt,
@@ -316,19 +331,13 @@ export function registerSpawnCommand(
             ...(permissionMode ? { permissionMode } : {}),
             ...(visibility ? { visibility } : {}),
             environment,
-            // The typed $post client types this body against the schema's
-            // output shape, where startedOnBehalfOf/originKind
-            // (`.default(null)`) are required — so a normal spawn passes the
-            // explicit null the server would otherwise fill. (A fork sets
-            // these; the CLI never does. z.input would re-optionalize the
-            // SDK arg type but the underlying $post still requires them, so the
-            // null lives here.)
             startedOnBehalfOf: null,
             originKind: opts.originKind ?? null,
             ...(parentThreadId ? { parentThreadId } : {}),
             ...(opts.section ? { sectionId: opts.section } : {}),
             ...(opts.sourceThread ? { sourceThreadId: opts.sourceThread } : {}),
             ...(sourceSeqEnd !== undefined ? { sourceSeqEnd } : {}),
+            ...(sendAt !== undefined ? { sendAt } : {}),
           });
         } catch (err: unknown) {
           throw prependErrorContext("Failed to create thread", err);
@@ -336,6 +345,11 @@ export function registerSpawnCommand(
 
         if (outputJson(opts, thread)) return;
         console.log(`Thread spawned: ${thread.id}`);
+        if (sendAt !== undefined) {
+          console.log(
+            `First message scheduled for ${new Date(sendAt).toLocaleString()}; the thread stays pending until then.`,
+          );
+        }
         // A hidden child reports to its parent too, so the promise follows the
         // parent link alone.
         if (

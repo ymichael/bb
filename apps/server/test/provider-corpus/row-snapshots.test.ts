@@ -1,11 +1,3 @@
-/**
- * A4 — production-thread row snapshots.
- *
- * Projects every corpus thread through the timeline route path and compares
- * the rows with the snapshot written at the last accepted baseline. Runs only
- * when `BB_PROVIDER_CORPUS_DIR` points at the private corpus; see
- * docs/debugging-and-qa.md ("Provider corpus") for write and compare runs.
- */
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -58,10 +50,6 @@ interface RowSnapshot {
   variants: Record<string, { pages: unknown[] }>;
 }
 
-/**
- * Top-level rows plus the children a completed turn carries in the nested
- * variant (the default variant summarizes a turn and leaves `children` null).
- */
 function countTimelineRows(rows: readonly TimelineRow[]): number {
   let count = 0;
   for (const row of rows) {
@@ -101,10 +89,6 @@ function buildRowSnapshot(
   return { rows, snapshot: normalizeJson(snapshot) };
 }
 
-/**
- * The reader already restricts ids to one safe path segment; this keeps the
- * resolved file under the rows root even if that validation ever loosens.
- */
 function snapshotFilePath(
   rowsRoot: string,
   provider: string,
@@ -132,25 +116,18 @@ function formatDiffs(diffs: readonly JsonDiff[], limit: number): string {
 const available = corpusAvailable();
 const mode = resolveSnapshotMode();
 const corpusThreads = available ? listCorpusThreads() : [];
-/**
- * With BB_PROVIDER_CORPUS_ROW_CLASSES set, compare mode matches rows by
- * identity and requires every change to fall into a named class from that
- * file, instead of allowlisting JSON pointers. A projection change that adds
- * or removes rows shifts every later pointer; the class file is the only
- * way to prove such a change is exactly what the PR intended.
- */
 const rowClassesPath = resolveRowDiffClassesPath();
 
 describe.skipIf(!available)("provider corpus row snapshots", () => {
-  // The describe body still runs at collection time when the suite is skipped,
-  // so everything here must tolerate a missing corpus.
   const corpusDir = resolveProviderCorpusDir() ?? "";
   const snapshotsDir = path.join(corpusDir, "snapshots");
   const rowsDir = resolveSnapshotRowsDir(snapshotsDir);
   const allowlist = available ? readAllowlist(snapshotsDir) : [];
   const usedAllowlistEntries = new Set<number>();
   const rowClasses: RowDiffClass[] =
-    available && rowClassesPath !== null ? readRowDiffClasses(rowClassesPath) : [];
+    available && rowClassesPath !== null
+      ? readRowDiffClasses(rowClassesPath)
+      : [];
   const rowClassReport = createRowDiffReport();
   let registry: ProviderRegistryService | null = null;
   const totals = {
@@ -186,9 +163,6 @@ describe.skipIf(!available)("provider corpus row snapshots", () => {
         const filePath = snapshotFilePath(rowsDir, provider, threadId);
 
         if (mode === "write") {
-          // A baseline must not depend on the wall clock or on iteration
-          // order: a second projection of the same rows has to match
-          // byte-for-byte before it is worth writing down.
           const rebuilt = buildRowSnapshot(loaded, corpusThread, registry);
           expect(JSON.stringify(rebuilt.snapshot)).toBe(
             JSON.stringify(built.snapshot),
@@ -283,8 +257,6 @@ describe.skipIf(!available)("provider corpus row snapshots", () => {
     }
     const wallMs = Math.round(performance.now() - totals.startedAt);
     const megabytes = (totals.bytes / (1024 * 1024)).toFixed(1);
-    // The vitest config silences console output of passing tests; stdout
-    // still reaches the terminal, and the JSON file survives the run.
     process.stdout.write(
       `Row snapshots (${mode}): ${totals.threads} threads, ${totals.rows} rows, ${megabytes} MB, ${wallMs} ms\n`,
     );
@@ -324,12 +296,9 @@ describe.skipIf(!available)("provider corpus row snapshots", () => {
       );
     }
     if (rowClassesPath !== null) {
-      // stdout, like the summary line: the console is silenced on success
-      // and the class counts are the run's evidence.
       process.stdout.write(
         `Row change classes (${rowClassesPath}):\n${formatRowDiffReport(rowClasses, rowClassReport)}\n`,
       );
-      // A filtered run (`-t thr_…`) leaves most classes legitimately idle.
       if (totals.threads === corpusThreads.length) {
         expect(
           idleRowDiffClasses(rowClasses, rowClassReport),
@@ -358,7 +327,6 @@ describe.skipIf(!available)("provider corpus row snapshots", () => {
           .join("\n")}`,
       );
     }
-    // A filtered run (`-t thr_…`) leaves most entries legitimately unused.
     if (totals.threads === corpusThreads.length) {
       expect(
         unusedEntries.map((entry) => describeAllowlistEntry(entry)),

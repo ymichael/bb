@@ -14,10 +14,10 @@ import {
   TURN_TIMEOUT_MS,
 } from "./shared.js";
 
-describe.sequential(
-  "fake provider managed graceful recovery integration",
-  () => {
-    it("restarts cleanly with a managed-worktree environment and continues the thread", () =>
+describe.sequential("fake provider managed graceful recovery integration", () => {
+  it(
+    "restarts cleanly with a managed-worktree environment and continues the thread",
+    () =>
       withHarness(async (harness) => {
         const { thread } = await createRecoveryThread(
           harness,
@@ -66,6 +66,7 @@ describe.sequential(
           "idle",
           TURN_TIMEOUT_MS,
         );
-      }), RECOVERY_TEST_TIMEOUT_MS);
-  },
-);
+      }),
+    RECOVERY_TEST_TIMEOUT_MS,
+  );
+});

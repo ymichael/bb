@@ -1,17 +1,17 @@
+import {
+  ActionMenuItem,
+  ActionMenuSeparator,
+} from "@/components/ui/action-menu-items";
 import type { Thread } from "@bb/domain";
 import type { ReactNode } from "react";
 import {
   ContextMenu,
   ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuSeparator,
   ContextMenuTrigger,
 } from "@bb/shared-ui/context-menu";
 import {
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@bb/shared-ui/dropdown-menu";
 import { Icon, type IconName } from "@bb/shared-ui/icon";
@@ -22,15 +22,12 @@ import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { CompactLongPressMenu } from "@/components/ui/compact-long-press-menu";
 import { isThreadRead } from "@bb/client-core";
+import { copyToClipboardWithToast } from "@/lib/clipboard";
+import { getThreadRoutePath } from "@/lib/route-paths";
 import { useThreadActions } from "./ThreadActionsProvider";
 
 interface ThreadActionsMenuBaseProps {
   thread: Thread;
-  /**
-   * When provided, adds a leading "Open in split" entry (the split feature's
-   * second entry point, alongside cmd-click). Omitted where splits don't apply
-   * (e.g. compact viewports), so the item only appears when meaningful.
-   */
   onOpenInSplit?: () => void;
 }
 
@@ -43,10 +40,6 @@ export interface ThreadActionsMenuResponsiveAction {
 interface ThreadActionsMenuProps extends ThreadActionsMenuBaseProps {
   onOpenChange?: (open: boolean) => void;
   triggerClassName?: string;
-  /**
-   * Contextual toolbar actions that move into this menu when a split header is
-   * too narrow to show them inline.
-   */
   responsiveActions?: readonly ThreadActionsMenuResponsiveAction[];
 }
 
@@ -60,68 +53,6 @@ type ThreadActionsMenuSurface = "context" | "dropdown";
 interface ThreadActionsMenuItemsProps extends ThreadActionsMenuBaseProps {
   responsiveActions?: readonly ThreadActionsMenuResponsiveAction[];
   surface: ThreadActionsMenuSurface;
-}
-
-interface ThreadActionMenuItemProps {
-  children: ReactNode;
-  className?: string;
-  variant?: "default" | "destructive";
-  icon: IconName;
-  onSelect?: (event: Event) => void;
-  surface: ThreadActionsMenuSurface;
-}
-
-function ThreadActionMenuItem({
-  children,
-  className,
-  variant,
-  icon,
-  onSelect,
-  surface,
-}: ThreadActionMenuItemProps) {
-  const content = (
-    <>
-      <Icon name={icon} aria-hidden="true" />
-      {children}
-    </>
-  );
-
-  if (surface === "context") {
-    return (
-      <ContextMenuItem
-        className={cn(
-          className,
-          variant === "destructive" &&
-            "text-destructive focus:bg-destructive/15 focus:text-destructive data-[last-hovered]:bg-destructive/15 data-[last-hovered]:text-destructive",
-        )}
-        onSelect={onSelect}
-      >
-        {content}
-      </ContextMenuItem>
-    );
-  }
-
-  return (
-    <DropdownMenuItem
-      className={className}
-      variant={variant}
-      onSelect={onSelect}
-    >
-      {content}
-    </DropdownMenuItem>
-  );
-}
-
-function ThreadActionMenuSeparator({
-  surface,
-}: {
-  surface: ThreadActionsMenuSurface;
-}) {
-  return surface === "context" ? (
-    <ContextMenuSeparator />
-  ) : (
-    <DropdownMenuSeparator />
-  );
 }
 
 function ThreadActionsMenuItems({
@@ -144,13 +75,17 @@ function ThreadActionsMenuItems({
   const isRead = isThreadRead(thread);
   const isArchived = thread.archivedAt != null;
   const isPinned = thread.pinnedAt !== null;
+  const threadUrl = new URL(
+    getThreadRoutePath({ projectId: thread.projectId, threadId: thread.id }),
+    window.location.origin,
+  ).toString();
 
   return (
     <>
       {responsiveActions.length > 0 ? (
         <>
           {responsiveActions.map((action) => (
-            <ThreadActionMenuItem
+            <ActionMenuItem
               key={action.label}
               surface={surface}
               icon={action.icon}
@@ -159,16 +94,16 @@ function ThreadActionsMenuItems({
               }}
             >
               {action.label}
-            </ThreadActionMenuItem>
+            </ActionMenuItem>
           ))}
           {showSeparators ? (
-            <ThreadActionMenuSeparator surface={surface} />
+            <ActionMenuSeparator surface={surface} />
           ) : null}
         </>
       ) : null}
       {onOpenInSplit ? (
         <>
-          <ThreadActionMenuItem
+          <ActionMenuItem
             surface={surface}
             icon="Columns2"
             onSelect={() => {
@@ -176,14 +111,25 @@ function ThreadActionsMenuItems({
             }}
           >
             Open in split
-          </ThreadActionMenuItem>
+          </ActionMenuItem>
           {showSeparators ? (
-            <ThreadActionMenuSeparator surface={surface} />
+            <ActionMenuSeparator surface={surface} />
           ) : null}
         </>
       ) : null}
-      {/* Quick status toggles. */}
-      <ThreadActionMenuItem
+      <ActionMenuItem
+        surface={surface}
+        icon="Copy"
+        onSelect={() => {
+          void copyToClipboardWithToast(threadUrl, {
+            successMessage: "Thread link copied",
+            errorMessage: "Failed to copy thread link",
+          });
+        }}
+      >
+        Copy thread link
+      </ActionMenuItem>
+      <ActionMenuItem
         surface={surface}
         icon={isRead ? "Mail" : "MailOpen"}
         onSelect={() => {
@@ -191,8 +137,8 @@ function ThreadActionsMenuItems({
         }}
       >
         {isRead ? "Mark unread" : "Mark read"}
-      </ThreadActionMenuItem>
-      <ThreadActionMenuItem
+      </ActionMenuItem>
+      <ActionMenuItem
         surface={surface}
         icon={isPinned ? "PinOff" : "Pin"}
         onSelect={() => {
@@ -200,8 +146,8 @@ function ThreadActionsMenuItems({
         }}
       >
         {isPinned ? "Unpin" : "Pin"}
-      </ThreadActionMenuItem>
-      <ThreadActionMenuItem
+      </ActionMenuItem>
+      <ActionMenuItem
         surface={surface}
         icon="Edit"
         onSelect={() => {
@@ -211,9 +157,9 @@ function ThreadActionsMenuItems({
         }}
       >
         Rename
-      </ThreadActionMenuItem>
-      {showSeparators ? <ThreadActionMenuSeparator surface={surface} /> : null}
-      <ThreadActionMenuItem
+      </ActionMenuItem>
+      {showSeparators ? <ActionMenuSeparator surface={surface} /> : null}
+      <ActionMenuItem
         surface={surface}
         icon={isArchived ? "ArchiveRestore" : "Archive"}
         onSelect={() => {
@@ -225,8 +171,8 @@ function ThreadActionsMenuItems({
         }}
       >
         {isArchived ? "Unarchive" : "Archive"}
-      </ThreadActionMenuItem>
-      <ThreadActionMenuItem
+      </ActionMenuItem>
+      <ActionMenuItem
         surface={surface}
         icon="Trash2"
         variant="destructive"
@@ -237,16 +183,11 @@ function ThreadActionsMenuItems({
         }}
       >
         Delete
-      </ThreadActionMenuItem>
+      </ActionMenuItem>
     </>
   );
 }
 
-/**
- * One-click archive (or unarchive) button for hover-revealed row actions. It
- * runs the same lifecycle as the menu's Archive entry, so undo, navigation,
- * and child cascade behave identically.
- */
 export function ThreadArchiveQuickAction({
   thread,
   className,
@@ -329,13 +270,6 @@ export function ThreadActionsMenu({
   );
 }
 
-/**
- * Row-level actions menu: a right-click context menu on wide viewports, and on
- * compact viewports a touch long-press (or right-click) that opens the same
- * items in the persistent responsive drawer. The compact path deliberately
- * avoids the modal Radix `ContextMenu` (aria-hidden on the app root, scroll
- * lock, document-wide pointer-events flip) on phones.
- */
 export function ThreadActionsContextMenu(props: ThreadActionsContextMenuProps) {
   const isCompactViewport = useIsCompactViewport();
   if (isCompactViewport) {

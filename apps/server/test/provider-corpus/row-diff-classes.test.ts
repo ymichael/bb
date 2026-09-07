@@ -15,7 +15,11 @@ function turn(
   turnId: string,
   segment: number | null,
   children: SnapshotRow[] | null,
-  bounds: { summaryCount: number; sourceSeqStart: number; sourceSeqEnd: number },
+  bounds: {
+    summaryCount: number;
+    sourceSeqStart: number;
+    sourceSeqEnd: number;
+  },
 ): SnapshotRow {
   return {
     kind: "turn",
@@ -40,13 +44,23 @@ function tool(callId: string, extra: Partial<SnapshotRow> = {}): SnapshotRow {
 }
 
 function assistant(itemId: string, text: string): SnapshotRow {
-  return { kind: "conversation", role: "assistant", id: `t:assistant:${itemId}`, text };
+  return {
+    kind: "conversation",
+    role: "assistant",
+    id: `t:assistant:${itemId}`,
+    text,
+  };
 }
 
-function snapshot(variants: Record<string, SnapshotRow[]>): RowSnapshotVariants {
+function snapshot(
+  variants: Record<string, SnapshotRow[]>,
+): RowSnapshotVariants {
   return {
     variants: Object.fromEntries(
-      Object.entries(variants).map(([name, rows]) => [name, { pages: [{ rows }] }]),
+      Object.entries(variants).map(([name, rows]) => [
+        name,
+        { pages: [{ rows }] },
+      ]),
     ),
   };
 }
@@ -57,44 +71,89 @@ function run(
   classes: RowDiffClass[],
 ) {
   const report = createRowDiffReport();
-  const changes = classifyRowSnapshotDiff("p/thr", before, after, classes, report);
+  const changes = classifyRowSnapshotDiff(
+    "p/thr",
+    before,
+    after,
+    classes,
+    report,
+  );
   return { changes, report };
 }
 
 describe("classifyRowSnapshotDiff", () => {
   it("matches rows by identity, so an inserted sibling is one added change and the shifted rows are untouched", () => {
     const before = snapshot({
-      nested: [turn("t1", null, [tool("a"), tool("c")], { summaryCount: 2, sourceSeqStart: 1, sourceSeqEnd: 5 })],
-      default: [turn("t1", null, null, { summaryCount: 2, sourceSeqStart: 1, sourceSeqEnd: 5 })],
+      nested: [
+        turn("t1", null, [tool("a"), tool("c")], {
+          summaryCount: 2,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 5,
+        }),
+      ],
+      default: [
+        turn("t1", null, null, {
+          summaryCount: 2,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 5,
+        }),
+      ],
     });
     const after = snapshot({
-      nested: [turn("t1", null, [tool("a"), tool("b"), tool("c")], { summaryCount: 3, sourceSeqStart: 1, sourceSeqEnd: 5 })],
-      default: [turn("t1", null, null, { summaryCount: 3, sourceSeqStart: 1, sourceSeqEnd: 5 })],
+      nested: [
+        turn("t1", null, [tool("a"), tool("b"), tool("c")], {
+          summaryCount: 3,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 5,
+        }),
+      ],
+      default: [
+        turn("t1", null, null, {
+          summaryCount: 3,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 5,
+        }),
+      ],
     });
     const { report } = run(before, after, [
-      { name: "unhidden", reason: "r", match: { added: { kind: "work", workKind: "tool" } } },
+      {
+        name: "unhidden",
+        reason: "r",
+        match: { added: { kind: "work", workKind: "tool" } },
+      },
     ]);
     expect(report.unclassified).toEqual([]);
     expect(report.claims.get("unhidden")).toBe(1);
-    // The turn's summaryCount follows its child in BOTH variants: the
-    // default variant's turn has no children, so it borrows the nested
-    // variant's verdict.
     expect(report.claims.get(CONTAINER_BOUNDS_CLASS)).toBe(2);
   });
 
   it("reports a change no class claims, with the changed field set", () => {
     const before = snapshot({ default: [tool("a", { output: "x" })] });
-    const after = snapshot({ default: [tool("a", { output: "y", toolName: "Grep" })] });
+    const after = snapshot({
+      default: [tool("a", { output: "y", toolName: "Grep" })],
+    });
     const { report } = run(before, after, [
-      { name: "output-only", reason: "r", match: { changed: { workKind: "tool", fields: ["output"] } } },
+      {
+        name: "output-only",
+        reason: "r",
+        match: { changed: { workKind: "tool", fields: ["output"] } },
+      },
     ]);
     expect(report.unclassified.map(describeRowChange)).toEqual([
       "changed work/tool [output,toolName]",
     ]);
-    expect(idleRowDiffClasses(
-      [{ name: "output-only", reason: "r", match: { changed: { workKind: "tool", fields: ["output"] } } }],
-      report,
-    )).toEqual(["output-only"]);
+    expect(
+      idleRowDiffClasses(
+        [
+          {
+            name: "output-only",
+            reason: "r",
+            match: { changed: { workKind: "tool", fields: ["output"] } },
+          },
+        ],
+        report,
+      ),
+    ).toEqual(["output-only"]);
   });
 
   it("reports a dead entry even when a sibling entry with the same name fired", () => {
@@ -106,51 +165,92 @@ describe("classifyRowSnapshotDiff", () => {
       {
         name: "upgraded",
         reason: "fires",
-        match: { reshaped: { from: { workKind: "tool" }, to: { workKind: "file-read" } } },
+        match: {
+          reshaped: {
+            from: { workKind: "tool" },
+            to: { workKind: "file-read" },
+          },
+        },
       },
       {
         name: "upgraded",
         reason: "never fires",
-        match: { reshaped: { from: { workKind: "tool" }, to: { workKind: "search" } } },
+        match: {
+          reshaped: { from: { workKind: "tool" }, to: { workKind: "search" } },
+        },
       },
     ];
     const { report } = run(before, after, classes);
     expect(report.claims.get("upgraded")).toBe(1);
-    // Liveness is per entry: the name claimed a change, the second matcher
-    // did not, and the verdict names the dead matcher.
     expect(idleRowDiffClasses(classes, report)).toEqual([
       `upgraded#1 ${JSON.stringify(classes[1]!.match)}`,
     ]);
-    // The live gate merges per-thread reports; the union keeps the verdict.
     const merged = createRowDiffReport();
     mergeRowDiffReport(merged, report);
-    expect(idleRowDiffClasses(classes, merged)).toEqual(idleRowDiffClasses(classes, report));
+    expect(idleRowDiffClasses(classes, merged)).toEqual(
+      idleRowDiffClasses(classes, report),
+    );
   });
 
   it("treats a turn that lost a segment as re-segmented and the row that folded into it as moved, not removed", () => {
     const text = assistant("m18", "I'll wait for the agent.");
     const before = snapshot({
       nested: [
-        turn("t1", 0, [tool("a")], { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 }),
+        turn("t1", 0, [tool("a")], {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
         text,
-        turn("t1", 1, [tool("b")], { summaryCount: 1, sourceSeqStart: 5, sourceSeqEnd: 7 }),
+        turn("t1", 1, [tool("b")], {
+          summaryCount: 1,
+          sourceSeqStart: 5,
+          sourceSeqEnd: 7,
+        }),
       ],
       default: [
-        turn("t1", 0, null, { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 }),
+        turn("t1", 0, null, {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
         text,
-        turn("t1", 1, null, { summaryCount: 1, sourceSeqStart: 5, sourceSeqEnd: 7 }),
+        turn("t1", 1, null, {
+          summaryCount: 1,
+          sourceSeqStart: 5,
+          sourceSeqEnd: 7,
+        }),
       ],
     });
     const after = snapshot({
-      nested: [turn("t1", null, [tool("a"), text, tool("b")], { summaryCount: 3, sourceSeqStart: 1, sourceSeqEnd: 7 })],
-      default: [turn("t1", null, null, { summaryCount: 3, sourceSeqStart: 1, sourceSeqEnd: 7 })],
+      nested: [
+        turn("t1", null, [tool("a"), text, tool("b")], {
+          summaryCount: 3,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 7,
+        }),
+      ],
+      default: [
+        turn("t1", null, null, {
+          summaryCount: 3,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 7,
+        }),
+      ],
     });
     const { report } = run(before, after, [
-      { name: "rejoined", reason: "r", match: { resegmented: { kind: "turn" } } },
-      { name: "rejoined", reason: "r", match: { moved: { kind: "conversation", role: "assistant" } } },
+      {
+        name: "rejoined",
+        reason: "r",
+        match: { resegmented: { kind: "turn" } },
+      },
+      {
+        name: "rejoined",
+        reason: "r",
+        match: { moved: { kind: "conversation", role: "assistant" } },
+      },
     ]);
     expect(report.unclassified).toEqual([]);
-    // Two variants × (one resegmented turn + one moved text).
     expect(report.claims.get("rejoined")).toBe(4);
   });
 
@@ -181,9 +281,18 @@ describe("classifyRowSnapshotDiff", () => {
       {
         name: "structural",
         reason: "r",
-        match: { reshaped: { from: { workKind: "tool" }, to: { workKind: "delegation" } } },
+        match: {
+          reshaped: {
+            from: { workKind: "tool" },
+            to: { workKind: "delegation" },
+          },
+        },
       },
-      { name: "surfaced", reason: "r", match: { added: { kind: "conversation", nested: true } } },
+      {
+        name: "surfaced",
+        reason: "r",
+        match: { added: { kind: "conversation", nested: true } },
+      },
     ]);
     expect(report.unclassified).toEqual([]);
     expect(report.claims.get("structural")).toBe(1);
@@ -194,20 +303,36 @@ describe("classifyRowSnapshotDiff", () => {
     const before = snapshot({ default: [tool("a", { status: "completed" })] });
     const after = snapshot({
       default: [
-        { ...tool("a"), workKind: "file-read", id: "t:file-read:a", path: "/x", status: "failed" },
+        {
+          ...tool("a"),
+          workKind: "file-read",
+          id: "t:file-read:a",
+          path: "/x",
+          status: "failed",
+        },
       ],
     });
     const restricted: RowDiffClass = {
       name: "upgraded",
       reason: "r",
       match: {
-        reshaped: { from: { workKind: "tool" }, to: { workKind: "file-read" }, fields: ["id", "path"] },
+        reshaped: {
+          from: { workKind: "tool" },
+          to: { workKind: "file-read" },
+          fields: ["id", "path"],
+        },
       },
     };
-    // The status flip rides along with the shape change: without `fields`
-    // the class claims it, with `fields` it is reported with the full set.
     const unrestricted = run(before, after, [
-      { ...restricted, match: { reshaped: { from: { workKind: "tool" }, to: { workKind: "file-read" } } } },
+      {
+        ...restricted,
+        match: {
+          reshaped: {
+            from: { workKind: "tool" },
+            to: { workKind: "file-read" },
+          },
+        },
+      },
     ]);
     expect(unrestricted.report.unclassified).toEqual([]);
     const { report } = run(before, after, [restricted]);
@@ -218,58 +343,113 @@ describe("classifyRowSnapshotDiff", () => {
 
   it("attributes a turn's bounds change to the classes its children fell into", () => {
     const before = snapshot({
-      nested: [turn("t1", null, [tool("a")], { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 })],
-      default: [turn("t1", null, null, { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 })],
+      nested: [
+        turn("t1", null, [tool("a")], {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
+      default: [
+        turn("t1", null, null, {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
     });
     const after = snapshot({
-      nested: [turn("t1", null, [tool("a"), tool("b")], { summaryCount: 2, sourceSeqStart: 1, sourceSeqEnd: 3 })],
-      default: [turn("t1", null, null, { summaryCount: 2, sourceSeqStart: 1, sourceSeqEnd: 3 })],
+      nested: [
+        turn("t1", null, [tool("a"), tool("b")], {
+          summaryCount: 2,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
+      default: [
+        turn("t1", null, null, {
+          summaryCount: 2,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
     });
     const { report } = run(before, after, [
       { name: "unhidden", reason: "r", match: { added: { workKind: "tool" } } },
     ]);
     expect(report.unclassified).toEqual([]);
-    expect(Object.fromEntries(report.containerBoundsBy)).toEqual({ unhidden: 2 });
+    expect(Object.fromEntries(report.containerBoundsBy)).toEqual({
+      unhidden: 2,
+    });
   });
 
   it("compares the page fields beside rows and lets a pageField class claim them", () => {
-    const before = { variants: { default: { pages: [{ rows: [tool("a")], pendingTodos: null }] } } };
-    const after = {
-      variants: { default: { pages: [{ rows: [tool("a")], pendingTodos: { items: [] } }] } },
+    const before = {
+      variants: {
+        default: { pages: [{ rows: [tool("a")], pendingTodos: null }] },
+      },
     };
-    expect(run(before, after, []).report.unclassified.map(describeRowChange)).toEqual([
-      "changed page.pendingTodos",
-    ]);
+    const after = {
+      variants: {
+        default: {
+          pages: [{ rows: [tool("a")], pendingTodos: { items: [] } }],
+        },
+      },
+    };
+    expect(
+      run(before, after, []).report.unclassified.map(describeRowChange),
+    ).toEqual(["changed page.pendingTodos"]);
     const claimed = run(before, after, [
-      { name: "banner", reason: "r", match: { pageField: { field: "pendingTodos" } } },
+      {
+        name: "banner",
+        reason: "r",
+        match: { pageField: { field: "pendingTodos" } },
+      },
     ]);
     expect(claimed.report.unclassified).toEqual([]);
     expect(claimed.report.claims.get("banner")).toBe(1);
   });
 
   it("does not let a turn status change hide behind a changed child", () => {
-    // A turn's status passes through from the turn event; it is not derived
-    // from the children the way summaryCount and the seq bounds are, so a
-    // child legitimately reshaped by a class must not carry a status flip
-    // with it under container-bounds.
     const before = snapshot({
-      nested: [turn("t1", null, [tool("a")], { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 })],
-      default: [turn("t1", null, null, { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 })],
+      nested: [
+        turn("t1", null, [tool("a")], {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
+      default: [
+        turn("t1", null, null, {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
     });
     const after = snapshot({
       nested: [
         {
-          ...turn("t1", null, [{ ...tool("a"), workKind: "file-read", id: "t:file-read:a" }], {
-            summaryCount: 1,
-            sourceSeqStart: 1,
-            sourceSeqEnd: 3,
-          }),
+          ...turn(
+            "t1",
+            null,
+            [{ ...tool("a"), workKind: "file-read", id: "t:file-read:a" }],
+            {
+              summaryCount: 1,
+              sourceSeqStart: 1,
+              sourceSeqEnd: 3,
+            },
+          ),
           status: "interrupted",
         },
       ],
       default: [
         {
-          ...turn("t1", null, null, { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 }),
+          ...turn("t1", null, null, {
+            summaryCount: 1,
+            sourceSeqStart: 1,
+            sourceSeqEnd: 3,
+          }),
           status: "interrupted",
         },
       ],
@@ -278,7 +458,12 @@ describe("classifyRowSnapshotDiff", () => {
       {
         name: "upgraded",
         reason: "r",
-        match: { reshaped: { from: { workKind: "tool" }, to: { workKind: "file-read" } } },
+        match: {
+          reshaped: {
+            from: { workKind: "tool" },
+            to: { workKind: "file-read" },
+          },
+        },
       },
     ]);
     expect(report.claims.get("upgraded")).toBe(1);
@@ -291,12 +476,26 @@ describe("classifyRowSnapshotDiff", () => {
 
   it("does not let a bounds-only turn change hide behind children that did not change", () => {
     const before = snapshot({
-      nested: [turn("t1", null, [tool("a")], { summaryCount: 1, sourceSeqStart: 1, sourceSeqEnd: 3 })],
+      nested: [
+        turn("t1", null, [tool("a")], {
+          summaryCount: 1,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
     });
     const after = snapshot({
-      nested: [turn("t1", null, [tool("a")], { summaryCount: 4, sourceSeqStart: 1, sourceSeqEnd: 3 })],
+      nested: [
+        turn("t1", null, [tool("a")], {
+          summaryCount: 4,
+          sourceSeqStart: 1,
+          sourceSeqEnd: 3,
+        }),
+      ],
     });
     const { report } = run(before, after, []);
-    expect(report.unclassified.map(describeRowChange)).toEqual(["changed turn [summaryCount]"]);
+    expect(report.unclassified.map(describeRowChange)).toEqual([
+      "changed turn [summaryCount]",
+    ]);
   });
 });

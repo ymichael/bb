@@ -4,9 +4,6 @@ import type { AppShortcutPresentation } from "@/lib/app-keybindings";
 const SIDEBAR_THREAD_SHORTCUT_TARGET_SELECTOR =
   "[data-sidebar-thread-shortcut-target]";
 
-// A windowed-out placeholder carries the ordered thread ids its item would
-// render, so DOM-order navigation still sees every thread (#1261). The value
-// is space-separated `threadId:projectId` pairs.
 export const SIDEBAR_WINDOWED_NAV_ATTRIBUTE = "data-sidebar-windowed-nav";
 
 export interface SidebarWindowedNavigationEntry {
@@ -25,8 +22,6 @@ export function encodeSidebarWindowedNavigationEntries(
 const MAX_SIDEBAR_THREAD_SHORTCUTS = 9;
 
 export interface SidebarThreadShortcutTarget {
-  /** Null for a thread inside a windowed-out placeholder: there is no row
-      to click, so callers navigate by `projectId` + `threadId` instead. */
   element: HTMLAnchorElement | null;
   key: string;
   threadId: string;
@@ -100,22 +95,12 @@ function collectSidebarThreadTargets(
   return targets;
 }
 
-/**
- * The first nine mounted rows, for the numbered jump shortcuts. Windowed-out
- * placeholders are excluded on purpose: the shortcut badges render on the
- * rows themselves, so an unmounted row cannot present a shortcut.
- */
 export function getSidebarThreadShortcutTargets(
   root: HTMLElement | null,
 ): SidebarThreadShortcutTarget[] {
   return collectSidebarThreadTargets(root, MAX_SIDEBAR_THREAD_SHORTCUTS, false);
 }
 
-/**
- * Every thread in visual order, for thread.next / thread.previous. Includes
- * threads inside windowed-out placeholders so the cycle covers the whole
- * list, not just the mounted window.
- */
 export function getSidebarThreadNavigationTargets(
   root: HTMLElement | null,
 ): SidebarThreadShortcutTarget[] {

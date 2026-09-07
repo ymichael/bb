@@ -1,4 +1,7 @@
-import { createFakePluginHost } from "@get-bb/plugin-sdk/testing";
+import {
+  createFakePluginHost,
+  makePluginAgentConfigurationContext,
+} from "@get-bb/plugin-sdk/testing";
 import { afterEach, describe, expect, it } from "vitest";
 import { getCall, getRunRequired, migrations } from "./data.js";
 import plugin from "./server.js";
@@ -47,7 +50,7 @@ describe("workflows plugin", () => {
     const { bb, harness } = createFakePluginHost({
       pluginId: "workflows",
       agentSkillIds: ["workflows"],
-      settings: { maxActiveRuns: "not-a-number" },
+      settings: { maxActiveRuns: 0 },
     });
     hosts.push(harness);
     await expect(plugin(bb)).resolves.toBeUndefined();
@@ -58,7 +61,7 @@ describe("workflows plugin", () => {
     expect(
       harness.registrations.services.map((service) => service.name),
     ).toEqual(["workflow-worker"]);
-    await harness.setSettings({ maxActiveRuns: "5" });
+    await harness.setSettings({ maxActiveRuns: 5 });
   });
 
   it("registers tool schemas without recursive $refs", async () => {
@@ -73,8 +76,6 @@ describe("workflows plugin", () => {
     expect(tools.map((tool) => tool.name)).toEqual(
       expect.arrayContaining(["bb_workflow_run", "bb_workflow_result"]),
     );
-    // A self-referential $ref makes some providers reject the whole tool list
-    // before the turn starts, so no tool may ship one.
     for (const tool of tools) {
       const schema = JSON.stringify(tool.inputSchema);
       expect(schema, `tool ${tool.name}`).not.toContain("$ref");
@@ -87,76 +88,78 @@ describe("workflows plugin", () => {
     ).toMatchObject({ ok: true });
   });
 
-  it("runs a structured workflow asynchronously and notifies its origin", async () => {
-    let childCount = 0;
-    const { bb, harness } = createFakePluginHost({
-      pluginId: "workflows",
-      agentSkillIds: ["workflows"],
-      sdk: {
-        threads: {
-          get: async () =>
-            ({
-              id: "thread-test",
-              environmentId: "environment-1",
-              providerId: "codex",
-            }) as never,
-          defaultExecutionOptions: async () => ({
-            model: "gpt-test",
-            reasoningLevel: "medium",
-            permissionMode: "full",
-            serviceTier: "default",
-            source: "default",
-          }),
-          spawn: async () => {
-            childCount += 1;
-            return { id: `child-${childCount}` } as never;
-          },
-          send: async () => ({ ok: true }),
-          stop: async () => ({ ok: true }),
-        },
-        providers: {
-          list: async () => [
-            {
-              id: "codex",
-              displayName: "Codex",
-              logoUrl: null,
-              available: true,
-              capabilities: {
-                supportsThreadArchive: true,
-                supportsThreadRename: true,
-                supportsServiceTier: true,
-                supportsNativeUserQuestion: false,
-                supportsFork: true,
-                permissionModes: ["full"],
-              },
-              composerActions: [],
+  it(
+    "runs a structured workflow asynchronously and notifies its origin",
+    async () => {
+      let childCount = 0;
+      const { bb, harness } = createFakePluginHost({
+        pluginId: "workflows",
+        agentSkillIds: ["workflows"],
+        sdk: {
+          threads: {
+            get: async () =>
+              ({
+                id: "thread-test",
+                environmentId: "environment-1",
+                providerId: "codex",
+              }) as never,
+            defaultExecutionOptions: async () => ({
+              model: "gpt-test",
+              reasoningLevel: "medium",
+              permissionMode: "full",
+              serviceTier: "default",
+              source: "default",
+            }),
+            spawn: async () => {
+              childCount += 1;
+              return { id: `child-${childCount}` } as never;
             },
-          ],
-          models: async () => ({
-            providers: [],
-            selectedOnlyModels: [],
-            modelLoadError: null,
-            models: [
+            send: async () => ({ ok: true }),
+            stop: async () => ({ ok: true }),
+          },
+          providers: {
+            list: async () => [
               {
-                id: "gpt-test",
-                model: "gpt-test",
-                displayName: "GPT Test",
-                description: "test",
-                supportedReasoningEfforts: [
-                  { reasoningEffort: "medium", description: "test" },
-                ],
-                defaultReasoningEffort: "medium",
-                isDefault: true,
+                id: "codex",
+                displayName: "Codex",
+                logoUrl: null,
+                available: true,
+                capabilities: {
+                  supportsThreadArchive: true,
+                  supportsThreadRename: true,
+                  supportsServiceTier: true,
+                  supportsNativeUserQuestion: false,
+                  supportsFork: true,
+                  permissionModes: ["full"],
+                },
+                composerActions: [],
               },
             ],
-          }),
+            models: async () => ({
+              providers: [],
+              selectedOnlyModels: [],
+              modelLoadError: null,
+              models: [
+                {
+                  id: "gpt-test",
+                  model: "gpt-test",
+                  displayName: "GPT Test",
+                  description: "test",
+                  supportedReasoningEfforts: [
+                    { reasoningEffort: "medium", description: "test" },
+                  ],
+                  defaultReasoningEffort: "medium",
+                  isDefault: true,
+                },
+              ],
+            }),
+          },
         },
-      },
-    });
-    hosts.push(harness);
-    await plugin(bb);
+      });
+      hosts.push(harness);
+      await plugin(bb);
 
-    const source = `export const meta = {
+      const source = `export const meta = {
       name: "structured-test",
       description: "Structured workflow test",
       phases: [{ title: "Solve", detail: "Ask a structured worker." }],
@@ -167,464 +170,441 @@ describe("workflows plugin", () => {
       title: "Solve the question",
       outputSchema: { type: "object", required: ["answer"], properties: { answer: { type: "number" } } },
     });`;
-    const startedText = await harness.callAgentTool("bb_workflow_run", {
-      source,
-    });
-    expect(typeof startedText).toBe("string");
-    const started = JSON.parse(startedText as string) as {
-      runId: string;
-      previewDirective: string;
-    };
-    expect(started.previewDirective).toBe(
-      `::workflow-preview{run="${started.runId}"}`,
-    );
-    await expect(
-      harness.callRpc("workflowRunView", {
-        threadId: "other-thread",
-        runId: started.runId,
-      }),
-    ).rejects.toThrow(/not available in this thread/i);
-    await expect(
-      harness.callRpc("workflowRunView", {
-        threadId: "thread-test",
-        runId: null,
-      }),
-    ).resolves.toMatchObject({ run: { id: started.runId } });
-    await expect(
-      harness.callRpc("workflowActiveRuns", { threadId: "thread-test" }),
-    ).resolves.toMatchObject({ runs: [{ id: started.runId }] });
-    await expect(
-      harness.callRpc("workflowActiveRuns", { threadId: "other-thread" }),
-    ).resolves.toEqual({ runs: [] });
-    await expect(
-      harness.callRpc("workflowRunView", {
-        threadId: "thread-test",
-        runId: started.runId,
-        unexpected: true,
-      }),
-    ).rejects.toMatchObject({ code: "invalid_input" });
+      const startedText = await harness.callAgentTool("bb_workflow_run", {
+        source,
+      });
+      expect(typeof startedText).toBe("string");
+      const started = JSON.parse(startedText as string) as {
+        runId: string;
+        previewDirective: string;
+      };
+      expect(started.previewDirective).toBe(
+        `::workflow-preview{run="${started.runId}"}`,
+      );
+      await expect(
+        harness.callRpc("workflowRunView", {
+          threadId: "other-thread",
+          runId: started.runId,
+        }),
+      ).rejects.toThrow(/not available in this thread/i);
+      await expect(
+        harness.callRpc("workflowRunView", {
+          threadId: "thread-test",
+          runId: null,
+        }),
+      ).resolves.toMatchObject({ run: { id: started.runId } });
+      await expect(
+        harness.callRpc("workflowActiveRuns", { threadId: "thread-test" }),
+      ).resolves.toMatchObject({ runs: [{ id: started.runId }] });
+      await expect(
+        harness.callRpc("workflowActiveRuns", { threadId: "other-thread" }),
+      ).resolves.toEqual({ runs: [] });
+      await expect(
+        harness.callRpc("workflowRunView", {
+          threadId: "thread-test",
+          runId: started.runId,
+          unexpected: true,
+        }),
+      ).rejects.toMatchObject({ code: "invalid_input" });
 
-    const worker = harness.runService("workflow-worker");
-    await eventually(() => {
-      expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(1);
-    });
-    expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).not.toHaveProperty(
-      "parentThreadId",
-    );
-    expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).not.toHaveProperty(
-      "sectionId",
-    );
-    expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).toMatchObject({
-      visibility: "hidden",
-      prompt: expect.stringContaining(
-        "Use bb_workflow_result to return your final response in the requested structured format. You MUST call this tool exactly once at the end of your response",
-      ),
-    });
-    await expect(
-      harness.callRpc("workflowRunView", {
-        threadId: "thread-test",
-        runId: started.runId,
-      }),
-    ).resolves.toMatchObject({
-      run: {
-        id: started.runId,
-        name: "structured-test",
-        currentPhase: "Solve",
-        phases: [
+      const worker = harness.runService("workflow-worker");
+      await eventually(() => {
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(1);
+      });
+      expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).not.toHaveProperty(
+        "parentThreadId",
+      );
+      expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).not.toHaveProperty(
+        "sectionId",
+      );
+      expect(harness.sdk.callsTo("threads.spawn")[0]?.[0]).toMatchObject({
+        visibility: "hidden",
+        prompt: expect.stringContaining(
+          "Use bb_workflow_result to return your final response in the requested structured format. You MUST call this tool exactly once at the end of your response",
+        ),
+      });
+      await expect(
+        harness.callRpc("workflowRunView", {
+          threadId: "thread-test",
+          runId: started.runId,
+        }),
+      ).resolves.toMatchObject({
+        run: {
+          id: started.runId,
+          name: "structured-test",
+          currentPhase: "Solve",
+          phases: [
+            {
+              title: "Solve",
+              detail: "Ask a structured worker.",
+              calls: [
+                { label: "Solve the question", childThreadId: "child-1" },
+              ],
+            },
+          ],
+        },
+      });
+
+      const workerConfig = await harness.resolveAgentConfiguration(
+        makePluginAgentConfigurationContext({
+          thread: {
+            id: "child-1",
+            parentThreadId: "thread-test",
+          },
+          origin: { pluginId: "workflows" },
+        }),
+      );
+      expect(workerConfig.tools.map((tool) => tool.name)).toEqual([
+        "bb_workflow_result",
+      ]);
+      expect(workerConfig.tools[0]?.inputSchema).toEqual({
+        type: "object",
+        properties: {
+          value: {
+            type: "object",
+            required: ["answer"],
+            properties: { answer: { type: "number" } },
+          },
+        },
+        required: ["value"],
+        additionalProperties: false,
+      });
+
+      const authorConfig = await harness.resolveAgentConfiguration(
+        makePluginAgentConfigurationContext(),
+      );
+      expect(authorConfig.tools.map((tool) => tool.name)).toEqual([
+        "bb_workflow_run",
+      ]);
+      expect(authorConfig.skills).toEqual(["workflows"]);
+      expect(authorConfig.instructions).toContain(
+        "copy its previewDirective into your response exactly once as a standalone line",
+      );
+
+      await expect(
+        harness.callAgentTool(
+          "bb_workflow_result",
+          { value: { wrong: true } },
+          { threadId: "child-1", projectId: "project-test" },
+        ),
+      ).resolves.toMatchObject({ isError: true });
+      await expect(
+        harness.callAgentTool(
+          "bb_workflow_result",
+          { value: { answer: 42 } },
+          { threadId: "child-1", projectId: "project-test" },
+        ),
+      ).resolves.toBe(JSON.stringify({ accepted: true }, null, 2));
+      expect(
+        harness.sdk
+          .callsTo("threads.stop")
+          .some(
+            ([input]) => (input as { threadId: string }).threadId === "child-1",
+          ),
+      ).toBe(true);
+      await expect(
+        harness.callAgentTool(
+          "bb_workflow_result",
+          { value: { answer: 42 } },
+          { threadId: "child-1", projectId: "project-test" },
+        ),
+      ).resolves.toBe(JSON.stringify({ accepted: true }, null, 2));
+      await expect(
+        harness.callAgentTool(
+          "bb_workflow_result",
+          { value: { answer: 43 } },
+          { threadId: "child-1", projectId: "project-test" },
+        ),
+      ).resolves.toMatchObject({
+        isError: true,
+        content: [
           {
-            title: "Solve",
-            detail: "Ask a structured worker.",
-            calls: [{ label: "Solve the question", childThreadId: "child-1" }],
+            text: "A different structured result was already accepted for this workflow call",
           },
         ],
-      },
-    });
+      });
 
-    const workerConfig = await harness.resolveAgentConfiguration({
-      thread: {
-        id: "child-1",
-        title: null,
-        parentThreadId: "thread-test",
-        sourceThreadId: null,
-      },
-      project: {
-        id: "project-test",
-        kind: "standard",
-        name: "test",
-        gitRemoteUrl: null,
-      },
-      environment: {
-        id: "environment-1",
-        name: null,
-        path: "/tmp/test",
-        workspaceProvisionType: "unmanaged",
-        branchName: null,
-      },
-      host: { id: "host-1", name: "host" },
-      provider: {
-      id: "codex",
-      model: "gpt-test",
-      capabilities: { supportsNativeUserQuestion: false },
-    },
-      origin: { kind: null, pluginId: "workflows" },
-    });
-    expect(workerConfig.tools.map((tool) => tool.name)).toEqual([
-      "bb_workflow_result",
-    ]);
-    expect(workerConfig.tools[0]?.inputSchema).toEqual({
-      type: "object",
-      properties: {
-        value: {
-          type: "object",
-          required: ["answer"],
-          properties: { answer: { type: "number" } },
-        },
-      },
-      required: ["value"],
-      additionalProperties: false,
-    });
+      await harness.emitThreadEvent("thread.idle", {
+        thread: { id: "child-1" } as never,
+        lastAssistantText: "done",
+      });
+      await eventually(() => {
+        expect(harness.sdk.callsTo("threads.send")).toHaveLength(1);
+      });
+      expect(harness.sdk.callsTo("threads.send")[0]?.[0]).toMatchObject({
+        threadId: "thread-test",
+        mode: "steer-if-active",
+        input: [
+          {
+            type: "text",
+            text: expect.stringContaining(
+              `[BB workflow finished · ${started.runId}]`,
+            ),
+            visibility: "agent-only",
+          },
+        ],
+      });
 
-    const authorConfig = await harness.resolveAgentConfiguration({
-      thread: {
-        id: "thread-test",
-        title: null,
-        parentThreadId: null,
-        sourceThreadId: null,
-      },
-      project: {
-        id: "project-test",
-        kind: "standard",
-        name: "test",
-        gitRemoteUrl: null,
-      },
-      environment: {
-        id: "environment-1",
-        name: null,
-        path: "/tmp/test",
-        workspaceProvisionType: "unmanaged",
-        branchName: null,
-      },
-      host: { id: "host-1", name: "host" },
-      provider: {
-      id: "codex",
-      model: "gpt-test",
-      capabilities: { supportsNativeUserQuestion: false },
-    },
-      origin: { kind: null, pluginId: null },
-    });
-    expect(authorConfig.tools.map((tool) => tool.name)).toEqual([
-      "bb_workflow_run",
-    ]);
-    expect(authorConfig.skills).toEqual(["workflows"]);
-    expect(authorConfig.instructions).toContain(
-      "copy its previewDirective into your response exactly once as a standalone line",
-    );
-
-    await expect(
-      harness.callAgentTool(
-        "bb_workflow_result",
-        { value: { wrong: true } },
-        { threadId: "child-1", projectId: "project-test" },
-      ),
-    ).resolves.toMatchObject({ isError: true });
-    await expect(
-      harness.callAgentTool(
-        "bb_workflow_result",
-        { value: { answer: 42 } },
-        { threadId: "child-1", projectId: "project-test" },
-      ),
-    ).resolves.toBe(JSON.stringify({ accepted: true }, null, 2));
-    expect(
-      harness.sdk
-        .callsTo("threads.stop")
-        .some(
-          ([input]) => (input as { threadId: string }).threadId === "child-1",
-        ),
-    ).toBe(true);
-    await expect(
-      harness.callAgentTool(
-        "bb_workflow_result",
-        { value: { answer: 42 } },
-        { threadId: "child-1", projectId: "project-test" },
-      ),
-    ).resolves.toBe(JSON.stringify({ accepted: true }, null, 2));
-    await expect(
-      harness.callAgentTool(
-        "bb_workflow_result",
-        { value: { answer: 43 } },
-        { threadId: "child-1", projectId: "project-test" },
-      ),
-    ).resolves.toMatchObject({
-      isError: true,
-      content: [
-        {
-          text: "A different structured result was already accepted for this workflow call",
-        },
-      ],
-    });
-
-    await harness.emitThreadEvent("thread.idle", {
-      thread: { id: "child-1" } as never,
-      lastAssistantText: "done",
-    });
-    await eventually(() => {
-      expect(harness.sdk.callsTo("threads.send")).toHaveLength(1);
-    });
-    expect(harness.sdk.callsTo("threads.send")[0]?.[0]).toMatchObject({
-      threadId: "thread-test",
-      mode: "steer-if-active",
-      input: [
-        {
-          type: "text",
-          text: expect.stringContaining(
-            `[BB workflow finished · ${started.runId}]`,
-          ),
-          visibility: "agent-only",
-        },
-      ],
-    });
-
-    await expect(workflowStatus(harness, started.runId)).resolves.toMatchObject(
-      {
+      await expect(
+        workflowStatus(harness, started.runId),
+      ).resolves.toMatchObject({
         id: started.runId,
         status: "succeeded",
         result: { answer: 42 },
         resultAvailable: true,
         calls: { total: 1, succeeded: 1 },
-      },
-    );
-    await expect(
-      harness.runCli(["status", started.runId], {
+      });
+      await expect(
+        harness.runCli(["status", started.runId], {
+          threadId: "thread-test",
+          projectId: "project-test",
+        }),
+      ).resolves.toMatchObject({ exitCode: 0 });
+      const listResult = await harness.runCli(["list", "--limit", "1"], {
         threadId: "thread-test",
         projectId: "project-test",
-      }),
-    ).resolves.toMatchObject({ exitCode: 0 });
-    const listResult = await harness.runCli(["list", "--limit", "1"], {
-      threadId: "thread-test",
-      projectId: "project-test",
-    });
-    expect(listResult).toMatchObject({ exitCode: 0 });
-    const listed = JSON.parse(listResult.stdout!) as Array<
-      Record<string, unknown>
-    >;
-    expect(listed).toHaveLength(1);
-    expect(listed[0]).toMatchObject({
-      id: started.runId,
-      status: "succeeded",
-      resultAvailable: true,
-    });
-    expect(listed[0]).not.toHaveProperty("source");
-    expect(listed[0]).not.toHaveProperty("resultJson");
-    const historyResult = await harness.runCli(
-      ["history", started.runId, "--cursor", "0", "--limit", "1"],
-      { threadId: "thread-test", projectId: "project-test" },
-    );
-    expect(historyResult).toMatchObject({ exitCode: 0 });
-    const records = historyResult
-      .stdout!.trimEnd()
-      .split("\n")
-      .map((line) => JSON.parse(line)) as Array<Record<string, unknown>>;
-    expect(records).toHaveLength(3);
-    expect(records[0]).toMatchObject({
-      type: "run",
-      logVersion: 1,
-      id: started.runId,
-      result: { answer: 42 },
-    });
-    expect(records[1]).toMatchObject({
-      type: "call",
-      runId: started.runId,
-      callIndex: 0,
-      label: "Solve the question",
-      phase: "Solve",
-      status: "succeeded",
-      result: { answer: 42 },
-    });
-    expect(records[2]).toMatchObject({
-      type: "page",
-      runId: started.runId,
-      cursor: 0,
-      limit: 1,
-      returned: 1,
-      totalCalls: 1,
-      hasMore: false,
-      nextCursor: null,
-    });
-
-    const oversizedPhase = "🌌".repeat(500_000);
-    const oversizedProvider = "🛰".repeat(500_000);
-    const oversizedModel = "🚀".repeat(500_000);
-    let deeplyNestedResult: unknown = Array.from({ length: 1_200 }, () => 0);
-    for (let depth = 0; depth < 128; depth += 1) {
-      deeplyNestedResult = [deeplyNestedResult];
-    }
-    const deeplyNestedResultJson = JSON.stringify(deeplyNestedResult);
-    expect(Buffer.byteLength(deeplyNestedResultJson, "utf8")).toBeLessThan(
-      8 * 1_024,
-    );
-    bb.storage
-      .database()
-      .prepare(
-        `UPDATE workflow_runs SET phase = ?, origin_provider = ?,
-         origin_model = ?, result_json = ? WHERE id = ?`,
-      )
-      .run(
-        oversizedPhase,
-        oversizedProvider,
-        oversizedModel,
-        deeplyNestedResultJson,
-        started.runId,
+      });
+      expect(listResult).toMatchObject({ exitCode: 0 });
+      const listed = JSON.parse(listResult.stdout!) as Array<
+        Record<string, unknown>
+      >;
+      expect(listed).toHaveLength(1);
+      expect(listed[0]).toMatchObject({
+        id: started.runId,
+        status: "succeeded",
+        resultAvailable: true,
+      });
+      expect(listed[0]).not.toHaveProperty("source");
+      expect(listed[0]).not.toHaveProperty("resultJson");
+      const historyResult = await harness.runCli(
+        ["history", started.runId, "--cursor", "0", "--limit", "1"],
+        { threadId: "thread-test", projectId: "project-test" },
       );
-    const boundedStatus = await harness.runCli(["status", started.runId], {
-      threadId: "thread-test",
-      projectId: "project-test",
-    });
-    expect(boundedStatus).toMatchObject({ exitCode: 0 });
-    expect(Buffer.byteLength(boundedStatus.stdout!, "utf8")).toBeLessThan(
-      24 * 1_024,
-    );
-    const boundedStatusValue = JSON.parse(boundedStatus.stdout!) as {
-      originProvider: string;
-      originProviderTruncated: boolean;
-      originModel: string;
-      originModelTruncated: boolean;
-      phase: string;
-      phaseTruncated: boolean;
-      resultAvailable: boolean;
-      resultOmitted: boolean;
-    };
-    expect(boundedStatusValue).toMatchObject({
-      phaseTruncated: true,
-      originProviderTruncated: true,
-      originModelTruncated: true,
-      resultAvailable: true,
-      resultOmitted: false,
-    });
-    expect(
-      Buffer.byteLength(boundedStatusValue.phase, "utf8"),
-    ).toBeLessThanOrEqual(1_024);
-    expect(
-      Buffer.byteLength(boundedStatusValue.originProvider, "utf8"),
-    ).toBeLessThanOrEqual(1_024);
-    expect(
-      Buffer.byteLength(boundedStatusValue.originModel, "utf8"),
-    ).toBeLessThanOrEqual(1_024);
+      expect(historyResult).toMatchObject({ exitCode: 0 });
+      const records = historyResult
+        .stdout!.trimEnd()
+        .split("\n")
+        .map((line) => JSON.parse(line)) as Array<Record<string, unknown>>;
+      expect(records).toHaveLength(3);
+      expect(records[0]).toMatchObject({
+        type: "run",
+        logVersion: 1,
+        id: started.runId,
+        result: { answer: 42 },
+      });
+      expect(records[1]).toMatchObject({
+        type: "call",
+        runId: started.runId,
+        callIndex: 0,
+        label: "Solve the question",
+        phase: "Solve",
+        status: "succeeded",
+        result: { answer: 42 },
+      });
+      expect(records[2]).toMatchObject({
+        type: "page",
+        runId: started.runId,
+        cursor: 0,
+        limit: 1,
+        returned: 1,
+        totalCalls: 1,
+        hasMore: false,
+        nextCursor: null,
+      });
 
-    const boundedList = await harness.runCli(["list", "--limit", "1"], {
-      threadId: "thread-test",
-      projectId: "project-test",
-    });
-    expect(boundedList).toMatchObject({ exitCode: 0 });
-    expect(Buffer.byteLength(boundedList.stdout!, "utf8")).toBeLessThan(
-      4 * 1_024,
-    );
-    const boundedListValue = JSON.parse(boundedList.stdout!) as Array<{
-      id: string;
-      phase: string;
-      phaseTruncated: boolean;
-    }>;
-    expect(boundedListValue).toMatchObject([
-      { id: started.runId, phaseTruncated: true },
-    ]);
-    expect(
-      Buffer.byteLength(boundedListValue[0]!.phase, "utf8"),
-    ).toBeLessThanOrEqual(128);
-    bb.storage
-      .database()
-      .prepare(
-        `UPDATE workflow_runs SET phase = NULL, origin_provider = 'codex',
+      const oversizedPhase = "🌌".repeat(500_000);
+      const oversizedProvider = "🛰".repeat(500_000);
+      const oversizedModel = "🚀".repeat(500_000);
+      let deeplyNestedResult: unknown = Array.from({ length: 1_200 }, () => 0);
+      for (let depth = 0; depth < 128; depth += 1) {
+        deeplyNestedResult = [deeplyNestedResult];
+      }
+      const deeplyNestedResultJson = JSON.stringify(deeplyNestedResult);
+      expect(Buffer.byteLength(deeplyNestedResultJson, "utf8")).toBeLessThan(
+        8 * 1_024,
+      );
+      bb.storage
+        .database()
+        .prepare(
+          `UPDATE workflow_runs SET phase = ?, origin_provider = ?,
+         origin_model = ?, result_json = ? WHERE id = ?`,
+        )
+        .run(
+          oversizedPhase,
+          oversizedProvider,
+          oversizedModel,
+          deeplyNestedResultJson,
+          started.runId,
+        );
+      const boundedStatus = await harness.runCli(["status", started.runId], {
+        threadId: "thread-test",
+        projectId: "project-test",
+      });
+      expect(boundedStatus).toMatchObject({ exitCode: 0 });
+      expect(Buffer.byteLength(boundedStatus.stdout!, "utf8")).toBeLessThan(
+        24 * 1_024,
+      );
+      const boundedStatusValue = JSON.parse(boundedStatus.stdout!) as {
+        originProvider: string;
+        originProviderTruncated: boolean;
+        originModel: string;
+        originModelTruncated: boolean;
+        phase: string;
+        phaseTruncated: boolean;
+        resultAvailable: boolean;
+        resultOmitted: boolean;
+      };
+      expect(boundedStatusValue).toMatchObject({
+        phaseTruncated: true,
+        originProviderTruncated: true,
+        originModelTruncated: true,
+        resultAvailable: true,
+        resultOmitted: false,
+      });
+      expect(
+        Buffer.byteLength(boundedStatusValue.phase, "utf8"),
+      ).toBeLessThanOrEqual(1_024);
+      expect(
+        Buffer.byteLength(boundedStatusValue.originProvider, "utf8"),
+      ).toBeLessThanOrEqual(1_024);
+      expect(
+        Buffer.byteLength(boundedStatusValue.originModel, "utf8"),
+      ).toBeLessThanOrEqual(1_024);
+
+      const boundedList = await harness.runCli(["list", "--limit", "1"], {
+        threadId: "thread-test",
+        projectId: "project-test",
+      });
+      expect(boundedList).toMatchObject({ exitCode: 0 });
+      expect(Buffer.byteLength(boundedList.stdout!, "utf8")).toBeLessThan(
+        4 * 1_024,
+      );
+      const boundedListValue = JSON.parse(boundedList.stdout!) as Array<{
+        id: string;
+        phase: string;
+        phaseTruncated: boolean;
+      }>;
+      expect(boundedListValue).toMatchObject([
+        { id: started.runId, phaseTruncated: true },
+      ]);
+      expect(
+        Buffer.byteLength(boundedListValue[0]!.phase, "utf8"),
+      ).toBeLessThanOrEqual(128);
+      bb.storage
+        .database()
+        .prepare(
+          `UPDATE workflow_runs SET phase = NULL, origin_provider = 'codex',
          origin_model = 'gpt-test', result_json = '{"answer":42}' WHERE id = ?`,
-      )
-      .run(started.runId);
+        )
+        .run(started.runId);
 
-    const failedText = await harness.callAgentTool("bb_workflow_run", {
-      source,
-    });
-    const failed = JSON.parse(failedText as string) as { runId: string };
-    await eventually(() => {
-      expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(2);
-    });
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const failedText = await harness.callAgentTool("bb_workflow_run", {
+        source,
+      });
+      const failed = JSON.parse(failedText as string) as { runId: string };
+      await eventually(() => {
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(2);
+      });
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        await expect(
+          harness.callAgentTool(
+            "bb_workflow_result",
+            { value: { wrong: attempt } },
+            { threadId: "child-2", projectId: "project-test" },
+          ),
+        ).resolves.toMatchObject({ isError: true });
+      }
+      await eventually(() => {
+        expect(
+          harness.sdk
+            .callsTo("threads.stop")
+            .filter(
+              ([args]) =>
+                (args as { threadId?: string }).threadId === "child-2",
+            ).length,
+        ).toBeGreaterThanOrEqual(1);
+        expect(harness.sdk.callsTo("threads.send")).toHaveLength(2);
+      });
+      await expect(
+        workflowStatus(harness, failed.runId),
+      ).resolves.toMatchObject({
+        status: "failed",
+      });
+
+      const sharedBudgetText = await harness.callAgentTool("bb_workflow_run", {
+        source,
+      });
+      const sharedBudget = JSON.parse(sharedBudgetText as string) as {
+        runId: string;
+      };
+      await eventually(() => {
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(3);
+      });
       await expect(
         harness.callAgentTool(
           "bb_workflow_result",
-          { value: { wrong: attempt } },
-          { threadId: "child-2", projectId: "project-test" },
+          { value: { wrong: "initial tool failure" } },
+          { threadId: "child-3", projectId: "project-test" },
         ),
       ).resolves.toMatchObject({ isError: true });
-    }
-    await eventually(() => {
-      expect(
-        harness.sdk
-          .callsTo("threads.stop")
-          .filter(
-            ([args]) => (args as { threadId?: string }).threadId === "child-2",
-          ).length,
-      ).toBeGreaterThanOrEqual(1);
-      expect(harness.sdk.callsTo("threads.send")).toHaveLength(2);
-    });
-    await expect(workflowStatus(harness, failed.runId)).resolves.toMatchObject({
-      status: "failed",
-    });
-
-    const sharedBudgetText = await harness.callAgentTool("bb_workflow_run", {
-      source,
-    });
-    const sharedBudget = JSON.parse(sharedBudgetText as string) as {
-      runId: string;
-    };
-    await eventually(() => {
-      expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(3);
-    });
-    await expect(
-      harness.callAgentTool(
-        "bb_workflow_result",
-        { value: { wrong: "initial tool failure" } },
-        { threadId: "child-3", projectId: "project-test" },
-      ),
-    ).resolves.toMatchObject({ isError: true });
-    await harness.emitThreadEvent("thread.idle", {
-      thread: { id: "child-3" } as never,
-      lastAssistantText: null,
-    });
-    await eventually(() => {
-      const correctionCalls = harness.sdk
-        .callsTo("threads.send")
-        .filter(
-          ([args]) => (args as { threadId?: string }).threadId === "child-3",
-        );
-      expect(correctionCalls).toHaveLength(1);
-      expect(correctionCalls[0]?.[0]).toMatchObject({
-        threadId: "child-3",
-        mode: "auto",
+      await harness.emitThreadEvent("thread.idle", {
+        thread: { id: "child-3" } as never,
+        lastAssistantText: null,
       });
-    });
-    await harness.emitThreadEvent("thread.idle", {
-      thread: { id: "child-3" } as never,
-      lastAssistantText: "still not JSON",
-    });
-    await eventually(() => {
-      expect(
-        harness.sdk
-          .callsTo("threads.stop")
+      await eventually(() => {
+        const correctionCalls = harness.sdk
+          .callsTo("threads.send")
           .filter(
             ([args]) => (args as { threadId?: string }).threadId === "child-3",
-          ),
-      ).toHaveLength(1);
-    });
-    await eventually(async () => {
-      const row = await workflowStatus(harness, sharedBudget.runId);
-      expect(row).toMatchObject({ status: "failed" });
-    });
+          );
+        expect(correctionCalls).toHaveLength(1);
+        expect(correctionCalls[0]?.[0]).toMatchObject({
+          threadId: "child-3",
+          mode: "auto",
+        });
+      });
+      await harness.emitThreadEvent("thread.idle", {
+        thread: { id: "child-3" } as never,
+        lastAssistantText: "still not JSON",
+      });
+      await eventually(() => {
+        expect(
+          harness.sdk
+            .callsTo("threads.stop")
+            .filter(
+              ([args]) =>
+                (args as { threadId?: string }).threadId === "child-3",
+            ),
+        ).toHaveLength(1);
+      });
+      await eventually(async () => {
+        const row = await workflowStatus(harness, sharedBudget.runId);
+        expect(row).toMatchObject({ status: "failed" });
+      });
 
-    const idleOnlyText = await harness.callAgentTool("bb_workflow_run", {
-      source,
-    });
-    const idleOnly = JSON.parse(idleOnlyText as string) as { runId: string };
-    await eventually(() => {
-      expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(4);
-    });
-    for (let failure = 1; failure <= 2; failure += 1) {
+      const idleOnlyText = await harness.callAgentTool("bb_workflow_run", {
+        source,
+      });
+      const idleOnly = JSON.parse(idleOnlyText as string) as { runId: string };
+      await eventually(() => {
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(4);
+      });
+      for (let failure = 1; failure <= 2; failure += 1) {
+        await harness.emitThreadEvent("thread.idle", {
+          thread: { id: "child-4" } as never,
+          lastAssistantText: null,
+        });
+        await eventually(() => {
+          expect(
+            harness.sdk
+              .callsTo("threads.send")
+              .filter(
+                ([args]) =>
+                  (args as { threadId?: string }).threadId === "child-4",
+              ),
+          ).toHaveLength(failure);
+        });
+      }
       await harness.emitThreadEvent("thread.idle", {
         thread: { id: "child-4" } as never,
         lastAssistantText: null,
@@ -632,125 +612,113 @@ describe("workflows plugin", () => {
       await eventually(() => {
         expect(
           harness.sdk
-            .callsTo("threads.send")
+            .callsTo("threads.stop")
             .filter(
               ([args]) =>
                 (args as { threadId?: string }).threadId === "child-4",
-            ),
-        ).toHaveLength(failure);
+            ).length,
+        ).toBeGreaterThanOrEqual(1);
       });
-    }
-    await harness.emitThreadEvent("thread.idle", {
-      thread: { id: "child-4" } as never,
-      lastAssistantText: null,
-    });
-    await eventually(() => {
-      expect(
-        harness.sdk
-          .callsTo("threads.stop")
-          .filter(
-            ([args]) => (args as { threadId?: string }).threadId === "child-4",
-          ).length,
-      ).toBeGreaterThanOrEqual(1);
-    });
-    await eventually(async () => {
-      await expect(
-        workflowStatus(harness, idleOnly.runId),
-      ).resolves.toMatchObject({
-        status: "failed",
+      await eventually(async () => {
+        await expect(
+          workflowStatus(harness, idleOnly.runId),
+        ).resolves.toMatchObject({
+          status: "failed",
+        });
       });
-    });
 
-    const nullSource = `export const meta = {
+      const nullSource = `export const meta = {
       name: "null-test",
       description: "Null workflow test",
       outputSchema: { type: "null" },
     };
     return await agent("Return null", { outputSchema: { type: "null" } });`;
-    const nullRunText = await harness.callAgentTool("bb_workflow_run", {
-      source: nullSource,
-    });
-    const nullRun = JSON.parse(nullRunText as string) as { runId: string };
-    await eventually(() => {
-      expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(5);
-    });
-    await expect(
-      harness.callAgentTool(
-        "bb_workflow_result",
-        { value: null },
-        { threadId: "child-5", projectId: "project-test" },
-      ),
-    ).resolves.toBe(JSON.stringify({ accepted: true }, null, 2));
-    await eventually(() => {
-      expect(
-        harness.sdk
-          .callsTo("threads.send")
-          .filter(
-            ([args]) =>
-              (args as { threadId?: string }).threadId === "thread-test",
-          ).length,
-      ).toBeGreaterThanOrEqual(5);
-    });
-    await expect(workflowStatus(harness, nullRun.runId)).resolves.toMatchObject(
-      {
+      const nullRunText = await harness.callAgentTool("bb_workflow_run", {
+        source: nullSource,
+      });
+      const nullRun = JSON.parse(nullRunText as string) as { runId: string };
+      await eventually(() => {
+        expect(harness.sdk.callsTo("threads.spawn")).toHaveLength(5);
+      });
+      await expect(
+        harness.callAgentTool(
+          "bb_workflow_result",
+          { value: null },
+          { threadId: "child-5", projectId: "project-test" },
+        ),
+      ).resolves.toBe(JSON.stringify({ accepted: true }, null, 2));
+      await eventually(() => {
+        expect(
+          harness.sdk
+            .callsTo("threads.send")
+            .filter(
+              ([args]) =>
+                (args as { threadId?: string }).threadId === "thread-test",
+            ).length,
+        ).toBeGreaterThanOrEqual(5);
+      });
+      await expect(
+        workflowStatus(harness, nullRun.runId),
+      ).resolves.toMatchObject({
         status: "succeeded",
         result: null,
         resultAvailable: true,
         resultOmitted: false,
-      },
-    );
+      });
 
-    const oversizedProperties = Object.fromEntries(
-      Array.from({ length: 4_100 }, (_, index) => [
-        `p${index}`,
-        { type: "number" },
-      ]),
-    );
-    const oversizedSource = `export const meta = ${JSON.stringify({
-      name: "oversized-schema",
-      description: "Oversized schema test",
-      outputSchema: { type: "object", properties: oversizedProperties },
-    })}; return null;`;
-    await expect(
-      harness.callAgentTool("bb_workflow_run", { source: oversizedSource }),
-    ).resolves.toMatchObject({
-      isError: true,
-      content: [{ text: expect.stringContaining("node limit") }],
-    });
+      const oversizedProperties = Object.fromEntries(
+        Array.from({ length: 4_100 }, (_, index) => [
+          `p${index}`,
+          { type: "number" },
+        ]),
+      );
+      const oversizedSource = `export const meta = ${JSON.stringify({
+        name: "oversized-schema",
+        description: "Oversized schema test",
+        outputSchema: { type: "object", properties: oversizedProperties },
+      })}; return null;`;
+      await expect(
+        harness.callAgentTool("bb_workflow_run", { source: oversizedSource }),
+      ).resolves.toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("node limit") }],
+      });
 
-    const oversizedBytesSource = `export const meta = ${JSON.stringify({
-      name: "oversized-schema-bytes",
-      description: "Oversized schema byte test",
-      outputSchema: { type: "string", $comment: "x".repeat(65_536) },
-    })}; return null;`;
-    await expect(
-      harness.callAgentTool("bb_workflow_run", {
-        source: oversizedBytesSource,
-      }),
-    ).resolves.toMatchObject({
-      isError: true,
-      content: [{ text: expect.stringContaining("byte limit") }],
-    });
+      const oversizedBytesSource = `export const meta = ${JSON.stringify({
+        name: "oversized-schema-bytes",
+        description: "Oversized schema byte test",
+        outputSchema: { type: "string", $comment: "x".repeat(65_536) },
+      })}; return null;`;
+      await expect(
+        harness.callAgentTool("bb_workflow_run", {
+          source: oversizedBytesSource,
+        }),
+      ).resolves.toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("byte limit") }],
+      });
 
-    let deepSchema: object = { type: "null" };
-    for (let depth = 0; depth < 40; depth += 1) {
-      deepSchema = { allOf: [deepSchema] };
-    }
-    const deepSource = `export const meta = ${JSON.stringify({
-      name: "deep-schema",
-      description: "Deep schema test",
-      outputSchema: deepSchema,
-    })}; return null;`;
-    await expect(
-      harness.callAgentTool("bb_workflow_run", { source: deepSource }),
-    ).resolves.toMatchObject({
-      isError: true,
-      content: [{ text: expect.stringContaining("maximum depth") }],
-    });
+      let deepSchema: object = { type: "null" };
+      for (let depth = 0; depth < 40; depth += 1) {
+        deepSchema = { allOf: [deepSchema] };
+      }
+      const deepSource = `export const meta = ${JSON.stringify({
+        name: "deep-schema",
+        description: "Deep schema test",
+        outputSchema: deepSchema,
+      })}; return null;`;
+      await expect(
+        harness.callAgentTool("bb_workflow_run", { source: deepSource }),
+      ).resolves.toMatchObject({
+        isError: true,
+        content: [{ text: expect.stringContaining("maximum depth") }],
+      });
 
-    worker.controller.abort();
-    await worker.done;
-  }, STRUCTURED_WORKFLOW_TEST_TIMEOUT_MS);
+      worker.controller.abort();
+      await worker.done;
+    },
+    STRUCTURED_WORKFLOW_TEST_TIMEOUT_MS,
+  );
 
   it("rejects cyclic and unsafe host values before persistence", async () => {
     const { bb, harness } = createFakePluginHost({ pluginId: "workflows" });

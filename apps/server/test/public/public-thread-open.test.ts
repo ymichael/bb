@@ -76,7 +76,6 @@ describe("public thread open", () => {
         },
       });
 
-      // Ephemeral: the thread row is untouched.
       expect(getThread(harness.db, thread.id)).toEqual(before);
     });
   });

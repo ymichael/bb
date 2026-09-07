@@ -1,3 +1,4 @@
+import { DiffLoadingSkeleton } from "@/components/code/code-loading-skeletons";
 import { useCallback, useMemo, useRef, type CSSProperties } from "react";
 import type { FileDiffOptions, SelectedLineRange } from "@pierre/diffs";
 import { FileDiff as DiffView } from "@pierre/diffs/react";
@@ -13,7 +14,6 @@ import {
 import { enrichGitDiffFileForContext } from "@/components/git-diff/git-diff-parsing";
 import { useResolvedCodeThemePair } from "@/lib/code-theme";
 import { usePreferredTheme } from "@/hooks/useTheme";
-import { Skeleton } from "@bb/shared-ui/skeleton";
 import { cn } from "@bb/shared-ui/lib/utils";
 import type { BbDiffProps } from "./code-rendering";
 
@@ -22,28 +22,8 @@ const DIFF_VIEW_STYLE = {
   "--diffs-line-height": "18px",
 } as CSSProperties;
 
-/** Unchanged lines revealed by one built-in expand-context action. */
 const DEFAULT_DIFF_EXPANSION_LINE_COUNT = 30;
 
-function BbDiffSkeleton() {
-  return (
-    <div className="space-y-1.5 px-3 py-3">
-      <Skeleton className="h-3 w-full rounded-sm" />
-      <Skeleton className="h-3 w-[96%] rounded-sm" />
-      <Skeleton className="h-3 w-[93%] rounded-sm" />
-      <Skeleton className="h-3 w-[90%] rounded-sm" />
-      <Skeleton className="h-3 w-[87%] rounded-sm" />
-      <Skeleton className="h-3 w-[84%] rounded-sm" />
-    </div>
-  );
-}
-
-/**
- * BB's default diff renderer: the `@pierre/diffs` `FileDiff` plus BB's line
- * selection menu, resolved code theme, and presentation defaults. Reached only
- * through {@link import("./DiffHost").DiffHost}, and only lazily — a plugin
- * that replaces the renderer and never delegates never loads this module.
- */
 export function BbDiff({
   file,
   patchText,
@@ -112,11 +92,7 @@ export function BbDiff({
       diffStyle: view,
       overflow,
       disableLineNumbers: !showLineNumbers,
-      // The card's own header owns the file name, path actions, and stats.
       disableFileHeader: true,
-      // Only set when the caller can actually supply full file contents:
-      // pierre renders an empty diff when it is handed an expansion budget
-      // for a hunk-only patch, which is what the timeline supplies.
       ...(expansionLineCount === undefined ? {} : { expansionLineCount }),
       themeType,
       theme: codeTheme,
@@ -147,13 +123,9 @@ export function BbDiff({
     ],
   );
   const options = usePierreStrictModeRecoveryOptions(baseOptions);
-  // `DiffView` captures the worker pool when it creates its instance, so wait
-  // for the workspace to build the pool before the first render. Asking here
-  // rather than in the host keeps the pool unbuilt when a plugin replacement
-  // owns the render and never delegates.
   const isWorkerPoolReady = useRequirePierreWorkerPool();
   if (!isWorkerPoolReady) {
-    return <BbDiffSkeleton />;
+    return <DiffLoadingSkeleton />;
   }
   return (
     <div

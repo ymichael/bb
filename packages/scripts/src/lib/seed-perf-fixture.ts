@@ -11,22 +11,17 @@ import {
 } from "@bb/db";
 
 export interface SeedPerfFixtureOptions {
-  /** Host id the seeded environments attach to. */
   hostId: string;
-  /** Root directory recorded as each project's workspace path. */
   workspacesRootPath: string;
   projectCount: number;
   threadCount: number;
-  /** Approximate total event rows across all seeded threads. */
   eventCount: number;
-  /** Deterministic RNG seed. The same seed produces the same fixture. */
   randomSeed: number;
   onProgress?: (message: string) => void;
 }
 
 export interface SeedPerfFixtureResult {
   projectIds: string[];
-  /** Workspace directory recorded for each seeded project's root environment. */
   projectWorkspacePaths: string[];
   threadIds: string[];
   eventRowCount: number;
@@ -742,10 +737,6 @@ function buildThreadEvents(args: ThreadEventBuildArgs): void {
   }
 }
 
-/**
- * Thread sizes follow a long tail: most threads stay small while a few
- * grow to thousands of events, which mirrors real usage.
- */
 function buildThreadEventTargets(
   rng: Rng,
   threadCount: number,
@@ -858,8 +849,6 @@ export function seedPerfFixture(
     });
   }
 
-  // Long-tail thread ownership: the first seeded project acts like the main
-  // daily-driver project and owns roughly half of all threads.
   for (let index = 0; index < options.threadCount; index += 1) {
     const roll = rng.next();
     const projectIndex =

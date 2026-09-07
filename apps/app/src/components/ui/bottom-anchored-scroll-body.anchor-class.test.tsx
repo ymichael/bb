@@ -52,17 +52,12 @@ describe("BottomAnchoredScrollBody scroll-anchor exclusion", () => {
     });
     const { container, contentWrapper, sentinel } = renderBody();
 
-    // The class sits on one element (the wrapper), not on the scroll content
-    // root, so no descendant rule is needed to exclude the timeline subtree.
     expect(contentWrapper.classList).toContain("scroll-bottom-anchor-content");
     expect(
       container.querySelectorAll(".scroll-bottom-anchor-content"),
     ).toHaveLength(1);
     expect(contentWrapper.contains(sentinel)).toBe(false);
     expect(sentinel.parentElement).toBe(contentWrapper.parentElement);
-    // The sticky footer follows the scrollport, so it must never be picked as
-    // the anchor once the wrapper is excluded: the old `*` rule covered it,
-    // and now a static exclusion on the footer does.
     const footer = container.querySelector("[data-scroll-footer]");
     expect(footer?.className).toContain("[overflow-anchor:none]");
     expect(footer?.previousElementSibling).toBe(sentinel);

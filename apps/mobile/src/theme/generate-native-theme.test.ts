@@ -15,18 +15,9 @@ import {
   type NativeThemeTokens,
 } from "./theme.native";
 
-/**
- * The committed `theme.native.ts` is derived from the web app's theme.css and
- * palette files. These tests keep it honest: it must match what the generator
- * produces today, and the generated values must preserve the relationships
- * theme.test.ts guards on the web (the ink ramp ordering, mode parity, the
- * translucent state fills).
- */
-
 const MODES = ["light", "dark"] as const;
 const toOklch = converter("oklch");
 
-/** A minimal mobile layer for the synthetic-source tests below. */
 const MINIMAL_MOBILE_CSS = `
   @theme { --radius-2xl: 16px; --radius-full: 9999px; }
 `;
@@ -50,7 +41,6 @@ function alpha(color: string): number {
   return Number(match[1]);
 }
 
-/** How far a token sits from the canvas, as an oklch lightness delta. */
 function contrastFromCanvas(
   tokens: NativeThemeTokens,
   key: keyof NativeThemeTokens,
@@ -87,7 +77,6 @@ describe("generate-native-theme", () => {
 
   it("re-tunes the default palette to the iOS system anchors and tint", () => {
     const { light, dark } = nativeThemes.default;
-    // systemBackground / label / systemBlue / systemRed per mode.
     expect(light.canvas).toBe("#ffffff");
     expect(light.background).toBe("#ffffff");
     expect(light.ink).toBe("#000000");
@@ -104,7 +93,6 @@ describe("generate-native-theme", () => {
   });
 
   it("lets palettes override the mobile layer's anchors and tint", () => {
-    // nord.ts sets these itself; it cascades after mobile-overrides.css.
     expect(nativeThemes.nord.light.primary).toBe("#5e81ac");
     expect(nativeThemes.nord.light.canvas).toBe("#eceff4");
     expect(nativeThemes.nord.dark.primary).toBe("#88c0d0");
@@ -148,8 +136,6 @@ describe("generate-native-theme", () => {
         });
 
         it("keeps one grouped surface flush with the canvas and lifts the other toward the ink", () => {
-          // Inset grouped lists: light tints the page behind white cells,
-          // dark keeps the page black and lifts the cells (systemGray6).
           const [flat, lifted] =
             mode === "light"
               ? [tokens.surfaceGroupedCell, tokens.surfaceGrouped]
@@ -195,12 +181,10 @@ describe("generate-native-theme", () => {
     });
     const base = model.themes.get("default");
     const nord = model.themes.get("nord");
-    // The mobile layer wins over theme.css for the default palette…
     expect(base?.light.ink).toBe("#000000");
     expect(base?.light.primary).toBe("#007aff");
     expect(base?.dark.primary).toBe("#0a84ff");
     expect(base?.dark.ink).toBe("#ffffff");
-    // …and loses to a palette, whose anchors re-derive the mobile-only token.
     expect(nord?.light.primary).toBe("#5e81ac");
     expect(nord?.dark.primary).toBe("#88c0d0");
     expect(nord?.dark.grouped).toBe("#2e3440");
@@ -209,8 +193,6 @@ describe("generate-native-theme", () => {
   });
 
   it("rejects a `:root` mobile override without a `.dark` twin", () => {
-    // `:root` reaches dark mode too: a root-only `--primary` would silently
-    // replace theme.css's dark value.
     expect(() =>
       buildNativeThemeModel({
         themeCss: MINIMAL_THEME_CSS,
@@ -218,7 +200,6 @@ describe("generate-native-theme", () => {
         paletteCss: emptyPalettes(),
       }),
     ).toThrow(/sets --primary under `:root`/);
-    // `.dark`-only re-tunes are allowed: light keeps the web value.
     const model = buildNativeThemeModel({
       themeCss: MINIMAL_THEME_CSS,
       mobileCss: `.dark { --ink: #cccccc; } ${MINIMAL_MOBILE_CSS}`,
@@ -226,7 +207,6 @@ describe("generate-native-theme", () => {
     });
     expect(model.themes.get("default")?.light.ink).toBe("#000000");
     expect(model.themes.get("default")?.dark.ink).toBe("#cccccc");
-    // …but a mobile-only token still needs both modes to exist at all.
     expect(() =>
       buildNativeThemeModel({
         themeCss: MINIMAL_THEME_CSS,
@@ -281,15 +261,10 @@ describe("generate-native-theme", () => {
     });
     const light = model.themes.get("default")?.light;
     const dark = model.themes.get("default")?.dark;
-    // Values below are Chrome 151's computed colors for the same expressions.
     expect(light?.hover).toBe("rgba(51, 51, 51, 0.059)");
     expect(light?.border).toBe("#dfdfdf");
-    // oklch(0.3211 0 0) is *specified* in oklch, so its hue 0 counts: the mix
-    // lands at hue ~70 (olive), not on the green's hue.
     expect(light?.successForeground).toBe("#7a5a34");
     expect(light?.scrim).toBe("rgba(255, 255, 255, 0.92)");
-    // #eceff4 (chroma 0.007) is converted into oklch, so its hue is powerless
-    // and #2e3440's hue carries through the whole ramp.
     expect(dark?.border).toBe("#4f5460");
     expect(dark?.hover).toBe("rgba(236, 239, 244, 0.138)");
     expect(dark?.successForeground).toBe("#cbd9c0");
@@ -302,7 +277,6 @@ describe("generate-native-theme", () => {
       xl2: 16,
       full: 9999,
     });
-    // No mobile `@theme` text overrides: the coarse-pointer value stands.
     expect(model.typography).toEqual([
       ["sm", { fontSize: 15, lineHeight: 22 }],
     ]);
@@ -335,8 +309,6 @@ describe("generate-native-theme", () => {
   });
 
   it("rejects a token that only the dark block defines", () => {
-    // `:root` declarations reach dark mode too, so a light-block token can
-    // only go missing the other way round: declared under `.dark` alone.
     expect(() =>
       buildNativeThemeModel({
         themeCss: `
@@ -380,7 +352,6 @@ describe("generate-native-theme", () => {
   });
 
   it("exposes the Apple text-style ramp and the web radii plus 2xl/full", () => {
-    // caption2, footnote, subheadline, body, title3, title2, title1, largeTitle.
     expect(nativeTypography).toEqual({
       "2xs": { fontSize: 11, lineHeight: 13 },
       xs: { fontSize: 13, lineHeight: 18 },

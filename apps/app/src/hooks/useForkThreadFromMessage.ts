@@ -15,7 +15,6 @@ import { findCachedProviderInfo } from "@/hooks/queries/system-queries";
 import { useRouteNavigate } from "@/components/ui/app-route-anchor";
 
 interface UseForkThreadFromMessageArgs {
-  /** Source thread the fork branches from. Null until the thread loads. */
   sourceThread: Thread | null;
 }
 
@@ -23,12 +22,6 @@ interface ForkThreadFromMessageTarget {
   sourceSeqEnd: number;
 }
 
-/**
- * Returns a handler whose identity is stable for the lifetime of the caller.
- * It reads the source thread from a ref at click time: the handler feeds the
- * timeline's static context, so a new identity per thread-detail refetch
- * would re-render every mounted message row.
- */
 export function useForkThreadFromMessage({
   sourceThread,
 }: UseForkThreadFromMessageArgs): (

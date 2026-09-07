@@ -17,8 +17,6 @@ describe("shell command bus", () => {
   });
 
   it("reports that nothing received it when no WebView is mounted", () => {
-    // The device screen is reachable with the shell switched off, so its
-    // recovery actions have to say so instead of silently doing nothing.
     expect(sendShellCommand({ kind: "clear-website-data" })).toBe(false);
   });
 

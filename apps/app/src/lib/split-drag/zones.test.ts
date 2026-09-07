@@ -10,7 +10,6 @@ import {
 
 const RECT: Rect = { left: 100, top: 200, width: 400, height: 300 };
 
-// Point at a fractional position inside RECT.
 function at(fx: number, fy: number): [number, number] {
   return [RECT.left + fx * RECT.width, RECT.top + fy * RECT.height];
 }
@@ -31,22 +30,20 @@ describe("pickZone", () => {
   });
 
   it("prefers left/right over top/bottom in the shared corner region", () => {
-    // Top-left corner is inside both the left band (<0.28) and the top band
-    // (<0.3); left must win.
     expect(pickZone(RECT, ...at(0.1, 0.1))).toBe("left");
   });
 
   it("respects the exact edge thresholds", () => {
-    // Just inside the 28% left band vs just outside it.
     expect(pickZone(RECT, ...at(0.27, 0.5))).toBe("left");
     expect(pickZone(RECT, ...at(0.29, 0.5))).toBe("center");
-    // Just inside the 30% top band (middle column) vs just outside it.
     expect(pickZone(RECT, ...at(0.5, 0.29))).toBe("top");
     expect(pickZone(RECT, ...at(0.5, 0.31))).toBe("center");
   });
 
   it("falls back to center for a degenerate rect", () => {
-    expect(pickZone({ left: 0, top: 0, width: 0, height: 0 }, 0, 0)).toBe("center");
+    expect(pickZone({ left: 0, top: 0, width: 0, height: 0 }, 0, 0)).toBe(
+      "center",
+    );
   });
 });
 
@@ -56,8 +53,12 @@ describe("zoneBox", () => {
       const box = zoneBox(RECT, zone);
       expect(box.left).toBeGreaterThanOrEqual(RECT.left);
       expect(box.top).toBeGreaterThanOrEqual(RECT.top);
-      expect(box.left + box.width).toBeLessThanOrEqual(RECT.left + RECT.width + 1e-6);
-      expect(box.top + box.height).toBeLessThanOrEqual(RECT.top + RECT.height + 1e-6);
+      expect(box.left + box.width).toBeLessThanOrEqual(
+        RECT.left + RECT.width + 1e-6,
+      );
+      expect(box.top + box.height).toBeLessThanOrEqual(
+        RECT.top + RECT.height + 1e-6,
+      );
     }
   });
 
@@ -70,25 +71,41 @@ describe("zoneBox", () => {
 describe("decideThreadDrop", () => {
   it("passes an edge zone through as a split when there is room", () => {
     expect(
-      decideThreadDrop({ zone: "left", threadAlreadyOpen: false, atMaxPanes: false }),
+      decideThreadDrop({
+        zone: "left",
+        threadAlreadyOpen: false,
+        atMaxPanes: false,
+      }),
     ).toEqual({ zone: "left", label: "Split left" });
   });
 
   it("labels a center zone as replace", () => {
     expect(
-      decideThreadDrop({ zone: "center", threadAlreadyOpen: false, atMaxPanes: false }),
+      decideThreadDrop({
+        zone: "center",
+        threadAlreadyOpen: false,
+        atMaxPanes: false,
+      }),
     ).toEqual({ zone: "center", label: "Replace this chat" });
   });
 
   it("coerces edges to center-replace at the pane cap", () => {
     expect(
-      decideThreadDrop({ zone: "top", threadAlreadyOpen: false, atMaxPanes: true }),
+      decideThreadDrop({
+        zone: "top",
+        threadAlreadyOpen: false,
+        atMaxPanes: true,
+      }),
     ).toEqual({ zone: "center", label: "Replace this chat" });
   });
 
   it("coerces to focus-pane when the thread is already open, overriding the cap", () => {
     expect(
-      decideThreadDrop({ zone: "right", threadAlreadyOpen: true, atMaxPanes: true }),
+      decideThreadDrop({
+        zone: "right",
+        threadAlreadyOpen: true,
+        atMaxPanes: true,
+      }),
     ).toEqual({ zone: "center", label: "Already open — focus pane" });
   });
 });
@@ -115,27 +132,24 @@ describe("shouldEngageSidebarSplitDrag", () => {
   const base = { startX: 20, startY: 300, sidebarRightEdge: 248 };
 
   it("does not engage while the pointer is still inside the sidebar", () => {
-    expect(
-      shouldEngageSidebarSplitDrag({ ...base, x: 200, y: 340 }),
-    ).toBe(false);
+    expect(shouldEngageSidebarSplitDrag({ ...base, x: 200, y: 340 })).toBe(
+      false,
+    );
   });
 
   it("engages once the pointer crosses the edge moving mostly horizontally", () => {
-    expect(
-      shouldEngageSidebarSplitDrag({ ...base, x: 300, y: 320 }),
-    ).toBe(true);
+    expect(shouldEngageSidebarSplitDrag({ ...base, x: 300, y: 320 })).toBe(
+      true,
+    );
   });
 
   it("lets reorder win on a mostly-vertical drag even past the edge", () => {
-    // dx = 40, dy = 400 -> vertical dominates, reorder keeps the gesture.
-    expect(
-      shouldEngageSidebarSplitDrag({ ...base, x: 288, y: 700 }),
-    ).toBe(false);
+    expect(shouldEngageSidebarSplitDrag({ ...base, x: 288, y: 700 })).toBe(
+      false,
+    );
   });
 
   it("requires travel beyond the activation distance even just past the edge", () => {
-    // Start hard against the sidebar edge, so crossing it is only a few px of
-    // travel — below the activation distance, reorder still owns the gesture.
     expect(
       shouldEngageSidebarSplitDrag({
         startX: 245,

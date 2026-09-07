@@ -6,7 +6,6 @@ import {
 
 export interface ThreadDeleteDialogTarget {
   thread: Thread;
-  /** Present iff the thread has one or more non-deleted children. */
   childThreadCount?: number;
 }
 

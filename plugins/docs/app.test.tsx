@@ -18,7 +18,6 @@ const navigationRegistration = {
   component: navigationView.component,
 };
 
-// jsdom has no matchMedia; @bb/shared-ui's responsive overlays query it.
 beforeEach(() => {
   Object.defineProperty(window, "matchMedia", {
     writable: true,
@@ -852,8 +851,6 @@ describe("Docs nav panel", () => {
     await waitFor(() => expect(saveNote).toHaveBeenCalled(), {
       timeout: 2_000,
     });
-    // The blank line separating frontmatter from the body survives the first
-    // save: without it every real-world document picks up a spurious diff line.
     expect(saveNote.mock.calls.at(-1)?.[0]).toMatchObject({
       content: expect.stringMatching(
         /^---\r\ntitle: Wiki page\r\ntype: knowledge\r\n---\r\n\r\n# Wiki page\n\nEdited body\./,
@@ -885,8 +882,6 @@ describe("Docs nav panel", () => {
       },
     );
 
-    // The opening `---` is a thematic break, not frontmatter, so the section it
-    // introduces must stay editable rather than being hidden as metadata.
     await waitFor(() => {
       const editor = slot.container.querySelector(".tiptap");
       expect(editor?.textContent).toContain("Some intro text.");

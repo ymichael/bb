@@ -1,13 +1,3 @@
-/**
- * Test-only structural introspection over zod 4 schemas, for the contract
- * guardrail tests (grammar snapshot, contract purity). Walks the schema
- * definition tree through objects, unions, intersections, wrappers, arrays,
- * records, tuples, pipes and lazies; nothing here runs at product time.
- *
- * Zod's internal definition objects are typed per class, so this reads them
- * through `Reflect.get` with runtime checks — the one place an unknown-shaped
- * value is acceptable, because the library is the boundary.
- */
 import type { z } from "zod";
 
 type ZodDef = z.core.$ZodTypeDef;
@@ -45,7 +35,6 @@ function zodShape(def: ZodDef): Record<string, z.ZodType> | undefined {
   return Object.fromEntries(entries);
 }
 
-/** The field schemas of an object schema (empty for non-objects). */
 export function zodObjectShape(schema: z.ZodType): Record<string, z.ZodType> {
   const def = defOf(schema);
   return def.type === "object" ? (zodShape(def) ?? {}) : {};
@@ -53,7 +42,6 @@ export function zodObjectShape(schema: z.ZodType): Record<string, z.ZodType> {
 
 export type ZodFieldPresence = "required" | "optional" | "default";
 
-/** Whether a field accepts omission, and whether omission fills a default. */
 export function zodFieldPresence(schema: z.ZodType): ZodFieldPresence {
   const type = defOf(schema).type;
   if (type === "default") return "default";
@@ -65,11 +53,6 @@ export function zodFieldPresence(schema: z.ZodType): ZodFieldPresence {
   return "required";
 }
 
-/**
- * Field name → presence for one object schema. Wrappers (optional, nullable,
- * default, pipe) are looked through to find the object; a non-object schema
- * yields no fields.
- */
 export function zodObjectFields(
   schema: z.ZodType,
 ): Record<string, ZodFieldPresence> {
@@ -105,14 +88,12 @@ export function zodObjectFields(
   }
 }
 
-/** The `options` of a union, or the schema itself when it is not a union. */
 export function zodUnionOptions(schema: z.ZodType): z.ZodType[] {
   const def = defOf(schema);
   if (def.type === "union") return zodChildren(def, "options");
   return [schema];
 }
 
-/** Literal value of a `z.literal()` field, when the schema is one. */
 export function zodLiteralValue(schema: z.ZodType): unknown {
   const def = defOf(schema);
   if (def.type !== "literal") return undefined;
@@ -120,11 +101,6 @@ export function zodLiteralValue(schema: z.ZodType): unknown {
   return Array.isArray(values) ? values[0] : undefined;
 }
 
-/**
- * Every object key reachable anywhere in the schema tree, as
- * `"<path>.<key>"` entries rooted at `rootName`. Lazies are entered once
- * (recursive JSON values terminate), so the walk always ends.
- */
 export function collectZodKeyPaths(
   schema: z.ZodType,
   rootName: string,

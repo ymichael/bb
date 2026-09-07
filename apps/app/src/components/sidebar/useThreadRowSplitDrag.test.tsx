@@ -95,10 +95,8 @@ describe("useThreadRowSplitDrag — openInSplit (cmd-click / context-menu entry)
     expect(countPanes(layout!.root)).toBe(2);
     const opened = findPaneByThread(layout!.root, "p1", "t9");
     expect(opened).not.toBeNull();
-    // Default placement is a right split, so the new pane is the last in order.
     expect(listPanes(layout!.root).at(-1)?.paneId).toBe(opened?.paneId);
     expect(layout!.focusedPaneId).toBe(opened?.paneId);
-    // A fresh open pushes a history entry (no replace).
     expect(navigateSpy).toHaveBeenCalledWith("/projects/p1/threads/t9");
   });
 
@@ -106,7 +104,7 @@ describe("useThreadRowSplitDrag — openInSplit (cmd-click / context-menu entry)
     const { store, openInSplit } = renderOpenInSplit("t2", twoPanes());
     openInSplit();
     const layout = store.get(splitLayoutAtom);
-    expect(countPanes(layout!.root)).toBe(2); // no new pane
+    expect(countPanes(layout!.root)).toBe(2);
     expect(layout!.focusedPaneId).toBe("pane-2");
     expect(navigateSpy).toHaveBeenCalledWith("/projects/p1/threads/t2", {
       replace: true,
@@ -117,9 +115,9 @@ describe("useThreadRowSplitDrag — openInSplit (cmd-click / context-menu entry)
     const { store, openInSplit } = renderOpenInSplit("t9", eightPanes());
     openInSplit();
     const layout = store.get(splitLayoutAtom);
-    expect(countPanes(layout!.root)).toBe(8); // never exceeds the cap
+    expect(countPanes(layout!.root)).toBe(8);
     const opened = findPaneByThread(layout!.root, "p1", "t9");
-    expect(opened?.paneId).toBe("pane-1"); // replaced the focused pane
+    expect(opened?.paneId).toBe("pane-1");
     expect(findPaneByThread(layout!.root, "p1", "t1")).toBeNull();
     expect(navigateSpy).toHaveBeenCalledWith("/projects/p1/threads/t9");
   });
@@ -129,7 +127,7 @@ describe("useThreadRowSplitDrag — openInSplit (cmd-click / context-menu entry)
     const seeded = singlePane();
     const { store, openInSplit } = renderOpenInSplit("t9", seeded);
     openInSplit();
-    expect(store.get(splitLayoutAtom)).toBe(seeded); // unchanged reference
+    expect(store.get(splitLayoutAtom)).toBe(seeded);
     expect(navigateSpy).toHaveBeenCalledWith("/projects/p1/threads/t9");
   });
 

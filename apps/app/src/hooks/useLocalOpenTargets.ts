@@ -45,8 +45,6 @@ interface OpenPathInFileTargetArgs extends OpenLocalPathRequest {
   targetId: WorkspaceOpenTargetId;
 }
 
-interface OpenPathInPreferredTargetArgs extends OpenLocalPathRequest {}
-
 interface OpenPathInAvailableTargetArgs extends OpenLocalPathRequest {
   rememberTarget: boolean;
   target: WorkspaceOpenTarget;
@@ -64,10 +62,10 @@ interface UseLocalOpenTargetsResult {
   ) => Promise<boolean>;
   openPathInFileTarget: (args: OpenPathInFileTargetArgs) => Promise<boolean>;
   openPathInPreferredDirectoryTarget: (
-    args: OpenPathInPreferredTargetArgs,
+    args: OpenLocalPathRequest,
   ) => Promise<boolean>;
   openPathInPreferredFileTarget: (
-    args: OpenPathInPreferredTargetArgs,
+    args: OpenLocalPathRequest,
   ) => Promise<boolean>;
   preferredDirectoryTarget: WorkspaceOpenTarget | null;
   preferredFileTarget: WorkspaceOpenTarget | null;
@@ -177,9 +175,6 @@ function useOpenTargetResolution(
       ),
     [args.contextKind, args.workspaceOpenTargets],
   );
-  // Resolve locally from the already-gated `workspaceOpenTargets` so that
-  // callers passing `enabled: false` don't trigger a daemon fetch via the
-  // global atom.
   const preferredDirectoryTarget = useMemo(
     () =>
       resolvePreferredWorkspaceOpenTarget({
@@ -379,7 +374,7 @@ export function useLocalOpenTargets(
   );
 
   const openPathInPreferredDirectoryTarget = useCallback(
-    async (request: OpenPathInPreferredTargetArgs) => {
+    async (request: OpenLocalPathRequest) => {
       if (!preferredDirectoryTarget) {
         dispatchOpenFailureToast({
           description: getOpenUnavailableDescription({
@@ -402,7 +397,7 @@ export function useLocalOpenTargets(
     [hasDaemon, openPathInAvailableTarget, preferredDirectoryTarget],
   );
   const openPathInPreferredFileTarget = useCallback(
-    async (request: OpenPathInPreferredTargetArgs) => {
+    async (request: OpenLocalPathRequest) => {
       const fileTargets =
         contextKind === "local" && fetchWorkspaceOpenTargetsForPath !== null
           ? await fetchWorkspaceOpenTargetsForPath(request.path).catch(

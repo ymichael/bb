@@ -16,8 +16,6 @@ import {
   TOP_LEVEL_TIMELINE_ROW_INTRINSIC_SIZE_CLASS_NAME,
 } from "./timeline-row-containment";
 
-// jsdom has no `CSS.supports`; the arming hook reads scroll-anchoring support
-// from it, so each test declares which engine it models.
 function stubScrollAnchoring(supported: boolean): void {
   vi.stubGlobal("CSS", {
     supports: (property: string, value: string) =>
@@ -93,8 +91,6 @@ describe("ThreadTimelineRows row containment", () => {
       </MemoryRouter>,
     );
 
-    // Freshly mounted rows carry only the intrinsic-size declaration so the
-    // first layout runs unskipped and records the row's real height.
     for (const rowId of ["user_1", "turn_1", "assistant_1"]) {
       expect(rowWrapper(view.container, rowId).className).toBe(
         TOP_LEVEL_TIMELINE_ROW_INTRINSIC_SIZE_CLASS_NAME,
@@ -104,8 +100,6 @@ describe("ThreadTimelineRows row containment", () => {
       "content-visibility",
     );
 
-    // One frame later the row is still unarmed (that frame's layout is the
-    // one that lays it out); the frame after that opts in.
     await act(nextAnimationFrame);
     expect(rowWrapper(view.container, "assistant_1").className).toBe(
       TOP_LEVEL_TIMELINE_ROW_INTRINSIC_SIZE_CLASS_NAME,
@@ -122,8 +116,6 @@ describe("ThreadTimelineRows row containment", () => {
       ).toEqual([...armedClassNames].sort());
     }
 
-    // Arming goes through classList, not a React re-render, so classes other
-    // code adds imperatively (the search-match flash) survive later renders.
     rowWrapper(view.container, "assistant_1").classList.add("bb-search-flash");
     view.rerender(
       <MemoryRouter>
@@ -149,14 +141,10 @@ describe("ThreadTimelineRows row containment", () => {
       ),
     ).toBe(true);
 
-    // Nested lists (turn / bundle bodies) keep plain wrappers: their parent
-    // body animates its own height.
     expect(rowWrapper(view.container, "cmd_nested").className).toBe("");
     expect(rowWrapper(view.container, "assistant_nested").className).toBe("");
     expect(rowWrapper(view.container, "assistant_nested").style.length).toBe(0);
 
-    // Conversation rows carry a per-row intrinsic size estimate; work rows use
-    // the class default (one text line).
     expect(rowWrapper(view.container, "turn_1").style.length).toBe(0);
     expect(
       rowWrapper(view.container, "assistant_1").style.containIntrinsicBlockSize,
@@ -200,8 +188,6 @@ describe("ThreadTimelineRows row containment", () => {
     await act(nextAnimationFrame);
     for (const rowId of ["user_1", "assistant_1"]) {
       const classes = Array.from(rowWrapper(view.container, rowId).classList);
-      // The intrinsic-size estimate is inert without content-visibility; only
-      // the arming class must stay away on engines that cannot anchor scroll.
       expect(classes).toContain(
         TOP_LEVEL_TIMELINE_ROW_INTRINSIC_SIZE_CLASS_NAME,
       );

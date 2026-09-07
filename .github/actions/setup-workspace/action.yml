@@ -6,7 +6,7 @@ inputs:
     description: Node version to install
     required: true
   pnpm-version:
-    description: pnpm version to install
+    description: pnpm version to install. Must match the root packageManager and have a pnpm-<version>.sha256 file beside this action.
     required: true
   cache-prefix:
     description: Names this job's Turbo cache entry (e.g. checks, test-server). Every job reads every prefix; this only decides which entry the job writes back.
@@ -19,11 +19,15 @@ inputs:
 runs:
   using: composite
   steps:
+    # A pinned release binary instead of pnpm/action-setup: the action
+    # bootstraps through `npm ci` and `pnpm self-update`, two npm registry
+    # round trips that cost 30 s at best and stalled for 7 minutes on every
+    # job of a run when the registry was slow. See install-pnpm.sh.
     - name: Set up pnpm
-      uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
-      with:
-        version: ${{ inputs.pnpm-version }}
-        run_install: false
+      shell: bash
+      env:
+        PNPM_VERSION: ${{ inputs.pnpm-version }}
+      run: bash "${GITHUB_ACTION_PATH}/install-pnpm.sh"
 
     - name: Set up Node.js
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0

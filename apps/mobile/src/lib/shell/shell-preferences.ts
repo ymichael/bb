@@ -1,13 +1,3 @@
-/**
- * Client-local shell state, in the same `bb.preferences` MMKV store the
- * haptics toggle uses.
- *
- * There is no longer an on/off switch. The page is the only interface this app
- * has, so the shell is unconditional; all that survives is where each profile
- * was last looking.
- */
-
-/** Per-profile last page path, so a cold start reopens where the user was. */
 export function lastShellPathStorageKey(profileId: string): string {
   return `bb.webviewShell.lastPath.${profileId}`;
 }
@@ -22,7 +12,6 @@ export interface ShellPreferenceStore {
   setLastPath(profileId: string, path: string): void;
 }
 
-/** Paths longer than this are a bug or an attack; a URL bar has no such page. */
 const MAX_REMEMBERED_PATH_LENGTH = 512;
 
 export function isRememberablePath(path: string): boolean {

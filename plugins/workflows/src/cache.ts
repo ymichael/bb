@@ -1,10 +1,6 @@
 import { createHash } from "node:crypto";
 import type { JsonSchema, JsonValue } from "./types.js";
 
-/**
- * Bump this whenever the meaning or encoding of a cache identity changes.
- * Execution prompt/tool changes belong in `executionSemantics` instead.
- */
 export const WORKFLOW_CALL_CACHE_VERSION: "workflow-call-cache-v1" =
   "workflow-call-cache-v1";
 
@@ -15,21 +11,12 @@ export interface ResolvedWorkflowExecutionSelection {
   permissionMode: string;
 }
 
-/**
- * Semantic worker behavior that is not already represented by the prompt,
- * selection, or schema. The versions must be bumped when the worker envelope
- * or result-submission protocol changes.
- */
 interface WorkflowCallExecutionSemantics {
   workerPromptVersion: string;
   resultProtocolVersion: string;
   maxRepairAttempts: number;
 }
 
-/**
- * Complete semantic identity for one workflow call. Display-only fields such
- * as title, label, and phase are intentionally absent.
- */
 export interface WorkflowCallCacheInput {
   version: typeof WORKFLOW_CALL_CACHE_VERSION;
   previousCacheKey: string | null;
@@ -177,15 +164,10 @@ function canonicalizeValue(
   }
 }
 
-/** Return the unique canonical JSON encoding of a hostile boundary value. */
 export function canonicalizeJson(value: unknown): string {
   return canonicalizeValue(value, "$", new WeakSet<object>());
 }
 
-/**
- * Compute the chained SHA-256 identity for a call. Only declared semantic
- * fields are copied, so accidental display metadata on the input is ignored.
- */
 export function computeWorkflowCallCacheKey(
   input: WorkflowCallCacheInput,
 ): string {
@@ -211,7 +193,6 @@ export function computeWorkflowCallCacheKey(
     .digest("hex");
 }
 
-/** Reuse only completed successful calls whose JSON result is not null. */
 export function reusableSuccessfulResult<Result extends NonNullJsonValue>(
   candidate: WorkflowCallResultCandidate<Result> | null,
 ): WorkflowCallReuseDecision<Result> {

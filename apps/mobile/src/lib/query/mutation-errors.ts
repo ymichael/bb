@@ -2,14 +2,6 @@ import { extractErrorMessage, toRecord } from "@bb/core-ui";
 import { BbHttpError } from "@bb/sdk/browser";
 import { isTransientReadError } from "./query-client";
 
-/**
- * Message derivation for the profile QueryClient's global mutation error
- * toast (mirrors apps/app/src/lib/mutation-errors.ts without the lifecycle
- * operations, which arrive with thread detail). Mutations declare
- * `meta.errorMessage` as the fallback headline; the server's error body wins
- * when it carries a message; transport failures get one shared wording.
- */
-
 const HTTP_STATUS_PREFIX_PATTERN = /^HTTP \d{3}:\s*/u;
 const TRAILING_PERIOD_PATTERN = /\.$/u;
 export const NETWORK_TRANSPORT_ERROR_MESSAGE =
@@ -33,7 +25,6 @@ function isAbortLikeError(error: unknown): boolean {
   return toRecord(error)?.name === "AbortError";
 }
 
-/** Reads the typed subset of `mutation.meta` the toast sink understands. */
 function getMutationErrorMeta(
   value: Readonly<Record<string, unknown>> | undefined,
 ): MutationErrorMeta {
@@ -83,11 +74,6 @@ export interface MutationErrorToast {
   description: string | null;
 }
 
-/**
- * What the global sink should show for a failed mutation, or null when
- * nothing should be shown (the mutation opted out via `showErrorToast:
- * false`, or the request was aborted on purpose).
- */
 export function describeMutationErrorToast(
   error: unknown,
   meta: Readonly<Record<string, unknown>> | undefined,

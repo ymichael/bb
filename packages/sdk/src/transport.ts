@@ -25,20 +25,10 @@ export interface BbSdkTransport {
   websocket?: BbRealtimeSocketFactory;
 }
 
-/**
- * Raw socket payload. Treated as opaque until decoded — realtime ignores
- * non-string frames.
- */
 export interface BbRealtimeSocketMessageEvent {
   data: unknown;
 }
 
-/**
- * Minimal runtime-agnostic socket shape consumed by the realtime client.
- * Default factories adapt the environment's WebSocket (browser/Node global,
- * or the `ws` package on older Node) to this interface; custom `websocket`
- * factories can wrap any implementation the same way.
- */
 export interface BbRealtimeSocket {
   close(): void;
   onclose: (() => void) | null;

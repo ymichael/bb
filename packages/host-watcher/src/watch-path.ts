@@ -132,11 +132,6 @@ class PathChangeWatcher {
     await this.subscription.dispose();
   }
 
-  /**
-   * Dropped FSEvents mean we missed an unknown set of changes under the root.
-   * Re-emit every immediate child as changed so downstream collectors resolve
-   * each tracked target afresh and reconcile against current on-disk state.
-   */
   private async rescanAfterDroppedEvents(): Promise<void> {
     let entries: string[];
     try {

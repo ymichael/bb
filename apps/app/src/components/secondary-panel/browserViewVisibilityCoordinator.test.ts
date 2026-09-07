@@ -49,7 +49,6 @@ describe("browserViewVisibilityCoordinator", () => {
 
     expect(visibility).toEqual([
       { tabId: "a", visible: true },
-      // Switching to b hides a first, then shows b.
       { tabId: "a", visible: false },
       { tabId: "b", visible: true },
     ]);
@@ -93,7 +92,6 @@ describe("browserViewVisibilityCoordinator", () => {
     coordinator.release("a");
     coordinator.show("b", () => {});
 
-    // No setVisible(a,false) after release — the gone view is never poked.
     expect(visibility).toEqual([
       { tabId: "a", visible: true },
       { tabId: "b", visible: true },

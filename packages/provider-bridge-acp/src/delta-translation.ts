@@ -1,20 +1,3 @@
-/**
- * ACP dialect parsing → narrow-grammar deltas.
- *
- * Translates the ACP bridge's internal envelopes (`acp/turn/started`,
- * `acp/update`, `acp/fs/write`, …) into `thread/delta` semantic deltas.
- * Everything timeline-shaped — turn/item ids, accepted-input correlation,
- * pairing, settlement, text accumulation — is the runtime delta assembler's
- * job; this module owns the ACP dialect: session-update classification, the
- * tool-call merge cache (updates carry only changed fields, so absent fields
- * inherit the started event's values — provider knowledge the assembler must
- * never guess), the thought/message flush triggers, and the stop-reason
- * mappings.
- *
- * The one dialect state is the merge cache. Ids, turns, and open items live
- * in the assembler.
- */
-
 import { providerRawEventSchema } from "@bb/domain";
 import type { ProviderRawEvent } from "@bb/domain";
 import {
@@ -86,30 +69,15 @@ import {
   type AcpToolCallUpdateEvent,
 } from "./wire.js";
 
-/**
- * The per-event translation scope the caller passes in (the bridge stamps the
- * bb thread id).
- */
 interface AcpDeltaTranslationContext {
   threadId?: string;
 }
 
-/** Per-session translator configuration. */
 export interface AcpDeltaTranslatorOptions {
-  /**
-   * The session's working directory: relative tool-call paths (grok's
-   * `locations: [{path: "README.md"}]`) resolve against it, and it is the
-   * `cwd` of every command item.
-   */
   cwd?: string | undefined;
-  /** The agent's dialect; generic when absent. */
   dialect?: AcpDialect | undefined;
 }
 
-/**
- * A permission request's `toolCall` as the bridge hands it to the translator
- * (`session/request_permission` carries a full ToolCallUpdate).
- */
 export interface AcpPermissionToolCallInput {
   toolCallId: string;
   title?: string | undefined;
@@ -121,11 +89,8 @@ export interface AcpPermissionToolCallInput {
   rawOutput?: unknown;
 }
 
-/** The in-flight call a permission request was bound to. */
 export interface AcpBoundPermissionToolCall {
-  /** The id the approval subject joins: the in-flight call's, else its own. */
   toolCallId: string;
-  /** The in-flight call after the permission's fields merged in, if bound. */
   event: AcpToolCallUpdateEvent | undefined;
 }
 
@@ -137,12 +102,7 @@ const ACP_PLAN_STEP_STATUS_BY_ENTRY_STATUS = {
   completed: "completed",
 } as const;
 
-/** Each ACP plan snapshot is its own settled item; the latest supersedes. */
 const PLAN_STEPS_CHANNEL = "planSteps";
-
-// ---------------------------------------------------------------------------
-// Pure ACP parsing helpers
-// ---------------------------------------------------------------------------
 
 function isTerminalAcpStatus(
   status: AcpToolCallUpdateEvent["status"],
@@ -167,11 +127,6 @@ function mapAcpToolCallStatus(
   }
 }
 
-/**
- * Merge a tool_call_update into the started tool_call event: updates carry
- * only changed fields, so absent fields keep the started event's values and
- * the merged event re-classifies with the original knowledge intact.
- */
 function mergeAcpToolCallEvents(
   started: AcpToolCallUpdateEvent | undefined,
   update: AcpToolCallUpdateEvent,
@@ -179,9 +134,6 @@ function mergeAcpToolCallEvents(
   if (!started) {
     return update;
   }
-  // A kind on the update replaces the started kind together with its raw
-  // form: a known kind clears a stale `rawKind`, an unknown one carries its
-  // own.
   const { rawKind: startedRawKind, ...startedRest } = started;
   const kindFields =
     update.kind !== undefined
@@ -205,32 +157,11 @@ function mergeAcpToolCallEvents(
   };
 }
 
-// ---------------------------------------------------------------------------
-// Translator factory
-// ---------------------------------------------------------------------------
-
-/** An unsettled call in the merge cache. */
 interface AcpOpenToolCall {
-  /** The latest merged tool_call event. */
   event: AcpToolCallUpdateEvent;
-  /**
-   * Authoritative diffs captured while serving ACP client fs writes. They
-   * survive later tool-call updates whose replace-semantics content omits or
-   * supersedes the diff that the client itself observed.
-   */
   clientFileWrites?: Extract<AcpToolCallContent, { type: "diff" }>[];
-  /**
-   * The item type the call opened as. An update can re-classify the merged
-   * event (grok's first update adds the kind), and only a call that opened
-   * as a command streams output onto its row.
-   */
   openedType: DeltaItemShape["type"];
-  /**
-   * A better headline a permission request revealed for a row that is
-   * already open (see `notePermissionToolCall`).
-   */
   permissionTitle?: string;
-  /** What the agent's dialect reported about a delegated sub-agent. */
   delegation?: AcpDelegationReport;
 }
 
@@ -239,24 +170,10 @@ export function createAcpDeltaTranslator(
 ) {
   const dialect = options.dialect ?? GENERIC_ACP_DIALECT;
   const pathOptions = { cwd: options.cwd };
-  /**
-   * The merge cache: latest merged tool_call event per unsettled call, in
-   * insertion order (which decides turn-end settlement order), keyed
-   * `${threadId} ${toolCallId}`.
-   */
   const mergedToolCalls = new Map<string, AcpOpenToolCall>();
 
-  /**
-   * The bb-injected tools of the session, by name. One translator lives per
-   * session, so the set is session-wide.
-   */
   let injectedToolsByName = new Map<string, AcpInjectedTool>();
-  /** The bb tool each unsettled call is bound to, by call key. */
   const injectedToolBindings = new Map<string, AcpInjectedTool>();
-  /**
-   * bb tool calls the MCP proxy forwarded before the agent announced a
-   * matching tool_call, per thread, oldest first.
-   */
   const pendingInjectedCalls = new Map<string, AcpInjectedTool[]>();
 
   function callKey(
@@ -275,12 +192,6 @@ export function createAcpDeltaTranslator(
     );
   }
 
-  /**
-   * A tool event with the dialect's identity folded in: an absent protocol
-   * `kind` or `name` takes the dialect's answer (grok names and kinds every
-   * call in `_meta` from the `tool_call` on), so the call opens as what it
-   * is. A protocol value always wins.
-   */
   function withDialectIdentity(
     event: AcpToolCallUpdateEvent,
   ): AcpToolCallUpdateEvent {
@@ -312,15 +223,10 @@ export function createAcpDeltaTranslator(
     pendingInjectedCalls.delete(context?.threadId ?? "");
   }
 
-  // -------------------------------------------------------------------------
-  // bb-injected tools (Q31)
-  // -------------------------------------------------------------------------
-
   function configureInjectedTools(tools: readonly AcpInjectedTool[]): void {
     injectedToolsByName = new Map(tools.map((tool) => [tool.name, tool]));
   }
 
-  /** The injected tool a call's title names outright, if any. */
   function injectedToolNamedBy(
     event: AcpToolCallUpdateEvent,
   ): AcpInjectedTool | undefined {
@@ -336,10 +242,6 @@ export function createAcpDeltaTranslator(
     return undefined;
   }
 
-  /**
-   * Bind a freshly announced tool_call to a bb tool: the one its title names,
-   * else the oldest proxied call still waiting for its announcement.
-   */
   function bindAnnouncedCall(
     context: AcpDeltaTranslationContext | undefined,
     event: AcpToolCallUpdateEvent,
@@ -354,15 +256,6 @@ export function createAcpDeltaTranslator(
     return pendingInjectedCalls.get(context?.threadId ?? "")?.shift();
   }
 
-  /**
-   * The MCP proxy forwarded a call to bb tool `tool` for this thread. ACP
-   * gives the bridge no id that links the proxied call to the agent's own
-   * tool_call (Cursor announces every MCP call as "MCP: tool", kind `other`),
-   * so the binding is positional: the unbound candidate whose title names the
-   * tool, else the unbound candidate that mentions MCP, else the oldest
-   * unbound candidate — agents announce parallel calls in the order they run
-   * them. With no candidate open, the call waits for the next announcement.
-   */
   function noteInjectedToolCall(threadId: string, toolName: string): void {
     const tool = injectedToolsByName.get(toolName) ?? { name: toolName };
     const candidates = threadCallEntries({ threadId }).filter(
@@ -382,13 +275,6 @@ export function createAcpDeltaTranslator(
     pendingInjectedCalls.set(threadId, queue);
   }
 
-  /** Classify a call with its bb-tool binding, if it has one. */
-  /**
-   * Classify a call with its bb-tool binding, if it has one. The agent's own
-   * dialect gets the first word — only it can know that a tool call is a
-   * sub-agent, which version 1 of the protocol cannot express — and the
-   * shared classifier decides everything else.
-   */
   function classifyCall(
     context: AcpDeltaTranslationContext | undefined,
     event: AcpToolCallUpdateEvent,
@@ -405,14 +291,12 @@ export function createAcpDeltaTranslator(
     return classifyAcpToolCall(event, injected, pathOptions);
   }
 
-  /** The file snapshot captured while serving an ACP client write request. */
   interface AcpFsWriteSnapshot {
     path: string;
     oldText?: string;
     content: string;
   }
 
-  /** Upsert client-observed diffs onto a provider tool-call snapshot. */
   function withClientFileWrites(
     event: AcpToolCallUpdateEvent,
     writes: readonly Extract<AcpToolCallContent, { type: "diff" }>[],
@@ -436,13 +320,6 @@ export function createAcpDeltaTranslator(
     };
   }
 
-  /**
-   * Fold a client-side fs write into the one open native file change it can
-   * describe. Some agents (notably OMP) announce a native edit, then execute
-   * it through `fs/write_text_file`; ACP gives the client request no tool-call
-   * id. Prefer one exact path match, otherwise the sole path-pending file
-   * change. Ambiguous requests remain standalone timeline items.
-   */
   function mergeFsWriteIntoOpenToolCall(
     context: AcpDeltaTranslationContext | undefined,
     write: AcpFsWriteSnapshot,
@@ -506,10 +383,6 @@ export function createAcpDeltaTranslator(
     return true;
   }
 
-  // -------------------------------------------------------------------------
-  // Fallback payloads (the old "no active turn" visibility guard)
-  // -------------------------------------------------------------------------
-
   function toRawEvent(rawEvent: JsonRpcMessage): ProviderRawEvent {
     const parsed = providerRawEventSchema.safeParse(rawEvent);
     if (parsed.success) {
@@ -547,12 +420,6 @@ export function createAcpDeltaTranslator(
     };
   }
 
-  /**
-   * A guard-listed update whose translation is empty: with a turn open the
-   * old translator emitted nothing, without one it surfaced the raw envelope
-   * as provider/unhandled (includeKnown). `onlyIfNoTurn` reproduces exactly
-   * that split assembler-side.
-   */
   function suppressedUnhandled(rawEvent: JsonRpcMessage): ThreadDelta[] {
     const fallback = noTurnFallbackFor(rawEvent);
     return [
@@ -566,7 +433,6 @@ export function createAcpDeltaTranslator(
     ];
   }
 
-  /** Visibility classification: only unknown coverage becomes an `unhandled`. */
   function unhandledDeltas(rawEvent: JsonRpcMessage): ThreadDelta[] {
     const description = acpVisibilityMetadata.describeRawEvent(rawEvent);
     if (description.coverage !== "unknown") {
@@ -581,11 +447,6 @@ export function createAcpDeltaTranslator(
       },
     ];
   }
-
-  // -------------------------------------------------------------------------
-  // Flush triggers (provider policy: thought/message streams settle when the
-  // next message chunk / tool call / turn end arrives)
-  // -------------------------------------------------------------------------
 
   function closeThoughtStream(): ThreadDelta {
     return {
@@ -603,22 +464,15 @@ export function createAcpDeltaTranslator(
     };
   }
 
-  // -------------------------------------------------------------------------
-  // Tool-call closes
-  // -------------------------------------------------------------------------
-
   interface AcpCloseArgs {
     context: AcpDeltaTranslationContext | undefined;
     event: AcpToolCallUpdateEvent;
     status: ThreadEventItemStatus;
-    /** A headline a permission revealed while the row was open. */
     permissionTitle?: string | undefined;
-    /** A sub-agent report the dialect took off a vendor request. */
     delegation?: AcpDelegationReport | undefined;
     noTurnFallback?: DeltaNoTurnFallback;
   }
 
-  /** The classified call with what a later report revealed, if anything. */
   function withDelegationReport(
     classified: AcpClassifiedToolCall,
     report: AcpDelegationReport | undefined,
@@ -639,7 +493,6 @@ export function createAcpDeltaTranslator(
     };
   }
 
-  /** The classified call with a permission's headline, when it had one. */
   function withPermissionTitle(
     classified: AcpClassifiedToolCall,
     permissionTitle: string | undefined,
@@ -656,15 +509,6 @@ export function createAcpDeltaTranslator(
         };
   }
 
-  /**
-   * The terminal close for a (merged) tool_call event: carries the full
-   * terminal shape plus the generic close fields; the assembler applies them
-   * per item type. A command closes with the exit code and output the agent
-   * reported in `rawOutput`; only a failed command that reported none falls
-   * back to exit code 1 (see `commandCloseFields`), a completed one is never
-   * given a fabricated `0`. Every other item closes with its output text as
-   * `resultText`.
-   */
   function toolCallClose(args: AcpCloseArgs): ThreadDelta {
     const classified = withPermissionTitle(
       withDelegationReport(
@@ -691,13 +535,6 @@ export function createAcpDeltaTranslator(
     };
   }
 
-  /**
-   * ACP's status cannot stand in for an exit code: Cursor reports a command
-   * that exited 1 AND a command that never spawned (its persistent shell's
-   * cwd was deleted, #1529) as `status: "completed"`, so a completed command
-   * that reported none closes without one rather than with a fabricated `0`.
-   * A failed command that reported none is still non-zero (1).
-   */
   function commandCloseFields(
     event: AcpToolCallUpdateEvent,
     status: ThreadEventItemStatus,
@@ -725,7 +562,6 @@ export function createAcpDeltaTranslator(
     return outputText === undefined ? {} : { resultText: outputText };
   }
 
-  /** Settle every unsettled cached call (turn/compaction end), oldest first. */
   function drainOpenToolCalls(
     context: AcpDeltaTranslationContext | undefined,
     status: ThreadEventItemStatus,
@@ -746,7 +582,6 @@ export function createAcpDeltaTranslator(
     return deltas;
   }
 
-  /** Turn-end flush: streams settle first, then the unsettled tool calls. */
   function flushOpenTurnWork(
     context: AcpDeltaTranslationContext | undefined,
     status: ThreadEventItemStatus,
@@ -757,10 +592,6 @@ export function createAcpDeltaTranslator(
       ...drainOpenToolCalls(context, status),
     ];
   }
-
-  // -------------------------------------------------------------------------
-  // Session updates
-  // -------------------------------------------------------------------------
 
   function translateUpdate(
     update: AcpSessionUpdate,
@@ -777,7 +608,6 @@ export function createAcpDeltaTranslator(
         if (text === undefined) {
           return suppressedUnhandled(rawEvent);
         }
-        // A message chunk flushes the open thought stream first.
         return [
           closeThoughtStream(),
           {
@@ -815,7 +645,6 @@ export function createAcpDeltaTranslator(
           return suppressedUnhandled(rawEvent);
         }
         const event = withDialectIdentity(parsed.data);
-        // A tool call flushes both open streams before its item.
         const flush = [closeThoughtStream(), closeAssistantStream()];
         const announcedKey = callKey(context, event.toolCallId);
         const bound = bindAnnouncedCall(context, event);
@@ -823,7 +652,6 @@ export function createAcpDeltaTranslator(
           injectedToolBindings.set(announcedKey, bound);
         }
         if (isTerminalAcpStatus(event.status)) {
-          // Arrived already settled: close-without-open, no cache entry.
           return [
             ...flush,
             toolCallClose({
@@ -892,14 +720,6 @@ export function createAcpDeltaTranslator(
             ? {}
             : { clientFileWrites: open.clientFileWrites }),
         });
-        // An in-progress update on a running command carries the output so
-        // far (grok streams cumulative stdout, with tail-window resets): a
-        // cumulative snapshot the assembler diffs onto the row. It is the
-        // command's own output: its `content` text or the streams the agent
-        // reported, never the rawOutput envelope rendered as JSON, which
-        // mid-flight also carries an exit code the command has not reached. Output that
-        // arrives with no turn open belongs to a command the turn end
-        // already settled, so it has no row to land on and is dropped.
         if (
           event.status === "in_progress" &&
           mergedType === "command" &&
@@ -922,8 +742,6 @@ export function createAcpDeltaTranslator(
         if (progressText === undefined) {
           return suppressedUnhandled(rawEvent);
         }
-        // Commands and file changes settle with their output at the close;
-        // every other item streams its progress text.
         if (mergedType !== "command" && mergedType !== "fileChange") {
           return [
             {
@@ -944,9 +762,6 @@ export function createAcpDeltaTranslator(
         if (!parsed.success) {
           return suppressedUnhandled(rawEvent);
         }
-        // An ACP plan update carries the whole entry list, so each one is a
-        // settled `planSteps` snapshot (grammar v3): a channel-keyed close
-        // mints a fresh item per snapshot and the latest supersedes the rest.
         const steps: ThreadEventPlanStep[] = parsed.data.entries.map(
           (entry) => ({
             step: entry.content,
@@ -988,10 +803,6 @@ export function createAcpDeltaTranslator(
     }
   }
 
-  // -------------------------------------------------------------------------
-  // Turn lifecycle
-  // -------------------------------------------------------------------------
-
   function turnStatusForStopReason(
     stopReason: AcpStopReason,
   ): ThreadEventTurnStatus {
@@ -1030,17 +841,12 @@ export function createAcpDeltaTranslator(
     ];
   }
 
-  // -------------------------------------------------------------------------
-  // Envelope dispatch
-  // -------------------------------------------------------------------------
-
   function translateAcpEvent(
     event: ProviderRuntimeEvent,
     context?: AcpDeltaTranslationContext,
   ): ThreadDelta[] {
     const errorEnvelope = errorEnvelopeSchema.safeParse(event);
     if (errorEnvelope.success) {
-      // A settling error abandons the unsettled calls with the failed turn.
       clearThreadCalls(context);
       return [
         {
@@ -1106,16 +912,27 @@ export function createAcpDeltaTranslator(
           return [];
         }
         const status = params.data.status;
+        const turnStatus: ThreadEventTurnStatus =
+          status === "skipped" ? "completed" : status;
         return [
-          ...flushOpenTurnWork(context, status),
-          // Only a completed maintenance prompt actually shrank the context; a
-          // failed or interrupted one must never report `thread/compacted`.
+          ...flushOpenTurnWork(context, itemStatusForTurnStatus(turnStatus)),
           ...(status === "completed"
             ? ([{ kind: "context.compacted" }] as ThreadDelta[])
             : []),
+          ...(status === "skipped"
+            ? ([
+                {
+                  kind: "provider.warning",
+                  category: "compaction-skipped",
+                  summary: "Context compaction skipped",
+                  details: params.data.detail,
+                  vouchedTurn: true,
+                },
+              ] as ThreadDelta[])
+            : []),
           {
             kind: "turn.boundary",
-            status,
+            status: turnStatus,
             ...(status === "failed"
               ? { error: { message: params.data.error } }
               : {}),
@@ -1201,24 +1018,6 @@ export function createAcpDeltaTranslator(
     }
   }
 
-  /**
-   * A `session/request_permission` carries a full ToolCallUpdate, and it is
-   * sometimes the richest description of the call the agent ever sends
-   * (Cursor titles its fetch permission "Fetch https://…" while the
-   * tool_call said "Web Fetch" with an empty rawInput). Bind it to the
-   * in-flight call it describes: the call with the same id, else — Cursor
-   * asks under its own id (`web_fetch_0`) — the single in-flight call of the
-   * same kind, the positional rule bb-injected tools already use.
-   *
-   * The merge is additive and never re-shapes an open row. A call that
-   * already has a core shape keeps its own description (opencode's
-   * `external_directory` ask rides the running `edit` call's id with kind
-   * `other` and a bare directory title, #1719). A generic row takes the
-   * permission's fields, but if they would classify it as another shape the
-   * row keeps the shape it opened with and takes only the headline: a row
-   * that opens as one kind and settles as another is two rows in the
-   * timeline, which is worse than a generic row that names its URL.
-   */
   function notePermissionToolCall(
     threadId: string,
     toolCall: AcpPermissionToolCallInput,
@@ -1276,17 +1075,9 @@ export function createAcpDeltaTranslator(
         ? {}
         : { permissionTitle: toolCall.title }),
     });
-    // The approval still describes what the permission asked about.
     return { toolCallId: open.event.toolCallId, event: merged };
   }
 
-  /**
-   * A sub-agent the agent's dialect reported (Cursor's `cursor/task`). It
-   * arrives on a vendor request rather than a session update, and Cursor
-   * sends it once the sub-agent has already finished, so it enriches the
-   * delegation row while the row is still open and is otherwise a no-op:
-   * re-opening a settled row would show the same work twice.
-   */
   function noteDelegationReport(
     threadId: string,
     report: AcpDelegationReport,
@@ -1320,7 +1111,6 @@ export function createAcpDeltaTranslator(
     ];
   }
 
-  /** The bb tool an unsettled call is bound to (Q31), for its permission. */
   function getInjectedToolBinding(
     threadId: string,
     toolCallId: string,

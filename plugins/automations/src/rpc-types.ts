@@ -12,9 +12,6 @@ import {
   SCHEDULE_TIMEZONE_MAX_LENGTH,
 } from "./limits.js";
 
-// The limits live in the import-free ./limits.js so the frontend can read a
-// number without bundling zod; these re-exports keep the backend's existing
-// imports and the package's `./rpc-types` export map entry unchanged.
 export {
   AUTOMATION_RUNS_LIMIT_MAX,
   AUTOMATION_SCRIPT_TIMEOUT_DEFAULT_MS,
@@ -181,6 +178,13 @@ export const automationExecutionSchema = z.discriminatedUnion("mode", [
 ]);
 export type AutomationExecution = z.infer<typeof automationExecutionSchema>;
 
+const legacyEmptyPromptAgentExecutionSchema =
+  automationAgentExecutionSchema.extend({ prompt: z.literal("") });
+export const repairableAutomationExecutionSchema = z.union([
+  automationExecutionSchema,
+  legacyEmptyPromptAgentExecutionSchema,
+]);
+
 function requireExactlyOneScriptSource(
   exec: z.infer<typeof automationExecutionSchema>,
   ctx: z.RefinementCtx,
@@ -201,12 +205,6 @@ const automationExecutionRequestSchema = automationExecutionSchema.superRefine(
   requireExactlyOneScriptSource,
 );
 
-/**
- * Execution as returned to clients. Script automations add `storedScriptPath`:
- * the absolute path of the plugin's private copy that runs execute. The copy is
- * a snapshot taken at create/update time; edits to the original `--script-file`
- * source do not reach it.
- */
 const automationResponseExecutionSchema = z.discriminatedUnion("mode", [
   automationAgentExecutionSchema,
   automationScriptExecutionSchema
@@ -235,7 +233,6 @@ const agentExecutionUpdateSchema = z
     providerId: z.string().min(1).optional(),
     model: z.string().min(1).optional(),
     reasoningLevel: reasoningLevelSchema.optional(),
-    /** Null explicitly clears a tier that the previous provider supported. */
     serviceTier: serviceTierSchema.nullable().optional(),
     permissionMode: permissionModeSchema.optional(),
     target: agentExecutionTargetSchema.optional(),
@@ -275,6 +272,37 @@ export const automationResponseSchema = z
   })
   .strict();
 export type AutomationResponse = z.infer<typeof automationResponseSchema>;
+
+export const legacyEmptyPromptAutomationResponseSchema =
+  automationResponseSchema.extend({
+    execution: legacyEmptyPromptAgentExecutionSchema,
+  });
+export type LegacyEmptyPromptAutomationResponse = z.infer<
+  typeof legacyEmptyPromptAutomationResponseSchema
+>;
+
+const invalidStoredAutomationReadProblemSchema = z
+  .object({
+    id: z.string(),
+    projectId: z.string(),
+    name: z.string(),
+    problem: z.literal("invalid-stored-data"),
+  })
+  .strict();
+export const missingAgentPromptAutomationReadProblemSchema =
+  legacyEmptyPromptAutomationResponseSchema.extend({
+    problem: z.literal("missing-agent-prompt"),
+  });
+export const automationReadProblemSchema = z.discriminatedUnion("problem", [
+  missingAgentPromptAutomationReadProblemSchema,
+  invalidStoredAutomationReadProblemSchema,
+]);
+export type AutomationReadProblem = z.infer<typeof automationReadProblemSchema>;
+export const automationReadResultSchema = z.union([
+  automationResponseSchema,
+  automationReadProblemSchema,
+]);
+export type AutomationReadResult = z.infer<typeof automationReadResultSchema>;
 
 export const automationRunResponseSchema = z
   .object({
@@ -374,7 +402,10 @@ export type ResolvedAutomationRunsInput = z.output<
   typeof automationRunsInputSchema
 >;
 
-export const automationListResponseSchema = z.array(automationResponseSchema);
+export const automationListResponseSchema = z.array(automationReadResultSchema);
+export type AutomationListResponse = z.infer<
+  typeof automationListResponseSchema
+>;
 
 export const automationRunListResponseSchema = z
   .object({
@@ -395,7 +426,7 @@ export type AutomationRunRpcResponse = z.infer<
 
 const automationsOverviewEntrySchema = z
   .object({
-    automation: automationResponseSchema,
+    automation: automationReadResultSchema,
     project: z.object({ id: z.string(), name: z.string() }).strict(),
   })
   .strict();

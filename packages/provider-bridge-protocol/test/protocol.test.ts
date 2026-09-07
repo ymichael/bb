@@ -118,8 +118,6 @@ describe("conformance item/opens-before-delta", () => {
     scope,
   });
 
-  // Every itemId-carrying streaming event, not just the two whose name ends in
-  // "/delta" — suffix matching missed four of them.
   const streamingEvents: ThreadEvent[] = [
     { type: "item/agentMessage/delta", ...delta },
     { type: "item/plan/delta", ...delta },
@@ -209,7 +207,6 @@ describe("conformance presentation/icon-namespaced-declared", () => {
     expect(undeclared.detail).toContain('"echo-provider/seal"');
     expect(undeclared.detail).toContain("declared: receipt");
 
-    // A plugin that declares nothing cannot emit any namespaced glyph.
     expect(
       checkPresentationIconsDeclared(
         [completed("item_3", "echo-provider/receipt")],
@@ -364,10 +361,6 @@ describe("streaming thread event grammar", () => {
     expect(results[2]).toMatchObject({ rule: "item/settles-once" });
   });
 
-  // An item that settles without a visible opening is non-conformant (the
-  // protocol says every item's first event is item/started), but it carries
-  // the full item payload — dropping it would lose real content, so it opens
-  // and settles in one step and only a REPEAT settlement is refused.
   it("lets an item that never opened settle once", () => {
     const results = observeAll([completed("item_1"), completed("item_1")]);
     expect(results.map((result) => result.kind)).toEqual(["ok", "violation"]);
@@ -400,7 +393,6 @@ describe("streaming thread event grammar", () => {
   it("keeps each thread's items and turns separate", () => {
     const grammar = new ThreadEventGrammar();
     expect(grammar.observe(started("item_1")).kind).toBe("ok");
-    // Same item id, different thread: nothing opened it there.
     expect(
       grammar.observe({
         type: "item/agentMessage/delta",
@@ -411,7 +403,6 @@ describe("streaming thread event grammar", () => {
         scope,
       }).kind,
     ).toBe("violation");
-    // A cleared thread forgets its open items.
     grammar.clearThread("thr_1");
     expect(
       grammar.observe({
@@ -428,7 +419,6 @@ describe("streaming thread event grammar", () => {
   it("does not advance state on a violating event", () => {
     const grammar = new ThreadEventGrammar();
     expect(grammar.observe(turnCompleted("turn_1")).kind).toBe("violation");
-    // The refused completion must not have registered as a completed turn.
     expect(grammar.observe(turnStarted("turn_1")).kind).toBe("ok");
   });
 });
@@ -455,15 +445,8 @@ describe("execution options", () => {
   });
 });
 
-/**
- * turn/settles-without-activity is driven end to end here (not as a pure
- * check) because the rule is about a bridge's behavior over time: a prompt is
- * accepted and then nothing happens. A stub bridge is the only way to pin both
- * outcomes without a real provider.
- */
 describe("conformance turn/settles-without-activity", () => {
   interface StubBridgeOptions {
-    /** Whether the zero-work prompt reaches a terminal turn/completed. */
     settlesZeroWork: boolean;
   }
 
@@ -482,9 +465,6 @@ describe("conformance turn/settles-without-activity", () => {
     const providerThreadId = "p_stub_1";
     let turnCounter = 0;
 
-    // The stub plays the bridge: it emits the thread/delta batches a real
-    // bridge would, and the kit assembles them through the runtime's own
-    // delta assembler.
     const emit = (threadId: string, deltas: unknown[]): void => {
       outbox.push({
         jsonrpc: "2.0",
@@ -502,11 +482,8 @@ describe("conformance turn/settles-without-activity", () => {
       const accepted = { kind: "input.accepted", clientRequestId };
       if (zeroWork) {
         if (!options.settlesZeroWork) {
-          // The #1431 bug: the provider finished, but no bb turn ever settles.
           return;
         }
-        // Accepted and settled with no activity in between: the boundary
-        // claims the turn the pending acceptance opened.
         emit(threadId, [
           accepted,
           { kind: "turn.boundary", status: "completed", claimIfIdle: true },
@@ -628,8 +605,6 @@ describe("conformance turn/settles-without-activity", () => {
     expect(result?.detail).toContain("never emitted a terminal turn/completed");
   });
 
-  // A bridge that has not opted in reports no result at all rather than a skip,
-  // so its report stays fully green (and its exact rule set stays stable).
   it("reports nothing when the fixture names no zero-work prompt", async () => {
     const result = await ruleStatus({
       settlesZeroWork: true,

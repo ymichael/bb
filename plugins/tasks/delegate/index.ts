@@ -288,6 +288,9 @@ type SdkThread = Awaited<ReturnType<BbPluginApi["sdk"]["threads"]["get"]>>;
 function taskThreadLiveStatus(thread: SdkThread): TaskThreadLiveStatus {
   if (thread.deletedAt != null) return "completed";
   switch (thread.status) {
+    // A pending thread has been created but has never dispatched. It is on
+    // its way to running, which is exactly what "starting" means to a task.
+    case "pending":
     case "starting":
       return "starting";
     case "active":

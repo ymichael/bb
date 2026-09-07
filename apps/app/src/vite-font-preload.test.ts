@@ -35,7 +35,9 @@ describe("resolveFontPreloadTags", () => {
 
   it("respects a non-root base", () => {
     const [tag] = resolveFontPreloadTags(bundle, "/app/");
-    expect(tag.attrs?.href).toBe("/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2");
+    expect(tag.attrs?.href).toBe(
+      "/app/assets/inter-latin-wght-normal-Dx4kXJAl.woff2",
+    );
   });
 
   it("emits nothing when the font is not in the bundle", () => {
@@ -43,7 +45,6 @@ describe("resolveFontPreloadTags", () => {
   });
 });
 
-/** The head layout Vite emits: theme script, then entry + preloads + css. */
 const builtHtml = [
   "<!doctype html><html><head>",
   '<script>localStorage.getItem("bb.theme")</script>',
@@ -70,7 +71,6 @@ describe("reorderHeadForFirstPaint", () => {
     expect(fontAt).toBeLessThan(stylesheetAt);
     expect(stylesheetAt).toBeLessThan(entryAt);
     expect(stylesheetAt).toBeLessThan(firstPreloadAt);
-    // One stylesheet moved, not duplicated, and boosted for the relay path.
     expect(html.match(/rel="stylesheet"/g)).toHaveLength(1);
     expect(html).toContain('<link fetchpriority="high" rel="stylesheet"');
   });
@@ -96,14 +96,6 @@ describe("reorderHeadForFirstPaint", () => {
   });
 });
 
-/**
- * The document Vite 8 hands post-order transforms for the real index.html:
- * the source entry tag is lifted out of <body>, and the built entry, its
- * modulepreloads and the stylesheet are appended to <head> in that order,
- * one per indented line. Built from the committed source so the test runs
- * without a build (dist/ is absent on the CI test runners) and still covers
- * the real pre-paint theme script and Vite's whitespace around the tags.
- */
 function viteEmittedIndexHtml(): string {
   const source = readFileSync(
     resolve(import.meta.dirname, "../index.html"),
@@ -155,7 +147,6 @@ describe("reorderHeadForFirstPaint on the document Vite emits from index.html", 
       expect(stylesheetAt).toBeLessThan(modulepreloadAt);
     }
     expect(Math.max(...modulepreloadsAt)).toBeLessThan(headEndAt);
-    // Moved, not duplicated: Vite's indented stylesheet line is consumed whole.
     expect(html.match(/rel="stylesheet"/g)).toHaveLength(1);
     expect(html.match(/<script type="module"/g)).toHaveLength(1);
     expect(html).toMatch(/boot-vendor-def\.js">\n  <\/head>/);
@@ -164,14 +155,6 @@ describe("reorderHeadForFirstPaint on the document Vite emits from index.html", 
 
 const distIndexHtmlPath = resolve(import.meta.dirname, "../dist/index.html");
 
-/**
- * The built document, not a fixture: the tunnel serializes responses FIFO on
- * one WebSocket, so discovery order in dist/index.html IS delivery order on
- * the relayed mobile path. The render-blocking stylesheet and the font
- * preload must be discovered before the modulepreload block, and the
- * pre-paint theme script must still run before the stylesheet applies.
- * Skipped when dist/ is absent (test runs without a build).
- */
 describe.skipIf(!existsSync(distIndexHtmlPath))(
   "emitted dist/index.html head order",
   () => {
@@ -180,8 +163,6 @@ describe.skipIf(!existsSync(distIndexHtmlPath))(
       const stylesheetAt = html.search(/<link[^>]*rel="stylesheet"/);
       const fontPreloadAt = html.search(/<link[^>]*as="font"/);
       const firstModulepreloadAt = html.search(/<link rel="modulepreload"/);
-      // The head inline script that adds the `dark` class pre-paint; it must
-      // finish before the stylesheet applies or cold loads flash light mode.
       const themeScriptAt = html.indexOf("bb.theme");
 
       expect(stylesheetAt).toBeGreaterThan(-1);

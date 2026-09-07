@@ -1,8 +1,16 @@
-import { getThread, listEvents } from "@bb/db";
+import {
+  getThread,
+  isThreadQueueAutoSendPaused,
+  listEvents,
+  listQueuedThreadMessages,
+} from "@bb/db";
 import { turnScope } from "@bb/domain";
+import { groupHostDaemonEvents } from "@bb/host-daemon-contract";
 import { describe, expect, it } from "vitest";
 import {
   listQueuedCommands,
+  listQueuedThreadCommands,
+  internalAuthHeaders,
   reportQueuedCommandError,
   reportQueuedCommandSuccess,
   waitForQueuedCommand,
@@ -17,6 +25,7 @@ import {
   seedThreadFixture,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
+import { runQueuedMessageDispatch } from "../../src/services/threads/queued-message-dispatch.js";
 import { stopThreadForCurrentState } from "../../src/services/threads/thread-lifecycle.js";
 
 describe("thread runtime stop", () => {
@@ -34,8 +43,6 @@ describe("thread runtime stop", () => {
         ({ command }) =>
           command.type === "thread.stop" && command.threadId === thread.id,
       );
-      // A release tells the daemon the thread is already idle, so it unloads
-      // the runtime without waiting for an active turn that cannot arrive.
       expect(stop.command).toMatchObject({ intent: "release" });
 
       await reportQueuedCommandSuccess(harness, stop, {
@@ -46,9 +53,6 @@ describe("thread runtime stop", () => {
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({ ok: true });
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");
-      // Nobody interrupted this thread. A release that appended an
-      // interruption would put a false event in the user's timeline and would
-      // interrupt the thread's pending interactions.
       expect(
         listEvents(harness.db, { threadId: thread.id }).filter(
           (event) => event.type === "system/thread/interrupted",
@@ -145,14 +149,148 @@ describe("thread runtime stop", () => {
     });
   });
 
+  it("keeps a startup-parked message paused after a manual stop until explicitly sent", async () => {
+    await withTestHarness(async (harness) => {
+      const { session, thread } = seedThreadFixture(harness, {
+        thread: { status: "active", visibility: "hidden" },
+      });
+      const queueResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Park while the turn starts" }],
+            mode: "steer",
+            model: "gpt-5",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+          }),
+        },
+      );
+      expect(queueResponse.status).toBe(200);
+      await expect(readJson(queueResponse)).resolves.toMatchObject({
+        delivery: "queued",
+        queuedMessage: { waitingOn: { kind: "turn-starting" } },
+      });
+      expect(listQueuedThreadMessages(harness.db, thread.id)).toHaveLength(1);
+
+      const stopResponsePromise = harness.app.request(
+        `/api/v1/threads/${thread.id}/stop`,
+        { method: "POST" },
+      );
+      const stop = await waitForQueuedCommand(
+        harness,
+        ({ command }) =>
+          command.type === "thread.stop" && command.threadId === thread.id,
+      );
+      await reportQueuedCommandSuccess(harness, stop, {
+        providerCheckpointId: null,
+      });
+      expect((await stopResponsePromise).status).toBe(200);
+
+      const queuedMessage = listQueuedThreadMessages(harness.db, thread.id)[0]!;
+
+      const staleStart = await harness.app.request("/internal/session/events", {
+        method: "POST",
+        headers: internalAuthHeaders(harness),
+        body: JSON.stringify({
+          sessionId: session.id,
+          eventGroups: groupHostDaemonEvents([
+            {
+              threadId: thread.id,
+              event: {
+                type: "turn/started",
+                threadId: thread.id,
+                providerThreadId: "provider-stopped-runtime",
+                scope: turnScope("turn-stopped-runtime"),
+              },
+            },
+          ]),
+        }),
+      });
+      expect(staleStart.status).toBe(200);
+      expect(getThread(harness.db, thread.id)?.status).toBe("idle");
+      expect(isThreadQueueAutoSendPaused(harness.db, thread.id)).toBe(true);
+
+      const laterQueueResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            input: [{ type: "text", text: "Queue after the stop" }],
+            model: "gpt-5",
+            permissionMode: "full",
+            reasoningLevel: "medium",
+            serviceTier: "default",
+          }),
+        },
+      );
+      expect(
+        laterQueueResponse.status,
+        await laterQueueResponse.clone().text(),
+      ).toBe(201);
+      await runQueuedMessageDispatch(harness.deps, {
+        kind: "thread-ready",
+        threadId: thread.id,
+      });
+      const pausedMessages = listQueuedThreadMessages(harness.db, thread.id);
+      expect(pausedMessages).toHaveLength(2);
+      expect(pausedMessages[0]?.id).toBe(queuedMessage.id);
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", thread.id),
+      ).toEqual([]);
+
+      const sendResponse = await harness.app.request(
+        `/api/v1/threads/${thread.id}/queued-messages/${queuedMessage.id}/send`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ mode: "auto" }),
+        },
+      );
+      expect(sendResponse.status).toBe(200);
+      expect(
+        listQueuedThreadMessages(harness.db, thread.id).map((row) => row.id),
+      ).toEqual([pausedMessages[1]!.id]);
+      expect(getThread(harness.db, thread.id)?.status).toBe("active");
+      expect(
+        listQueuedThreadCommands(harness, "turn.submit", thread.id),
+      ).toHaveLength(1);
+
+      const acceptedStart = await harness.app.request(
+        "/internal/session/events",
+        {
+          method: "POST",
+          headers: internalAuthHeaders(harness),
+          body: JSON.stringify({
+            sessionId: session.id,
+            eventGroups: groupHostDaemonEvents([
+              {
+                threadId: thread.id,
+                event: {
+                  type: "turn/started",
+                  threadId: thread.id,
+                  providerThreadId: "provider-stopped-runtime",
+                  scope: turnScope("turn-deliberate-resume"),
+                },
+              },
+            ]),
+          }),
+        },
+      );
+      expect(acceptedStart.status).toBe(200);
+      expect(isThreadQueueAutoSendPaused(harness.db, thread.id)).toBe(false);
+    });
+  });
+
   it("still releases the runtime when the turn completes during the stop", async () => {
     await withTestHarness(async (harness) => {
       const { environment, thread } = seedThreadFixture(harness, {
         thread: { status: "idle", visibility: "hidden" },
       });
-      // The caller read the thread while it was active; the turn completed
-      // before the stop transaction ran, so `stop.requested` is a no-op on the
-      // settled row. The runtime is still loaded and must still be released.
       const stalePromise = stopThreadForCurrentState(
         harness.deps,
         { ...thread, status: "active" },
@@ -199,14 +337,11 @@ describe("thread runtime stop", () => {
         }),
       );
 
-      // The second caller must not report a finished release while the first
-      // release is still in flight, and it must not send a duplicate RPC.
       const settledEarly = await Promise.race([
         second.then(() => "settled"),
         new Promise((resolve) => setTimeout(() => resolve("pending"), 50)),
       ]);
       expect(settledEarly).toBe("pending");
-      // Only the first release is in flight. A duplicate would queue a second.
       expect(listQueuedCommands(harness, "thread.stop")).toHaveLength(1);
 
       await reportQueuedCommandSuccess(harness, stop, {
@@ -238,8 +373,6 @@ describe("thread runtime stop", () => {
         errorMessage: "Test release failure",
       });
 
-      // A release keeps no durable record, so a silent success would leave the
-      // caller believing a still-loaded runtime is gone.
       expect((await responsePromise).status).toBeGreaterThanOrEqual(500);
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");
     });
@@ -267,8 +400,6 @@ describe("thread runtime stop", () => {
         { method: "POST" },
       );
 
-      // A disconnected host holds no runtime to release, so the release
-      // already reached its goal.
       expect(response.status).toBe(200);
       await expect(readJson(response)).resolves.toEqual({ ok: true });
       expect(getThread(harness.db, thread.id)?.status).toBe("idle");

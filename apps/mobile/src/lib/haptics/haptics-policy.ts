@@ -1,23 +1,10 @@
-/**
- * Haptics policy, pure (vitest under node). The RN adapter in `haptics.ts`
- * turns a {@link HapticCall} into the expo-haptics call; screens ask for a
- * semantic {@link HapticKind} and never touch expo-haptics directly.
- */
-
 export type HapticKind =
-  /** A picker row / segmented choice changed. */
   | "selection"
-  /** Light tap: secondary buttons, toggles. */
   | "impact-light"
-  /** Medium tap: primary actions (send, create). */
   | "impact-medium"
-  /** Heavy tap: long-press menus opening. */
   | "impact-heavy"
-  /** A request the user made succeeded (approve, save, install). */
   | "success"
-  /** A destructive confirmation is being shown / applied. */
   | "warning"
-  /** A request failed. */
   | "error";
 
 export type HapticCall =
@@ -25,11 +12,9 @@ export type HapticCall =
   | { method: "impact"; style: "light" | "medium" | "heavy" }
   | { method: "notification"; type: "success" | "warning" | "error" };
 
-/** Key of the client-local toggle in the `bb.preferences` store. */
 export const HAPTICS_ENABLED_STORAGE_KEY = "bb.haptics.enabled";
 const HAPTICS_ENABLED_DEFAULT = true;
 
-/** Parses the stored toggle; anything but the literal "false" means enabled. */
 export function parseHapticsEnabled(stored: string | undefined): boolean {
   if (stored === undefined) return HAPTICS_ENABLED_DEFAULT;
   return stored !== "false";
@@ -39,11 +24,6 @@ function serializeHapticsEnabled(enabled: boolean): string {
   return enabled ? "true" : "false";
 }
 
-/**
- * The expo-haptics call for a semantic kind, or null when haptics are off.
- * The mapping is the only place that decides which physical feedback a
- * semantic event gets.
- */
 export function resolveHapticCall(
   enabled: boolean,
   kind: HapticKind,
@@ -67,7 +47,6 @@ export function resolveHapticCall(
   }
 }
 
-/** The Button `haptic` prop vocabulary mapped onto the semantic kinds. */
 export type ButtonHaptic = "light" | "medium" | "heavy" | "selection";
 
 export function hapticKindForButton(haptic: ButtonHaptic | true): HapticKind {
@@ -95,7 +74,6 @@ export interface HapticsPreferenceStore {
   subscribe(listener: () => void): () => void;
 }
 
-/** Tiny external store over a string storage (MMKV in the app, a Map in tests). */
 export function createHapticsPreferenceStore(
   storage: HapticsPreferenceStorage,
 ): HapticsPreferenceStore {

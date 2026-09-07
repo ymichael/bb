@@ -9,13 +9,6 @@ import {
   applyCachedAppThemeCss,
 } from "./lib/themes";
 
-/**
- * The inline scripts in index.html run before the app stylesheet applies and
- * long before main.tsx, so they must read the same localStorage keys and
- * shapes that useTheme.ts and lib/themes write. Nothing else ties the two
- * together: a renamed key would silently bring back the light/default-palette
- * flash on every cold load.
- */
 const indexHtml = readFileSync(
   resolve(import.meta.dirname, "../index.html"),
   "utf8",
@@ -31,8 +24,6 @@ function extractInlineScripts(html: string): string[] {
 }
 
 function installDocument(html: string): void {
-  // jsdom does not execute scripts assigned through innerHTML, which is what
-  // we want: the DOM comes from the file, the scripts run under our control.
   const withoutScripts = html.replace(/<script[\s\S]*?<\/script>/g, "");
   const inner = withoutScripts
     .replace(/^[\s\S]*?<html[^>]*>/, "")
@@ -114,8 +105,6 @@ describe("index.html pre-paint script", () => {
 
   it("injects the palette CSS cached by applyAppThemeCss as the last head style", () => {
     const css = ":root { --canvas: oklch(0.3 0.02 250); }";
-    // Write the cache exactly the way the app does at runtime, then discard
-    // the element it created so the pre-paint script starts from a bare head.
     applyAppThemeCss(css);
     document.getElementById("bb-app-theme")?.remove();
     expect(localStorage.getItem(APP_THEME_CSS_STORAGE_KEY)).toBe(css);
@@ -138,8 +127,6 @@ describe("index.html pre-paint script", () => {
     const css = ".dark { --canvas: oklch(0.2 0.02 250); }";
     localStorage.setItem(APP_THEME_CSS_STORAGE_KEY, css);
     runInlineScripts();
-    // Simulate the dev server injecting the app stylesheet after the
-    // pre-paint element ran.
     const devStyle = document.createElement("style");
     devStyle.setAttribute("data-vite-dev-id", "app.css");
     document.head.appendChild(devStyle);

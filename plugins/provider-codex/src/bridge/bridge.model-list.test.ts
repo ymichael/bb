@@ -41,8 +41,6 @@ it("reuses one initialized app-server across model catalog requests", async () =
 
   expect(first.error).toBeUndefined();
   expect(second.error).toBeUndefined();
-  // The fixture puts a random per-process identity in its model id. Equal
-  // catalogs therefore prove both requests reached the same child process.
   expect(second.result).toEqual(first.result);
 });
 

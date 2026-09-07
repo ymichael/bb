@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
 import {
   buildThreadTitleMentionResources,
   EMPTY_TITLE_MENTION_RESOURCES,
@@ -46,9 +46,6 @@ describe("buildThreadTitleMentionResources", () => {
     );
     expect(first.threadById.get("thr_app")?.title).toBe("Ship it");
 
-    // A sidebar refetch after a turn boundary: fresh payload, same titles; only
-    // a status/updatedAt field moved. Every ThreadRow reads this context, so
-    // the object (and each map inside it) must keep identity.
     const second = buildThreadTitleMentionResources(
       navigation({ updatedAt: 2 }),
       first,
@@ -76,7 +73,6 @@ describe("buildThreadTitleMentionResources", () => {
     );
     expect(retitled.threadById).not.toBe(renamedProject.threadById);
     expect(retitled.threadById.get("thr_app")?.title).toBe("Shipped");
-    // The untouched personal thread keeps its entry object.
     expect(retitled.threadById.get("thr_me")).toBe(
       renamedProject.threadById.get("thr_me"),
     );

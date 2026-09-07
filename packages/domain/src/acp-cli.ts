@@ -21,10 +21,6 @@ const uniqueProviderSkillRootPathsSchema = z
     }
   });
 
-/**
- * Provider-native skill roots: relative to the target host's home (`user`)
- * or to the workspace (`project`).
- */
 export const providerNativeSkillRootsSchema = z
   .object({
     user: uniqueProviderSkillRootPathsSchema.default([]),

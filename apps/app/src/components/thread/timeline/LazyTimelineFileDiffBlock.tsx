@@ -2,13 +2,6 @@ import { lazy, Suspense } from "react";
 import { Skeleton } from "@bb/shared-ui/skeleton";
 import type { TimelineFileDiffBlockProps } from "./TimelineFileDiffBlock.js";
 
-/**
- * `TimelineFileDiffBlock` parses patches with `@pierre/diffs` and renders
- * them with its FileDiff (Shiki behind it). Loading that chunk when the first
- * file-change row expands, instead of with the thread route, keeps the diff
- * engine out of the SplitWorkspaceRoute closure that every thread open pays
- * for. Rows that never show a diff never fetch it.
- */
 const TimelineFileDiffBlockChunk = lazy(() =>
   import("./TimelineFileDiffBlock.js").then(({ TimelineFileDiffBlock }) => ({
     default: TimelineFileDiffBlock,

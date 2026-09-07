@@ -29,12 +29,6 @@ export const bbDesktopVersionFeedSchema = z.object({
 });
 export type BbDesktopVersionFeed = z.infer<typeof bbDesktopVersionFeedSchema>;
 
-/**
- * One feed file per platform lives under each release tag, so the release job
- * can publish macOS and Linux assets into the same moving release. macOS keeps
- * the original unsuffixed name: shipped macOS builds already request it, and
- * renaming it would strand every installed app on its current version.
- */
 const BB_DESKTOP_VERSION_FEED_FILE_NAMES = {
   linux: "desktop-version-linux.json",
   macos: "desktop-version.json",

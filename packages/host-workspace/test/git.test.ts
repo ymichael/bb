@@ -93,12 +93,6 @@ async function pushRemoteMainCommit(remotePath: string) {
   await runGit(["push", "origin", "main"], { cwd: clonePath });
 }
 
-/**
- * The "bare clone + sibling worktrees" layout: `<root>/.bare` holds the bare
- * clone, `<root>/.git` is a gitdir file pointing at it, and each branch lives
- * in a sibling directory created with `git worktree add`. The root is a git
- * repository but not a work tree.
- */
 async function initBareWorktreeLayout() {
   const origin = await initReadGitBlobRepo();
   await runGit(["branch", "feature-a"], { cwd: origin });
@@ -643,9 +637,7 @@ describe("parseNameStatusEntries", () => {
   });
 
   it("skips truncated trailing entries without throwing", () => {
-    // A status token with no following path token.
     expect(parseNameStatusEntries("M\0")).toEqual([]);
-    // A rename with only the old path, no new path.
     expect(parseNameStatusEntries("R100\0src/old.ts\0")).toEqual([]);
   });
 });

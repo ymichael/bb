@@ -53,12 +53,6 @@ const maximalThreadMetadata: ThreadChangeMetadata = {
   },
 };
 
-/**
- * One message per entity populating every declared field with every declared
- * change kind. The "fixtures stay maximal" test below forces this list to be
- * updated whenever a strict schema grows a field, so the lenient round-trip
- * can never silently skip a new field.
- */
 const maximalChangedMessages: ChangedMessage[] = [
   {
     type: "changed",
@@ -92,12 +86,6 @@ const maximalChangedMessages: ChangedMessage[] = [
   },
 ];
 
-/**
- * Drift guard between the strict outgoing schemas and the hand-maintained
- * lenient inbound twins: a field added to a strict schema but not its lenient
- * counterpart would be silently stripped from every inbound message (zod
- * objects strip unknown keys by default), with no compile or runtime error.
- */
 describe("lenient changed-message schema parity", () => {
   it("declares the same entities and field sets as the strict schemas", () => {
     const strictOptions = strictOptionsByEntity();
@@ -120,17 +108,12 @@ describe("lenient changed-message schema parity", () => {
   it.each(maximalChangedMessages)(
     "lenient parse preserves a maximal strict $entity message",
     (message) => {
-      // The fixture is valid strict output...
       expect(changedMessageSchema.parse(message)).toEqual(message);
-      // ...and the lenient parse must not strip or rewrite any of it.
       expect(changedMessageLenientSchema.parse(message)).toEqual(message);
     },
   );
 
   it("drops a status change a stale client cannot parse but keeps the message", () => {
-    // A newer server may ship a runtime display status this client does not
-    // know. The client must still learn that the status changed (and refetch)
-    // rather than lose the whole notification.
     const parsed = changedMessageLenientSchema.parse({
       type: "changed",
       entity: "thread",

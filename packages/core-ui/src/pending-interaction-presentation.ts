@@ -41,7 +41,6 @@ export function formatPendingInteractionSummary(
   }
 
   if (!isApprovalPendingInteractionPayload(interaction.payload)) {
-    // A plugin form, whoever raised it: the title names the ask.
     return interaction.payload.title;
   }
 

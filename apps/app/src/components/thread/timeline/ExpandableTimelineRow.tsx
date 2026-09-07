@@ -33,29 +33,16 @@ import {
 interface ExpandableTimelineRowProps {
   autoExpanded?: boolean;
   forceExpanded?: boolean;
-  /**
-   * Opens terminal frontier rows when they arrive, then latches that visible
-   * state until the user toggles the row or the row unmounts.
-   */
   terminalAutoExpanded?: boolean;
   renderBody: () => ReactNode;
   title: TimelineTitle;
-  /** Replaces the generic timeline-title renderer for a specialized header. */
   titleContent?: ReactNode;
   collapsedPreview?: ReactNode;
   expandable?: boolean;
   horizontalPadding?: TimelineRowHorizontalPadding;
   leadingIcon?: IconName;
-  /**
-   * A plugin-declared icon resolved from the inventory, drawn as a
-   * currentColor mask in place of `leadingIcon`. Resolved by the caller so
-   * an icon that is not found falls back to the glyph before any mask URL is
-   * emitted (a mask that 404s renders nothing).
-   */
   leadingIconUrl?: string;
-  /** Inline style for the leading icon (a bridge's per-theme tint). */
   leadingIconStyle?: CSSProperties;
-  /** Extra classes on the header summary line only (not the expanded body). */
   summaryClassName?: string;
   onTitleAction?: TimelineTitleActionResolver;
   resolveSegmentLinkHref?: TimelineTitleLinkResolver;
@@ -201,9 +188,7 @@ function ExpandableTimelineRowComponent({
               expandable ? () => setCollapsedPreviewActive(true) : undefined
             }
             onBlur={expandable ? handleCollapsedPreviewBlur : undefined}
-            onKeyDown={
-              expandable ? handleCollapsedPreviewKeyDown : undefined
-            }
+            onKeyDown={expandable ? handleCollapsedPreviewKeyDown : undefined}
           >
             {collapsedPreview}
           </div>

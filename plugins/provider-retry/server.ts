@@ -1,14 +1,10 @@
 import type { BbPluginApi } from "@get-bb/plugin-sdk";
 import { registerProviderRetryCli } from "./src/cli.js";
-import { providerRetryRpcContract } from "./src/contract.js";
-import {
-  DEFAULT_MAXIMUM_WAIT_MS,
-  ProviderRetryService,
-} from "./src/service.js";
+import { DEFAULT_MAXIMUM_WAIT_MS, decideRetry } from "./src/retry-policy.js";
 
 const MAXIMUM_WAIT_OPTIONS = ["6 hours", "24 hours", "No limit"] as const;
 
-function maximumWaitMs(value: string | boolean | undefined): number | null {
+function maximumWaitMs(value: string): number | null {
   switch (value) {
     case "6 hours":
       return DEFAULT_MAXIMUM_WAIT_MS;
@@ -23,96 +19,48 @@ function maximumWaitMs(value: string | boolean | undefined): number | null {
   }
 }
 
-function waitForAbort(signal: AbortSignal): Promise<void> {
-  if (signal.aborted) return Promise.resolve();
-  return new Promise((resolve) => {
-    signal.addEventListener("abort", () => resolve(), { once: true });
-  });
-}
-
-function logFailure(bb: BbPluginApi, operation: string, error: unknown): void {
-  bb.log.warn(
-    `${operation}: ${error instanceof Error ? error.message : String(error)}`,
-  );
-}
-
 export default async function plugin(bb: BbPluginApi) {
   const settings = bb.settings.define({
     maximumWait: {
       type: "select",
       label: "Maximum automatic wait",
       description:
-        "Do not schedule a retry when the reported reset is farther away than this.",
+        "Do not schedule a subscription-limit retry when its reset is farther away than this.",
       options: [...MAXIMUM_WAIT_OPTIONS],
       default: "6 hours",
     },
   });
   const initialSettings = await settings.get();
-  const service = new ProviderRetryService(
-    bb,
-    undefined,
-    maximumWaitMs(initialSettings.maximumWait),
-  );
+  let maximumWait = maximumWaitMs(initialSettings.maximumWait);
   settings.onChange((next) => {
-    service.setMaximumWaitMs(maximumWaitMs(next.maximumWait));
+    maximumWait = maximumWaitMs(next.maximumWait);
   });
-  bb.onDispose(() => service.dispose());
 
-  bb.rpc.register(providerRetryRpcContract, {
-    async providerRetryCancel({ threadId }) {
-      return { cancelled: await service.cancel(threadId) };
-    },
-    providerRetryStatus({ threadId }) {
-      return { view: service.status(threadId) };
-    },
-  });
-  registerProviderRetryCli(bb, service);
-
-  async function reconcile(
-    threadId: string,
-    trackedOnly = false,
-  ): Promise<void> {
-    try {
-      await (trackedOnly
-        ? service.reconcileTracked(threadId)
-        : service.reconcile(threadId));
-    } catch (error) {
-      logFailure(bb, `Could not inspect provider retry for ${threadId}`, error);
+  /**
+   * The retry decision, which is the whole plugin.
+   *
+   * Everything it needs — which turn failed, what the provider said about its
+   * windows, how many times this turn has been retried — arrives on the event.
+   * What is left is policy, and then one call: core owns the queue, the
+   * schedule and the re-attempt, so asking for the retry IS scheduling it.
+   */
+  bb.events.on("turn.failed", async (event) => {
+    const decision = decideRetry({
+      failure: event,
+      maximumWaitMs: maximumWait,
+      now: Date.now(),
+      random: Math.random(),
+    });
+    if (decision.kind === "decline") {
+      return;
     }
-  }
+    await bb.sdk.threads.retry({
+      threadId: event.threadId,
+      turnRequestId: event.requestId,
+      sendAt: decision.sendAt,
+      reason: decision.reason,
+    });
+  });
 
-  bb.events.on("thread.failed", async ({ thread }) => {
-    await reconcile(thread.id);
-  });
-  bb.events.on("thread.active", async ({ thread }) => {
-    await reconcile(thread.id, true);
-  });
-  bb.events.on("thread.idle", async ({ thread }) => {
-    await reconcile(thread.id, true);
-  });
-  bb.events.on("thread.archived", ({ thread }) => service.supersede(thread.id));
-  bb.events.on("thread.deleted", ({ thread }) =>
-    service.deleteThread(thread.id),
-  );
-
-  bb.background.service("provider-retry-scheduler", {
-    async start(signal) {
-      const unsubscribeHost = bb.sdk.subscribe({
-        event: "host:changed",
-        callback: (event) => {
-          if (
-            event.id !== undefined &&
-            event.changes.includes("host-connected")
-          ) {
-            service.hostChanged(event.id);
-          }
-        },
-      });
-      try {
-        await waitForAbort(signal);
-      } finally {
-        unsubscribeHost();
-      }
-    },
-  });
+  registerProviderRetryCli(bb);
 }

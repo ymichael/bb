@@ -16,17 +16,8 @@ const SKILL_ROOT_LABELS: Record<
   plugin: "Plugin",
 };
 
-/**
- * Provider scopes are labelled from the skill's own `provider` field rather
- * than from the scope, which used to spell the provider out (`claude-user`,
- * `codex-project`, …) and therefore could not name a plugin provider at all.
- */
 export function skillScopeLabel(
   skill: Pick<SkillSummary, "scope" | "provider">,
-  /**
-   * The provider's display name from the server roster. Without it an agent
-   * labels itself with its raw provider id (core holds no provider names).
-   */
   providerDisplayName?: string,
 ): string {
   if (skill.scope === "provider-user" || skill.scope === "provider-project") {

@@ -1,3 +1,4 @@
+import { createUpdatedPackageContent } from "./lib/package-version.mjs";
 import { randomUUID } from "node:crypto";
 import { readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -57,22 +58,6 @@ async function readPackageTarget({ fileSystem, repoRoot, target }) {
     packageJson,
     target,
   };
-}
-
-function detectPackageJsonIndent(content) {
-  const match = /\n([ \t]+)"/u.exec(content);
-
-  return match === null ? 2 : match[1];
-}
-
-function createUpdatedPackageContent({ content, packageJson, newVersion }) {
-  const trailingNewline = content.endsWith("\n") ? "\n" : "";
-
-  return `${JSON.stringify(
-    { ...packageJson, version: newVersion },
-    null,
-    detectPackageJsonIndent(content),
-  )}${trailingNewline}`;
 }
 
 function findMaxCurrentVersion(packageReads) {

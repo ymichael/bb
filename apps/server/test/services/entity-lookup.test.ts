@@ -12,6 +12,7 @@ import {
   type DbConnection,
 } from "@bb/db";
 import type { Host, Project } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { ApiError } from "../../src/errors.js";
 import { NotificationHub } from "../../src/ws/hub.js";
 import {
@@ -48,17 +49,16 @@ function setup(): SetupResult {
       path: "/tmp/entity-lookup",
     },
   });
-  const host: Host = {
+  const host = makeHost({
     id: hostRow.id,
     name: hostRow.name,
     type: hostRow.type,
     status: "disconnected",
     maxPermissionMode: hostRow.maxPermissionMode,
     lastSeenAt: hostRow.lastSeenAt,
-    lastRejectedProtocolVersion: null,
     createdAt: hostRow.createdAt,
     updatedAt: hostRow.updatedAt,
-  };
+  });
   return { db, host, hub, project };
 }
 

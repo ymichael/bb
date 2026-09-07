@@ -224,9 +224,7 @@ async function runWithTimeout(args: TimeoutFetchArgs): Promise<Response> {
   }
 }
 
-function codexRequestTimeoutError(
-  timeoutMs: number,
-): AiServiceFailure {
+function codexRequestTimeoutError(timeoutMs: number): AiServiceFailure {
   return new AiServiceFailure(
     "timeout",
     "codex_request_timeout",
@@ -272,9 +270,7 @@ async function cancelReaderBestEffort(
 ): Promise<void> {
   try {
     await reader.cancel();
-  } catch {
-    // The caller is already handling the primary read failure.
-  }
+  } catch {}
 }
 
 async function readLimitedResponseText(
@@ -343,10 +339,7 @@ async function readErrorText(
   return text.length > 400 ? `${text.slice(0, 400)}...` : text;
 }
 
-type FailureCodes = [
-  generic: ExperimentalAiServiceErrorCode,
-  detail: string,
-];
+type FailureCodes = [generic: ExperimentalAiServiceErrorCode, detail: string];
 
 function codexRequestErrorCode(status: number): FailureCodes {
   if (status === 401) {
@@ -364,7 +357,9 @@ function codexRequestErrorCode(status: number): FailureCodes {
 const CODEX_SERVICE_UNAVAILABLE_PATTERN =
   /\b(?:overloaded|temporarily unavailable|try again later)\b/iu;
 
-function codexStreamFailureErrorCode(failure: CodexStreamFailure): FailureCodes {
+function codexStreamFailureErrorCode(
+  failure: CodexStreamFailure,
+): FailureCodes {
   if (failure.code === "server_error") {
     return ["service_unavailable", "codex_service_unavailable"];
   }
@@ -444,9 +439,6 @@ async function createCodexHttpError({
 }: CodexHttpErrorArgs): Promise<AiServiceFailure> {
   const prefix = `Codex ${operation} request failed with HTTP ${response.status}`;
   if (isCloudflareChallenge(response)) {
-    // Cloudflare bot management decides per network and per request whether
-    // to challenge; a Node client cannot solve the JavaScript challenge, so
-    // the failure is transient and the HTML page is not a useful message.
     return new AiServiceFailure(
       "service_unavailable",
       "codex_service_unavailable",
@@ -814,11 +806,6 @@ async function fetchResponses(args: ResponsesFetchArgs): Promise<Response> {
       });
 }
 
-/**
- * Structured helper inference through the codex CLI's own auth on this host
- * (ChatGPT tokens, or an API key). Throws `AiServiceFailure`; the host entry
- * turns that into the contract's `{ ok: false }`.
- */
 export async function completeCodexInference(
   command: InferenceCompleteCommand,
 ): Promise<Extract<ExperimentalAiInferenceCompleteOutput, { ok: true }>> {

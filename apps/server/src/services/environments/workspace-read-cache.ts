@@ -1,40 +1,6 @@
 import type { ChangedMessage, EnvironmentChangeKind } from "@bb/domain";
 import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 
-/**
- * Per-environment in-flight dedupe plus a short TTL cache for read-only
- * workspace probes (`workspace.status`, `workspace.pull_request`).
- *
- * Every probe spawns git/gh subprocesses on the host. Several clients (a
- * thread view, sidebar rows, a phone that just came back to the foreground)
- * ask for the same environment within the same second, so identical reads
- * that overlap share one daemon RPC and repeated reads inside the TTL are
- * served from memory.
- *
- * Freshness is driven by two sources. Server-side workspace mutations
- * (the environment action route, host file writes) call
- * `invalidateEnvironment` / `invalidateHost` before they respond, because
- * the client refetches on mutation success and the daemon's watcher event
- * for that write arrives asynchronously, often after the response. The
- * environment change events the web client already refetches on
- * (`work-status-changed`, `git-refs-changed`, ...) cover writes the server
- * does not perform itself (agent edits, the user's shell). Either source
- * drops the cached value AND detaches any in-flight probe for that
- * environment, because a probe that started before the change may have
- * observed the pre-change tree. Later readers then start a fresh probe. The
- * TTL only bounds staleness for the case where nobody is subscribed to the
- * environment, so no daemon events arrive.
- */
-
-/**
- * Environment change kinds that leave workspace reads untouched.
- *
- * `metadata-changed` is record-only (name, recorded branch, ...). The status
- * probe itself records the observed branch, so treating it as a tree change
- * would detach every probe that follows a branch switch. A workspace move
- * changes the read key (the workspace context is part of it), so it never
- * reads a probe of the previous checkout.
- */
 const IGNORED_ENVIRONMENT_CHANGES: ReadonlySet<EnvironmentChangeKind> = new Set(
   ["metadata-changed", "thread-storage-changed"],
 );
@@ -53,7 +19,6 @@ interface InFlightEntry<TValue> {
 interface EnvironmentReadCacheReadArgs<TValue> {
   environmentId: string;
   hostId: string;
-  /** Distinguishes reads of the same environment with different inputs. */
   key: string;
   load: () => Promise<TValue>;
 }
@@ -94,9 +59,6 @@ export class EnvironmentReadCache<
 
     const promise = args.load().then(
       (value) => {
-        // Only publish the value when this probe is still the current one.
-        // An invalidation that arrived mid-flight detached it, and the value
-        // may describe the pre-change tree.
         if (this.inFlight.get(cacheKey)?.promise === promise) {
           this.inFlight.delete(cacheKey);
           this.entries.set(cacheKey, {
@@ -148,18 +110,7 @@ export class EnvironmentReadCache<
   }
 }
 
-/**
- * How long a `workspace.status` result may be reused without a daemon
- * event. Long enough to fold the burst of reads a thread open or a phone
- * foreground produces; short enough that an unsubscribed environment (no
- * events) never shows a stale tree for long.
- */
 const WORKSPACE_STATUS_CACHE_TTL_MS = 3_000;
-/**
- * How long a `workspace.pull_request` result may be reused without a daemon
- * event. Remote check runs change without any local event, so this bounds
- * how stale a check status can be between polls.
- */
 const WORKSPACE_PULL_REQUEST_CACHE_TTL_MS = 10_000;
 
 interface WorkspaceReadCachesDeps {
@@ -196,20 +147,12 @@ export class WorkspaceReadCaches {
     return [this.status, this.pullRequest];
   }
 
-  /**
-   * Drop every cached and in-flight read of one environment. Call this after
-   * any server-side workspace mutation for the environment (commit, squash
-   * merge, pull request action, ...) whether it succeeded or failed midway:
-   * the tree may have changed and the daemon's watcher event, if any, only
-   * arrives later. Over-invalidating costs one extra probe.
-   */
   invalidateEnvironment(environmentId: string): void {
     for (const cache of this.caches) {
       cache.invalidateEnvironment(environmentId);
     }
   }
 
-  /** Drop every cached and in-flight read of every environment on a host. */
   invalidateHost(hostId: string): void {
     for (const cache of this.caches) {
       cache.invalidateHost(hostId);
@@ -238,9 +181,6 @@ export class WorkspaceReadCaches {
       return;
     }
     if (message.entity === "host") {
-      // A daemon that reconnects may be looking at a different tree than
-      // the one it reported before it dropped; the client refetches on
-      // host changes too, so serve those refetches a fresh probe.
       if (message.id === undefined) {
         this.invalidateAll();
       } else {

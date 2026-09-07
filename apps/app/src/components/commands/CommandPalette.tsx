@@ -33,9 +33,18 @@ import {
   recordPaletteRecent,
 } from "@/lib/command-palette/palette-recents";
 import { buildPluginPaletteActions } from "@/lib/command-palette/palette-plugin-actions";
-import { getPluginSlotSnapshot } from "@/lib/plugin-slots";
+import { buildSettingsPaletteActions } from "@/lib/command-palette/palette-settings-actions";
+import { buildPluginPagePaletteActions } from "@/lib/command-palette/palette-plugin-page-actions";
+import { usePluginSlots } from "@/lib/plugin-slots";
 import { getActiveThreadPanelOpener } from "@/components/plugin/plugin-thread-panel-navigation";
 import { getThreadRoutePath } from "@/lib/route-paths";
+import { pluginListQueryOptions } from "@/hooks/queries/plugin-settings-queries";
+import {
+  buildPluginSettingsEntries,
+  type PluginSettingsCandidate,
+} from "@/components/settings/plugin-settings-entries";
+import { useSettingsNavSections } from "@/components/settings/settings-nav";
+import { appQueryClient } from "@/lib/app-query-client";
 import {
   ThreadPaletteResults,
   type ThreadPaletteNavigationItem,
@@ -44,15 +53,10 @@ import {
 type PaletteMode = "commands" | "threads";
 
 export interface CommandPaletteProps {
-  /** The surface's thread and project, handed to plugin rows. */
   threadId: string | null;
   projectId: string | null;
 }
 
-/**
- * Type to filter the commands that apply right now, then run one with Enter.
- * Mounted once by `AppLayout` and opened by `palette.open`.
- */
 export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
   const navigate = useNavigate();
   const runner = useAppCommandRunner();
@@ -70,10 +74,48 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
   const [recents, setRecents] = useState<readonly string[]>(() =>
     readPaletteRecents(),
   );
-  // Where availability, dispatch, and focus-on-close all point.
+  const [installedPlugins, setInstalledPlugins] = useState<
+    readonly PluginSettingsCandidate[]
+  >([]);
+  const pluginSlots = usePluginSlots();
+  const sections = useSettingsNavSections(pluginSlots.fileOpeners);
+  const pluginSettingsEntries = useMemo(
+    () =>
+      buildPluginSettingsEntries({
+        installedPlugins,
+        settingsSections: pluginSlots.settingsSections,
+      }),
+    [installedPlugins, pluginSlots.settingsSections],
+  );
+  const settingsActions = useMemo(
+    () =>
+      buildSettingsPaletteActions({
+        navigate: (path) => {
+          void navigate(path);
+        },
+        pluginEntries: pluginSettingsEntries,
+        sections,
+      }),
+    [navigate, pluginSettingsEntries, sections],
+  );
+  const pluginPageActions = useMemo(
+    () =>
+      buildPluginPagePaletteActions({
+        navigate: (path) => {
+          void navigate(path);
+        },
+        panels: pluginSlots.navPanels,
+      }),
+    [navigate, pluginSlots.navPanels],
+  );
   const openTargetRef = useRef<EventTarget | null>(null);
-  // Set when a row is chosen, read once focus has been restored.
   const pendingRunRef = useRef<(() => void) | null>(null);
+
+  const loadInstalledPlugins = useCallback(() => {
+    void appQueryClient
+      .fetchQuery(pluginListQueryOptions({ enabled: true }))
+      .then(setInstalledPlugins, () => {});
+  }, []);
 
   const buildActions = useCallback(
     (target: EventTarget | null) => [
@@ -84,7 +126,7 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
         shortcuts,
       }),
       ...buildPluginPaletteActions({
-        slots: getPluginSlotSnapshot().commandPaletteActions,
+        slots: pluginSlots.commandPaletteActions,
         threadId,
         projectId,
         openThreadPanel: getActiveThreadPanelOpener(),
@@ -92,6 +134,7 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
     ],
     [
       projectId,
+      pluginSlots.commandPaletteActions,
       runner.dispatch,
       runner.isCommandAvailable,
       shortcuts,
@@ -107,8 +150,9 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
       setQuery(mode === "commands" ? ">" : "");
       setHighlightedIndex(0);
       setOpen(true);
+      loadInstalledPlugins();
     },
-    [buildActions],
+    [buildActions, loadInstalledPlugins],
   );
 
   useAppCommandHandler("palette.open", (invocation) => {
@@ -129,21 +173,24 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
 
   const mode: PaletteMode = query.startsWith(">") ? "commands" : "threads";
   const modeQuery = mode === "commands" ? query.slice(1) : query;
+  const commandActions = useMemo(
+    () => [...actions, ...settingsActions, ...pluginPageActions],
+    [actions, pluginPageActions, settingsActions],
+  );
   const rankedCommands = useMemo(
-    () => rankPaletteActions({ actions, query: modeQuery, recentIds: recents }),
-    [actions, modeQuery, recents],
+    () =>
+      rankPaletteActions({
+        actions: commandActions,
+        query: modeQuery,
+        recentIds: recents,
+      }),
+    [commandActions, modeQuery, recents],
   );
   const resultCount =
     mode === "commands" ? rankedCommands.length : threadItems.length;
-  // Typing can shrink the list under the selection.
   const activeIndex =
     resultCount === 0 ? -1 : Math.min(highlightedIndex, resultCount - 1);
 
-  /**
-   * Focus stays in the search field, so nothing scrolls the highlighted row
-   * into view on its own. Keyboard moves only: scrolling on hover would yank
-   * the list out from under the pointer.
-   */
   const listRef = useRef<HTMLDivElement | null>(null);
   const scrollOnNextHighlightRef = useRef(false);
   useEffect(() => {
@@ -189,16 +236,11 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
     [navigate],
   );
 
-  /**
-   * Restore focus before running, so a command that focuses something does not
-   * have it taken back by the dialog's own restoration a tick later.
-   */
-  const handleCloseAutoFocus = useCallback((event: Event) => {
+  const handleAfterCloseAutoFocus = useCallback(() => {
     const pending = pendingRunRef.current;
     pendingRunRef.current = null;
     const target = openTargetRef.current;
     if (target instanceof HTMLElement && target.isConnected) {
-      event.preventDefault();
       target.focus({ preventScroll: true });
     }
     pending?.();
@@ -271,7 +313,7 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
         hideCloseButton
         aria-describedby={undefined}
         className="top-[12%] max-w-xl translate-y-0 gap-0 p-0"
-        onCloseAutoFocus={handleCloseAutoFocus}
+        onAfterCloseAutoFocus={handleAfterCloseAutoFocus}
         data-testid="command-palette"
       >
         <DialogTitle className="sr-only">
@@ -283,7 +325,6 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
             className="size-4 shrink-0 text-muted-foreground"
           />
           <input
-            // Opened by a chord expressly to type into.
             autoFocus
             role="combobox"
             aria-expanded
@@ -300,8 +341,6 @@ export function CommandPalette({ threadId, projectId }: CommandPaletteProps) {
               setQuery(nextQuery);
               if (!nextQuery.startsWith(">")) setThreadItems([]);
               setHighlightedIndex(0);
-              // `activeIndex` may not change, so the effect above cannot do
-              // this: send the scrolled container back to the first row.
               if (listRef.current !== null) listRef.current.scrollTop = 0;
             }}
             onKeyDown={handleKeyDown}
@@ -361,7 +400,6 @@ function PaletteRow({
   onSelect: () => void;
 }) {
   return (
-    // A listbox option the input points at, not a focusable control.
     <div
       id={id}
       role="option"

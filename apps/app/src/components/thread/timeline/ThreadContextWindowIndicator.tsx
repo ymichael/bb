@@ -9,7 +9,6 @@ import {
 
 interface ThreadContextWindowIndicatorProps {
   usage: ThreadContextWindowUsage;
-  /** Render with the usage menu open on mount. Story-only escape hatch. */
   defaultOpen?: boolean;
 }
 

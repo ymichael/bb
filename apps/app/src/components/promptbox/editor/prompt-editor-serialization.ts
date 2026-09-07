@@ -17,11 +17,6 @@ export interface PromptEditorValue {
   mentions: PromptTextMention[];
 }
 
-/**
- * One contiguous piece of serialized prompt text that maps back to editable
- * ProseMirror content. Markdown delimiters and block/list prefixes deliberately
- * have no segment because they do not occupy document positions.
- */
 export interface PromptEditorOffsetSegment {
   textFrom: number;
   textTo: number;
@@ -35,10 +30,6 @@ interface PromptEditorSerialization extends PromptEditorValue {
 }
 
 interface PromptEditorContentOptions {
-  /**
-   * Parse the Markdown surface forms emitted by promptEditorValueFromDoc back
-   * into rich editor nodes. Blockquotes stay enabled regardless of this option.
-   */
   richTextMarkdown?: boolean;
 }
 
@@ -135,11 +126,6 @@ interface MarkdownLine {
   text: string;
 }
 
-/**
- * Sorted, merged half-open ranges supporting O(log n) containment checks.
- * Large pastes (e.g. a minified JS bundle) contain thousands of Markdown
- * delimiter candidates; a linear scan per candidate made parsing quadratic.
- */
 interface SortedRangeIndex {
   starts: number[];
   ends: number[];
@@ -230,9 +216,6 @@ function collectMarkdownMarkRanges(text: string): MarkdownParseRanges {
     type: MarkdownMarkRange["type"],
     canUseMarker: (position: number) => boolean = () => true,
   ) => {
-    // Markers/protected ranges recorded by the current pass always sit behind
-    // the scan cursor, so only ranges from PREVIOUS passes can contain a
-    // future candidate. Snapshot them once per pass for binary search.
     const blocked = buildSortedRangeIndex([...markers, ...protectedRanges]);
     let index = 0;
     while (index < text.length) {
@@ -250,9 +233,6 @@ function collectMarkdownMarkRanges(text: string): MarkdownParseRanges {
         text,
       });
       if (close === -1) {
-        // No usable closing marker exists anywhere after this point, so no
-        // later opener can pair either; without this exit a text full of
-        // unpaired delimiters rescans the tail once per candidate.
         break;
       }
       if (close === open + marker.length) {
@@ -290,11 +270,6 @@ function collectMarkdownMarkRanges(text: string): MarkdownParseRanges {
   return { marks, markers };
 }
 
-/**
- * Mark lookup for monotonically increasing positions. Equivalent to
- * a full range scan (same ordering: `marks` is sorted by start) but amortized
- * O(1) per query.
- */
 function createMarkdownMarkSweep(
   marks: readonly MarkdownMarkRange[],
 ): (position: number) => JSONContent["marks"] {
@@ -318,12 +293,6 @@ function createMarkdownMarkSweep(
   };
 }
 
-/**
- * Boundary lookup for monotonically increasing positions: the first marker
- * start, mention start, or newline strictly after `position` (else text end).
- * Pointer-based so a full parse costs O(text + markers + mentions) instead of
- * rescanning every marker and mention per emitted text run.
- */
 function createMarkdownBoundarySweep({
   mentions,
   markers,
@@ -397,9 +366,6 @@ function promptEditorInlineMarkdownContentFromValue(
   let cursor = 0;
   let mentionIndex = 0;
 
-  // The cursor only moves forward, so marker/mention/mark lookups can use
-  // monotonic pointers instead of rescanning per emitted run (which made a
-  // large single-line paste with many delimiters quadratic).
   const markerByStart = new Map<number, MarkdownMarkerRange>();
   for (const marker of ranges.markers) {
     markerByStart.set(marker.start, marker);
@@ -458,20 +424,9 @@ function promptEditorInlineMarkdownContentFromValue(
   return content;
 }
 
-/**
- * Shift mentions that fall within a global text span into a sub-value relative
- * to `spanStart`, optionally accounting for characters stripped from the front
- * of each line (the `> `/`>` quote prefix). `lineSpans` lists each source
- * line's global [start,end) plus the cumulative number of characters removed
- * before it in the stripped sub-text, so a mention's offset can be rebased onto
- * the stripped inner text.
- */
 interface StrippedLineSpan {
-  /** Global offset of the first content character of this line (after prefix). */
   contentStart: number;
-  /** Global offset just past this line's content. */
   contentEnd: number;
-  /** Offset of this line's content within the stripped sub-text. */
   innerStart: number;
 }
 
@@ -519,7 +474,7 @@ function blockquoteFromLines(
       contentEnd,
       innerStart: innerCursor,
     });
-    innerCursor += strippedLines[index]!.length + 1; // +1 for joining "\n"
+    innerCursor += strippedLines[index]!.length + 1;
   }
 
   const innerMentions = rebaseMentionsToSpan(value, lineSpans);
@@ -753,12 +708,11 @@ export function promptEditorContentFromValue(
   }
 
   const lines = value.text.split("\n");
-  // Global start offset of each line within value.text.
   const lineGlobalStarts: number[] = [];
   let offset = 0;
   for (const line of lines) {
     lineGlobalStarts.push(offset);
-    offset += line.length + 1; // +1 for the "\n" delimiter
+    offset += line.length + 1;
   }
 
   const blocks: JSONContent[] = [];
@@ -869,17 +823,6 @@ export function promptEditorInlineContentFromValue(
   return content;
 }
 
-function mentionAttrsFromNode(
-  node: ProseMirrorNode,
-): PromptEditorMentionAttrs | null {
-  return parsePromptEditorMentionAttrs(node.attrs);
-}
-
-/**
- * Markdown delimiters that wrap a text run carrying inline marks. `code` is
- * literal, so it never combines with emphasis. Bold wraps outside italic, e.g.
- * a run with both marks becomes `**_text_**`.
- */
 function markdownDelimitersForMarks(
   marks: readonly ProseMirrorNode["marks"][number][],
 ): { open: string; close: string } {
@@ -978,7 +921,7 @@ function serializePromptEditorNode(
       return;
     }
     if (node.type.name === "mention") {
-      const attrs = mentionAttrsFromNode(node);
+      const attrs = parsePromptEditorMentionAttrs(node.attrs);
       if (attrs) {
         const span = appendMarkedInlineText(
           attrs.serializedText,
@@ -998,9 +941,6 @@ function serializePromptEditorNode(
     appendChildren(node, nodePosition);
   };
 
-  // Serialize a blockquote: build its inner value via a fresh walk, then emit
-  // each inner line with a "> "/">" prefix. The prefix characters count toward
-  // text.length, so inner mention offsets are shifted to reflect the prefixes.
   const appendBlockquote = (node: ProseMirrorNode, nodePosition: number) => {
     const inner = serializePromptEditorNode(node, nodePosition);
     const lines = inner.text.split("\n");
@@ -1052,10 +992,6 @@ function serializePromptEditorNode(
     }
   };
 
-  // Serialize a bullet/ordered list. Each item gets an indent + marker on its
-  // own line; the marker is appended to the running text before the item's
-  // inline content, so mention offsets recorded during that walk are correct.
-  // Nested lists recurse with deeper indentation.
   const appendListItems = (
     listNode: ProseMirrorNode,
     listPosition: number,
@@ -1092,7 +1028,6 @@ function serializePromptEditorNode(
             depth + 1,
           );
         } else {
-          // Paragraph (or other inline block) shares the marker line.
           appendChildren(block, blockPosition);
         }
         blockPosition += block.nodeSize;
@@ -1156,11 +1091,6 @@ function serializePromptEditorNode(
   return { text, mentions, offsetMapping };
 }
 
-/**
- * Serialize the editor document and retain the exact plain-text-to-document
- * mapping used by decoration rules. Mention pills map their complete text
- * representation to the single atomic mention node.
- */
 export function promptEditorSerializationFromDoc(
   doc: ProseMirrorNode,
 ): PromptEditorSerialization {

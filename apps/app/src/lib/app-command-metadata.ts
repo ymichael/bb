@@ -9,7 +9,6 @@ interface AppCommandMetadata {
   command: AppCommandId;
   description: string;
   label: string;
-  /** Whether the quick palette lists it. Settings → Keyboard shows them all. */
   paletteVisible: boolean;
 }
 
@@ -26,11 +25,6 @@ function command(
   return { command: id, description, label, paletteVisible: true };
 }
 
-/**
- * Rebindable, but no palette row: the numbered accelerator families (26
- * near-identical rows), the relative cycle commands (meant to be repeated
- * against visible feedback), and opening the palette itself.
- */
 function paletteHiddenCommand(
   id: AppCommandId,
   label: string,
@@ -87,6 +81,11 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
         "Search and run bb commands from the keyboard.",
       ),
       command("window.new", "New window", "Open another bb desktop window."),
+      command(
+        "app.back",
+        "Back to app",
+        "Return from Settings or Extensions to the app.",
+      ),
       command("settings.open", "Open settings", "Open bb settings."),
       command(
         "settings.openServers",
@@ -102,6 +101,11 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
         "panel.newTab",
         "New panel tab",
         "Open a tab in the secondary panel.",
+      ),
+      command(
+        "panel.reopenClosedTab",
+        "Reopen closed panel tab",
+        "Reopen the most recently closed secondary panel tab.",
       ),
       command(
         "panel.close",
@@ -144,6 +148,11 @@ export const APP_COMMAND_GROUPS: readonly AppCommandGroup[] = [
         "logs.openServerDaemon",
         "Open server and daemon logs",
         "Open the desktop log viewer for the bb server and host daemon.",
+      ),
+      command(
+        "notifications.open",
+        "Show all notifications",
+        "Open the notification center to read and clear past notifications.",
       ),
     ],
   },

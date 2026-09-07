@@ -57,11 +57,12 @@ const infoAndDiffFixedTabs = [
 function createTestRenderableTab(
   tab: SecondaryFileFixedPanelTab,
   renderContent: SecondaryPanelRenderableTab["renderContent"] = () => null,
+  onClose: () => void = noop,
 ): SecondaryPanelRenderableTab {
   return {
     label: "index.ts",
     leadingVisual: null,
-    onClose: noop,
+    onClose,
     onSelect: noop,
     renderContent,
     statusLabel: null,
@@ -100,7 +101,102 @@ function renderPanel(args: {
   );
 }
 
+function renderFixedTabSplit({
+  keyboardKey,
+}: {
+  keyboardKey?: "Enter" | " ";
+} = {}) {
+  const { wrapper: Wrapper } = createQueryClientTestHarness();
+  const panelStateId = `fixed-tab-remove-split-${keyboardKey ?? "pointer"}`;
+  const initial = createSidebarSplitState(
+    [infoFixedTab.id, diffFixedTab.id],
+    diffFixedTab.id,
+  );
+  const split = moveSidebarTab(
+    initial,
+    initial.layout.focusedPaneId,
+    diffFixedTab.id,
+    { paneId: initial.layout.focusedPaneId, zone: "right" },
+    { groupId: "group-diff" },
+  );
+  window.localStorage.setItem(
+    sidebarSplitStorageKey(panelStateId),
+    serializeSidebarSplitState(split),
+  );
+
+  return render(
+    <Wrapper>
+      <SidebarProvider>
+        <TooltipProvider>
+          <PanelGroup direction="horizontal">
+            <ThreadSecondaryPanel
+              activeTab={diffFixedTab}
+              canUseGitUi
+              fixedTabs={infoAndDiffFixedTabs}
+              tabs={[]}
+              isConversationCollapsed={false}
+              isOpen
+              metadataContent={<div>Thread metadata</div>}
+              onClose={noop}
+              onCollapse={noop}
+              onTabReorder={noop}
+              onOpenNewTab={noop}
+              onPanelFocus={noop}
+              onToggleConversationCollapse={noop}
+              renderAsDrawer={false}
+              splitPanelStateId={panelStateId}
+            />
+          </PanelGroup>
+        </TooltipProvider>
+      </SidebarProvider>
+    </Wrapper>,
+  );
+}
+
 describe("ThreadSecondaryPanel compact file content", () => {
+  it("renders the available tab while persisted active state catches up", () => {
+    const { wrapper: Wrapper } = createQueryClientTestHarness();
+    const fallbackTab = createWorkspaceFilePreviewFixedPanelTab({
+      environmentId: "env-test",
+      projectId: "project-test",
+      tab: {
+        lineRange: null,
+        path: "src/recovered.ts",
+        source: { kind: "working-tree" },
+        statusLabel: null,
+      },
+    });
+
+    render(
+      <Wrapper>
+        <TooltipProvider>
+          <ThreadSecondaryPanel
+            activeTab={null}
+            canUseGitUi={false}
+            fixedTabs={[]}
+            tabs={[
+              createTestRenderableTab(fallbackTab, () => (
+                <div>Recovered tab body</div>
+              )),
+            ]}
+            isConversationCollapsed={false}
+            isOpen
+            metadataContent={null}
+            onClose={noop}
+            onCollapse={noop}
+            onTabReorder={noop}
+            onOpenNewTab={noop}
+            onPanelFocus={noop}
+            onToggleConversationCollapse={noop}
+            renderAsDrawer
+          />
+        </TooltipProvider>
+      </Wrapper>,
+    );
+
+    expect(screen.getByText("Recovered tab body")).toBeTruthy();
+  });
+
   it("renders arbitrary fixed-tab content through the shared surface", () => {
     const { wrapper: Wrapper } = createQueryClientTestHarness();
     const fixedTab = createPluginPageFixedPanelTab({
@@ -272,6 +368,8 @@ describe("ThreadSecondaryPanel compact file content", () => {
       sidebarSplitStorageKey(panelStateId),
       serializeSidebarSplitState(split),
     );
+    const closeFirstTab = vi.fn();
+    const closeSecondTab = vi.fn();
 
     render(
       <Wrapper>
@@ -295,15 +393,19 @@ describe("ThreadSecondaryPanel compact file content", () => {
                 splitPanelStateId={panelStateId}
                 tabs={[
                   {
-                    ...createTestRenderableTab(firstTab, () => (
-                      <div>First tab body</div>
-                    )),
+                    ...createTestRenderableTab(
+                      firstTab,
+                      () => <div>First tab body</div>,
+                      closeFirstTab,
+                    ),
                     label: "first.ts",
                   },
                   {
-                    ...createTestRenderableTab(secondTab, () => (
-                      <div>Second tab body</div>
-                    )),
+                    ...createTestRenderableTab(
+                      secondTab,
+                      () => <div>Second tab body</div>,
+                      closeSecondTab,
+                    ),
                     label: "second.ts",
                   },
                 ]}
@@ -317,6 +419,12 @@ describe("ThreadSecondaryPanel compact file content", () => {
     expect(screen.getByText("First tab body")).toBeTruthy();
     expect(screen.getByText("Second tab body")).toBeTruthy();
     expect(document.querySelectorAll("[data-split-pane-id]")).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Remove split" }),
+    ).toHaveLength(2);
+    fireEvent.click(screen.getByRole("button", { name: "Close first.ts" }));
+    expect(closeFirstTab).toHaveBeenCalledTimes(1);
+    expect(closeSecondTab).not.toHaveBeenCalled();
   });
 
   it("retains the active file body after the persistent drawer closes", () => {
@@ -448,6 +556,70 @@ describe("ThreadSecondaryPanel compact file content", () => {
   });
 });
 
+describe("ThreadSecondaryPanel remove-split control", () => {
+  it("is absent when unsplit and appears at the trailing edge of every split pane", () => {
+    const unsplit = renderPanel({
+      isConversationCollapsed: false,
+      onToggleConversationCollapse: noop,
+    });
+    expect(unsplit.queryByRole("button", { name: "Remove split" })).toBeNull();
+    unsplit.unmount();
+
+    renderFixedTabSplit();
+
+    const panes = Array.from(
+      document.querySelectorAll<HTMLElement>("[data-split-pane-id]"),
+    );
+    const removeControls = screen.getAllByRole("button", {
+      name: "Remove split",
+    });
+    expect(panes).toHaveLength(2);
+    expect(removeControls).toHaveLength(2);
+    expect(
+      panes.every((pane) => {
+        const chrome = pane.querySelector(
+          '[data-testid="thread-secondary-panel-top-chrome"]',
+        );
+        const removeControl = pane.querySelector('[aria-label="Remove split"]');
+        return (
+          chrome?.lastElementChild instanceof HTMLElement &&
+          removeControl instanceof HTMLButtonElement &&
+          chrome.lastElementChild.contains(removeControl)
+        );
+      }),
+    ).toBe(true);
+  });
+
+  it.each(["Enter", " "] as const)(
+    "keeps Info and Diff open when removing their split with %j",
+    (key) => {
+      renderFixedTabSplit({ keyboardKey: key });
+
+      const removeControl = screen.getAllByRole("button", {
+        name: "Remove split",
+      })[1];
+      expect(removeControl).toBeInstanceOf(HTMLButtonElement);
+      if (!(removeControl instanceof HTMLButtonElement)) return;
+      removeControl.focus();
+      expect(document.activeElement).toBe(removeControl);
+      expect(removeControl.tabIndex).toBe(0);
+
+      fireEvent.keyDown(removeControl, { key });
+      fireEvent.keyUp(removeControl, { key });
+      fireEvent.click(removeControl, { detail: 0 });
+
+      expect(document.querySelectorAll("[data-split-pane-id]")).toHaveLength(0);
+      expect(screen.queryByRole("button", { name: "Remove split" })).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "Show thread info panel" }),
+      ).toBeTruthy();
+      expect(
+        screen.getByRole("button", { name: "Show diff panel" }),
+      ).toBeTruthy();
+    },
+  );
+});
+
 describe("ThreadSecondaryPanel Diff eligibility", () => {
   it("falls back from an ineligible active Diff tab to Info", () => {
     const { wrapper: Wrapper } = createQueryClientTestHarness();
@@ -520,12 +692,8 @@ describe("ThreadSecondaryPanel Diff eligibility", () => {
   });
 });
 
-// Every right-panel show/hide control has to disclose the edge the panel
-// actually opens from, and on a compact viewport that edge is the bottom.
-// Each trigger builds its own button, so the glyph is only correct as long as
-// every one of them routes through getRightPanelToggleIconName.
 describe("ThreadSecondaryPanel hide control glyph", () => {
-  it("shows the drawer glyph while the panel renders as a bottom drawer", () => {
+  it("shows the side-panel glyph while the panel renders as a shelf", () => {
     const view = renderPanel({
       isConversationCollapsed: false,
       onToggleConversationCollapse: noop,
@@ -533,7 +701,7 @@ describe("ThreadSecondaryPanel hide control glyph", () => {
     });
 
     const hideControl = view.getByRole("button", { name: "Hide right panel" });
-    expect(hideControl.querySelector('[data-icon="PanelBottom"]')).toBeTruthy();
+    expect(hideControl.querySelector('[data-icon="PanelRight"]')).toBeTruthy();
   });
 
   it("shows the side-panel glyph on a wide viewport", () => {
@@ -547,9 +715,23 @@ describe("ThreadSecondaryPanel hide control glyph", () => {
   });
 });
 
-// The full-screen control is the ONLY way back once the conversation is hidden
-// — there is no standalone rail to click. Pin both halves of the same-slot
-// expansion pair so a full-screen tab can always restore its prior layout.
+describe("ThreadSecondaryPanel resize boundary", () => {
+  it("keeps the panel seam visible while the clipped panel surface moves", () => {
+    const view = renderPanel({
+      isConversationCollapsed: false,
+      onToggleConversationCollapse: noop,
+    });
+
+    const boundary = view.getByRole("separator", {
+      name: "Resize thread and right panel",
+    });
+    const seam = boundary.querySelector(
+      "span:not([data-panel-resize-hit-target])",
+    );
+    expect(seam?.className).toContain("bg-border-seam");
+  });
+});
+
 describe("ThreadSecondaryPanel full-screen control", () => {
   it("keeps Full Screen before Hide right panel in the trailing toolbar", () => {
     const view = renderPanel({
@@ -592,6 +774,7 @@ describe("ThreadSecondaryPanel full-screen control", () => {
 
     const control = view.getByRole("button", { name: "Exit Full Screen" });
     expect(control.getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector("aside")?.style.width).toBe("100%");
 
     fireEvent.click(control);
     expect(onToggleConversationCollapse).toHaveBeenCalledTimes(1);
@@ -639,7 +822,15 @@ describe("ThreadSecondaryPanel full-screen control", () => {
       </Wrapper>,
     );
 
-    const control = screen.getByRole("button", { name: "Full Screen" });
+    expect(screen.getByRole("button", { name: "Open new tab" })).not.toBeNull();
+    expect(
+      screen.queryByRole("button", { name: "Open new tab in this pane" }),
+    ).toBeNull();
+    expect(
+      document.querySelectorAll("[data-new-tab-control-reserved]"),
+    ).toHaveLength(0);
+
+    const control = screen.getByRole("button", { name: "Maximize pane" });
     fireEvent.focus(control);
     expect(
       screen.getByRole("menu", { name: "Pane arrangement" }),
@@ -671,16 +862,55 @@ describe("ThreadSecondaryPanel full-screen control", () => {
         pane.querySelector('[data-testid="thread-secondary-panel-top-chrome"]'),
       ),
     ).toBe(true);
+    expect(
+      screen.getAllByRole("button", { name: "Maximize pane" }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Remove split" }),
+    ).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Hide right panel" }),
+    ).toHaveLength(1);
     expect(document.querySelectorAll("header")).toHaveLength(0);
     const newTabControls = screen.getAllByRole("button", {
-      name: "Open new tab",
+      name: "Open new tab in this pane",
     });
     expect(newTabControls).toHaveLength(1);
-    fireEvent.click(newTabControls[0] as HTMLElement);
+    expect(
+      document.querySelectorAll("[data-new-tab-control-reserved]"),
+    ).toHaveLength(1);
+    const initiallyFocusedPane = panes.find(
+      (pane) => pane.dataset.focused === "true",
+    );
+    const initiallyInactivePane = panes.find(
+      (pane) => pane.dataset.focused === "false",
+    );
+    expect(
+      initiallyFocusedPane?.querySelector(
+        'button[aria-label^="Open new tab in this pane"]',
+      ),
+    ).not.toBeNull();
+    expect(
+      initiallyInactivePane?.querySelector("[data-new-tab-control-reserved]"),
+    ).not.toBeNull();
+
+    fireEvent.pointerDown(initiallyInactivePane as HTMLElement);
+    const focusedPaneNewTabControl = screen.getByRole("button", {
+      name: "Open new tab in this pane",
+    });
+    expect(focusedPaneNewTabControl.closest("[data-split-pane-id]")).toBe(
+      initiallyInactivePane,
+    );
+    expect(
+      initiallyFocusedPane?.querySelector("[data-new-tab-control-reserved]"),
+    ).not.toBeNull();
+    fireEvent.click(focusedPaneNewTabControl);
     expect(onOpenNewTab).toHaveBeenCalledTimes(1);
+    expect(initiallyInactivePane?.dataset.focused).toBe("true");
+    expect(initiallyFocusedPane?.dataset.focused).toBe("false");
   });
 
-  it("keeps pane-local tab rows and one restore control in a stacked split", () => {
+  it("maximizes one stacked pane while keeping both tab rows mounted", () => {
     const { wrapper: Wrapper } = createQueryClientTestHarness();
     const fileTab = createWorkspaceFilePreviewFixedPanelTab({
       environmentId: "env-test",
@@ -739,7 +969,7 @@ describe("ThreadSecondaryPanel full-screen control", () => {
     );
 
     const restoreControls = screen.getAllByRole("button", {
-      name: "Exit Full Screen",
+      name: "Restore split",
     });
     expect(restoreControls).toHaveLength(1);
     const panes = Array.from(
@@ -763,23 +993,30 @@ describe("ThreadSecondaryPanel full-screen control", () => {
           ).length,
       ),
     ).toEqual([1, 1]);
-    expect(
-      screen
-        .getByRole("separator", {
-          name: "Resize stacked right panel panes",
-        })
-        .getAttribute("aria-orientation"),
-    ).toBe("horizontal");
+    const separator = document.querySelector<HTMLElement>(
+      '[aria-label="Resize stacked right panel panes"]',
+    );
+    expect(separator?.getAttribute("aria-orientation")).toBe("horizontal");
+    expect(separator?.getAttribute("aria-hidden")).toBe("true");
+    expect(separator?.className).toContain("invisible");
     expect(
       panes.map(
-        (pane) =>
-          pane.querySelectorAll('[aria-label="Exit Full Screen"]').length,
+        (pane) => pane.querySelectorAll('[aria-label="Restore split"]').length,
       ),
-    ).toEqual([1, 0]);
+    ).toEqual([0, 1]);
+    expect(panes[0]?.getAttribute("aria-hidden")).toBe("true");
+    expect(panes[0]?.style.contentVisibility).toBe("hidden");
+    expect(panes[1]?.dataset.maximized).toBe("true");
     const restoreControl = restoreControls[0];
     if (restoreControl === undefined)
       throw new Error("Missing restore control");
     fireEvent.click(restoreControl);
     expect(onToggleConversationCollapse).toHaveBeenCalledTimes(1);
+    expect(
+      panes.every((pane) => pane.getAttribute("aria-hidden") === null),
+    ).toBe(true);
+    expect(
+      document.querySelector('[data-split-pane-id][data-maximized="true"]'),
+    ).toBeNull();
   });
 });

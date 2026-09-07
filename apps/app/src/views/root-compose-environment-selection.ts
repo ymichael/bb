@@ -15,18 +15,9 @@ import {
 import type { ReuseThreadOption } from "@/components/pickers/WorktreePicker";
 import { getThreadDisplayTitle } from "@/lib/thread-title";
 
-/**
- * Pure environment-selection resolvers shared by every new-thread compose
- * surface: `RootComposeView` (the primary one) and `PluginNewThreadComposer`
- * (the SDK's `experimental_NewThreadComposer`). They take plain data and
- * return plain data, so both surfaces resolve a picker selection into a
- * create-thread environment the same way.
- */
-
 interface ResolveRootComposeEffectiveEnvironmentValueArgs {
   environmentSelectionValue: string;
   isProjectless: boolean;
-  /** Ids of all hosts known to the server. */
   knownHostIds: ReadonlySet<string>;
   primaryHostId: string | null;
   projectSources: readonly ProjectSource[];
@@ -49,15 +40,8 @@ function isWorktreeWithEnv(thread: ThreadListEntry): boolean {
 
 export function buildReuseThreadOptions(
   threads: readonly ThreadListEntry[],
-  /** Host id → machine name, provided only when worktree rows should carry a
-   * machine hint when more than one host exists. */
   hostNameById: ReadonlyMap<string, string> | null = null,
 ): ReuseThreadOption[] {
-  // One option per worktree env. Threads within each env are sorted
-  // most-recently-active first so the picker preview surfaces the threads
-  // the user is most likely to recognize. Only unarchived threads reach
-  // here — `useThreads({ archived: false })` filters at the source. Envs
-  // with no unarchived threads naturally drop out.
   const threadsByEnvironmentId = new Map<string, ThreadListEntry[]>();
   const branchByEnvironmentId = new Map<string, string | null>();
   const nameByEnvironmentId = new Map<string, string | null>();
@@ -139,14 +123,10 @@ export function resolveRootComposeEffectiveEnvironmentValue({
 
   const parsedSelection = parseEnvironmentValue(environmentSelectionValue);
 
-  // A host selection survives as long as that machine still exists and has
-  // this project. Otherwise it falls through to the primary-host rewrite.
   if (
     parsedSelection?.type === "host" &&
     knownHostIds.has(parsedSelection.hostId)
   ) {
-    // Projectless threads run in the machine's personal workspace — no
-    // project source is required and there is no worktree mode to keep.
     if (isProjectless) {
       return encodeHostValue(parsedSelection.hostId, "local");
     }
@@ -200,12 +180,6 @@ export function resolveRootComposeEffectiveEnvironmentValue({
   return fallbackHostValue;
 }
 
-/**
- * The machine the composed thread will run on: the effective selection's host
- * when it names one, otherwise the primary. Provider-CLI status, update
- * actions, and submit blocking all key off this host — the primary's CLI
- * state must not gate work targeted at another machine.
- */
 export function resolveComposeHostId(
   parsedEnvironment: ReturnType<typeof parseEnvironmentValue>,
   primaryHostId: string | null,

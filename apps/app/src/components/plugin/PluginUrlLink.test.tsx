@@ -16,9 +16,7 @@ describe("PluginUrlLink", () => {
       <MemoryRouter>
         <RouteNavigationProvider>
           <AppNavigationHostProvider capabilities={{ openUrl }}>
-            <PluginUrlLink href="https://example.com">
-              Example
-            </PluginUrlLink>
+            <PluginUrlLink href="https://example.com">Example</PluginUrlLink>
           </AppNavigationHostProvider>
         </RouteNavigationProvider>
       </MemoryRouter>,
@@ -32,9 +30,7 @@ describe("PluginUrlLink", () => {
     render(
       <MemoryRouter>
         <AppNavigationHostProvider capabilities={{ openUrl }}>
-          <PluginUrlLink href="https://example.com">
-            Example
-          </PluginUrlLink>
+          <PluginUrlLink href="https://example.com">Example</PluginUrlLink>
         </AppNavigationHostProvider>
       </MemoryRouter>,
     );

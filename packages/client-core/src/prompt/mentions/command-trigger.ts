@@ -17,10 +17,6 @@ interface ProviderPromptActionProps {
   promptActions: readonly ProviderPromptAction[];
 }
 
-/**
- * Maps provider-owned composer metadata into the prompt action shape consumed
- * by app hosts.
- */
 export function buildProviderPromptActionProps(
   composerActions: readonly ProviderComposerAction[],
 ): ProviderPromptActionProps {
@@ -54,11 +50,6 @@ function serializedProviderCommand(command: ProviderComposerCommand): string {
   return `${command.trigger}${command.name}${command.trailingText}`;
 }
 
-/**
- * A selected command is a one-position mention atom in the editor doc. The
- * dismissed range is based on that rendered node width plus any space inserted
- * after it, not on the serialized provider token length (`/review`, etc.).
- */
 export function commandPillDismissedRangeEnd({
   triggerPosition,
   trailingText,

@@ -1,7 +1,5 @@
 interface FormatRelativeTimeArgs {
-  /** The past instant being described, in epoch milliseconds. */
   timestamp: number;
-  /** The reference "now", in epoch milliseconds. Passed in for testability. */
   now: number;
 }
 
@@ -10,12 +8,6 @@ const HOUR_MS = 60 * MINUTE_MS;
 const DAY_MS = 24 * HOUR_MS;
 const WEEK_MS = 7 * DAY_MS;
 
-/**
- * Formats a past timestamp as a compact relative label ("just now", "2m ago",
- * "3h ago", "Yesterday", "2d ago", "3w ago"), falling back to a short absolute
- * date once the gap exceeds a few weeks. Future timestamps collapse to
- * "just now" so a small clock skew never renders a negative duration.
- */
 export function formatRelativeTime({
   timestamp,
   now,
@@ -44,4 +36,36 @@ export function formatRelativeTime({
     month: "short",
     day: "numeric",
   });
+}
+
+interface FormatScheduledTimeArgs {
+  timestamp: number;
+  now: number;
+}
+
+export function formatScheduledTime({
+  timestamp,
+  now,
+}: FormatScheduledTimeArgs): string {
+  const target = new Date(timestamp);
+  const clock = target.toLocaleTimeString(undefined, {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+  const startOfToday = new Date(now);
+  startOfToday.setHours(0, 0, 0, 0);
+  const daysAhead = Math.floor(
+    (target.getTime() - startOfToday.getTime()) / DAY_MS,
+  );
+  if (daysAhead === 0) {
+    return clock;
+  }
+  if (daysAhead === 1) {
+    return `Tomorrow ${clock}`;
+  }
+  const date = target.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+  return `${date} ${clock}`;
 }

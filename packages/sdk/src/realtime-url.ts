@@ -5,11 +5,6 @@ export interface ResolveRealtimeUrlArgs {
 }
 
 interface WebsocketUrlFromHttpUrlArgs {
-  /**
-   * Whether the URL's path is a server mount prefix to keep (configured
-   * baseUrl behind a reverse proxy) or an SPA page path to discard
-   * (same-origin browser location).
-   */
   preservePathPrefix: boolean;
   url: URL;
 }
@@ -61,8 +56,6 @@ export function resolveRealtimeUrl(args: ResolveRealtimeUrlArgs): string {
     return transport.realtimeUrl;
   }
 
-  // Mirror the HTTP transport's derivation (`${baseUrl}/api/v1${path}`): a
-  // path-prefixed baseUrl keeps its prefix for the websocket endpoint too.
   const absoluteBaseUrl = absoluteHttpBaseUrl(transport.baseUrl);
   if (absoluteBaseUrl) {
     return websocketUrlFromHttpUrl({

@@ -201,17 +201,10 @@ async function expectSidebarButtonState(
 describe("useRouteStateHistoryNavigation", () => {
   afterEach(() => {
     cleanup();
-    // The stack is module-scoped (it must survive control remounts); tests
-    // must not inherit each other's history.
     resetAppRouteHistoryForTest();
   });
 
   it("keeps the stack when the controls remount across sidebar layouts", async () => {
-    // Navigating Extensions → the new-thread composer swaps which sidebar
-    // (and thus which controls instance) is mounted, and the navigation
-    // itself lands while no instance is alive. The stack must survive the
-    // remount and record that missed navigation, or Back arrives disabled
-    // exactly when it is needed.
     render(
       <MemoryRouter initialEntries={["/"]}>
         <RemountableHistoryHarness />

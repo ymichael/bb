@@ -33,10 +33,6 @@ import { ProviderIconMark } from "@/components/settings/ProviderIconMark";
 import { getProviderIconInfo } from "@/lib/provider-icon";
 
 type ResourceProviderFilter = "bb" | SkillProvider;
-/**
- * Provider id → the server's `ProviderInfo`, for every listed provider: the
- * display name and the declared mark (core vendors neither).
- */
 export type ProviderRoster = ReadonlyMap<string, ProviderInfo>;
 type ResourceSkillSourceFilter = "included" | "bb-official" | "user";
 type ResourceSortMode = "provider" | "alpha";
@@ -53,13 +49,6 @@ const SOURCE_FILTER_OPTIONS = RESOURCE_SKILL_SOURCE_FILTERS.map((source) => ({
   label: skillSourceFilterLabel(source),
 }));
 
-/**
- * Names a provider the way the rest of the app does: the server's display name
- * first. Without the roster the fallback is the icon's aria label, and a
- * caller holding only an id cannot reach one for an unregistered agent, so
- * the label degrades to the raw provider id in the filter menu, the scope
- * label, and search.
- */
 function providerLabel(
   provider: SkillProvider | null,
   providerRoster: ProviderRoster,
@@ -76,16 +65,12 @@ function providerFilterLabel(
   provider: ResourceProviderFilter,
   providerRoster: ProviderRoster,
 ): string {
-  return provider === "bb"
-    ? "bb"
-    : providerLabel(provider, providerRoster);
+  return provider === "bb" ? "bb" : providerLabel(provider, providerRoster);
 }
 
 function skillSourceFilterId(skill: SkillSummary): ResourceSkillSourceFilter {
   if (skill.scope === "bb-builtin") return "bb-official";
   if (skill.scope === "plugin") return "included";
-  // Every remaining scope is authored by the user, so the bucket is total and
-  // the filter can never strand a skill.
   return "user";
 }
 
@@ -106,10 +91,6 @@ function isResourceSkillSourceFilter(
   return value === "included" || value === "bb-official" || value === "user";
 }
 
-// The filter menu hands back plain strings. Provider ids are an open
-// vocabulary now, so completeness of the option list comes from deriving it
-// from the listed skills rather than from a closed table; this only rejects
-// the empty string, which is not a provider id.
 function isResourceProviderFilter(
   value: string,
 ): value is ResourceProviderFilter {
@@ -122,7 +103,6 @@ export function ProviderLogo({
   className,
 }: {
   providerId: SkillProvider;
-  /** The roster entry; without it only a plugin-registered icon can draw. */
   provider?: ProviderInfo | undefined;
   className?: string;
 }) {
@@ -135,7 +115,11 @@ export function ProviderLogo({
     return <LogoIcon className={className} />;
   }
   return (
-    <ProviderIconMark provider={provider} icon={info.icon} className={className} />
+    <ProviderIconMark
+      provider={provider}
+      icon={info.icon}
+      className={className}
+    />
   );
 }
 
@@ -153,7 +137,11 @@ export function SkillProvenanceTooltip({
   return (
     <span className="inline-flex items-center gap-1.5">
       <span>{prefix}</span>
-      <span data-provider-icon={providerId ?? "bb"} aria-hidden="true">
+      <span
+        data-provider-icon={providerId ?? "bb"}
+        aria-hidden="true"
+        className="flex size-3.5 shrink-0 items-center justify-center"
+      >
         {providerId === null ? (
           <BbLogo className="size-3.5 brightness-0 invert" />
         ) : (
@@ -234,10 +222,6 @@ function skillMutationDisabledReason(
   return `Bundled with ${providerLabel(skill.provider, providerRoster)}`;
 }
 
-/**
- * Each Skills page describes its own purpose: Browse speaks to discovery from
- * the open ecosystem, the library to managing what this host already has.
- */
 const SKILLS_BROWSE_DESCRIPTION = (
   <>
     Trending agent skills from{" "}
@@ -255,12 +239,6 @@ const SKILLS_BROWSE_DESCRIPTION = (
 const SKILLS_LIBRARY_DESCRIPTION =
   "The skills on this bb host — yours, your providers', and those bundled with plugins. They work with every agent you use in bb.";
 
-/**
- * How long the pointer (or focus) must rest on a row before its detail
- * queries warm. Raw enter events would turn one sweep of the cursor down the
- * list into a prefetch per row — two requests each — for rows the user never
- * meant to open.
- */
 const PREFETCH_HOVER_INTENT_MS = 150;
 
 function SkillRow({
@@ -272,7 +250,6 @@ function SkillRow({
   skill: SkillSummary;
   providerRoster: ProviderRoster;
   onSelect: () => void;
-  /** Warms the detail queries on intent; the connected layer supplies it. */
   onPrefetch?: (skill: SkillSummary) => void;
 }) {
   const description = skillDescription(skill, providerRoster);
@@ -291,8 +268,6 @@ function SkillRow({
   };
   useEffect(() => cancelScheduledPrefetch, []);
   return (
-    // ResourceRow keeps its narrow prop surface; the intent listeners live on
-    // a wrapper (React delegates these events, so this covers the whole row).
     <div
       onPointerEnter={schedulePrefetch}
       onPointerLeave={cancelScheduledPrefetch}
@@ -334,33 +309,21 @@ function SkillRow({
 
 interface SkillsOverviewProps {
   skills: readonly SkillSummary[];
-  /**
-   * Provider display names from the server roster. Provider ids are
-   * open-ended (every custom ACP agent is one), so without the roster an
-   * agent labels itself with its raw provider id.
-   */
   providerRoster: ProviderRoster;
   isLoading: boolean;
   hasError: boolean;
   query?: string;
   activeMode?: SkillsCollectionMode;
   browseContent?: ReactNode;
-  /** Opens the composer to create a skill, optionally seeded with a full prompt. */
   onCreateSkill: (prompt?: string) => void;
   onSelectSkill: (skill: SkillSummary) => void;
-  /** Warms a skill's detail queries from row hover/focus. */
   onPrefetchSkill?: (skill: SkillSummary) => void;
   onQueryChange?: (query: string) => void;
-  /** Refetch after a load failure — gives the error state a way out. */
   onRetry?: () => void;
 }
 
 type SkillsCollectionMode = "library" | "browse";
 
-/**
- * Presentational Skills list: provider-grouped, searchable, typeahead-style
- * rows. Split from the data-fetching container so it renders in tests/stories.
- */
 export function SkillsOverview({
   skills,
   providerRoster,
@@ -378,7 +341,6 @@ export function SkillsOverview({
   const [providerFilters, setProviderFilters] = useState<
     ResourceProviderFilter[]
   >(["bb"]);
-  // Empty means unfiltered: the menu has no explicit "All" row.
   const [sourceFilters, setSourceFilters] = useState<
     ResourceSkillSourceFilter[]
   >([]);
@@ -389,8 +351,6 @@ export function SkillsOverview({
     null,
   );
   const normalizedQuery = query.trim().toLowerCase();
-  // One projection identity for both the page selection and the row heights
-  // the page size is measured from.
   const libraryResetKey = [
     normalizedQuery,
     providerFilters.join(","),
@@ -410,10 +370,6 @@ export function SkillsOverview({
     return counts;
   }, [skills]);
   const providerBucketCount = providerCounts.size;
-  // Derived from the listed skills (plus any still-selected filter) so a
-  // provider bb has never heard of still gets a filter row. "bb" leads;
-  // the rest sort by display label, which reproduces the order the old
-  // hardcoded table hardcoded.
   const providerOptions = useMemo(() => {
     const present = new Set<ResourceProviderFilter>([
       "bb",
@@ -468,10 +424,7 @@ export function SkillsOverview({
           skill.name,
           skill.description ?? "",
           providerLabel(skill.provider, providerRoster),
-          skillScopeLabel(
-            skill,
-            providerLabelForScope(skill, providerRoster),
-          ),
+          skillScopeLabel(skill, providerLabelForScope(skill, providerRoster)),
         ]
           .join(" ")
           .toLowerCase()
@@ -503,8 +456,6 @@ export function SkillsOverview({
     sortMode,
     sourceFilters,
   ]);
-  // Rows accumulate as the sentinel scrolls into view; the page machinery
-  // (viewport-fit chunk size, projection reset keys) stays underneath.
   const libraryList = useResourceInfiniteItems(visibleSkills, {
     pageSize: libraryPageSize,
     resetKey: libraryResetKey,
@@ -534,9 +485,6 @@ export function SkillsOverview({
     <ResourceListState
       state="empty"
       message={
-        // Naming only the query would misattribute the empty result when a
-        // filter is what emptied it — clearing the search would still show
-        // nothing.
         normalizedQuery === ""
           ? skills.length === 0
             ? "No skills in your library."
@@ -567,9 +515,6 @@ export function SkillsOverview({
   );
 
   return (
-    // Browse and Library are separate top-nav destinations; the page renders
-    // whichever the URL selects and carries no tab layer of its own. Each
-    // describes its own purpose — discovery vs. managing what you have.
     <ResourceCollectionPage
       id="skills-collection"
       description={
@@ -653,7 +598,6 @@ export function SkillsOverview({
 
 interface SkillDetailDialogViewProps {
   skill: SkillSummary | null;
-  /** See {@link SkillsOverviewProps.providerRoster}. */
   providerRoster: ProviderRoster;
   files: readonly string[];
   selectedPath: string;
@@ -671,12 +615,6 @@ interface SkillDetailDialogViewProps {
   onOpenInEditor: () => void;
 }
 
-/**
- * Presentational skill detail page: renders the SKILL.md with Edit / Delete /
- * Open-source affordances. Editing starts a resource-scoped thread; direct
- * source opening remains a separate action. The connected
- * {@link SkillDetailPage} wires it to the content/update/delete queries.
- */
 export function SkillDetailDialogView({
   skill,
   providerRoster,

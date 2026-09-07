@@ -53,7 +53,9 @@ describe.sequential("fake provider smoke environment integration", () => {
 
       expect(status.outcome).toBe("available");
       if (status.outcome !== "available") {
-        throw new Error(`Expected workspace status, received ${status.outcome}`);
+        throw new Error(
+          `Expected workspace status, received ${status.outcome}`,
+        );
       }
       expect(status.workspace.workingTree.state).toBe("clean");
       expect(status.workspace.workingTree.hasUncommittedChanges).toBe(false);
@@ -80,9 +82,6 @@ describe.sequential("fake provider smoke environment integration", () => {
         throw new Error("Workspace path was not assigned");
       }
 
-      // A small change lands in the `auto` tier, so its patch ships inline with
-      // the table of contents (first-screen prefetch) and also resolves on
-      // demand through diff/patch.
       await createTestFile({
         content: "export const paginated = true;\n",
         filePath: path.join(workspacePath, "feature.ts"),

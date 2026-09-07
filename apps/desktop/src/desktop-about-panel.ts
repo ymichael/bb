@@ -1,20 +1,11 @@
-/**
- * Facts shown in the About dialog. Everything here is either injected at build
- * time (version, channel, commit, build date, plugin SDK version) or read from
- * the running process, so a bug report can be reproduced against the exact
- * build the user is running.
- */
 export interface DesktopAboutFacts {
   applicationName: string;
-  /** ISO 8601 timestamp of when the build was produced. */
   buildDate: string;
   channel: "latest" | "nightly";
-  /** Full git SHA, or empty when the build had no git metadata. */
   commit: string;
   electronVersion: string;
   osArch: string;
   osRelease: string;
-  /** `os.type()`, e.g. "Darwin" or "Linux". */
   osType: string;
   platform: NodeJS.Platform;
   pluginSdkVersion: string;
@@ -30,7 +21,6 @@ export interface DesktopAboutPanelOptions {
 export interface DesktopAboutDialogOptions {
   buttons: string[];
   cancelId: number;
-  /** Index into `buttons` whose click should copy `detail` to the clipboard. */
   copyButtonId: number;
   defaultId: number;
   detail: string;
@@ -48,11 +38,6 @@ function displayValue(value: string): string {
   return trimmed.length === 0 ? UNKNOWN_VALUE : trimmed;
 }
 
-/**
- * How stale the running build is, in the "3 days old" form. Returns null for an
- * unparseable build date so the Date line degrades to the raw value instead of
- * claiming an age it cannot know.
- */
 export function formatBuildAge(
   buildDate: string,
   nowMs: number,
@@ -61,8 +46,6 @@ export function formatBuildAge(
   if (Number.isNaN(buildMs)) {
     return null;
   }
-  // A build that reads as newer than the clock means skew, not a future
-  // release; report it as fresh rather than as a negative age.
   const days = Math.max(
     0,
     Math.floor((nowMs - buildMs) / MILLISECONDS_PER_DAY),
@@ -85,12 +68,6 @@ function formatBuildDate(buildDate: string, nowMs: number | null): string {
   return age === null ? trimmed : `${trimmed} (${age})`;
 }
 
-/**
- * The detail block a user copies into a bug report, one `Label: value` per
- * line, most build-identifying first. Pass null for `nowMs` where the block is
- * rendered once and read later — a build age frozen at launch would be wrong by
- * the time a long-running session reads it.
- */
 export function buildDesktopAboutDetails(
   facts: DesktopAboutFacts,
   nowMs: number | null,
@@ -109,11 +86,6 @@ export function buildDesktopAboutDetails(
     .join("\n");
 }
 
-/**
- * The About dialog shown from the app menu. It replaces the native About panel
- * because only a message box can carry a Copy button, and the whole point of
- * the detail block is pasting it into a bug report.
- */
 export function createDesktopAboutDialogOptions(
   facts: DesktopAboutFacts,
   nowMs: number,
@@ -132,19 +104,11 @@ export function createDesktopAboutDialogOptions(
   };
 }
 
-/**
- * The native panel stays populated for any path that opens it without going
- * through the app menu. Electron accepts these options once at startup, so it
- * omits the build age.
- */
 export function createDesktopAboutPanelOptions(
   facts: DesktopAboutFacts,
 ): DesktopAboutPanelOptions {
   const details = buildDesktopAboutDetails(facts, null);
 
-  // `credits` is macOS/Windows only. The GTK about dialog has no equivalent
-  // free-text field, so Linux gets the details under the version instead of
-  // silently dropping them.
   if (facts.platform === "linux") {
     return {
       applicationName: facts.applicationName,

@@ -4,7 +4,6 @@ import type {
   WorkspaceGitOperation,
 } from "@bb/domain";
 import {
-  detectGitRepo,
   detectGitRepoKind,
   fetchRemoteBranches,
   getCheckoutRef,
@@ -12,10 +11,9 @@ import {
   getWorkspaceGitOperation,
   hasUncommittedChanges,
   listBranchRefsWithDefaults,
-  listBranches,
-  listRemoteBranches,
   readDefaultBranchRefs,
   type GitProcessOptions,
+  withGitRefMutationLock,
 } from "@bb/host-workspace";
 import type { HostDaemonOnlineRpcResult } from "@bb/host-daemon-contract";
 import { CommandDispatchError } from "../command-dispatch-support.js";
@@ -38,7 +36,7 @@ interface LimitedBranchList {
 
 interface PinBranchArgs {
   branches: readonly string[];
-  branch: string | null | undefined;
+  branch: string | undefined;
 }
 
 interface ClassifySelectedBranchArgs {
@@ -131,10 +129,18 @@ async function refreshRemoteBranches(
     return;
   }
 
-  const inFlight = fetchRemoteBranches(cwd, {
-    timeoutMs: REMOTE_BRANCH_FETCH_TIMEOUT_MS,
-    ...options,
-  })
+  const refreshDeadline = Date.now() + REMOTE_BRANCH_FETCH_TIMEOUT_MS;
+  const inFlight = withGitRefMutationLock(
+    commonDir,
+    () => {
+      const remainingTimeoutMs = Math.max(1, refreshDeadline - Date.now());
+      return fetchRemoteBranches(cwd, {
+        ...options,
+        timeoutMs: remainingTimeoutMs,
+      });
+    },
+    { timeoutMs: REMOTE_BRANCH_FETCH_TIMEOUT_MS },
+  )
     .catch(() => undefined)
     .then(() => undefined)
     .finally(() => {
@@ -200,7 +206,7 @@ export async function listHostBranchOptions(
   const gitProcessOptions = userExecutableProcessOptions(
     options?.runtimeManager.getShellEnv() ?? {},
   );
-  if (!(await detectGitRepo(command.path, gitProcessOptions))) {
+  if ((await detectGitRepoKind(command.path, gitProcessOptions)) === "none") {
     return {
       branches: [],
       branchesTruncated: false,
@@ -215,9 +221,6 @@ export async function listHostBranchOptions(
   }
 
   if (command.remoteRefresh === "background") {
-    // Return cached refs immediately. A successful fetch updates shared Git
-    // refs, whose workspace watcher event invalidates the observed picker
-    // query so the refreshed options arrive without blocking this response.
     void refreshRemoteBranches(command.path, gitProcessOptions).catch(
       () => undefined,
     );
@@ -226,92 +229,55 @@ export async function listHostBranchOptions(
   return readBranchOptions({ ...command, ...gitProcessOptions });
 }
 
-export async function listHostBranches(
-  command: CommandOf<"host.list_branches">,
+export async function inspectHostGitSource(
+  command: CommandOf<"host.inspect_git_source">,
   options?: Pick<CommandDispatchOptions, "runtimeManager">,
-): Promise<HostDaemonOnlineRpcResult<"host.list_branches">> {
+): Promise<HostDaemonOnlineRpcResult<"host.inspect_git_source">> {
   if (!path.isAbsolute(command.path)) {
     throw new CommandDispatchError("invalid_path", "Path must be absolute");
   }
 
-  // A project source can be a bare repository whose checkouts are sibling
-  // worktrees (`<root>/.bare` + `<root>/.git` gitdir file). It has refs and
-  // can seed new worktrees, but has no work tree to be dirty or mid-operation.
   const gitProcessOptions = userExecutableProcessOptions(
     options?.runtimeManager.getShellEnv() ?? {},
   );
   const repoKind = await detectGitRepoKind(command.path, gitProcessOptions);
   if (repoKind === "none") {
     return {
-      branches: [],
-      branchesTruncated: false,
       checkout: { kind: "unknown", reason: "Path is not a git repository" },
       defaultBranch: null,
       defaultBranchRelation: null,
       hasUncommittedChanges: false,
       operation: { kind: "none" },
       originDefaultBranch: null,
-      remoteBranches: [],
-      remoteBranchesTruncated: false,
-      selectedBranch: classifySelectedBranch({
-        branches: [],
-        remoteBranches: [],
-        selectedBranch: command.selectedBranch,
-      }),
     };
   }
 
-  await refreshRemoteBranches(command.path, gitProcessOptions);
+  if (command.remoteRefresh === "blocking") {
+    await refreshRemoteBranches(command.path, gitProcessOptions);
+  } else {
+    void refreshRemoteBranches(command.path, gitProcessOptions).catch(
+      () => undefined,
+    );
+  }
 
-  const [branches, remoteBranches, checkout, defaultRefs, dirty, operation] =
-    await Promise.all([
-      listBranches(command.path, gitProcessOptions),
-      listRemoteBranches(command.path, gitProcessOptions),
-      getCheckoutRef(command.path, gitProcessOptions),
-      readDefaultBranchRefs(command.path, gitProcessOptions),
-      repoKind === "work-tree"
-        ? hasUncommittedChanges(command.path, gitProcessOptions)
-        : false,
-      repoKind === "work-tree"
-        ? getWorkspaceGitOperation(command.path, gitProcessOptions)
-        : NO_GIT_OPERATION,
-    ]);
+  const [checkout, defaultRefs, dirty, operation] = await Promise.all([
+    getCheckoutRef(command.path, gitProcessOptions),
+    readDefaultBranchRefs(command.path, gitProcessOptions),
+    repoKind === "work-tree"
+      ? hasUncommittedChanges(command.path, gitProcessOptions)
+      : false,
+    repoKind === "work-tree"
+      ? getWorkspaceGitOperation(command.path, gitProcessOptions)
+      : NO_GIT_OPERATION,
+  ]);
   const defaultBranch = defaultRefs.defaultBranch;
   const originDefaultBranch = defaultRefs.originDefaultBranch;
-  // Pin default refs to the first page so common picks like main and
-  // origin/main are available before the user searches.
-  const sorted = pinBranch({ branches, branch: defaultBranch });
-  const sortedRemoteBranches = pinBranch({
-    branches: remoteBranches,
-    branch:
-      originDefaultBranch ?? (defaultBranch ? `origin/${defaultBranch}` : null),
-  });
-  const limitedBranches = limitBranchList({
-    branches: sorted,
-    limit: command.limit,
-    query: command.query,
-  });
-  const limitedRemoteBranches = limitBranchList({
-    branches: sortedRemoteBranches,
-    limit: command.limit,
-    query: command.query,
-  });
-  const selectedBranch = classifySelectedBranch({
-    branches,
-    remoteBranches,
-    selectedBranch: command.selectedBranch,
-  });
   return {
-    branches: limitedBranches.branches,
-    branchesTruncated: limitedBranches.truncated,
     checkout,
     defaultBranch: defaultBranch ?? null,
     defaultBranchRelation: defaultRefs.defaultBranchRelation ?? null,
     hasUncommittedChanges: dirty,
     operation,
     originDefaultBranch: originDefaultBranch ?? null,
-    remoteBranches: limitedRemoteBranches.branches,
-    remoteBranchesTruncated: limitedRemoteBranches.truncated,
-    selectedBranch,
   };
 }

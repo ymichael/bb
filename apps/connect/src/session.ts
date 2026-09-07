@@ -11,19 +11,6 @@ import {
   session,
 } from "@bb/connect-db";
 
-// Per-isolate caches. The gate authenticates every request (including each
-// static asset), so a single page load fires dozens of requests through the
-// same warm isolate. Without caching, that's 3 sequential D1 round-trips per
-// request (~150ms each); with it, only the first request in a burst touches
-// D1. TTLs are short so sign-out / disconnect take effect quickly (and the DO
-// already severs a live tunnel on revoke, so a stale-cached label still can't
-// reach a disconnected server).
-//
-// Entries hold the lookup's promise, stored the moment the query starts, so a
-// COLD isolate's request burst is also one D1 round trip per key: request
-// 2..N join request 1's in-flight lookup instead of issuing their own. A
-// rejected lookup is evicted when it settles — only successful lookups (and
-// deliberate cached negatives) live out the TTL.
 const LABEL_TTL_MS = 15_000;
 const SESSION_TTL_MS = 20_000;
 const SESSION_REFRESH_BEFORE_EXPIRY_MS =
@@ -63,16 +50,12 @@ function cacheStore<T>(
   key: string,
   value: Promise<T>,
   expires: number,
-  /** Recomputes the entry's expiry once the lookup lands (e.g. clamping a
-   * session entry to its D1 row's own expiration). */
   settledExpires?: (value: T) => number,
 ): Promise<T> {
   const entry: CacheEntry<T> = { value, expires };
   map.set(key, entry);
   value.then(
     (settled) => {
-      // Guard the identity: a fresh read or an invalidation may have
-      // replaced this entry already.
       if (settledExpires === undefined || map.get(key) !== entry) return;
       entry.expires = settledExpires(settled);
     },
@@ -85,18 +68,11 @@ function cacheStore<T>(
 
 interface ResolvedServer {
   kind: "server";
-  /**
-   * The account that owns this server (`server.userId`). Session and machine
-   * auth scope to this: only this account may visit the server, and only this
-   * account's machines may traverse `/internal/*`. With multi-server, an
-   * account owns several servers, each with its own `userId === this account`.
-   */
   userId: string;
   server: {
     id: string;
     credentialHash: string | null;
     revokedAt: Date | null;
-    /** Last tunnel heartbeat; null = never connected. Drives the offline page. */
     lastSeenAt: Date | null;
   };
 }
@@ -110,24 +86,12 @@ interface ResolvedMachine {
     id: string;
     credentialHash: string;
     revokedAt: Date | null;
-    /** Last tunnel heartbeat; null = never connected. */
     lastSeenAt: Date | null;
   };
 }
 
 type ResolvedLabel = ResolvedServer | ResolvedMachine;
 
-/**
- * Preserve the existing server-label resolution path and precedence: first
- * resolve `server.subdomain` exactly as main does, then fall through to a
- * machine label. Machine claims supply the ownership generation used to keep a
- * stale cached resolution pinned to the previous machine TunnelDO after reuse.
- *
- * Pass `{ fresh: true }` to bypass the read cache for credential-sensitive
- * paths (tunnel (re)connect): the ~15s cache TTL would otherwise let a
- * just-revoked credential re-establish a tunnel from a warm isolate. The
- * fresh read still refreshes the cache for subsequent visitor lookups.
- */
 export async function resolveLabel(
   label: string,
   db: ConnectDb,
@@ -213,7 +177,6 @@ async function lookupLabel(
 
 export interface VerifiedSessionCookie {
   userId: string;
-  /** A hint only; Better Auth rechecks the session before refreshing it. */
   needsRefresh: boolean;
 }
 
@@ -227,31 +190,16 @@ function verifiedSession(
   };
 }
 
-/**
- * Verify a better-auth session cookie directly against D1 (no cross-worker
- * call), cached per-isolate. Mirrors better-auth's
- * `${token}.${base64(hmac-sha256(token,secret))}` scheme. The refresh hint
- * matches Better Auth's update-age boundary but is not authoritative; Better
- * Auth rechecks the session before writing or reissuing its cookie.
- */
 export async function verifySessionCookieDetails(
   cookieValue: string,
   secret: string,
   db: ConnectDb,
 ): Promise<VerifiedSessionCookie | null> {
-  // better-auth URL-encodes the cookie value, so the base64 signature arrives
-  // with %2F/%2B/%3D. Decode before splitting/comparing (the hex token is
-  // unaffected by decoding).
   const decoded = safeDecode(cookieValue);
   const dot = decoded.lastIndexOf(".");
   if (dot <= 0) return null;
 
   const now = Date.now();
-  // Cache on the full `token.sig` value, not the token alone: keying on the
-  // token would return a cached userId before the signature is checked, so a
-  // valid `token` with a forged signature would authenticate (and a forged
-  // one would negative-poison the real token). The full-cookie key makes the
-  // cache reflect exactly what passed verification.
   const cached = cacheGet(sessionCache, decoded, now);
   const cachedSession =
     cached !== undefined
@@ -267,9 +215,6 @@ export async function verifySessionCookieDetails(
             now,
           ),
           now + SESSION_TTL_MS,
-          // A positive entry must not outlive its D1 session row; the clamp
-          // runs at settle time because a single-flight entry is stored
-          // before the row is known.
           (looked) =>
             looked === null
               ? now + SESSION_TTL_MS
@@ -298,8 +243,6 @@ async function lookupCachedSession(
     new TextEncoder().encode(token),
   );
   const expectedSig = btoa(String.fromCharCode(...new Uint8Array(sigBuf)));
-  // A bad signature is a deliberate cached negative: it costs no D1 read and
-  // keeps a forged cookie from hammering the crypto path per request.
   if (!constantTimeEqual(providedSig, expectedSig)) return null;
 
   const row = await db
@@ -307,10 +250,11 @@ async function lookupCachedSession(
     .from(session)
     .where(and(eq(session.token, token), gt(session.expiresAt, new Date(now))))
     .get();
-  return row ? { userId: row.userId, expiresAt: row.expiresAt.getTime() } : null;
+  return row
+    ? { userId: row.userId, expiresAt: row.expiresAt.getTime() }
+    : null;
 }
 
-/** Returns the owning user for callers that do not participate in refresh. */
 export async function verifySessionCookie(
   cookieValue: string,
   secret: string,
@@ -324,7 +268,7 @@ export async function verifySessionCookie(
 const machineLastSeenWrites = new Map<string, number>();
 export const MACHINE_LAST_SEEN_WRITE_INTERVAL_MS = 60_000;
 
-async function sha256Hex(value: string): Promise<string> {
+export async function sha256Hex(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
     new TextEncoder().encode(value),
@@ -334,13 +278,6 @@ async function sha256Hex(value: string): Promise<string> {
     .join("");
 }
 
-/**
- * Verify a bb-connect machine credential (presented by a daemon on the
- * `x-bb-connect-machine` header) against D1. Returns the owning userId when the
- * credential matches a non-revoked machine. Successful verification is not
- * cached: dashboard revocation is the lost-machine recovery hatch and must
- * take effect on the next request.
- */
 export async function verifyMachineCredential(
   credential: string,
   db: ConnectDb,
@@ -362,7 +299,6 @@ export async function verifyMachineCredentialDetails(
   return row ?? null;
 }
 
-/** Best-effort liveness write, capped to one D1 update per machine per minute/isolate. */
 export async function markMachineSeen(
   machineId: string,
   db: ConnectDb,

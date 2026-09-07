@@ -15,10 +15,6 @@ import { getEnv } from "./env.js";
 import { getSessionUserId } from "./current-user.server.js";
 import { resolveDevEmailPasswordEnabled } from "./local-auth.js";
 
-// The ONLY server module the client route imports. Everything here is a
-// createServerFn, so the client receives RPC stubs and none of the server-only
-// imports (D1, better-auth, cloudflare:workers) land in the client bundle.
-
 type DashboardState =
   | { authed: false; emailPasswordEnabled: boolean }
   | ({ authed: true } & AccountState);
@@ -64,7 +60,6 @@ export const createServerRowFn = createServerFn({ method: "POST" })
     return createServer(depsFromEnv(getEnv()), userId, label);
   });
 
-/** Parse the connect-code request at the boundary: an optional server + reuse flag. */
 export const createCodeFn = createServerFn({ method: "POST" })
   .validator((input: { serverId?: string; reuse?: boolean } | undefined) => ({
     serverId: typeof input?.serverId === "string" ? input.serverId : undefined,

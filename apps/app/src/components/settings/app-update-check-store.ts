@@ -1,7 +1,5 @@
 import { appToast } from "@/components/ui/app-toast";
 
-// Module-level, not component state: an update check keeps running (and still
-// reports its result) after the user navigates away from Settings → Updates.
 let isChecking = false;
 const listeners = new Set<() => void>();
 
@@ -29,11 +27,6 @@ export function checkErrorDescription(error: unknown): string {
   return "The update check did not complete.";
 }
 
-/**
- * Run one update check at a time. `check` is started here rather than in an
- * effect so it finishes — and toasts its failure — even if the caller unmounts
- * mid-flight.
- */
 export function startAppUpdateCheck(check: () => Promise<void>): void {
   if (isChecking) {
     return;
@@ -53,7 +46,6 @@ export function startAppUpdateCheck(check: () => Promise<void>): void {
     });
 }
 
-/** Drop all cross-test state from this module-level store. */
 export function resetAppUpdateCheckStoreForTests(): void {
   isChecking = false;
   listeners.clear();

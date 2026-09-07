@@ -39,12 +39,8 @@ export interface SdkSessionOptions {
   pathToClaudeCodeExecutable?: Options["pathToClaudeCodeExecutable"];
   plugins?: Options["plugins"];
   thinking?: Options["thinking"];
-  /** Flag-tier settings (highest user-controlled tier); BB owns this layer. */
   settings?: Options["settings"];
-  /**
-   * The bb thread this session serves, read when the CLI is spawned. Record
-   * mode scopes the CLI's stdio recording to it; absent otherwise.
-   */
+  extraArgs?: Options["extraArgs"];
   recordThreadId?: () => string;
 }
 
@@ -55,11 +51,6 @@ export type ClaudeSdkReasoningEffort =
   | "xhigh"
   | "max";
 
-/**
- * A type alias, not an interface: the Agent SDK's `Settings` carries a string
- * index signature, and only an object type alias gets the implicit index
- * signature that makes it assignable to `applyFlagSettings`.
- */
 export type ClaudeMutableFlagSettings = {
   autoMemoryEnabled: boolean;
   enableWorkflows: boolean;
@@ -125,14 +116,6 @@ function buildSdkDoneErrorMessage(args: BuildSdkDoneErrorMessageArgs): string {
   return `${errorMessage}\n\nClaude Code stderr:\n${stderrTail}`;
 }
 
-/**
- * Record mode's spawn of the Claude CLI. The Agent SDK owns the CLI pipe, so
- * the only way to tee it is to spawn the process ourselves through the SDK's
- * `spawnClaudeCodeProcess` seam — a byte-for-byte copy of its default spawn
- * (piped stdio, stderr forwarded to the session's tail) plus the recorder.
- * Used only when `BB_PROVIDER_BRIDGE_RECORD_DIR` is set; the default path is
- * untouched otherwise.
- */
 function spawnRecordedClaudeProcess(args: {
   onStderr: (data: string) => void;
   spawnOptions: SpawnOptions;
@@ -160,9 +143,6 @@ function buildSdkPermissionOptions(
     return { permissionMode };
   }
 
-  // Claude Code refuses dangerous permission skipping under root. Keep bb's
-  // logical bypass policy in the bridge canUseTool handler, but avoid sending
-  // the SDK flags that make the CLI exit before the session starts.
   if (isCurrentProcessRoot()) {
     return { permissionMode: "default" };
   }
@@ -204,14 +184,6 @@ export class SdkSession {
     return !this.inputDone;
   }
 
-  /**
-   * Change the permission mode of the live session. Used to leave Plan mode
-   * once the user approves a plan. The new mode is also recorded on the
-   * session options so a later resume rebuilds the session with it.
-   *
-   * Only streaming-input sessions accept the control request, and only while
-   * the query is open, so a closed session records the mode and returns.
-   */
   async setPermissionMode(mode: ClaudePermissionMode): Promise<void> {
     this.options.permissionMode = mode;
     await this.query?.setPermissionMode(mode);
@@ -271,10 +243,6 @@ export class SdkSession {
           }
         : {}),
       includePartialMessages: true,
-      // Mirror the Claude CLI cascade so the SDK loads both the user's global
-      // configuration (~/.claude/settings.json, ~/.claude/CLAUDE.md) and the
-      // workspace's project and local settings. Restricting this to "project"
-      // hid global home configuration from bb-managed sessions.
       settingSources: ["user", "project", "local"],
       persistSession: true,
       env: this.options.env ?? process.env,
@@ -310,6 +278,7 @@ export class SdkSession {
       ...(this.options.plugins ? { plugins: this.options.plugins } : {}),
       ...(this.options.thinking ? { thinking: this.options.thinking } : {}),
       ...(this.options.settings ? { settings: this.options.settings } : {}),
+      ...(this.options.extraArgs ? { extraArgs: this.options.extraArgs } : {}),
     };
 
     try {

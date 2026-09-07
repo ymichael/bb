@@ -64,10 +64,6 @@ export function SectionSidebarRow({
   );
 }
 
-/**
- * A sidebar row that runs an action instead of navigating. The mobile shell
- * uses it to reach a native screen the page cannot render itself.
- */
 export function SectionSidebarActionRow({
   children,
   label,
@@ -97,6 +93,40 @@ export function SectionSidebarActionRow({
   );
 }
 
+export function SectionSidebarDisclosureRow({
+  expanded,
+  label,
+  onToggle,
+}: {
+  expanded: boolean;
+  label: string;
+  onToggle: () => void;
+}) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      variant="ghost"
+      aria-expanded={expanded}
+      className={cn(
+        PROJECT_LIST_ACTION_BUTTON_CLASS,
+        "w-full text-subtle-foreground/75",
+      )}
+      onClick={onToggle}
+    >
+      <Icon
+        name="ChevronRight"
+        className={cn(
+          "size-3 shrink-0 transition-transform duration-150",
+          expanded && "rotate-90",
+        )}
+        aria-hidden="true"
+      />
+      <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+    </Button>
+  );
+}
+
 export function SectionSidebarLabel({ children }: { children: ReactNode }) {
   return (
     <div
@@ -110,14 +140,6 @@ export function SectionSidebarLabel({ children }: { children: ReactNode }) {
   );
 }
 
-/**
- * Shared shell for focused app sections such as Settings and Tools.
- *
- * `mobileHosted` renders the body without its own `<Sidebar>` shell: on
- * compact viewports AppLayoutSidebar owns one persistent drawer panel and
- * hosts this body inside it, so switching between the app sidebar and a
- * section sidebar never remounts the panel or the app sidebar's thread list.
- */
 export function SectionSidebar({
   backLabel,
   backTo,

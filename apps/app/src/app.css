@@ -27,7 +27,9 @@
    * variable is the single switch both they and the shell root read.
    */
   :root {
+    --bb-app-chrome-row-height: 3rem;
     --bb-shell-height: 100dvh;
+    --secondary-panel-width-mobile: min(76vw, 320px);
   }
 
   html.bb-app-shell-root {
@@ -60,8 +62,8 @@
    * selection with `select-none` so drags and Select All only pick up
    * content. `user-select: auto` resolves from the parent, so WebKit would
    * carry that opt-out into editable controls inside those regions (the
-   * sidebar thread search, the inline thread-title rename) and refuse to
-   * select their text. Restore native selection on the controls themselves.
+   * inline thread-title rename, for example) and refuse to select their text.
+   * Restore native selection on the controls themselves.
    */
   .select-none
     :where(input, textarea, [contenteditable]:not([contenteditable="false"])) {
@@ -405,6 +407,26 @@
  * The mobile path still owns its React state so software-keyboard expansion
  * remains synchronized with visualViewport changes.
  */
+[data-plugin-shelf] {
+  container: plugin-shelf / inline-size;
+}
+
+[data-plugin-shelf-grid] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container plugin-shelf (min-width: 32.5rem) {
+  [data-plugin-shelf-grid] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container plugin-shelf (min-width: 49rem) {
+  [data-plugin-shelf-grid] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 @container promptbox-shell (max-width: 30rem) {
   [data-follow-up-composer] {
     --follow-up-composer-container-compact: true;
@@ -646,6 +668,32 @@
     background-color: color-mix(in oklab, var(--foreground) 40%, transparent);
   }
 
+  [data-vaul-drawer-direction] [data-sidebar="content"] {
+    scrollbar-color: transparent transparent;
+  }
+
+  [data-vaul-drawer-direction]
+    [data-sidebar="content"]::-webkit-scrollbar-thumb,
+  [data-vaul-drawer-direction]
+    [data-sidebar="content"]::-webkit-scrollbar-thumb:hover {
+    background-color: transparent;
+  }
+
+  [data-vaul-drawer-direction] [data-sidebar="content"]:hover {
+    scrollbar-color: color-mix(in oklab, var(--foreground) 20%, transparent)
+      transparent;
+  }
+
+  [data-vaul-drawer-direction]
+    [data-sidebar="content"]:hover::-webkit-scrollbar-thumb {
+    background-color: color-mix(in oklab, var(--foreground) 20%, transparent);
+  }
+
+  [data-vaul-drawer-direction]
+    [data-sidebar="content"]:hover::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in oklab, var(--foreground) 40%, transparent);
+  }
+
   /*
    * Opt out of the global thin scrollbar into always-visible classic
    * scrollbars for two-axis data surfaces (e.g. the CSV table preview).
@@ -725,7 +773,7 @@
   }
 }
 
-/* Briefly highlight a conversation message that a sidebar search result
+/* Briefly highlight a conversation message that a thread-search result
  * deep-links to, then fade back to transparent. */
 @keyframes bb-search-flash {
   from {

@@ -23,8 +23,6 @@ function createInteraction(
     createdAt: 1,
     resolvedAt: null,
   };
-  // Each payload kind pairs with its own resolution type; spelling the
-  // branches keeps the fixture on the paired union without a cast.
   switch (payload.kind) {
     case "approval":
       return { ...base, payload };

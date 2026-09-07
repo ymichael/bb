@@ -5,30 +5,6 @@ import {
   environmentDiffPatchQueryKeyPrefix,
 } from "./query-keys";
 
-/**
- * The diff tab's per-file patch cache (mirror of
- * apps/app/src/hooks/cache-owners/environment-diff-patch-cache-owner.ts).
- *
- * Patches live in the profile QueryClient under a per-(environment, target,
- * path) key but have no query observers: the patch hook reads them with
- * `getQueryData`. Two consequences the web design handles and this module
- * keeps:
- *
- * - React Query's `gcTime` would count from the write, not from the last
- *   reader, so entries are built with `gcTime: Infinity` and retention is
- *   owned by {@link retainDiffPatchQueries} (evict a while after the last
- *   reader unmounts).
- * - Realtime workspace events must *evict* (remove) the patches, not
- *   invalidate them, because nothing would refetch an observer-less query;
- *   `getQueryData` returning undefined is what makes the list re-request a
- *   visible path. Every eviction bumps a per-environment generation so a
- *   patch fetch that started before the eviction drops its now-stale write
- *   instead of re-seeding the just-cleared cache.
- *
- * Generations are tracked per QueryClient (each server profile owns one) so
- * two profiles never share counters.
- */
-
 export interface PatchQueryIdentity {
   environmentId: string;
   targetType: string | null;
@@ -37,7 +13,6 @@ export interface PatchQueryIdentity {
 
 interface EvictionGenerations {
   perEnvironment: Map<string, number>;
-  /** Folded into every environment's generation (all-environment evictions). */
   all: number;
 }
 
@@ -55,7 +30,6 @@ function getGenerations(queryClient: QueryClient): EvictionGenerations {
   return generations;
 }
 
-/** Current eviction generation for an environment (0 if never evicted). */
 export function getDiffPatchEvictionGeneration(
   queryClient: QueryClient,
   environmentId: string,
@@ -64,10 +38,6 @@ export function getDiffPatchEvictionGeneration(
   return (generations.perEnvironment.get(environmentId) ?? 0) + generations.all;
 }
 
-/**
- * Evict one environment's cached patches: bump its generation first (so an
- * in-flight fetch resolving later drops its write), then remove the queries.
- */
 export function removeEnvironmentDiffPatchQueries(
   queryClient: QueryClient,
   environmentId: string,
@@ -82,7 +52,6 @@ export function removeEnvironmentDiffPatchQueries(
   });
 }
 
-/** Evict every environment's cached patches (a global environment change). */
 export function removeAllDiffPatchQueries(queryClient: QueryClient): void {
   const generations = getGenerations(queryClient);
   generations.all += 1;
@@ -91,7 +60,6 @@ export function removeAllDiffPatchQueries(queryClient: QueryClient): void {
   });
 }
 
-/** Read a single file's cached patch for the given target scope, if present. */
 export function readDiffPatchEntry(
   queryClient: QueryClient,
   identity: PatchQueryIdentity,
@@ -107,7 +75,6 @@ export function readDiffPatchEntry(
   );
 }
 
-/** Cache one file's patch under the per-(target, path) key (no gc timer). */
 export function writeDiffPatchEntry(
   queryClient: QueryClient,
   identity: PatchQueryIdentity,
@@ -125,7 +92,6 @@ export function writeDiffPatchEntry(
   queryClient.setQueryData<DiffPatchEntry>(queryKey, entry);
 }
 
-/** How long an environment's patches outlive their last reader. */
 const DIFF_PATCH_RETENTION_MS = 2 * 60_000;
 
 interface DiffPatchRetentionLease {
@@ -149,15 +115,6 @@ function getRetentionLeases(
   return leases;
 }
 
-/**
- * Keep an environment's cached patches alive while a reader is mounted. When
- * the last reader releases, the patches are evicted after
- * {@link DIFF_PATCH_RETENTION_MS} — long enough for a quick close/reopen of
- * the panel to keep its loaded diff, short enough that browsing many threads
- * on a phone does not accumulate every visited diff. A reader that mounts
- * again inside that window cancels the pending eviction. Returns the release
- * function (idempotent).
- */
 export function retainDiffPatchQueries(
   queryClient: QueryClient,
   environmentId: string,

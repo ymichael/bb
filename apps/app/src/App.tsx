@@ -10,6 +10,7 @@ import { AppLayout } from "./components/layout/AppLayout";
 import { AuthCallbackView } from "./views/AuthCallbackView";
 import { QuickCreateProjectProvider } from "./hooks/useQuickCreateProject";
 import { RouteNavigationProvider } from "./components/ui/app-route-anchor";
+import { RouteNavigationIndicator } from "./components/ui/route-navigation-indicator";
 import { AppNavigationUrlHost } from "./lib/url-open-routing";
 import { NativeShellReporter } from "./lib/native-shell";
 import { AppFileExternalNavigationHost } from "./components/plugin/AppFileExternalNavigationHost";
@@ -55,7 +56,6 @@ import {
 } from "./lib/route-paths";
 import { AppCommandProvider } from "./components/commands/AppCommandProvider";
 import { ProviderCliInstallLogDialogHost } from "./components/provider-cli/provider-cli-install";
-import { PluginSettingsCompatibilityRoute } from "./components/settings/PluginSettingsCompatibilityRoute";
 import { RouteLoadingSkeleton } from "./components/ui/route-loading-skeleton";
 
 const SettingsView = lazy(() =>
@@ -78,14 +78,6 @@ const ProjectSettingsView = lazy(() =>
     default: m.ProjectSettingsView,
   })),
 );
-// Start fetching the split-workspace route chunk (and, through Vite's preload
-// helper, its static closure) as soon as the boot chunk evaluates instead of
-// waiting for the first React render to reach the lazy element. Nearly every
-// page load ends up on this route, so the request is never wasted, and on a
-// phone the boot parse + first render otherwise adds a serialized round trip
-// before the largest transfer even starts. The trailing catch only keeps a
-// failed fetch from surfacing as an unhandled rejection while no route has
-// rendered yet; React.lazy still receives the rejection when it renders.
 const splitWorkspaceRouteModule = import("./views/SplitWorkspaceRoute");
 splitWorkspaceRouteModule.catch(() => {});
 const SplitWorkspaceRoute = lazy(() => splitWorkspaceRouteModule);
@@ -143,13 +135,6 @@ export function ExtensionsLandingRedirect() {
   return <Navigate to={TOOLS_PLUGINS_ROUTE_PATH} replace />;
 }
 
-/**
- * /tools/* → /extensions/* preserving the subpath, query, and hash, so every
- * pre-rename deep link lands on its renamed page. The /tools/automations
- * routes keep their own more-specific redirects (React Router ranks static
- * segments above this splat), since those left Extensions for the plugin
- * panel rather than moving with the rename.
- */
 export function LegacyToolsPathRedirect() {
   const location = useLocation();
   const suffix = location.pathname.slice(LEGACY_TOOLS_PREFIX_ROUTE_PATH.length);
@@ -186,9 +171,6 @@ export function HashNavigationScroll() {
     const scrollToTarget = (): boolean => {
       const target = document.getElementById(targetId);
       if (target === null) return false;
-      // Fragment destinations are navigation landmarks. Move keyboard focus as
-      // well as the viewport, including for semantic sections that are not
-      // normally focusable.
       if (target.tabIndex < 0 && !target.hasAttribute("tabindex")) {
         target.tabIndex = -1;
       }
@@ -199,8 +181,6 @@ export function HashNavigationScroll() {
 
     if (scrollToTarget()) return;
 
-    // Lazy routes and plugin slots may mount after the URL changes. Observe the
-    // app until the destination exists instead of dropping the navigation.
     let observer: MutationObserver | null = null;
     let timeoutId: number | null = null;
     const stopWaiting = () => {
@@ -234,20 +214,9 @@ function AppRoutes() {
           />
           <Route
             path={SETTINGS_PLUGINS_ROUTE_PATH}
-            element={
-              <PluginSettingsCompatibilityRoute>
-                <SettingsView />
-              </PluginSettingsCompatibilityRoute>
-            }
+            element={<SettingsView />}
           />
-          <Route
-            path={SETTINGS_PLUGIN_ROUTE_PATH}
-            element={
-              <PluginSettingsCompatibilityRoute>
-                <SettingsView />
-              </PluginSettingsCompatibilityRoute>
-            }
-          />
+          <Route path={SETTINGS_PLUGIN_ROUTE_PATH} element={<SettingsView />} />
           <Route
             path={SETTINGS_MACHINE_ROUTE_PATH}
             element={<MachineSettingsView />}
@@ -314,7 +283,10 @@ function AppRoutes() {
             path={TOOLS_REGISTRY_SKILL_DETAIL_ROUTE_PATH}
             element={<ToolsView />}
           />
-          <Route path={TOOLS_PLUGINS_ROUTE_PATH} element={<ToolsView />} />
+          <Route
+            path={`${TOOLS_PLUGINS_ROUTE_PATH}/*`}
+            element={<ToolsPluginsRoute />}
+          />
           <Route
             path={TOOLS_PLUGIN_BROWSE_ROUTE_PATH}
             element={<ExtensionsLandingRedirect />}
@@ -326,11 +298,9 @@ function AppRoutes() {
           <Route
             path="*"
             element={
-              // The thread / new-thread pane draws its own header, so while
-              // its chunk loads the content area would otherwise be blank.
-              // Settings and tools routes keep the outer null fallback: the
-              // AppLayout header is already on screen for them.
-              <Suspense fallback={<RouteLoadingSkeleton />}>
+              <Suspense
+                fallback={<RouteLoadingSkeleton isBoundedPane={false} />}
+              >
                 <SplitWorkspaceRoute />
               </Suspense>
             }
@@ -342,11 +312,6 @@ function AppRoutes() {
   );
 }
 
-/**
- * Sibling of the lazy routes inside their Suspense boundary: React commits
- * it (and runs its effect) only once the first route content has resolved,
- * which is the signal deferred plugin frontend boot waits on.
- */
 function RouteContentPaintSignal() {
   useEffect(() => {
     markRouteContentPainted();
@@ -354,18 +319,16 @@ function RouteContentPaintSignal() {
   return null;
 }
 
+function ToolsPluginsRoute() {
+  const { "*": pluginId } = useParams<"*">();
+  return <ToolsView pluginId={pluginId || undefined} />;
+}
+
 export function App() {
-  // Connect WebSocket for real-time invalidation
   useWebSocket();
-  // Keep the Electron window chrome (traffic lights, inactive title bar)
-  // in sync with bb's theme preference.
   useDesktopThemeSync();
-  // Apply the server-stored app palette (built-in or custom CSS) app-wide.
   useAppTheme();
-  // Reconcile the favicon tint with the server-stored appearance (and migrate
-  // any legacy localStorage-only preference on first load).
   useFaviconColorSync();
-  // Load plugin frontend bundles once system config resolves.
   usePluginFrontendBoot();
   useRememberPluginNavPanelChrome();
 
@@ -373,6 +336,7 @@ export function App() {
     <QuickCreateProjectProvider>
       <AppCommandProvider>
         <RouteNavigationProvider>
+          <RouteNavigationIndicator />
           <AppNavigationUrlHost>
             <AppFileExternalNavigationHost>
               <HashNavigationScroll />
@@ -384,11 +348,9 @@ export function App() {
                 />
                 <Route path="*" element={<AppRoutes />} />
               </Routes>
-              {/* Outside <Routes>: a provider CLI install outlives the page that
-                started it, so its failure toast can be clicked from any route —
-                including auth callback, which renders no app shell. */}
-               <ProviderCliInstallLogDialogHost />
-             </AppFileExternalNavigationHost>
+              {}
+              <ProviderCliInstallLogDialogHost />
+            </AppFileExternalNavigationHost>
           </AppNavigationUrlHost>
         </RouteNavigationProvider>
       </AppCommandProvider>

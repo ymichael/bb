@@ -22,14 +22,15 @@ Spawning:
     --model <model>                Model override
     --reasoning-level <level>      Reasoning level: low, medium, high, xhigh, max (provider-dependent)
     --environment <id-or-path>     Attach to an existing environment (ID or workspace path)
-    --new-environment <kind>       Create a new environment (worktree)
-    --base-branch <branch>         Base branch for a new managed worktree
+    --new-environment <kind>       Create a fresh personal workspace or managed worktree
+    --base-branch <branch>         Exact Git ref for a new managed worktree
     --machine <id-or-name>         Run on a machine (--host is an alias)
     --service-tier <tier>          Service tier: fast, default
     --permission-mode <mode>       Permission mode: accept-edits, auto, or full
     --plan                         Send the prompt as the provider's /plan action (plan first, execute after approval)
     --section <id>                 Create the thread in a section
     --visibility <visibility>      visible or hidden; a child inherits its parent by default
+    --send-at <when>               Dispatch the first message at an ISO 8601 timestamp or a duration from now (30s, 10m, 2h, 7d)
     --file <path>                  Host-readable absolute or uploaded file path
     --image <path>                 Host-readable absolute or uploaded image path
     --origin-kind <kind>           Create a fork thread
@@ -59,6 +60,8 @@ Spawning:
   workspace. It cannot be combined with an existing environment ID because that
   environment already selects its machine. Without the flag, local/primary
   machine resolution is unchanged.
+  Omit --base-branch for bb's default. Explicit values are exact; use
+  origin/<branch> for a remote ref.
 
 Forking:
 
@@ -66,7 +69,9 @@ Forking:
 
     --prompt <prompt>              Optional first prompt; omit for an idle fork
     --source-seq-end <seq>         Fork after the source turn containing this event sequence (tip by default)
-    --workspace <mode>             isolated (default) or reuse
+    --environment <id-or-path>     Existing environment ID or unmanaged workspace path
+    --new-environment <kind>       Create a fresh personal workspace or managed worktree
+    --base-branch <branch>         Exact Git ref for a new worktree; omit for the project default
     --title <title>                Thread title
     --permission-mode <mode>       Inherit source by default; accepts accept-edits, auto, full
     --visibility <visibility>      visible (default) or hidden
@@ -80,9 +85,13 @@ Forking:
   inherited timeline both end with that turn (an anchor on a user message
   branches before it, like editing it). Without it a fork clones the session
   tip and inherits every completed turn. Providers that can only clone a whole
-  session accept an anchor only on the source's latest turn. Isolated forks
-  create a fresh managed worktree (or personal workspace for personal threads);
-  reuse attaches the source environment. Omit --prompt to create an idle fork.
+  session accept an anchor only on the source's latest turn. A fork reuses the
+  source environment by default. Use --new-environment personal for a fresh
+  personal workspace or --new-environment worktree for a fresh worktree on the
+  source machine; --environment can select another environment or unmanaged
+  path on that machine. A different machine is rejected because the source
+  provider session lives on its original machine. Omit --prompt to create an
+  idle fork.
 
 Editing a sent message (requires the default-on `editMessages` experiment):
 
@@ -114,8 +123,23 @@ Listing:
   titles are cut at 60 characters. Project shows the project name; the
   personal project shows "-". Use --json for the full thread records.
 
-  bb thread search <query>                 Search threads and messages
+  bb thread search <query> [--limit <1-50>]
+                                             Search threads and messages
   bb thread history <id>                   List prompt history
+
+  bb thread count                          Count threads without listing them
+    --status <status>                      Count threads in this status: pending, idle, starting, active, stopping, error
+    --host <id>                            Count threads whose environment is on this machine
+    --provider <id>                        Count threads running on this provider
+    --project <id>                         Count threads in this project
+    --parent <id|none>                     Count one thread's children, or 'none' for threads with no parent
+    --by <dimension>                       Group the count by host, provider, or project
+
+  Counting happens in the database, so use it instead of listing threads and
+  counting rows: `bb thread list` pages a bounded window and would miscount.
+  Archived, deleted, and hidden threads are excluded. Without --by the command
+  prints one number; with --by it prints a count per group (threads with no
+  host/provider/project group under "-") followed by the total.
 
 Sections:
 
@@ -133,7 +157,6 @@ Inspecting:
     --diff-target <type>                   Diff scope: uncommitted, branch_committed, all, commit
     --diff-sha <sha>                       Commit SHA (for --diff-target commit)
     --diff-merge-base <branch>             Override merge-base branch for diff
-    --merge-base-branches                  List available merge-base branches
 
   Shows pull request status for the attached environment branch when available.
 
@@ -186,17 +209,22 @@ Messaging:
     --model <model>                        Model override for this turn
     --reasoning-level <level>              Reasoning level override
     --plan                                 Send the message as the provider's /plan action
+    --send-at <when>                       Dispatch at an ISO 8601 timestamp or a duration from now (30s, 10m, 2h, 7d)
     --file <path>                          Host-readable absolute or uploaded file path
     --image <path>                         Host-readable absolute or uploaded image path
 
   Tell steers by default, delivering the message immediately into the active
   turn. Use --mode queue for non-urgent follow-ups that can wait until the agent
-  is free. A target that is awaiting user interaction (an open question or
-  approval) cannot take a prompt; tell then holds the message and delivers it
-  in the requested mode once the interaction settles. That outcome is not a
-  failure, so do not resend. `--json` reports `delivery` as `sent`, `queued`,
-  or `deferred`. A held message waits for a thread that failed while it was
-  held, and delivers when the thread is retried.
+  is free; --mode auto steers a live turn and starts a new one on an idle
+  thread. Input sent while a turn is starting stays in the queue with
+  `waitingOn: turn-starting`; `turn/started` wakes it and steers it into that
+  turn. A target that is awaiting user interaction (an open question or
+  approval) cannot take a prompt; tell then adds the message to the thread's
+  queue and dispatches it once the interaction settles. That outcome is not a
+  failure, so do not resend. `--json` reports `delivery` as `sent` or `queued`,
+  and a queued answer carries the complete row as `queuedMessage`, including
+  its `id`, `waitingOn`, and `sendAt`. A deferred message waits for a thread
+  that failed while it was deferred, and delivers when the thread is retried.
 
   --plan sends the same structured /plan command the composer's plan action
   sends, so the agent proposes a plan for approval before executing (Claude
@@ -209,12 +237,17 @@ Messaging:
 
   bb thread stop [id]                      Stop work and release the agent runtime
   bb thread compact [id]                   Request compaction of an idle or errored thread's context
+  bb thread clear [id]                     Clear model context for an idle or failed thread
   bb thread cancel-plan [id]               Exit the provider's active Plan mode
   bb thread clear-goal [id]                Clear the provider's active Goal
     --self                                 Target current thread
 
   `thread compact` enqueues the same structured /compact turn used by the
   composer. Follow the thread timeline for the eventual compaction result.
+  `thread clear` keeps the BB thread, workspace, durable event history, and
+  sticky execution settings. Its active timeline starts at one visible
+  `Context cleared` boundary, and its next prompt starts a fresh provider
+  conversation in the same thread.
 
 Ownership:
 
@@ -261,7 +294,7 @@ Interactions:
 
 Queued messages:
 
-  bb thread queue list <thread-id>
+  bb thread queue list [<thread-id>] [--wait-holder plugin:<plugin-id>]
   bb thread queue create <thread-id> <message>
   bb thread queue update <thread-id> <message-id> <message> [--file <path>] [--image <path>]
   bb thread queue send <thread-id> <message-id> [--mode auto|steer]
@@ -269,12 +302,49 @@ Queued messages:
   bb thread queue group <thread-id> <boundary-id> --prefix <comma-separated-ids>
   bb thread queue delete <thread-id> <message-id>
 
+  A queued message is one that could not dispatch yet. Every one carries a
+  typed reason in its `Waiting on` column: waiting for the current turn to
+  finish, for the workspace, for a pending interaction, for a clock (`Send at`),
+  or for a plugin that has queued it. `queue list` with no thread id lists every
+  queued row in the workspace; `--wait-holder plugin:<plugin-id>` narrows it to
+  the rows one plugin is holding.
+
+  `queue send` dispatches a row now, bypassing every plugin wait and its own
+  schedule — the invariants (a running turn, an unfinished workspace, an
+  unanswered interaction) still apply, and a message that hits one simply queues
+  again. `--mode steer` uses those same send-now bypasses and re-attempts the row
+  as a steer; it does not bypass the invariants, so a provisioning row remains
+  queued until the workspace is ready.
+  `queue delete` discards it instead. Both are always permitted.
+
+  --send-at takes an ISO 8601 timestamp (2026-08-25T09:00, local without an
+  offset) or a duration from now (30s, 10m, 2h, 7d). A time that has already
+  passed is rejected, as is a bare date, which has no time of day. Several
+  queued rows on one thread are normal: two scheduled sends coexist.
+
 Persisted panel tabs:
 
   bb thread tabs show <thread-id>
   bb thread tabs set <thread-id> --expected-revision <n> --tabs-json '<json>'
 
 Lifecycle:
+
+  bb thread retry [id]                     Retry the thread's failed turn
+    --self                                 Target current thread
+    --turn <requestId>                     Retry this turn request id specifically; fails when it is not the thread's failed turn
+    --send-at <when>                       Dispatch at an ISO 8601 timestamp or a duration from now (30s, 10m, 2h, 7d)
+    --reason <text>                        Why it is being retried, shown on the queued row
+
+  Retry re-submits the failed turn by reference: no duplicated user message in
+  the timeline, and an attempt number that increments (2 is the first retry).
+  What the provider is sent follows its own acceptance record — an input it
+  never accepted is re-sent verbatim, while an accepted turn (already in the
+  provider's conversation) is continued with a nudge rather than asked twice.
+  With no --turn it retries the most recent turn, the
+  one whose failure put the thread in error; --turn asserts which turn you mean
+  and fails when the thread has moved on, as does retrying a thread that has not
+  failed or a turn that already has a retry queued. Without --send-at the retry
+  is attempted now, and may still queue behind a busy thread or a plugin.
 
   bb thread archive [id]                   Archive a thread (and children/hidden forks)
     --self                                 Archive current thread

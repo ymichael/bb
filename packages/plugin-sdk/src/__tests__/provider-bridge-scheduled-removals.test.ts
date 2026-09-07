@@ -1,12 +1,3 @@
-/**
- * A name `@get-bb/plugin-sdk/provider-bridge` has published stays importable
- * until the next major version, even after its last in-repo consumer went:
- * dropping a published name is a breaking change (docs/api_to_audit.md,
- * "Scheduled removals"). This test keeps the doc's list and the facade in
- * step — every name the doc schedules for removal must still be exported by
- * the published declaration bundle and, for a value, be a real runtime export
- * of the facade — so an alias cannot silently disappear before the major.
- */
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import * as providerBridgeSdk from "../provider-bridge.js";
@@ -17,7 +8,6 @@ const DECLARATIONS_URL = new URL(
   import.meta.url,
 );
 
-/** The backticked names listed as bullets under "## Scheduled removals". */
 function scheduledRemovalNames(doc: string): string[] {
   const start = doc.indexOf("## Scheduled removals (next major)");
   expect(start, "the scheduled-removals section").toBeGreaterThan(-1);
@@ -30,7 +20,6 @@ function scheduledRemovalNames(doc: string): string[] {
   );
 }
 
-/** The names a bundled `export { … }` / `export type { … }` line exports. */
 function exportedNames(
   declarations: string,
   kind: "type" | "value",
@@ -55,8 +44,6 @@ describe("scheduled removals on @get-bb/plugin-sdk/provider-bridge", () => {
       readFile(DECLARATIONS_URL, "utf8"),
     ]);
     const scheduled = scheduledRemovalNames(doc);
-    // The list exists to be non-empty; an empty match means the doc's shape
-    // changed under this test rather than that nothing is scheduled.
     expect(scheduled.length).toBeGreaterThan(0);
 
     const typeExports = exportedNames(declarations, "type");
@@ -75,9 +62,6 @@ describe("scheduled removals on @get-bb/plugin-sdk/provider-bridge", () => {
   });
 
   it("still resolves the 0.4.15 names whose definitions moved", () => {
-    // What a bridge built against 0.4.15 imported from this subpath; the
-    // ACP pair moved to the ACP kit, the task-tool pair to the claude-code
-    // plugin. Each alias parses what it parsed then.
     expect(
       providerBridgeSdk.hostDaemonAcpLaunchSpecSchema.safeParse({
         displayName: "Amp",

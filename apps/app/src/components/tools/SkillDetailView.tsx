@@ -38,7 +38,6 @@ interface SkillDetailViewProps {
   path: string;
   pathHref?: string;
   titleBadge?: SkillDetailTitleBadge;
-  /** Extra contextual actions displayed at the trailing edge of the header. */
   headerActions?: ReactNode;
   overflowMenu?: ReactNode;
   files: readonly string[];
@@ -130,14 +129,6 @@ function SkillFileList({
   );
 }
 
-/**
- * Markdown renders progressively: fence-safe chunks of the source, with more
- * appended as the panel scrolls — the same endless-scroll behavior the
- * extension lists use, in place of the old page-flip footer. Chunking is what
- * keeps big BB-official docs fast to open: the first chunk paints immediately
- * instead of the whole document (dozens of viewport-heights of highlighted
- * code fences) rendering up front.
- */
 const SKILL_CONTENT_CHUNK_LINES = 120;
 
 export function splitMarkdownIntoChunks(content: string): string[] {
@@ -150,8 +141,6 @@ export function splitMarkdownIntoChunks(content: string): string[] {
     if (/^\s*(```|~~~)/u.test(line)) {
       inFence = !inFence;
     }
-    // Split only at blank lines outside code fences, so a chunk boundary can
-    // never cut a fence, table, or list item in half.
     if (
       !inFence &&
       current.length >= SKILL_CONTENT_CHUNK_LINES &&
@@ -176,8 +165,6 @@ function ScrollingSkillContent({
   content: string;
   markdown: boolean;
 }) {
-  // Non-markdown files render whole: they are code previews whose line
-  // numbering and header would restart at every chunk seam.
   const chunks = useMemo(
     () => (markdown ? splitMarkdownIntoChunks(content) : [content]),
     [content, markdown],

@@ -36,7 +36,6 @@ describe("diff-patch-cache", () => {
     expect(readDiffPatchEntry(queryClient, identity, "a.ts")).toBeUndefined();
     writeDiffPatchEntry(queryClient, identity, entry);
     expect(readDiffPatchEntry(queryClient, identity, "a.ts")).toEqual(entry);
-    // Another target of the same environment is a different slice.
     expect(
       readDiffPatchEntry(
         queryClient,
@@ -66,7 +65,6 @@ describe("diff-patch-cache", () => {
         "a.ts",
       ),
     ).toEqual(entry);
-    // A global eviction reaches environments never individually evicted.
     removeAllDiffPatchQueries(queryClient);
     expect(getDiffPatchEvictionGeneration(queryClient, "env_2")).toBe(1);
     expect(getDiffPatchEvictionGeneration(queryClient, "env_1")).toBe(2);
@@ -93,13 +91,12 @@ describe("diff-patch-cache", () => {
     const releaseA = retainDiffPatchQueries(queryClient, "env_1", 1_000);
     const releaseB = retainDiffPatchQueries(queryClient, "env_1", 1_000);
     releaseA();
-    releaseA(); // idempotent
+    releaseA();
     vi.advanceTimersByTime(5_000);
     expect(readDiffPatchEntry(queryClient, identity, "a.ts")).toEqual(entry);
     releaseB();
     vi.advanceTimersByTime(999);
     expect(readDiffPatchEntry(queryClient, identity, "a.ts")).toEqual(entry);
-    // A reader mounting again inside the window cancels the eviction.
     const releaseC = retainDiffPatchQueries(queryClient, "env_1", 1_000);
     vi.advanceTimersByTime(5_000);
     expect(readDiffPatchEntry(queryClient, identity, "a.ts")).toEqual(entry);

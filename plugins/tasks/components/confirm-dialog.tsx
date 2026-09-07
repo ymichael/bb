@@ -9,11 +9,6 @@ import {
   DialogTitle,
 } from "@bb/shared-ui/dialog";
 
-/**
- * Alert-style confirmation built on the vendored Dialog. (The registry's
- * alert-dialog needs the @radix-ui/react-alert-dialog dependency, which this
- * plugin doesn't ship; Dialog covers the confirm/cancel shape.)
- */
 export function ConfirmDialog({
   open,
   onOpenChange,
@@ -28,7 +23,6 @@ export function ConfirmDialog({
   title: string;
   description: ReactNode;
   confirmLabel: string;
-  /** Keeps the dialog open but blocks confirming until the caller is ready. */
   confirmDisabled?: boolean;
   onConfirm: () => void;
 }) {

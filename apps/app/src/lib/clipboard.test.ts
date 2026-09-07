@@ -41,6 +41,7 @@ afterEach(() => {
   toastMocks.error.mockReset();
   toastMocks.success.mockReset();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   removeClipboard();
 });
 
@@ -97,6 +98,102 @@ describe("copyTextToClipboard", () => {
 });
 
 describe("copyToClipboardWithToast", () => {
+  it("writes message text and an attached PNG as one clipboard item", async () => {
+    const clipboardData: Record<string, Blob | Promise<Blob>>[] = [];
+    class TestClipboardItem {
+      constructor(data: Record<string, Blob | Promise<Blob>>) {
+        clipboardData.push(data);
+      }
+    }
+    const write = vi.fn(async () => {
+      await Promise.all(Object.values(clipboardData[0] ?? {}));
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("ClipboardItem", TestClipboardItem);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("image", {
+          headers: { "Content-Type": "image/png" },
+          status: 200,
+        }),
+      ),
+    );
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { write, writeText },
+    });
+
+    await expect(
+      copyToClipboardWithToast("A photo", {
+        imageUrl: "/attachments/photo.png",
+      }),
+    ).resolves.toBe(true);
+
+    expect(write).toHaveBeenCalledOnce();
+    expect(writeText).not.toHaveBeenCalled();
+    const copiedImageBlob = await Promise.resolve(
+      clipboardData[0]?.["image/png"],
+    );
+    expect(copiedImageBlob?.type).toBe("image/png");
+    expect(await copiedImageBlob?.text()).toBe("image");
+    const textBlob = await Promise.resolve(clipboardData[0]?.["text/plain"]);
+    expect(await textBlob?.text()).toBe("A photo");
+  });
+
+  it("writes an attached image when the message has no text", async () => {
+    const clipboardData: Record<string, Blob | Promise<Blob>>[] = [];
+    const write = vi.fn(async () => {
+      await Promise.all(Object.values(clipboardData[0] ?? {}));
+    });
+    vi.stubGlobal(
+      "ClipboardItem",
+      class TestClipboardItem {
+        constructor(data: Record<string, Blob | Promise<Blob>>) {
+          clipboardData.push(data);
+        }
+      },
+    );
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response("image", {
+          headers: { "Content-Type": "image/png" },
+        }),
+      ),
+    );
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { write },
+    });
+
+    await expect(
+      copyToClipboardWithToast("", {
+        imageUrl: "/attachments/photo.png",
+      }),
+    ).resolves.toBe(true);
+
+    expect(write).toHaveBeenCalledOnce();
+  });
+
+  it("reports a failure when the browser cannot write the attached image", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    await expect(
+      copyToClipboardWithToast("A photo", {
+        errorMessage: "Failed to copy",
+        imageUrl: "/attachments/photo.png",
+      }),
+    ).resolves.toBe(false);
+
+    expect(writeText).not.toHaveBeenCalled();
+    expect(toastMocks.error).toHaveBeenCalledWith("Failed to copy");
+  });
+
   it("shows the configured error only after both copy methods fail", async () => {
     installClipboard(vi.fn().mockRejectedValue(new Error("denied")));
     installEditingCommand(() => false);

@@ -67,18 +67,9 @@ export function itemStatusToApprovalStatus(
 interface ExecutionUpdateBase {
   callId: string;
   output?: string;
-  /**
-   * Wall-clock millis when the work reached a terminal status. `null` while
-   * pending. The projection records this on `end` events so the renderer
-   * can derive duration from `(message.startedAt, completedAt)`.
-   */
   completedAt: number | null;
   status?: EventProjectionToolCallMessage["status"];
   parentToolCallId?: string;
-  /**
-   * The bridge's declarative presentation for the item (grammar v3). Absent
-   * on events persisted before presentation existed.
-   */
   presentation?: ThreadEventItemPresentation;
 }
 
@@ -103,9 +94,7 @@ export interface DelegationExecutionUpdate
   extends ExecutionUpdateBase, DelegationMetadata {
   kind: "delegation";
   toolName?: string;
-  /** Provider-native id of the child (grammar v3 `delegation` only). */
   childRef?: string;
-  /** The delegation outlives its spawning turn (grammar v3 `delegation` only). */
   background?: boolean;
 }
 
@@ -171,6 +160,7 @@ export function parseExecLifecycleEvent(
     const completedAt = kind === "end" ? meta.createdAt : null;
 
     const command = extractShellCommandFromString(decoded.item.command);
+    const presentation = decoded.item.presentation;
     return {
       kind,
       call: {
@@ -184,6 +174,7 @@ export function parseExecLifecycleEvent(
         completedAt,
         approvalStatus: itemStatusToApprovalStatus(decoded.item.approvalStatus),
         status,
+        ...(presentation ? { presentation } : {}),
         ...(parentToolCallId ? { parentToolCallId } : {}),
       },
     };
@@ -192,16 +183,8 @@ export function parseExecLifecycleEvent(
   return null;
 }
 
-/** The neutral tool name a v3 delegation row carries: it has no tool. */
 export const DELEGATION_ITEM_TOOL_NAME = "delegation";
 
-/**
- * A grammar v3 `delegation` item: `item/started` opens it, a background
- * delegation's `item/delegation/progress` snapshots revise its label and
- * summary while it runs, and `item/completed` (foreground) or
- * `item/delegation/completed` (background) settles it with the child's
- * terminal summary as the row output.
- */
 function parseDelegationItemLifecycleEvent(
   decoded: ThreadEvent,
   meta: EventMeta,
@@ -300,9 +283,6 @@ export function parseToolCallLifecycleEvent(
     const toolArgs = parseToolArgs(parsedArgs);
     const presentation = decoded.item.presentation;
 
-    // A generic tool call. Its kind, its label and whether it delegated work
-    // come from the persisted item (the bridge's presentation, the v3 item
-    // kinds, child turns linked by `parentToolCallId`), never from its name.
     return {
       kind,
       call: {

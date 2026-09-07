@@ -81,8 +81,6 @@ describe("RuntimeBackgroundWorkState", () => {
     });
     expect(state.hasOpenThreadWork("t1")).toBe(true);
 
-    // The parent turn settling does not settle the delegation: the child can
-    // still be running (codex multiplexes its turns onto the parent session).
     state.observe({
       type: "turn/completed",
       threadId: "t1",

@@ -10,9 +10,6 @@ import { ServerResponseError } from "./server-client.js";
 
 const DEFAULT_DEBOUNCE_MS = 100;
 
-// Tripwires for noticing that delivery has stalled and the in-memory queue is
-// growing. These only warn — they never drop, fault, or bound the queue. If
-// they fire in practice, that is the signal to add real backpressure.
 const QUEUE_DEPTH_WARN_THRESHOLD = 512;
 const QUEUE_DEPTH_WARN_MIN_AGE_MS = 5_000;
 const QUEUE_AGE_WARN_THRESHOLD_MS = 30_000;
@@ -30,7 +27,6 @@ export interface EventPostResult {
 export interface CreateEventSinkOptions {
   isSessionOpen: () => boolean;
   logger: Pick<HostDaemonLogger, "debug" | "error" | "warn">;
-  /** Injectable wall clock for queue-age tests. */
   now?: () => number;
   postEvents: (events: HostDaemonEventEnvelope[]) => Promise<EventPostResult>;
 }
@@ -89,15 +85,6 @@ function shouldFlushThreadEventImmediately(event: ThreadEvent): boolean {
   return isWaitingForApprovalItemEvent(event);
 }
 
-// True when the server refused these events for what they *are*, so reposting
-// them unchanged can only produce the same refusal: a malformed batch (400) or
-// one carrying an event the store will never accept (409). Both answer with
-// `invalid_request`.
-//
-// The code check is what keeps this narrow. `/session/events` also fails
-// non-retryably with `unauthorized` and `inactive_session` (401), and those say
-// nothing about the events themselves — the daemon must keep them queued for
-// the session it is about to reopen, not discard them.
 function isPermanentPostRejection(error: Error): boolean {
   return (
     error instanceof ServerResponseError &&
@@ -122,8 +109,6 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
   let flushTimer: ReturnType<typeof setTimeout> | null = null;
   let flushPromise: Promise<void> | null = null;
   let disposed = false;
-  // When the queue first became non-empty in the current backed-up episode, or
-  // null while the queue is empty. Used only for the debug tripwire below.
   let backedUpSinceMs: number | null = null;
   let backpressureLogged = false;
 
@@ -141,8 +126,6 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
       return;
     }
     backpressureLogged = true;
-    // A stalled queue means every thread on this host is silently falling
-    // behind in the UI, so this needs to be visible at the default log level.
     options.logger.warn(
       { queueDepth, queueAgeMs },
       "Daemon event queue is backing up; delivery may be stalled",
@@ -178,21 +161,6 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
     }, delayMs);
   }
 
-  // Delivers `batch` and reports how many of its leading events no longer need
-  // sending — either the server took them or they were undeliverable by
-  // construction and were dropped. A count below `batch.length` means delivery
-  // stopped early and the remainder must be retried by a later flush.
-  //
-  // The server marks a rejection non-retryable when reposting the identical
-  // payload can only produce the identical rejection (a turn-scoped event whose
-  // turn/started it never saw, for instance, which it answers with 409). Such a
-  // batch must never be retried as-is: the queue is host-wide, so one
-  // undeliverable event at its head would stall every thread on the machine
-  // until the daemon restarted. Bisect instead — the server appends a batch in
-  // a single transaction and rolls the whole thing back when it refuses one
-  // event, so nothing was committed and re-posting the halves cannot duplicate.
-  // That isolates the offending events in O(log n) posts and lets the healthy
-  // ones through.
   async function deliverBatch(
     batch: readonly HostDaemonEventEnvelope[],
   ): Promise<number> {
@@ -243,11 +211,6 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
     return batch.length;
   }
 
-  // Posts queued events while the session is open. Events that cannot be
-  // delivered right now — because the session is closed or the post failed —
-  // stay queued and are retried by the next flush (the next emit, or the
-  // reconnect that reopens the session). The queue lives only in memory, so a
-  // daemon crash drops anything still pending; that is an accepted tradeoff.
   async function drainQueue(): Promise<void> {
     while (queue.length > 0 && !disposed && options.isSessionOpen()) {
       const batch = queue.slice();
@@ -292,7 +255,9 @@ export function createEventSink(options: CreateEventSinkOptions): EventSink {
       });
       maybeLogQueuePressure();
       scheduleFlush(
-        shouldFlushThreadEventImmediately(input.event) ? 0 : DEFAULT_DEBOUNCE_MS,
+        shouldFlushThreadEventImmediately(input.event)
+          ? 0
+          : DEFAULT_DEBOUNCE_MS,
       );
     },
     flush,

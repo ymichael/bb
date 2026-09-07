@@ -145,7 +145,6 @@ describe("MarkdownPreview", () => {
 
   it("caps the table breakout at the nearest horizontally clipped ancestor", () => {
     const { notifyResize } = mockResizeObserverDeliveries();
-    // Every element is 300px wide at x=100 unless it sets data-left/data-width.
     vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(
       function (this: HTMLElement) {
         const left = Number(this.dataset.left ?? 100);
@@ -180,7 +179,6 @@ describe("MarkdownPreview", () => {
         </div>,
       );
 
-    // The clip ends where the content ends: no room on the right, no breakout.
     const flush = renderClipped(400);
     const flushBreakout =
       flush.container.querySelector("table")?.parentElement?.parentElement;
@@ -190,7 +188,6 @@ describe("MarkdownPreview", () => {
     ).toBe("300px");
     flush.unmount();
 
-    // 100px free on the left and 200px on the right: grow by the smaller side.
     const roomy = renderClipped(600);
     const roomyBreakout =
       roomy.container.querySelector("table")?.parentElement?.parentElement;
@@ -200,7 +197,6 @@ describe("MarkdownPreview", () => {
     ).toBe("500px");
     roomy.unmount();
 
-    // The preview root itself clips: the table must not leave the preview.
     const sheet = document.createElement("style");
     sheet.textContent = ".overflow-x-hidden { overflow-x: hidden; }";
     document.head.appendChild(sheet);
@@ -247,12 +243,10 @@ describe("MarkdownPreview", () => {
     notifyResize();
     expect(breakout.style.getPropertyValue("--md-content-w")).toBe("320px");
 
-    // Same width, different height: no style write.
     breakout.style.setProperty("--md-content-w", "sentinel");
     notifyResize();
     expect(breakout.style.getPropertyValue("--md-content-w")).toBe("sentinel");
 
-    // A width change re-measures.
     width = 480;
     notifyResize();
     expect(breakout.style.getPropertyValue("--md-content-w")).toBe("480px");
@@ -358,7 +352,6 @@ describe("MarkdownPreview", () => {
     expect(openFinder).not.toHaveBeenCalled();
     expect(openBuiltin).not.toHaveBeenCalled();
 
-    // The provider returned null for the .ts link — plain anchor, no menu.
     fireEvent.contextMenu(screen.getByRole("link", { name: /app/ }));
     expect(screen.queryByText(/Open with/)).toBeNull();
   });
@@ -511,9 +504,6 @@ describe("MarkdownPreview", () => {
   });
 
   it("closes a display math block whose `$$` delimiters are glued to the TeX (#1778)", async () => {
-    // `$$T_…` opens a math fence with the TeX as dropped meta and a trailing
-    // `…$$` never closes it, so the rest of the message used to render as one
-    // `.katex-error`.
     const { container } = render(
       <MarkdownPreview
         content={[
@@ -534,7 +524,6 @@ describe("MarkdownPreview", () => {
       expect(container.querySelector(".katex-display")).not.toBeNull(),
     );
     expect(container.querySelector(".katex-error")).toBeNull();
-    // The first formula line is rendered, not dropped as fence meta.
     expect(
       container.querySelector(".katex-display annotation")?.textContent,
     ).toContain("appearance");

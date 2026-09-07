@@ -1,9 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import {
-  Editor,
-  isNodeSelection,
-  type ChainedCommands,
-} from "@tiptap/core";
+import { Editor, isNodeSelection, type ChainedCommands } from "@tiptap/core";
 import { BubbleMenuPlugin } from "@tiptap/extension-bubble-menu";
 import type { IconSvgElement } from "@hugeicons/react";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -28,7 +24,6 @@ import {
   type MentionSuggestionHandle,
 } from "./extensions.js";
 
-/** True while an IME is composing (e.g. Japanese candidate selection). */
 function isImeComposing(event: KeyboardEvent): boolean {
   return event.isComposing || event.keyCode === 229;
 }
@@ -86,8 +81,6 @@ const EDITOR_CSS = `
 .bb-tasks-editor .tiptap :is(th, td) > p { margin-top: 0; }
 .bb-tasks-editor .tiptap :is(th, td) > p + p { margin-top: 0.5em; }
 .bb-tasks-editor .tiptap .selectedCell::after { position: absolute; inset: 0; z-index: 2; pointer-events: none; content: ""; background: color-mix(in oklab, var(--primary) 14%, transparent); }
-.bb-tasks-editor .tiptap .column-resize-handle { position: absolute; top: 0; right: -2px; bottom: -1px; width: 4px; z-index: 3; pointer-events: none; background: var(--primary); }
-.bb-tasks-editor .tiptap.resize-cursor { cursor: col-resize; }
 .bb-tasks-editor .tiptap ul[data-type="taskList"] { list-style: none; padding-left: 0.25em; }
 .bb-tasks-editor .tiptap ul[data-type="taskList"] ul[data-type="taskList"] { margin-top: 0; }
 .bb-tasks-editor .tiptap ul[data-type="taskList"] li { display: flex; align-items: flex-start; gap: 0.5em; margin-top: 0.3em; padding-left: 0; }
@@ -201,7 +194,6 @@ const BUBBLE_ACTIONS: BubbleAction[] = [
 ];
 
 interface TasksEditorProps {
-  /** Markdown source; the canonical representation of the content. */
   value: string;
   onChange(markdown: string): void;
   placeholder?: string;
@@ -211,21 +203,9 @@ interface TasksEditorProps {
   onUploadImage?: (
     file: File,
   ) => Promise<{ url: string; attachmentId: string }>;
-  /**
-   * Stages pasted/dropped files instead of uploading them inline; takes
-   * precedence over onUploadImage and accepts any file type. Used where the
-   * attachment owner does not exist yet (e.g. the new-task dialog).
-   */
   onAttachFiles?: (files: File[]) => void;
   mentionItems?: (query: string) => Promise<MentionItem[]>;
-  /** Invoked when a thread-mention pill is clicked (edit and read-only). */
   onOpenThread?: (threadId: string) => void;
-  /**
-   * When set, bare Enter (and Cmd/Ctrl+Enter) invoke this instead of inserting
-   * a newline. Shift+Enter still inserts a newline. Used by the task comment
-   * composer. On coarse-pointer devices bare Enter stays a newline; Cmd/Ctrl+Enter
-   * still submits. Hosts should no-op when send is disabled or in-flight.
-   */
   onSubmit?: () => void;
   onEditorReady?: (editor: Editor) => void;
   className?: string;
@@ -269,8 +249,6 @@ export function TasksEditor({
   readyRef.current = onEditorReady;
   const initialValueRef = useRef(value);
   const autofocusRef = useRef(autofocus);
-  // Coarse pointer (touch) keeps bare Enter as newline; soft keyboards use
-  // enterkeyhint="enter" rather than "send" so the key doesn't look like submit.
   const isPointerCoarse = usePointerCoarse();
   const canSubmitWithEnterKey = Boolean(onSubmit) && !isPointerCoarse;
   const canSubmitWithEnterRef = useRef(canSubmitWithEnterKey);
@@ -282,9 +260,7 @@ export function TasksEditor({
     : undefined;
 
   const [, setRevision] = useState(0);
-  const [mention, setMentionState] = useState<MentionPopoverState | null>(
-    null,
-  );
+  const [mention, setMentionState] = useState<MentionPopoverState | null>(null);
   const mentionRef = useRef<MentionPopoverState | null>(null);
   const setMention = (next: MentionPopoverState | null) => {
     mentionRef.current = next;
@@ -366,13 +342,9 @@ export function TasksEditor({
       autofocus: autofocusRef.current && !readOnly ? "end" : false,
       editorProps: {
         handleKeyDown(_view, event) {
-          // Submit-on-Enter is opt-in via onSubmit (comment composer). Without
-          // it, Enter keeps the default TipTap newline/list behavior.
           if (!onSubmitRef.current || readOnly) return false;
           if (event.key !== "Enter") return false;
-          // Never steal Enter while an IME is composing a candidate.
           if (isImeComposing(event)) return false;
-          // Mention popover owns Enter/Tab while open.
           const openMention = mentionRef.current;
           if (openMention && openMention.items.length > 0) return false;
 
@@ -386,12 +358,8 @@ export function TasksEditor({
             !event.ctrlKey &&
             !event.altKey;
 
-          // Shift+Enter (and other modifier combos we don't claim) insert a
-          // newline via the default editor keymap.
           if (event.shiftKey && !withPrimaryMod) return false;
           if (!withPrimaryMod && !plainEnter) return false;
-          // Touch devices: bare Enter stays a newline; Cmd/Ctrl+Enter still
-          // submits so a hardware keyboard can force send.
           if (plainEnter && !canSubmitWithEnterRef.current) return false;
 
           event.preventDefault();
@@ -433,10 +401,6 @@ export function TasksEditor({
       },
     });
     editorRef.current = editor;
-    // The trailing-paragraph plugin only fires on transactions, so the initial
-    // constructor document is not covered. Seed it once here — before the
-    // update listener is attached — so a description that loads as a single
-    // image starts with a caret target without registering as a user edit.
     if (!readOnly) {
       const last = editor.state.doc.lastChild;
       const paragraph = editor.state.schema.nodes.paragraph;
@@ -466,7 +430,6 @@ export function TasksEditor({
           shouldShow: ({ editor: bubbleEditor, state, from, to }) => {
             const { selection } = state;
             if (!bubbleEditor.isEditable || selection.empty) return false;
-            // Node selections (e.g. a clicked image or pill) get no text menu.
             if (isNodeSelection(selection)) return false;
             return state.doc.textBetween(from, to).trim().length > 0;
           },
@@ -480,8 +443,6 @@ export function TasksEditor({
     });
     editor.on("transaction", () => setRevision((current) => current + 1));
     readyRef.current?.(editor);
-    // Thread pills open their thread on click. A plain DOM listener (instead
-    // of ProseMirror's handleClickOn) also covers read-only comment bodies.
     const root = rootRef.current;
     const onClick = (event: MouseEvent) => {
       if (!(event.target instanceof Element)) return;
@@ -501,9 +462,6 @@ export function TasksEditor({
     };
   }, [readOnly, variant]);
 
-  // The value prop is canonical: when the host swaps in different markdown
-  // (e.g. another task was opened), replace the document. Echoes of our own
-  // onChange output are ignored.
   useEffect(() => {
     initialValueRef.current = value;
     const editor = editorRef.current;
@@ -512,7 +470,6 @@ export function TasksEditor({
     editor.commands.setContent(value, false);
   }, [value]);
 
-  // Soft-keyboard enterkeyhint tracks coarse-pointer without recreating the editor.
   useEffect(() => {
     const editor = editorRef.current;
     if (!editor || editor.isDestroyed) return;
@@ -532,9 +489,13 @@ export function TasksEditor({
     .map((item, index) => ({ item, index }))
     .filter((entry) => entry.item.type === "thread");
 
-  const mentionRow = (
-    { item, index }: { item: MentionItem; index: number },
-  ) => (
+  const mentionRow = ({
+    item,
+    index,
+  }: {
+    item: MentionItem;
+    index: number;
+  }) => (
     <button
       key={item.id}
       type="button"
@@ -563,10 +524,6 @@ export function TasksEditor({
     </button>
   );
 
-  // Clicks that land on the wrapper padding or the empty surface container
-  // (rather than on real content) place the caret at the end of the document.
-  // With StarterKit's gapcursor this yields a usable caret even when the only
-  // node is a block image, so the description stays editable.
   const focusOnEmptyMouseDown = (event: React.MouseEvent<HTMLDivElement>) => {
     if (readOnly) return;
     if (
@@ -585,8 +542,7 @@ export function TasksEditor({
       data-variant={variant}
       onMouseDown={variant === "doc" ? focusOnEmptyMouseDown : undefined}
     >
-      {/* Floating selection menu (doc variant only); BubbleMenuPlugin moves
-          this element into a tippy popper positioned above the selection. */}
+      {}
       {variant === "doc" && !readOnly ? (
         <div
           ref={bubbleRef}

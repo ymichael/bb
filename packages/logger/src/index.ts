@@ -44,18 +44,10 @@ export function createLogger(options: CreateLoggerOptions): Logger {
   const transportMode = options.transportMode ?? "worker";
 
   if (transportMode === "stream") {
-    // Sandboxed single-file bundles cannot resolve pino worker transports
-    // from disk, so use a direct file destination instead.
     const destination = pino.destination(join(logDir, `${component}.log`));
     return pino(loggerOptions, destination);
   }
 
-  // Every worker-mode logger writes to two places: structured JSON to a
-  // rolling file (for grep/jq/log aggregation), and human-readable output
-  // to stdout (for `pnpm start`/`pnpm dev`, where the parent script
-  // forwards the child's stdout into the interactive terminal).
-  // `colorize` is left unset so pino-pretty auto-detects via
-  // `tty.isatty(1)` — TTYs get ANSI colors, pipes/files/journald stay clean.
   const targets: pino.TransportTargetOptions[] = [
     {
       target: "pino-roll",
@@ -69,10 +61,6 @@ export function createLogger(options: CreateLoggerOptions): Logger {
     },
   ];
 
-  // pino-pretty streams to stdout from a worker thread, so vitest's
-  // `silent` setting (which patches console.* in the main thread) can't
-  // suppress it. Skip it under vitest to keep large-payload tests from
-  // flooding the reporter.
   if (!process.env.VITEST) {
     targets.push({
       target: "pino-pretty",

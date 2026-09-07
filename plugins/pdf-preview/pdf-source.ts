@@ -20,11 +20,6 @@ function queryUrl(path: string, values: Record<string, string>): string {
   return `${path}?${new URLSearchParams(values).toString()}`;
 }
 
-/**
- * Resolve the authenticated core read that owns the file bytes. Plugin file
- * openers receive live files only, so a workspace target always means the
- * working-tree side rather than a git snapshot.
- */
 export function resolvePdfReadTarget(
   path: string,
   source: PluginFileOpenerSource,
@@ -127,7 +122,6 @@ async function requireOk(response: Response): Promise<Response> {
   return response;
 }
 
-/** Read once, validate the media type, and return a PDF-typed Blob. */
 export async function loadPdfBlob(
   target: PdfReadTarget,
   signal: AbortSignal,

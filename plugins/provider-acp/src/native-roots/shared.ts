@@ -1,13 +1,3 @@
-/**
- * The host-file primitives every agent resolver shares: vendor path
- * conventions (`~`, `$VAR`, paths stored relative to the home directory),
- * tolerant config-file reads, and the repository ancestor walk.
- *
- * A vendor file that is missing, unparseable, or not the shape bb expects
- * yields nothing: the agent's own skills are a convenience in bb's composer,
- * and a bad config line must never fail the listing.
- */
-
 import fs from "node:fs/promises";
 import path from "node:path";
 import type { z } from "zod";
@@ -18,7 +8,6 @@ import type {
 
 export type ResolvedRootOrigin = "project" | "user";
 
-/** A path a vendor stores: `~`, `~/...`, absolute, or relative to the home. */
 export function resolveStoredPath(homeDir: string, storedPath: string): string {
   if (storedPath === "~") {
     return homeDir;
@@ -29,7 +18,6 @@ export function resolveStoredPath(homeDir: string, storedPath: string): string {
   return path.resolve(homeDir, storedPath);
 }
 
-/** `$VAR` / `${VAR}` from the host environment, then `~`. */
 export function expandConfiguredPath(
   homeDir: string,
   env: AcpNativeRootsEnvironment,
@@ -49,10 +37,6 @@ export function expandConfiguredPath(
   return expandedEnvironment;
 }
 
-/**
- * A path from a vendor config file, made absolute against `basePath`. The
- * result is normalized: the contract refuses dot segments.
- */
 export function resolveConfiguredPath(args: {
   basePath: string;
   env: AcpNativeRootsEnvironment;
@@ -116,11 +100,6 @@ async function hasProjectRootMarker(directoryPath: string): Promise<boolean> {
   }
 }
 
-/**
- * The repository ancestor chain: the nearest ancestor with a `.git` entry is
- * the repository root. Without a marker, only the cwd. Runs from the
- * repository root to cwd.
- */
 export async function resolveProjectAncestorDirectories(cwd: string): Promise<{
   directories: string[];
   projectRootPath: string;
@@ -156,7 +135,6 @@ export async function childDirectoryPaths(
   }
 }
 
-/** A directory of skill directories. */
 export function skillsRoot(args: {
   ancestors?: boolean;
   origin: ResolvedRootOrigin;
@@ -176,11 +154,6 @@ export function skillsRoot(args: {
   };
 }
 
-/**
- * A path a vendor config names as a skill location: a `SKILL.md` file is one
- * skill (its directory name is the fallback name); anything else is a
- * directory of skills.
- */
 export function configuredSkillRoot(args: {
   origin: ResolvedRootOrigin;
   recursive: boolean;

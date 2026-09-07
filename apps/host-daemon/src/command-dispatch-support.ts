@@ -1,3 +1,4 @@
+import type { DesktopBrowserBroker } from "./desktop-browser-broker.js";
 import type { AgentRuntimeBridgeLaunch } from "@bb/agent-runtime";
 import type { AvailableModel } from "@bb/domain";
 import type { EventSinkInput } from "./event-sink.js";
@@ -47,6 +48,7 @@ export const noopEventSink: EventSink = {
 };
 
 export interface CommandDispatchOptions {
+  desktopBrowserBroker?: DesktopBrowserBroker;
   dataDir: string;
   logger: Pick<HostDaemonLogger, "debug" | "warn">;
   fetchProjectAttachment: FetchProjectAttachment;
@@ -90,15 +92,6 @@ export interface CommandDispatchOptions {
     plan: ProviderInstallationCommand;
     env?: NodeJS.ProcessEnv;
   }) => ReadableStream<Uint8Array>;
-  /**
-   * Re-reads the login shell's environment into the runtime manager once its
-   * short refresh window has lapsed, which is where a PATH change clears the
-   * provider-CLI gate and evicts idle runtimes. The gate in front of thread
-   * start and rewind awaits this before it consults its memo, because a PATH
-   * change is what makes a remembered probe wrong and the manager only learns
-   * about one through this refresh. Daemon-internal: nothing on the wire
-   * changes.
-   */
   refreshShellEnv: () => Promise<void>;
   resolveInteractiveRequest?: (
     request: InteractiveResolveCommandInput,
@@ -145,12 +138,6 @@ export function isExpectedOnlineRpcFailureError(error: unknown): boolean {
 const MISSING_EXECUTABLE_PATTERN = /\bENOENT\b/;
 const SPAWN_PATTERN = /\bspawn\b/;
 
-/**
- * Turn a wire `bridgeLaunch` into the runtime shape: the artifact source is
- * resolved to a verified local path (downloading + hash-verifying if needed).
- * The source travels through, so the runtime routes on the server's explicit
- * answer rather than re-deriving it from the provider id.
- */
 export async function resolveRuntimeBridgeLaunch(
   bridgeLaunch: HostDaemonBridgeLaunch,
   options: Pick<
@@ -158,17 +145,12 @@ export async function resolveRuntimeBridgeLaunch(
     "dataDir" | "fetchPluginHostArtifact" | "logger"
   >,
 ): Promise<AgentRuntimeBridgeLaunch> {
-  // Wire and runtime shapes share one noun set, so the block carries over
-  // whole; only the mutable permission-mode array is copied.
   const capabilities = {
     ...bridgeLaunch.capabilities,
     permissionModes: [...bridgeLaunch.capabilities.permissionModes],
   };
   const providerOptions = { ...bridgeLaunch.providerOptions };
   const envPassthrough = [...bridgeLaunch.envPassthrough];
-  // Every bridge is scoped to the plugin that ships it: it gets that plugin's
-  // own persistent directory, the same one the plugin's host worker would
-  // get, under its own `bridge-data` kind.
   const dataDir = await ensurePluginProcessDataDir({
     daemonDataDir: options.dataDir,
     pluginId: bridgeLaunch.pluginId,
@@ -252,10 +234,6 @@ export async function requireWorkspaceEnvironment(
     dataDir?: string;
     environmentId: string;
     injectedSkillSources?: readonly HostDaemonInjectedSkillSource[];
-    /**
-     * Set by thread commands that resolve with injectedSkillSources, so a
-     * busy runtime is reused instead of conflicting; see EnsureEnvironmentArgs.
-     */
     targetThreadId?: string;
     workspaceContext: WorkspaceContext;
   },

@@ -14,13 +14,6 @@ interface CreateRuntimeProviderIdentityStateArgs {
 interface RegisterThreadProviderArgs {
   providerId: string;
   providerState: RuntimeProviderIdentityState;
-  /**
-   * Queue the thread so a `thread/identity` notification that names no
-   * registered thread is attributed to it, oldest registration first. The
-   * provider identity the runtime adopts is the one on the thread/start,
-   * thread/resume or thread/fork result; the notification only records it
-   * ahead of (or again after) that result.
-   */
   expectsIdentityNotification: boolean;
   threadId: string;
 }
@@ -150,11 +143,6 @@ export class RuntimeThreadIdentityRegistry {
       }
     }
 
-    // Last resort for bridges that do not echo an id the runtime can match: a
-    // process serving exactly one thread has only one place to put the event.
-    // Never for an id that names ANOTHER live thread, though — that is a
-    // bridge reporting on a session it does not own, and attributing it here
-    // would write one thread's work into another's timeline.
     if (
       args.providerState.threadIds.size === 1 &&
       !this.namesForeignThread(args.providerState, args.eventThreadId) &&
@@ -190,12 +178,6 @@ export class RuntimeThreadIdentityRegistry {
     this.threadToProviderThread.delete(threadId);
   }
 
-  /**
-   * Fully detaches one thread from a still-running provider process: clears
-   * the identity maps and drops the thread from the provider's bookkeeping.
-   * Used when a thread ends its residency (stop/archive) while the provider
-   * process keeps serving other threads.
-   */
   forgetThread(args: ForgetThreadArgs): void {
     args.providerState.threadIds.delete(args.threadId);
     args.providerState.pendingIdentityThreadIds =

@@ -27,8 +27,6 @@ describe("drizzle config", () => {
   it("respects BB_DATA_DIR in production", () => {
     vi.stubEnv("BB_DATA_DIR", "~/custom-bb");
 
-    expect(resolveDrizzleDataDir("prod")).toBe(
-      join(os.homedir(), "custom-bb"),
-    );
+    expect(resolveDrizzleDataDir("prod")).toBe(join(os.homedir(), "custom-bb"));
   });
 });

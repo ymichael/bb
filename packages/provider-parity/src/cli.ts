@@ -1,20 +1,4 @@
 #!/usr/bin/env node
-/**
- * `pnpm parity --old <checkout> --new . [--provider <id>] [--cell <name>]
- *              [--recordings <dir>] [--allowlist <file>] [--timeout <ms>] [--verbose]
- *              [--dump-dir <dir>]`
- *
- * `--dump-dir` writes each leg's normalized event and row lists per cell
- * (`<provider>-<cell>.<old|new>.<events|rows>.json`), so an allowlist entry
- * can name the exact list index of a diff the 160-character CLI rendering
- * cannot show in full.
- *
- * Replay every committed recording through the bridge of two checkouts and
- * diff the assembled events and projected rows against the allowlist. Exit
- * 1 on any unallowed diff or stale allowlist entry, so the run doubles as a
- * gate. With `--old` equal to `--new` the diff must be empty: that is the
- * harness's own acceptance test.
- */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
@@ -59,7 +43,6 @@ function usage(): never {
   process.exit(2);
 }
 
-/** `pnpm parity` runs inside the package; resolve paths from the caller's cwd. */
 const callerCwd = process.env.INIT_CWD ?? process.cwd();
 
 function parseArgs(argv: string[]): CliArgs {
@@ -143,7 +126,9 @@ function formatComparison(comparison: ParityComparison): string[] {
     lines.push(`  grammar drop only in new: ${String(value)}`);
   }
   for (const entry of comparison.staleAllowlist) {
-    lines.push(`  stale allowlist entry (${entry.pr}): ${entry.layer} ${entry.path} — ${entry.reason}`);
+    lines.push(
+      `  stale allowlist entry (${entry.pr}): ${entry.layer} ${entry.path} — ${entry.reason}`,
+    );
   }
   return lines;
 }
@@ -179,42 +164,60 @@ async function main(): Promise<void> {
     }
     if (readBridgeRecording(cell.dir).manifest?.scope === "process") {
       skipped += 1;
-      process.stdout.write(`SKIP ${key}: process-scoped recording (no thread events to compare)\n`);
+      process.stdout.write(
+        `SKIP ${key}: process-scoped recording (no thread events to compare)\n`,
+      );
       continue;
     }
     const missingOld = missingBridgeModule(oldLeg.checkoutRoot, cell.provider);
     if (missingOld !== null) {
       skipped += 1;
-      process.stdout.write(`SKIP ${key}: old checkout has no ${missingOld} (its bridge cannot be replayed)\n`);
+      process.stdout.write(
+        `SKIP ${key}: old checkout has no ${missingOld} (its bridge cannot be replayed)\n`,
+      );
       continue;
     }
     const onStderr = args.verbose
       ? (text: string) => process.stderr.write(text)
       : undefined;
-    // Each leg paces itself from the lane its own assembler parses whole:
-    // the old (recording-time) leg from the recorded lane, the new leg from
-    // the current lane its bridge wrote, when there is one.
     const [oldInputs, newInputs] = await Promise.all([
       replayCell(cell, { ...oldLeg, timeoutMs: args.timeoutMs, onStderr }),
-      replayCell(cell, { ...newLeg, timeoutMs: args.timeoutMs, onStderr, planFromCurrentLane: true }),
+      replayCell(cell, {
+        ...newLeg,
+        timeoutMs: args.timeoutMs,
+        onStderr,
+        planFromCurrentLane: true,
+      }),
     ]);
     if (args.dumpDir !== null) {
       mkdirSync(args.dumpDir, { recursive: true });
       const prefix = join(args.dumpDir, `${cell.provider}-${cell.cell}`);
-      writeFileSync(`${prefix}.old.events.json`, JSON.stringify(normalizeParityEvents(oldInputs.events), null, 2));
-      writeFileSync(`${prefix}.new.events.json`, JSON.stringify(normalizeParityEvents(newInputs.events), null, 2));
-      writeFileSync(`${prefix}.old.rows.json`, JSON.stringify(normalizeParityRows(oldInputs.rows), null, 2));
-      writeFileSync(`${prefix}.new.rows.json`, JSON.stringify(normalizeParityRows(newInputs.rows), null, 2));
+      writeFileSync(
+        `${prefix}.old.events.json`,
+        JSON.stringify(normalizeParityEvents(oldInputs.events), null, 2),
+      );
+      writeFileSync(
+        `${prefix}.new.events.json`,
+        JSON.stringify(normalizeParityEvents(newInputs.events), null, 2),
+      );
+      writeFileSync(
+        `${prefix}.old.rows.json`,
+        JSON.stringify(normalizeParityRows(oldInputs.rows), null, 2),
+      );
+      writeFileSync(
+        `${prefix}.new.rows.json`,
+        JSON.stringify(normalizeParityRows(newInputs.rows), null, 2),
+      );
     }
     const comparison = compareCell(cell, oldInputs, newInputs, allowlist);
     const oldCounts = countCellInputs(oldInputs);
     const newCounts = countCellInputs(newInputs);
     const stalls = [...oldInputs.run.stalls, ...newInputs.run.stalls];
     const recorded = countCellInputs(recordedCellInputs(cell));
-    // A replay that produced nothing where the recording produced events is
-    // a broken replay, not parity; so is one the harness had to unblock.
-    const empty = recorded.events > 0 && (oldCounts.events === 0 || newCounts.events === 0);
-    const status = comparison.passed && stalls.length === 0 && !empty ? "PASS" : "FAIL";
+    const empty =
+      recorded.events > 0 && (oldCounts.events === 0 || newCounts.events === 0);
+    const status =
+      comparison.passed && stalls.length === 0 && !empty ? "PASS" : "FAIL";
     if (status === "FAIL") failed += 1;
     process.stdout.write(
       `${status} ${key}: old ${oldCounts.events} events/${oldCounts.rows} rows, new ${newCounts.events} events/${newCounts.rows} rows` +
@@ -230,7 +233,9 @@ async function main(): Promise<void> {
       process.stdout.write(`  stall: ${stall}\n`);
     }
     if (empty) {
-      process.stdout.write(`  empty replay: the recording assembles ${recorded.events} events\n`);
+      process.stdout.write(
+        `  empty replay: the recording assembles ${recorded.events} events\n`,
+      );
     }
   }
   process.stdout.write(
@@ -240,6 +245,8 @@ async function main(): Promise<void> {
 }
 
 main().catch((error: unknown) => {
-  process.stderr.write(`${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`);
+  process.stderr.write(
+    `${error instanceof Error ? (error.stack ?? error.message) : String(error)}\n`,
+  );
   process.exit(1);
 });

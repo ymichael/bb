@@ -7,8 +7,6 @@ const major = semver.major(PLUGIN_SDK_VERSION);
 
 describe("isPluginSdkRangeSatisfied", () => {
   it("accepts a caret range the running SDK has grown past", () => {
-    // The regression this guards: `^0.4.1` stops at 0.5.0 under semver, so an
-    // SDK minor bump unloaded every installed plugin at once.
     expect(isPluginSdkRangeSatisfied(`^${major}.0.1`)).toBe(true);
     expect(isPluginSdkRangeSatisfied(`${major}.0.1`)).toBe(true);
   });

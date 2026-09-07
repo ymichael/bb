@@ -2,7 +2,8 @@ import type {
   InstalledPlugin,
   PluginApplyUpdateResult as SdkPluginApplyUpdateResult,
   PluginCatalogAuthor,
-  PluginCatalogInstallPlan,
+  PluginCatalogCollection,
+  PluginCatalogCollectionMembership,
   PluginCatalogResolvedSource,
   PluginCatalogSearchResult as SdkPluginCatalogSearchResult,
   PluginMarketplace,
@@ -52,7 +53,6 @@ function toPluginSourceDetail(
   };
 }
 
-/** Null when the plugin is unknown or the server predates the route. */
 async function fetchPluginSource(
   fetchImpl: FetchLike,
   pluginId: string,
@@ -96,29 +96,14 @@ export async function installCatalogPlugin(
   return createPluginsClient(fetchImpl).catalog.install(args);
 }
 
-/** The true resolved source an install would use, fetched before confirming. */
-async function fetchCatalogInstallPlan(
-  fetchImpl: FetchLike,
-  args: { entryId: string; marketplace?: string },
-): Promise<PluginCatalogInstallPlan> {
-  return createPluginsClient(fetchImpl).catalog.installPlan(args);
-}
-
-/**
- * Resolve an install before the user confirms it. Third-party entries pay a
- * network round trip for the resolved tag and commit, so this never runs until
- * the confirmation is actually open.
- */
 export function useCatalogInstallPlan(
   args: { entryId: string; marketplace?: string } | null,
 ) {
   const request = args ?? { entryId: "" };
   return useQuery({
     queryKey: pluginCatalogInstallPlanQueryKey(request),
-    queryFn: () => fetchCatalogInstallPlan(fetch, request),
+    queryFn: () => createPluginsClient(fetch).catalog.installPlan(request),
     enabled: args !== null,
-    // The plan describes one confirmation, and a git range resolves to a
-    // different commit over time: never serve it from cache.
     staleTime: 0,
     gcTime: 0,
     retry: false,
@@ -231,23 +216,22 @@ export interface PluginCatalogSearchEntry {
   description: string;
   icon: string | null;
   iconUrl: string | null;
-  /** Mask `iconUrl` with the text color instead of showing its own colors. */
   iconTinted: boolean;
-  category: string;
+  categoryId?: string;
+  category?: string;
+  screenshots: string[];
+  overview?: string;
+  collections: PluginCatalogCollectionMembership[];
+  publishedAt?: string;
   source: string;
-  /** Public repository or package page of the entry's code; null when none. */
   repositoryUrl: string | null;
   marketplace: string;
   marketplaceDisplayName: string;
-  /** Stable publisher identity, for grouping; never the label, which a
-   * marketplace chooses for itself. */
   publisherKey: string;
-  /** Publisher badge: the marketplace's name, or `BB Official` when bundled. */
   publisherLabel: string;
   official: boolean;
   author: PluginCatalogAuthor | null;
   installed: boolean;
-  /** Distinct BB installations that reported installing it; null when unknown. */
   installs: number | null;
   compatible: boolean;
   incompatibleReason: string | null;
@@ -264,7 +248,14 @@ function toPluginCatalogSearchEntry(
     icon: data.icon,
     iconUrl: data.iconUrl,
     iconTinted: data.iconTinted,
-    category: data.category,
+    ...(data.categoryId === undefined ? {} : { categoryId: data.categoryId }),
+    ...(data.category === undefined ? {} : { category: data.category }),
+    screenshots: data.screenshots,
+    ...(data.overview === undefined ? {} : { overview: data.overview }),
+    collections: data.collections,
+    ...(data.publishedAt === undefined
+      ? {}
+      : { publishedAt: data.publishedAt }),
     source: data.source,
     repositoryUrl: data.repositoryUrl,
     marketplace: data.marketplace,
@@ -280,14 +271,24 @@ function toPluginCatalogSearchEntry(
   };
 }
 
+export interface PluginCatalogSearchData {
+  entries: PluginCatalogSearchEntry[];
+  collections: PluginCatalogCollection[];
+}
+
 export async function searchPluginCatalog(
   fetchImpl: FetchLike,
   query: string,
-): Promise<PluginCatalogSearchEntry[]> {
-  const results = await createPluginsClient(fetchImpl).catalog.search({
+): Promise<PluginCatalogSearchData> {
+  const { results, collections } = await createPluginsClient(
+    fetchImpl,
+  ).catalog.search({
     query,
   });
-  return results.map(toPluginCatalogSearchEntry);
+  return {
+    entries: results.map(toPluginCatalogSearchEntry),
+    collections,
+  };
 }
 
 const PLUGIN_CATALOG_STALE_TIME_MS = 30 * 60_000;

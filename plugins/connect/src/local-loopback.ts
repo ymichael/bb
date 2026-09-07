@@ -1,4 +1,3 @@
-/** Use Vite as the tunneled origin when a source-dev bb pairs locally. */
 export function resolveLocalCloudLoopbackUrl(
   serverUrl: string | undefined,
   rawDevAppPort: string | undefined,

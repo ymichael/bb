@@ -1,0 +1,305 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://getbb.app/schemas/marketplace-v2.schema.json",
+  "title": "BB plugin marketplace manifest version 2",
+  "description": "This document lists plugins and discovery data.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "name", "displayName", "plugins"],
+  "properties": {
+    "$schema": {
+      "const": "https://getbb.app/schemas/marketplace-v2.schema.json"
+    },
+    "schemaVersion": {
+      "const": 2
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "displayName": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "minLength": 1
+    },
+    "categories": {
+      "type": "array",
+      "$comment": "Each category id must be unique.",
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "collections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/collection"
+      }
+    },
+    "plugins": {
+      "type": "array",
+      "maxItems": 256,
+      "$comment": "Each plugin id must be unique.",
+      "items": {
+        "$ref": "#/$defs/entry"
+      }
+    }
+  },
+  "$defs": {
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "description"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "collection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "displayName", "pluginIds"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "pluginIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      }
+    },
+    "entry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "displayName",
+        "description",
+        "icon",
+        "author",
+        "source"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "$comment": "The file name must match this id.",
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "icon": {
+          "oneOf": [
+            {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9]*$"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["url"],
+              "properties": {
+                "url": {
+                  "type": "string",
+                  "$comment": "Use an HTTPS URL or a path relative to this document.",
+                  "pattern": "^(?!http:)(?:https://)?[^\\s]+\\.(?:svg|png|webp)$"
+                }
+              }
+            }
+          ]
+        },
+        "tags": {
+          "type": "array",
+          "maxItems": 10,
+          "items": {
+            "type": "string",
+            "maxLength": 32,
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          }
+        },
+        "author": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name"],
+          "$comment": "Do not put an email address here.",
+          "properties": {
+            "name": {
+              "type": "string",
+              "minLength": 1
+            },
+            "github": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9](?:-?[A-Za-z0-9]){0,38}$"
+            },
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            }
+          }
+        },
+        "source": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/npmSource"
+            },
+            {
+              "$ref": "#/$defs/gitRefSource"
+            },
+            {
+              "$ref": "#/$defs/gitRangeSource"
+            }
+          ]
+        },
+        "category": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "$comment": "This id must occur in the categories array."
+        },
+        "screenshots": {
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "string",
+            "$comment": "Use an HTTPS URL or a repository screenshot path.",
+            "pattern": "^(?:https://[^\\s]+\\.(?:png|jpg|jpeg|webp)|\\./screenshots/[a-z0-9][a-z0-9-]*/[A-Za-z0-9][A-Za-z0-9._-]*\\.(?:png|jpg|jpeg|webp))$"
+          }
+        },
+        "overview": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 4000,
+          "$comment": "An entry file uses the path ./overview/<plugin-id>.md. The built document holds the markdown text."
+        },
+        "publishedAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    },
+    "npmSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["npm"],
+      "properties": {
+        "npm": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["package"],
+          "$comment": "Do not use range and tag together.",
+          "not": {
+            "required": ["range", "tag"]
+          },
+          "properties": {
+            "package": {
+              "type": "string",
+              "pattern": "^(?:@[a-z0-9][a-z0-9._~-]*/)?[a-z0-9][a-z0-9._~-]*$"
+            },
+            "range": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tag": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9._-]*$"
+            },
+            "registry": {
+              "type": "string",
+              "pattern": "^https://"
+            }
+          }
+        }
+      }
+    },
+    "gitSubdir": {
+      "type": "string",
+      "$comment": "Use a safe path relative to the repository.",
+      "pattern": "^(?![A-Za-z]:)(?!/)(?!(?:[^/]+/)*(?:\\.|\\.\\.|\\.git)(?:/|$))[^/\\\\]+(?:/[^/\\\\]+)*$"
+    },
+    "gitRefSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git"],
+      "properties": {
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "ref"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "subdir": {
+              "$ref": "#/$defs/gitSubdir"
+            },
+            "ref": {
+              "type": "string",
+              "pattern": "^(?!-)(?![\\s\\S]*\\.\\.)(?![\\s\\S]*@)(?![\\s\\S]*:)[\\s\\S]+$"
+            }
+          }
+        }
+      }
+    },
+    "gitRangeSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["git"],
+      "properties": {
+        "git": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url", "range"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "pattern": "^https://"
+            },
+            "subdir": {
+              "$ref": "#/$defs/gitSubdir"
+            },
+            "range": {
+              "type": "string",
+              "minLength": 1
+            },
+            "tagPrefix": {
+              "type": "string",
+              "maxLength": 128,
+              "pattern": "^(?!.*\\.\\.)(?!.*//)(?!.*\\/\\.)(?![^/]*\\.lock(?:/|$))(?!.*\\/[^/]*\\.lock(?:/|$))(?!.*\\.$)[A-Za-z0-9][A-Za-z0-9._/-]*$"
+            }
+          }
+        }
+      }
+    }
+  }
+}

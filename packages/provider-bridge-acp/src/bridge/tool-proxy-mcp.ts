@@ -12,7 +12,6 @@ const ENV_PORT = "BB_ACP_DYNAMIC_TOOL_PORT";
 const ENV_TOKEN = "BB_ACP_DYNAMIC_TOOL_TOKEN";
 const ENV_THREAD_ID = "BB_ACP_DYNAMIC_TOOL_THREAD_ID";
 const ENV_TOOLS = "BB_ACP_DYNAMIC_TOOLS";
-/** Test-only override for the progress heartbeat interval (milliseconds). */
 const ENV_PROGRESS_INTERVAL_MS = "BB_ACP_DYNAMIC_TOOL_PROGRESS_INTERVAL_MS";
 
 export interface AcpMcpServerConfig {
@@ -65,9 +64,6 @@ const bridgeToolCallResponseSchema = z.union([
         ]),
       )
       .optional(),
-    // The initialized response and older text-only responses omit images.
-    // Parsing them as an empty list keeps the re-executed packaged artifact
-    // compatible with that legacy socket shape.
     images: z
       .array(z.object({ data: z.string(), mimeType: z.string() }))
       .default([]),
@@ -94,13 +90,6 @@ interface McpServerEnvironment {
 
 let nextMcpToolCallId = 0;
 
-/**
- * Interval between `notifications/progress` messages for a pending tools/call.
- * The MCP TypeScript SDK client (OpenCode, and most ACP agents) fails a request
- * after 60 seconds unless a progress notification for its `progressToken`
- * resets the timer. AskUserQuestion waits on the user for minutes, so the call
- * must send progress well inside that window (#1944).
- */
 const TOOL_CALL_PROGRESS_INTERVAL_MS = 15_000;
 
 export function buildAcpMcpServerConfig(
@@ -212,17 +201,11 @@ function objectParams(params: unknown): Record<string, unknown> {
     : {};
 }
 
-/** The `_meta.progressToken` of a request, when the client asked for one. */
 function readProgressToken(params: unknown): string | number | null {
   const meta = objectParams(objectParams(params)._meta).progressToken;
   return typeof meta === "string" || typeof meta === "number" ? meta : null;
 }
 
-/**
- * Sends `notifications/progress` for `progressToken` every `intervalMs` until
- * the returned stop function runs. Progress is a counter: the MCP spec only
- * requires it to increase, and the total is unknown while a user is typing.
- */
 function startProgressHeartbeat(args: {
   intervalMs?: number;
   progressToken: string | number;

@@ -7,27 +7,12 @@ import { Pill } from "@bb/shared-ui/pill";
 import { EmptyStatePanel } from "@bb/shared-ui/empty-state";
 import { SIDEBAR_UNREAD_DOT_CLASS } from "../sidebar/sidebarRowClasses";
 
-/**
- * The token audit board — every neutral surface, interactive state, status
- * color, and live primitive in one place, each rendered in both light and dark
- * at once so a token can be compared across modes without toggling the page
- * theme. Use it as an audit board after any token change: a surface that
- * collapses into its neighbour, a state that reads too strong/faint, or a
- * control that clashes shows up here immediately.
- */
 export default {
   title: "Theme Tokens",
 };
 
-// --- helpers ---------------------------------------------------------------
-
 const THEME_MODES: readonly string[] = ["light", "dark"];
 
-/**
- * Renders the same sample forced into both light and dark, side by side. Each
- * pane re-declares its theme tokens locally (via the `.light` / `.dark` class),
- * so both modes show regardless of the page theme.
- */
 function DualTheme({ children }: { children: ReactNode }) {
   return (
     <div className="grid w-full grid-cols-2 gap-3">
@@ -46,11 +31,6 @@ function DualTheme({ children }: { children: ReactNode }) {
   );
 }
 
-/** Renders the same sample against the page background and the sidebar — the two
- *  neutral surfaces that still differ (card and popover are flush with the
- *  background now). The interactive-state fills are translucent, so this is
- *  where to confirm they composite the same on the flat page and on the tinted
- *  sidebar chrome, which is where sidebar rows actually use them. */
 function OnBothSurfaces({ children }: { children: ReactNode }) {
   return (
     <div className="grid w-full grid-cols-2 gap-3">
@@ -101,12 +81,12 @@ function StateRows() {
   );
 }
 
-/** A solid color swatch with its token name beneath — the same labelled-chip
- *  shape used elsewhere on the board, for auditing the semantic palette. */
 function Swatch({ token, fill }: { token: string; fill: string }) {
   return (
     <div className="flex w-16 flex-col items-center gap-1">
-      <div className={cn("h-11 w-full rounded-md border border-border", fill)} />
+      <div
+        className={cn("h-11 w-full rounded-md border border-border", fill)}
+      />
       <span className="text-center text-[10px] leading-tight text-muted-foreground">
         {token}
       </span>
@@ -114,10 +94,6 @@ function Swatch({ token, fill }: { token: string; fill: string }) {
   );
 }
 
-/** An inverted emphasis fill shown with its real paired foreground text, so the
- *  two tiers (strong `foreground`, mid `primary`) read as the attention-grabbing
- *  surfaces they are — and why the default button (strong) outweighs the primary
- *  swatch (mid). */
 function EmphasisChip({
   tier,
   token,
@@ -144,8 +120,6 @@ function EmphasisChip({
   );
 }
 
-/** A small surface label, colored with that surface's own paired foreground
- *  token so the board audits each surface/foreground pairing directly. */
 function SurfaceTag({
   className,
   children,
@@ -158,14 +132,6 @@ function SurfaceTag({
   );
 }
 
-/**
- * A realistic slice of app chrome: the sidebar against the page background,
- * with a card and a floating popover. Card and popover are flush with the
- * background — they read as raised purely through their border and shadow, not
- * a surface tint — so this is where to check that border+shadow elevation still
- * separates a panel (and a panel-over-panel popover) from the page, especially
- * in dark mode where shadows are faint and the border carries most of the lift.
- */
 function SurfaceWidget() {
   return (
     <div className="flex h-44 overflow-hidden rounded-lg border border-border shadow-sm">
@@ -198,10 +164,6 @@ function SurfaceWidget() {
   );
 }
 
-/** Contiguous neutral fill ramp — segments touch so adjacent steps are directly
- *  comparable (a collapsed step is immediately visible). Card and popover are
- *  intentionally absent: they're flush with the background now, so they belong
- *  in SurfaceWidget (border+shadow elevation), not on the fill ramp. */
 const RAMP: readonly (readonly [string, string])[] = [
   ["background", "bg-background"],
   ["sidebar", "bg-sidebar"],
@@ -232,7 +194,6 @@ function RampBar() {
   );
 }
 
-/** A labelled cluster of equal-size chips within a row. */
 function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1.5">
@@ -244,7 +205,6 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** One labelled chip, sized consistently across Lines and Overlays. */
 function Chip({ token, children }: { token: string; children: ReactNode }) {
   return (
     <div className="flex w-16 flex-col items-center gap-1">
@@ -258,18 +218,23 @@ function Chip({ token, children }: { token: string; children: ReactNode }) {
   );
 }
 
-/** A border token shown as a framed swatch (its real use: a stroke). */
 function LineChip({ token, className }: { token: string; className: string }) {
   return (
     <Chip token={token}>
-      <div className={cn("size-7 rounded border-2 bg-transparent", className)} />
+      <div
+        className={cn("size-7 rounded border-2 bg-transparent", className)}
+      />
     </Chip>
   );
 }
 
-/** A translucent overlay token, composited on the chip's background (its real
- *  use is over a surface — they read the same on background and card now). */
-function OverlayChip({ token, className }: { token: string; className: string }) {
+function OverlayChip({
+  token,
+  className,
+}: {
+  token: string;
+  className: string;
+}) {
   return (
     <Chip token={token}>
       <div className={cn("size-7 rounded", className)} />
@@ -303,14 +268,13 @@ function Primitives() {
         <Pill variant="emphasis">emphasis</Pill>
       </div>
       <Input placeholder="Input field" className="h-8 text-xs" />
-      <EmptyStatePanel className="text-xs">Empty state placeholder</EmptyStatePanel>
+      <EmptyStatePanel className="text-xs">
+        Empty state placeholder
+      </EmptyStatePanel>
     </div>
   );
 }
 
-// --- story -----------------------------------------------------------------
-
-/** Everything on one board, one row per concept, each shown in both modes. */
 export function Overview() {
   return (
     <StoryCard labelWidth="150px">
@@ -336,7 +300,10 @@ export function Overview() {
               <LineChip token="input" className="border-input" />
             </Group>
             <Group title="Overlays">
-              <OverlayChip token="surface-raised" className="bg-surface-raised" />
+              <OverlayChip
+                token="surface-raised"
+                className="bg-surface-raised"
+              />
               <OverlayChip
                 token="surface-recessed"
                 className="bg-surface-recessed"
@@ -394,7 +361,10 @@ export function Overview() {
         </DualTheme>
       </StoryRow>
 
-      <StoryRow label="Live primitives" hint="Catches fills/borders that clash on a surface.">
+      <StoryRow
+        label="Live primitives"
+        hint="Catches fills/borders that clash on a surface."
+      >
         <DualTheme>
           <OnBothSurfaces>
             <Primitives />

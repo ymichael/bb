@@ -23,6 +23,87 @@ The builtin Custom instructions plugin adds a multiline editor under Settings
 → Custom instructions. Saved text is persisted on this bb host and included in
 agent task instructions; blank text contributes nothing.
 
+The builtin Account Pooler plugin is disabled on fresh installations. It stores
+Claude and Codex account tokens in per-account 0600 secret files and proxies
+provider API requests through the bb server. Enable it and add an account:
+
+```
+bb plugin enable account-pool
+bb pool account add --provider claude --login
+printf '%s\n' "$CLAUDE_AUTH_CODE" | bb pool account login-complete --session <id> --code-stdin
+bb pool account add --provider claude --import
+bb pool account add --provider codex --import
+printf '%s\n' "$ANTHROPIC_API_KEY" | bb pool account add --provider claude --api-key-stdin [--label <text>] [--priority <n>]
+bb pool account add --provider claude --api-key <key> [--label <text>] [--priority <n>]
+bb pool account list [--json]
+bb pool account remove <id>
+bb pool account enable <id>
+bb pool account disable <id>
+bb pool account priority <id> <n>
+bb pool account reorder <claude|codex> <id>...
+bb pool status [--json]
+bb pool routing <claude|codex> [--off]
+bb pool config
+bb pool config set <anthropicUpstreamBaseUrl|codexUpstreamBaseUrl|switchThreshold> <value>
+bb pool token rotate --machine <id-or-name>
+bb pool bypass <thread-id> [--off]
+```
+
+Claude `--login` starts a ten-minute in-memory PKCE session, prints the browser
+sign-in URL and session ID, then exits. After sign-in, pipe the manual callback
+code to `account login-complete` with that session ID. The browser does not need
+to run on the bb server machine, and neither the code nor account tokens enter
+process arguments. Codex `--login` prints a device verification URL, one-time
+code, session ID, and an `account login-poll` command that waits for
+authorization. Both flows are available in the plugin settings page through
+the **Sign in to Claude** and **Sign in to Codex** buttons. The CLI Codex import
+path continues to read the bb server host's `~/.codex/auth.json`.
+
+The hub starts immediately, even before an account is configured, so newly
+added or enabled accounts are available without a plugin reload. With an
+enabled account whose secret file remains readable and valid, the plugin
+contributes its provider-specific server route and a distinct secret token to
+Claude Code or Codex sessions on every host. Claude Code also receives
+`ENABLE_TOOL_SEARCH=true` so tool search stays on through the hub. Codex
+receives `CODEX_OPENAI_BASE_URL` and the secret `CODEX_POOL_AUTH_TOKEN`; its
+app server uses those values without editing `~/.codex/config.toml`. Tokens are
+never printed. `status` prunes tokens for
+unenrolled machines and shows token timestamps plus recently routed threads
+whose machines need a local Claude login before the pool can be disabled
+safely. Rotation keeps the prior token valid for ten minutes. Agents should use
+`--api-key-stdin`, which reads exactly one non-empty key from piped standard
+input. The compatibility form `--api-key <key>` exposes the key in process
+arguments, shell history, and agent transcripts. Prefer `--import` when Claude
+Code is already signed in. OAuth quota refreshes on add or enable and every
+five minutes while the account is idle. Account tables add columns for the
+family buckets Anthropic reports, and JSON status exposes the same observations
+under `familyWeekly`. Selection skips an account only for a spent requested
+family while retaining it for other families. When Claude Code supplies an
+account UUID in `metadata.user_id`, the hub aligns it with the selected OAuth
+account. `bb pool config` prints the quota switch threshold and both upstream
+URLs. Use `bb pool config set <key> <value>` to change one; the two URL values
+are QA-only overrides. Upgrading from a build that stored these values through
+plugin settings resets the threshold and QA overrides to their defaults.
+
+Accounts run sequentially per provider: lower priority numbers first, with ties
+following the order accounts were added. New conversations use the current
+account until it reaches the switch threshold or fails; the pool then advances
+to the next eligible account and wraps at the end. It keeps using that fallback
+even when an earlier account recovers. Existing conversations stay pinned while
+their account remains eligible. Short temporary rate limits wait on the same
+account once; longer holds return Retry-After for pinned conversations while new
+conversations can advance. A model-family limit detours only requests for that
+family without moving the session's main pin or the provider cursor. The cursor
+and session pins survive hub restarts. Session pins expire after 30 idle minutes,
+and the pool retains the 4,096 most recently used pins.
+
+Use the up/down arrows in Account Pooler settings, or
+`bb pool account reorder <claude|codex> <id>...`, to set the complete order for
+one provider. Include disabled accounts too. Reordering changes the next failover
+sequence without moving the current account. `bb pool account priority <id> <n>`
+sets an individual priority; the same operations are available through the
+`account.reorder` and `account.setPriority` plugin RPCs.
+
 The builtin Keep Awake plugin prevents macOS idle sleep while bb is running.
 Its settings page lets you target all hosts or selected hosts. The CLI
 equivalents are:
@@ -39,23 +120,33 @@ It reconciles when the plugin starts, a host connects, its configuration
 changes, or a worker exits unexpectedly. Disabling the plugin disposes its host
 workers and their child processes.
 
-The builtin Provider retry plugin is enabled on fresh installations. It
-continues Codex and Claude Code turns after a structured subscription window
-resets, keeps its timers in memory, coordinates waits by machine/provider
-subscription, and adds a composer banner with a Cancel action while an
-automatic retry is pending.
-The banner disappears when the retry starts, is cancelled, or the user
-continues the thread. A server restart or plugin reload clears pending timers
-without changing the original failed thread. Inspect it with
-`bb provider-retry status`. See `bb guide providers` for the eligibility rules.
-Prior output or tool activity does not block recovery. Its `maximumWait`
-setting defaults to `6 hours`; choose `24 hours` or `No limit` from the plugin
-detail page, or configure it with
+The builtin Concurrency limit plugin controls how many threads run at once.
+Its settings page has an optional overall limit and one limit per host. Host
+limits default to Auto: one thread per available processor.
+Leave an override blank to return it to Auto; use 0 to pause new work. The CLI
+equivalents are:
+
+```
+bb concurrency-limit status [--json]
+bb concurrency-limit global [unlimited|<limit>] [--json]
+bb concurrency-limit host <host-id> [auto|<limit>] [--json]
+```
+
+The builtin Provider retry plugin is enabled on fresh installations. It retries
+Codex and Claude Code turns after structured provider overloads and subscription
+window limits. A pending retry is a queued row on the thread, so a server
+restart does not lose it, and that row — on the queue card above the composer,
+with its reason, its time and its own Cancel — is the only place the wait is
+narrated. Inspect it with `bb provider-retry status`. See
+`bb guide providers` for the eligibility rules. The plugin only reacts to a
+failed turn — it never blocks a send. Prior output or tool activity does not
+block recovery. Its `maximumWait` setting defaults to `6 hours`; choose
+`24 hours` or `No limit` from the plugin detail page, or configure it with
 `bb plugin config provider-retry set maximumWait <value>`.
 
 The builtin Workflows plugin runs durable provider-independent JavaScript
 orchestration. It is disabled on fresh installations; enable `workflows` under
-Extensions → Plugins or run `bb plugin enable workflows` before using:
+Settings → Installed plugins or run `bb plugin enable workflows` before using:
 
   bb workflows validate (--script '<javascript>'|--source '<javascript>'|
                         --file <path>|--name <name>)
@@ -71,7 +162,7 @@ Commands must run from a BB project thread. Workflows has six plugin
 settings, configurable with `bb plugin config workflows set <key> <value>`:
 `maxActiveRuns` (default 4, range 1–32), `maxConcurrentAgents` (8, 1–64),
 `maxAgentCalls` (100, 1–1000), `totalRunTimeoutMs` (86400000, 60000–604800000),
-`retentionDays` (30, 1–3650), and `maxNotificationBytes` (16384,
+`retentionDays` (7, 1–3650), and `maxNotificationBytes` (16384,
 1024–262144). `maxActiveRuns` applies live; the other five are snapshotted for
 each new run. Settings changes do not require a plugin reload.
 
@@ -122,6 +213,9 @@ a manifest-backed local workspace:
 Pull preserves vault-relative paths and writes `.bb-docs-state.json`; edit the
 ordinary files and leave that state file untouched. Push uses pulled SHA-256
 versions as compare-and-swap guards. Concurrent changes stop with exit 3.
+Status exits 0 when no changes exist and exits 4 when changes exist. Exit 4 is
+a successful result. Review its output, then run push separately. Do not
+connect status and push with `&&`.
 Local file and empty-directory deletions are warnings unless `--delete` is
 explicit; a pulled folder root is retained, so pull its parent or the whole
 vault to remove that folder. Use `--workspace-host <id>` when a standalone
@@ -172,7 +266,7 @@ added/updated/unchanged counts.
 
   bb plugin search <query>       Search the store: the plugins bundled with
                                  the app plus every registered marketplace
-                                 catalog
+                                 catalog. Results include a Category column
   bb plugin install <entry>      Install a bundled official plugin by name
                                  (github, docs, memory, tasks),
                                  <entry-id>@<marketplace>, a Git repository
@@ -292,7 +386,8 @@ added/updated/unchanged counts.
                                  cached icons are deleted; plugins installed
                                  from it keep running as direct installs and
                                  keep checking for updates from their recorded
-                                 source. bb-community cannot be removed
+                                 source. bb-official and bb-community cannot
+                                 be removed
 
 Multi-plugin repositories
 
@@ -331,25 +426,33 @@ rollback, and remove keep working per plugin.
 
 BB Official plugins
 
-BB's official plugins — GitHub, Docs, Memory, and Tasks — ship bundled inside
-the app itself. They appear in Extensions → Plugins → Browse
-and install with one click from the local bundled copy: no network, no
-download, no separate release. Install from the CLI by bare name
-(`bb plugin install github`, `bb plugin install docs`, `bb plugin install
-memory`, or `bb plugin install tasks`). Installed official plugins are pinned
-to the bundled copy and update automatically when the BB app updates.
+BB's official plugins ship inside the app. The reserved `bb-official`
+marketplace describes these plugins with the standard v2 format. Its catalog
+uses a local path. It never uses the network. `bb marketplace list` shows it
+first. You cannot add or remove it.
 
-The BB Community marketplace (reserved name `bb-community`) lists reviewed
-plugins that live outside the app bundle. bb reads its manifest from
-https://getbb.app/marketplace/v1/marketplace.json (override the URL with
-BB_MARKETPLACE_URL) at startup and every two hours, with a conditional
-request. bb stores the last catalog it validated: an unreachable server or an
-invalid manifest keeps that catalog, and the app bundles a seed snapshot for
-a first run with no network. A refresh updates discovery metadata and icons
-only — it never installs, updates, or runs plugin code. Entry icons are
-fetched, validated, and served by the bb server, so the app never requests a
-marketplace URL. Installing an entry runs the normal install pipeline against
-its listed git or npm source and records which marketplace listed it.
+The plugins appear in the first Browse shelf, BB Official. They also appear in
+their category shelves. Install a plugin by its bare name or its qualified name.
+For example, use
+`bb plugin install docs` or `bb plugin install docs@bb-official`. bb copies the
+plugin from the app bundle. An app update also updates the bundled copy.
+
+The BB Community marketplace has the reserved name `bb-community`. It lists
+reviewed plugins that live outside the app bundle. bb requests the v2 manifest
+from https://getbb.app/marketplace/v2/marketplace.json. A 404 response makes
+bb request the v1 manifest. Other errors do not cause this fallback. Set
+BB_MARKETPLACE_URL to override the URL. bb reads the manifest at startup and
+every two hours.
+
+bb stores the last catalog that it validated. An invalid manifest keeps that
+catalog. The app also includes a seed snapshot for the first offline start. A
+refresh changes discovery data and icons only. It never installs, updates, or
+runs plugin code. The server fetches and serves entry icons. The detail page
+loads screenshots from the URLs that the marketplace declares. An entry can
+also carry a long-form markdown description. The detail page renders it below
+the short description, and `bb plugin search --json` returns it as `overview`.
+An install uses the normal git or npm source pipeline. bb records the source
+marketplace.
 
 The BB Community marketplace also publishes install counts beside its
 manifest, at https://getbb.app/marketplace/v1/stats.json. bb re-reads that
@@ -359,6 +462,9 @@ The number is how many BB installations reported installing the plugin
 through anonymous telemetry, so it undercounts: telemetry is opt-out and only
 production builds report. No third-party marketplace has counts; bb measures
 them itself rather than repeating a publisher's claim.
+
+BB Official entries use the same counts. bb finds each count in the BB
+Community `stats.json` file by the plugin id.
 
 Third-party marketplaces
 
@@ -370,26 +476,29 @@ path:<directory> on the bb server's machine:
   bb marketplace add git:github.com/acme/bb-marketplace@main
   bb marketplace add path:/work/acme-marketplace
 
-The manifest's own `name` is the marketplace's identity, so adding refuses a
-name another marketplace already uses. `bb-community` is reserved: it cannot be
-added and cannot be removed. A git or path marketplace reads its icons from
-the checkout beside the manifest; an https one resolves relative icon URLs
-against the manifest URL. Either way the bb server fetches, validates, and
-serves the icons, so the app never requests a marketplace URL. A git
-marketplace is cloned into a throwaway checkout that bb deletes after reading
-it — the validated manifest and icon bytes are all bb keeps.
+The manifest `name` is the marketplace identity. bb refuses a duplicate name.
+The `bb-official` and `bb-community` names are reserved. You cannot add or
+remove them. A third-party marketplace can use manifest v1 or v2. A git or
+path marketplace reads icons
+from its checkout. An HTTPS marketplace resolves relative icon URLs against
+the manifest URL. The server fetches and serves all icons. The detail page
+loads screenshots from the URLs that the marketplace declares. bb clones a
+git marketplace into a temporary checkout. bb keeps only the validated
+manifest and icon bytes.
+
+bb ignores unknown v2 fields, except in npm and git source objects. bb rejects
+unknown source keys because a source key changes the installed code.
 
 Install an entry of a specific marketplace with <entry-id>@<marketplace>:
 
   bb plugin install thread-hover-cards@acme-plugins
 
-A bare id resolves across every marketplace. Exactly one match installs, no
-match falls back to the bundled official plugin of that name, and several
-matches fail and list the id@marketplace choices. Every other source
+A bare id resolves across every marketplace. Exactly one match installs.
+Several matches fail and list the id@marketplace choices. Every other source
 form — Git repository URLs, path:, npm:, git:, builtin:, and path-like
 syntax — is unchanged and still bypasses catalog resolution.
 
-Before an install from a marketplace other than bb-community, bb resolves and
+Before an install from a third-party marketplace, bb resolves and
 shows the true source: the npm package with its range or dist-tag, or the git
 URL with its ref or semver range, its subdirectory, and the exact release tag
 and commit that range currently lands on. The confirmation names the
@@ -409,8 +518,9 @@ The Browse tab groups entries by publisher: BB Official for the plugins
 bundled with the app, BB Community for the curated marketplace's listings, and
 each third-party marketplace under its own display name. Grouping keys on the
 marketplace identity, not on the display name, so a marketplace cannot join
-another publisher's group by copying its name — and only bb-community may
-present the BB Official or BB Community labels. Entry cards show the author.
+another publisher's group by copying its name. Only the two reserved
+marketplaces can use the BB Official or BB Community labels. Entry cards show
+the author.
 
 For direct git:/npm: installs, updates are manual: `bb plugin outdated`
 checks tracking sources and `bb plugin update` applies compatible candidates.
@@ -452,10 +562,10 @@ it has both, the install fails and asks you to choose. Write
 `@semver:<range>` for the range or `@ref:<name>` for the literal ref. Bare
 version tags such as `v1` and `v1.2.3` are always the literal tag.
 
-`bb plugin search <query>` matches id, display name, description, category,
-and tags across the bundled plugins and every registered marketplace catalog
-(status: installed / compatible / requires newer bb). Entries carry tags,
-which feed the category filter. Install a bundled plugin by its bare name. Direct
+`bb plugin search <query>` matches an id, name, description, category, or tag.
+It searches bb-official and each other registered marketplace. The output has a
+Category column. Status shows installed, compatible, or requires newer bb.
+Install a bundled plugin by its bare name. Direct
 HTTP(S) Git repository URLs, `path:`, `npm:`, `git:`, and `builtin:`
 sources—and path-like syntax—continue to bypass official-plugin resolution.
 
@@ -621,7 +731,7 @@ Everything else (zod included) bundles from the plugin's node_modules (`npm inst
 release packages with their declared production dependencies). A crashing slot collapses to a
 "plugin <id> crashed" chip without
 touching the rest of the app. Installed plugins and their declared settings
-(same data as `bb plugin config`) also appear under Extensions → Plugins.
+(same data as `bb plugin config`) also appear under Settings → Installed plugins.
 
 Plugin CLI commands: a plugin can register one top-level subcommand (for
 example `bb github …`). Unknown `bb` commands are looked up against installed
@@ -657,6 +767,14 @@ floor rather than a ceiling; scaffold writes `">=0.4.3"` for SDK 0.4.3). Use
 default. Scoped names such as `@acme/bb-plugin-hello` are also supported. The
 plugin id is the final package-name component minus `bb-plugin-`, so both forms
 use `hello`.
+
+The scaffold also writes `PLUGIN_OVERVIEW.md` beside package.json: the
+long-form store listing, shown in an Overview section under `bb.description` on
+the plugin detail page in the app and on getbb.app. It says the same thing as
+`bb.description` at length, so update both together. Keep it under 4000
+characters, use headings, paragraphs, emphasis, code, blockquotes, lists,
+thematic breaks, and absolute https links only, and do not open with a `#`
+title. A submission to the BB Community marketplace requires the file.
 
 Plugins can contribute palettes with `bb.themes`: an array of
 `{ id, name, description?, css, codeTheme? }`, where `css` is a

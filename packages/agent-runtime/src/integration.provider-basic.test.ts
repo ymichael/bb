@@ -1,5 +1,3 @@
-/** Provider integration tests using createAgentRuntime. */
-
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { requireThreadEventScopeTurnId } from "@bb/domain";
@@ -33,7 +31,6 @@ const providers = ["codex", "claude-code", "pi"];
 
 for (const providerId of providers) {
   describe.concurrent(`${providerId} provider`, () => {
-    // 1. Lists models
     it("lists models", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -52,7 +49,6 @@ for (const providerId of providers) {
       }
     });
 
-    // 2. Starts a thread and runs a single turn
     it("starts a thread and runs a single turn", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -88,7 +84,6 @@ for (const providerId of providers) {
         expect(ctx.events.some((e) => e.type === "turn/completed")).toBe(true);
         expectInputAcceptedCount(ctx.events, 1);
 
-        // Should have some content (agent message or streamed text)
         const text = getAgentText(ctx.events) || getStreamedText(ctx.events);
         expect(text.length).toBeGreaterThan(0);
       } finally {
@@ -97,7 +92,6 @@ for (const providerId of providers) {
       }
     });
 
-    // 3. Handles a follow-up turn in the same session
     it("handles a follow-up turn in the same session", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -115,7 +109,6 @@ for (const providerId of providers) {
           options,
         });
 
-        // Turn 1
         await ctx.runtime.runTurn({
           threadId,
           clientRequestId: "creq_23456789ab",
@@ -131,7 +124,6 @@ for (const providerId of providers) {
           label: "first turn/completed",
         });
 
-        // Turn 2
         await ctx.runtime.runTurn({
           threadId,
           clientRequestId: "creq_23456789ac",
@@ -158,7 +150,6 @@ for (const providerId of providers) {
       }
     });
 
-    // 4. Steers an active turn.
     it("steers an active turn", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -245,7 +236,6 @@ for (const providerId of providers) {
       }
     }, 90_000);
 
-    // 5. Stops an active turn and recovers with a resumed session.
     it("stops an active turn and recovers with a follow-up", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -350,7 +340,6 @@ for (const providerId of providers) {
       }
     }, 90_000);
 
-    // 6. Respects developer instructions
     it("respects developer instructions", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -392,7 +381,6 @@ for (const providerId of providers) {
       }
     });
 
-    // 7. Recovers from a bad request
     it("recovers from a bad request", async () => {
       const ctx = createTestRuntime(providerId);
       try {
@@ -410,7 +398,6 @@ for (const providerId of providers) {
           options,
         });
 
-        // Good turn 1
         await ctx.runtime.runTurn({
           clientRequestId: "creq_222222224e",
           threadId,
@@ -425,7 +412,6 @@ for (const providerId of providers) {
           label: "first turn/completed",
         });
 
-        // Bad request — nonexistent thread
         const badThreadId = `nonexistent_${Date.now()}`;
         let badRequestFailed = false;
         try {
@@ -440,7 +426,6 @@ for (const providerId of providers) {
         }
         expect(badRequestFailed).toBe(true);
 
-        // Good turn 2 — same session should still work
         await ctx.runtime.runTurn({
           clientRequestId: "creq_222222224g",
           threadId,
@@ -463,7 +448,6 @@ for (const providerId of providers) {
       }
     });
 
-    // 8. Handles dynamic tool calls
     it("handles dynamic tool calls", async () => {
       let toolCalled = false;
       const ctx = createTestRuntime(providerId, {

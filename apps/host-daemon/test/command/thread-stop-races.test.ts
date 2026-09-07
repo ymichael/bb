@@ -42,25 +42,15 @@ import {
   fetchDispatchTestArtifact,
 } from "./dispatch-helpers.js";
 
-/**
- * Race coverage for the thread.stop dispatch flow against the REAL agent
- * runtime (the scripted echo bridge, a real provider subprocess behind the
- * real bridge-protocol adapter): the stop wait is event-driven via
- * runtime.waitForActiveTurn, crash clearing is owned by the runtime, and
- * repeated stops are idempotent.
- */
-
 const ENVIRONMENT_ID = "env-stop-race";
 const THREAD_STOP_ACTIVE_TURN_WAIT_MS = 5_000;
 
 interface RaceHarness {
   dispatchOptions: CommandDispatchOptions;
   events: ThreadEvent[];
-  /** The scripted echo bridge launch every command in this harness carries. */
   launch: HostDaemonBridgeLaunch;
   manager: RuntimeManager;
   unexpectedProcessExit: Promise<AgentRuntimeProcessExitInfo>;
-  /** Every request the bridge processes handled (the provider's view). */
   record: ScriptedEchoRequestRecord;
   requireRuntime: () => AgentRuntime;
   workspacePath: string;
@@ -96,19 +86,12 @@ function nextClientRequestId(): ClientTurnRequestId {
   return requestId;
 }
 
-/** Lets queued microtasks (the dispatch chain up to its turn waiter) run. */
 function flushMicrotasks(): Promise<void> {
   return new Promise((resolve) => {
     setImmediate(resolve);
   });
 }
 
-/**
- * The scripted echo bridge as the daemon receives a plugin provider: a built
- * `bb.host` artifact named by digest and byte length on the wire, fetched and
- * hash-verified into the daemon's cache before the bootstrap imports it.
- * Built once per file from source, like the plugin runtime builds it.
- */
 let scriptedEchoArtifact: Promise<{
   bytes: Uint8Array;
   digest: string;
@@ -134,11 +117,6 @@ function buildScriptedEchoArtifact(): Promise<{
   return scriptedEchoArtifact;
 }
 
-/**
- * The launch the dispatch commands carry, the way the server attaches a
- * plugin provider's artifact. `scripted` rides `providerOptions` like any
- * provider-owned static.
- */
 async function scriptedEchoDispatchLaunch(
   options: { pluginId?: string; scripted?: ScriptedEchoLaunchScript } = {},
 ): Promise<HostDaemonBridgeLaunch> {
@@ -206,8 +184,6 @@ async function createRaceHarness(): Promise<RaceHarness> {
     dispatchOptions: makeDispatchOptions({
       runtimeManager: manager,
       dataDir,
-      // The daemon's artifact fetcher, serving the built scripted echo bridge
-      // for whichever plugin id a launch names.
       fetchPluginHostArtifact: async ({ digest }) => {
         if (digest !== artifact.digest) {
           throw new Error(`unknown plugin host artifact ${digest}`);
@@ -262,6 +238,7 @@ function threadStartCommand(
     },
     instructions: "Be a helpful coding agent.",
     dynamicTools: [],
+    contributedEnv: [],
     injectedSkillSources: [],
     instructionMode: "append",
   };
@@ -299,6 +276,7 @@ function turnSubmitCommand(
       providerThreadId: "prov-1",
       instructions: "Be a helpful coding agent.",
       dynamicTools: [],
+      contributedEnv: [],
       injectedSkillSources: [],
       instructionMode: "append",
     },
@@ -315,7 +293,6 @@ function threadStopCommand(threadId: string): CommandOf<"thread.stop"> {
   };
 }
 
-/** The `thread/stop` requests that reached a bridge process, in order. */
 function recordedThreadStops(harness: RaceHarness): Record<string, unknown>[] {
   return harness.record
     .read()
@@ -347,8 +324,6 @@ describe("thread.stop race semantics", () => {
     expect(runtime.hasThread("t-race")).toBe(true);
     expect(runtime.getActiveTurnId("t-race")).toBeNull();
 
-    // Stop arrives while no turn is active yet: it must wait for the
-    // turn/started observation, not poll and not give up.
     const stopPromise = dispatchCommand(
       threadStopCommand("t-race"),
       harness.dispatchOptions,
@@ -356,7 +331,6 @@ describe("thread.stop race semantics", () => {
     await flushMicrotasks();
     expect(recordedThreadStops(harness)).toHaveLength(0);
 
-    // The turn now starts; its turn/started observation must release the stop.
     const submitPromise = dispatchCommand(
       turnSubmitCommand(harness, {
         threadId: "t-race",
@@ -367,8 +341,6 @@ describe("thread.stop race semantics", () => {
     await expect(stopPromise).resolves.toEqual({ providerCheckpointId: null });
     await expect(submitPromise).resolves.toEqual({ appliedAs: "new-turn" });
 
-    // The wire carries the bridge's own turn id, reverse-mapped by the
-    // adapter from the assembler-minted id the runtime tracks.
     expect(recordedThreadStops(harness)).toEqual([
       expect.objectContaining({
         threadId: "t-race",
@@ -396,8 +368,6 @@ describe("thread.stop race semantics", () => {
     const runtime = harness.requireRuntime();
     expect(runtime.getActiveTurnId("t-idle")).toBeNull();
 
-    // No turn ever starts, so the stop waits the full timeout. Fake timers
-    // advance past it without spending the 5s in test time.
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const stopPromise = dispatchCommand(
       threadStopCommand("t-idle"),
@@ -408,7 +378,6 @@ describe("thread.stop race semantics", () => {
     vi.useRealTimers();
 
     await expect(stopPromise).resolves.toEqual({ providerCheckpointId: null });
-    // The stop reached the provider as a no-turn stop and released the thread.
     expect(recordedThreadStops(harness)).toEqual([
       expect.objectContaining({
         threadId: "t-idle",
@@ -424,8 +393,6 @@ describe("thread.stop race semantics", () => {
 
   it("clears the active turn when the provider crashes mid-turn so a later stop noops", async () => {
     const harness = await createRaceHarness();
-    // A second provider whose bridge dies mid-turn: it acknowledges the turn
-    // (turn/started reaches the runtime) and then exits.
     const crasherLaunch = await scriptedEchoDispatchLaunch({
       pluginId: "provider-crasher",
       scripted: { exitAfter: "turn/start" },
@@ -439,10 +406,6 @@ describe("thread.stop race semantics", () => {
       harness.launch,
       harness.dispatchOptions,
     );
-    // A healthy sibling process keeps this same environment runtime loaded,
-    // so the later stop exercises its unknown-thread dispatch path. Start its
-    // independent bootstrap beside the crasher instead of serializing two
-    // real Node process startups under the test's wall-clock budget.
     const healthyStart = entry.runtime.ensureProvider({
       providerId: "fake",
       bridgeLaunch: healthyLaunch,
@@ -460,7 +423,6 @@ describe("thread.stop race semantics", () => {
 
     const crashExit = await harness.unexpectedProcessExit;
     expect(crashExit.providerId).toBe("crasher");
-    // The exit snapshot proves the thread was mid-turn when the process died.
     expect(crashExit.threads).toEqual([
       expect.objectContaining({
         threadId: "t-crash",
@@ -468,11 +430,9 @@ describe("thread.stop race semantics", () => {
         activeTurnId: expect.any(String),
       }),
     ]);
-    // The runtime's own exit handling is the only clearing of that state.
     const runtime = harness.requireRuntime();
     expect(runtime.getActiveTurnId("t-crash")).toBeNull();
     expect(runtime.hasThread("t-crash")).toBe(false);
-    // The daemon synthesized the failure for the orphaned turn.
     expect(harness.events).toContainEqual(
       expect.objectContaining({
         type: "turn/completed",
@@ -485,7 +445,6 @@ describe("thread.stop race semantics", () => {
     await expect(
       dispatchCommand(threadStopCommand("t-crash"), harness.dispatchOptions),
     ).resolves.toEqual({ providerCheckpointId: null });
-    // The stop never reached a provider: the crashed thread is unknown.
     expect(recordedThreadStops(harness)).toHaveLength(0);
   });
 
@@ -523,8 +482,6 @@ describe("thread.stop race semantics", () => {
 
     expect(firstStop.ok).toBe(true);
     expect(secondStop.ok).toBe(true);
-    // Only one stop reached the provider; the loser saw the thread already
-    // forgotten and nooped.
     expect(recordedThreadStops(harness)).toHaveLength(1);
     expect(
       harness.events.filter(

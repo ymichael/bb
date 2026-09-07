@@ -6,10 +6,6 @@ import type {
   BbDesktopInfo,
 } from "@bb/desktop-contract";
 
-// A minimal, inert desktop bridge for stories that need the desktop-only browser
-// surface to register as available. The browser methods are no-ops: the native
-// `WebContentsView` only exists in the packaged desktop app, so in a story the
-// browser tab renders its chrome + new-tab screen and never a live page.
 const STORY_DESKTOP_INFO: BbDesktopInfo = {
   lastCheckedAt: null,
   latestVersion: null,
@@ -76,14 +72,6 @@ interface WithDesktopBrowserProps {
   children: ReactNode;
 }
 
-/**
- * Installs an inert `window.bbDesktop` so stories can exercise the desktop-only
- * browser surface — the launcher's "Open browser" entry and the browser tab.
- * The bridge is set synchronously during render (before children read
- * `isDesktopBrowserAvailable()`, which runs at render time) and removed on
- * unmount so it never leaks into the web-build stories that must see the surface
- * as absent. Use exactly one wrapper per story page.
- */
 export function WithDesktopBrowser({
   browserState = null,
   children,

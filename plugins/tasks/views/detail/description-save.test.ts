@@ -4,7 +4,6 @@ import {
   type DescriptionSaveOutcome,
 } from "./description-save.js";
 
-/** Manual timer: `fire()` runs the most recently scheduled callback. */
 function manualTimer() {
   let queued: (() => void) | undefined;
   return {
@@ -36,7 +35,8 @@ function setup(
   return { timer, errors, saver };
 }
 
-const flushMicrotasks = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
+const flushMicrotasks = () =>
+  new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 describe("createDescriptionSaver", () => {
   it("clears the pending draft only after the server confirms the save", async () => {
@@ -53,7 +53,6 @@ describe("createDescriptionSaver", () => {
     expect(calls).toEqual(["draft v1"]);
     expect(saver.hasPending()).toBe(false);
     expect(errors).toEqual([]);
-    // Nothing left to flush on unmount.
     saver.flush("task-1");
     await flushMicrotasks();
     expect(calls).toEqual(["draft v1"]);
@@ -95,11 +94,9 @@ describe("createDescriptionSaver", () => {
     saver.onChange("task-1", "draft v1");
     timer.fire();
     await flushMicrotasks();
-    // While v1 is in flight the user keeps typing.
     saver.onChange("task-1", "draft v2");
     release?.();
     await flushMicrotasks();
-    // v1 settled but v2 is still pending; the rearmed timer sends it.
     expect(saver.hasPending()).toBe(true);
     timer.fire();
     release?.();

@@ -1,5 +1,8 @@
 import type { QueryClient } from "@tanstack/react-query";
-import type { TerminalListResponse, TerminalSession } from "@bb/server-contract";
+import type {
+  TerminalListResponse,
+  TerminalSession,
+} from "@bb/server-contract";
 import {
   allTerminalsQueryKeyPrefix,
   terminalsQueryKey,

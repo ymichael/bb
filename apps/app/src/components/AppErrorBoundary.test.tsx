@@ -16,8 +16,6 @@ function mountRoot(): {
   const container = document.createElement("div");
   document.body.appendChild(container);
   const root = createRoot(container, {
-    // Any error that reaches here means the boundary did not catch it and the
-    // root came down — the white page the report describes.
     onUncaughtError: (error) => {
       throw error;
     },
@@ -48,7 +46,6 @@ describe("AppErrorBoundary", () => {
 
     expect(container.textContent).toContain("bb hit an error and stopped");
     expect(container.querySelector("button")?.textContent).toBe("Reload bb");
-    // The message stays reachable so a report can carry it.
     expect(container.textContent).toContain("render exploded");
     dispose();
   });
@@ -67,7 +64,6 @@ describe("AppErrorBoundary", () => {
     );
     const moved = container.querySelector("[data-moved]");
     expect(moved).not.toBeNull();
-    // The foreign mutation the crash report points at.
     document.createElement("section").appendChild(moved!);
 
     render(

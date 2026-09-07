@@ -15,7 +15,6 @@ import {
 } from "./build-plugin-server.js";
 import { resolvePluginBuildToolchain } from "./toolchain.js";
 
-/** The monorepo's own toolchain; resolves esbuild without downloading. */
 function testToolchain() {
   return resolvePluginBuildToolchain(join(tmpdir(), "bb-toolchain-unused"));
 }
@@ -37,9 +36,6 @@ describe("plugin server build", () => {
   });
 
   it("builds a pre-rename source importing bare @bb/plugin-sdk", async () => {
-    // The SDK is never installed in a plugin's node_modules, so dropping the
-    // legacy specifier from the externals turns `bb plugin build` on any
-    // pre-rename source into a hard "Could not resolve" failure.
     const dir = await mkdtemp(join(tmpdir(), "bb-plugin-server-legacy-"));
     tempDirs.push(dir);
     await mkdir(join(dir, "dist"), { recursive: true });
@@ -91,8 +87,6 @@ describe("plugin server build", () => {
         server: "./server.ts",
       },
     };
-    // A contract shared by a plugin's server and host entries is the usual
-    // reason server code reaches `@get-bb/plugin-sdk/host`.
     const serverSource = [
       'import { defineRpcContract, type BbPluginApi } from "@get-bb/plugin-sdk";',
       'import { experimental_nativeRootsHostContract } from "@get-bb/plugin-sdk/host";',
@@ -109,9 +103,6 @@ describe("plugin server build", () => {
     }
 
     it("keeps the bare specifier external and bundles the subpath from the plugin's SDK", async () => {
-      // The packaged server aliases only the bare specifier to its runtime
-      // bundle; a subpath left external resolves to
-      // `plugin-sdk-runtime.js/host` there and fails the load.
       const dir = await mkdtemp(join(tmpdir(), "bb-plugin-server-subpath-"));
       tempDirs.push(dir);
       await writeFixture(dir);
@@ -131,12 +122,10 @@ describe("plugin server build", () => {
       const bundle = await readFile(jsPath, "utf8");
       expect(bundle).toContain('from "@get-bb/plugin-sdk"');
       expect(bundle).not.toContain('"@get-bb/plugin-sdk/host"');
-      // The inlined contract, not a stub: its method names are in the bundle.
       expect(bundle).toContain("resolveNativeRoots");
     });
 
     it("names the missing SDK dependency when the plugin has no node_modules", async () => {
-      // Outside the workspace, so nothing above the fixture resolves the SDK.
       const dir = await mkdtemp(join(tmpdir(), "bb-plugin-server-no-sdk-"));
       tempDirs.push(dir);
       await writeFixture(dir);

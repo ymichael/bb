@@ -4,10 +4,7 @@ import {
   readVoidResponse,
   resolveResponse,
 } from "./response.js";
-import type {
-  BbSdkTransport,
-  CreateHttpTransportArgs,
-} from "./transport.js";
+import type { BbSdkTransport, CreateHttpTransportArgs } from "./transport.js";
 
 const SAME_ORIGIN_BASE_URL = "";
 

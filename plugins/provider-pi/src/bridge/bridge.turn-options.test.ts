@@ -10,18 +10,8 @@ import {
   startFakePiBridge,
 } from "./test-support.js";
 
-/**
- * Execution options ride every turn command and the runtime never diffs
- * them, so each bridge reconciles them itself (#2160). Pi takes the model and
- * the thinking level as spawn flags, so a turn that carries different ones
- * rebuilds the child from the thread's session file and says so with
- * `session/replaced`; a turn that carries the live ones leaves it alone.
- */
-
-/** A rebuild starts a second real pi child; match the process-test budget. */
 const TURN_OPTIONS_TEST_TIMEOUT_MS = 60_000;
 
-/** The fake's small model: a 32k context window against fake-model's 200k. */
 const MINI = {
   ...FULL_PERMISSION_OPTIONS,
   model: "fake-provider/fake-mini",
@@ -58,7 +48,6 @@ function sessionReplacements(
     .filter((params) => params.threadId === threadId);
 }
 
-/** The context window each turn reported: the fake reports its model's. */
 function contextWindowSizes(threadId: string): number[] {
   return harness
     .deltasOf(threadId)
@@ -82,179 +71,192 @@ function turnStart(
   });
 }
 
-it("rebuilds the session on the model a later turn carries", async () => {
-  const threadId = "thr_turn_options_model";
-  await harness.startThread(threadId, { options: MINI });
+it(
+  "rebuilds the session on the model a later turn carries",
+  async () => {
+    const threadId = "thr_turn_options_model";
+    await harness.startThread(threadId, { options: MINI });
 
-  expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
-  let seen = await harness.waitForTurnBoundary(threadId, 0);
-  // The turn carried the construction options, so it rebuilt nothing and
-  // ran on the pinned fake-mini.
-  expect(contextWindowSizes(threadId)).toEqual([32_000]);
-  expect(sessionReplacements(threadId)).toEqual([]);
+    expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
+    let seen = await harness.waitForTurnBoundary(threadId, 0);
+    expect(contextWindowSizes(threadId)).toEqual([32_000]);
+    expect(sessionReplacements(threadId)).toEqual([]);
 
-  // The user picks another model in the composer. The runtime never diffs
-  // options: the change only rides the next turn command.
-  expect(
-    (await turnStart(2, threadId, "second", FULL_MODEL)).error,
-  ).toBeUndefined();
-  seen = await harness.waitForTurnBoundary(threadId, seen);
+    expect(
+      (await turnStart(2, threadId, "second", FULL_MODEL)).error,
+    ).toBeUndefined();
+    seen = await harness.waitForTurnBoundary(threadId, seen);
 
-  expect(contextWindowSizes(threadId).at(-1)).toBe(200_000);
-  expect(sessionReplacements(threadId)).toEqual([
-    {
+    expect(contextWindowSizes(threadId).at(-1)).toBe(200_000);
+    expect(sessionReplacements(threadId)).toEqual([
+      {
+        threadId,
+        providerThreadId: threadId,
+        reason: expect.stringContaining("Execution settings changed"),
+        contextLost: false,
+      },
+    ]);
+    expect(
+      harness
+        .deltasOf(threadId)
+        .filter((delta) => delta.kind === "session.reset"),
+    ).toHaveLength(2);
+
+    expect(
+      (await turnStart(3, threadId, "third", FULL_MODEL)).error,
+    ).toBeUndefined();
+    await harness.waitForTurnBoundary(threadId, seen);
+    expect(sessionReplacements(threadId)).toHaveLength(1);
+  },
+  TURN_OPTIONS_TEST_TIMEOUT_MS,
+);
+
+it(
+  "rebuilds the session on the reasoning level a later turn carries",
+  async () => {
+    const threadId = "thr_turn_options_level";
+    await harness.startThread(threadId, { options: MINI });
+
+    expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
+    const seen = await harness.waitForTurnBoundary(threadId, 0);
+    expect(sessionReplacements(threadId)).toEqual([]);
+
+    expect(
+      (
+        await turnStart(2, threadId, "second", {
+          ...MINI,
+          reasoningLevel: "high",
+        })
+      ).error,
+    ).toBeUndefined();
+    await harness.waitForTurnBoundary(threadId, seen);
+
+    expect(sessionReplacements(threadId)).toHaveLength(1);
+  },
+  TURN_OPTIONS_TEST_TIMEOUT_MS,
+);
+
+it(
+  "compacts with the model the compaction turn selected",
+  async () => {
+    const threadId = "thr_turn_options_compact";
+    await harness.startThread(threadId, { options: MINI });
+
+    expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
+    const seen = await harness.waitForTurnBoundary(threadId, 0);
+
+    const compaction = await harness.request(2, "turn/start", {
       threadId,
       providerThreadId: threadId,
-      reason: expect.stringContaining("Execution settings changed"),
-      contextLost: false,
-    },
-  ]);
-  // The replacement opens a new native id space: the construction reset and
-  // the rebuild's reset are both on the wire.
-  expect(
-    harness.deltasOf(threadId).filter((delta) => delta.kind === "session.reset"),
-  ).toHaveLength(2);
-
-  // A third turn on the options the rebuild applied changes nothing.
-  expect(
-    (await turnStart(3, threadId, "third", FULL_MODEL)).error,
-  ).toBeUndefined();
-  await harness.waitForTurnBoundary(threadId, seen);
-  expect(sessionReplacements(threadId)).toHaveLength(1);
-}, TURN_OPTIONS_TEST_TIMEOUT_MS);
-
-it("rebuilds the session on the reasoning level a later turn carries", async () => {
-  const threadId = "thr_turn_options_level";
-  await harness.startThread(threadId, { options: MINI });
-
-  expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
-  const seen = await harness.waitForTurnBoundary(threadId, 0);
-  expect(sessionReplacements(threadId)).toEqual([]);
-
-  expect(
-    (await turnStart(2, threadId, "second", { ...MINI, reasoningLevel: "high" }))
-      .error,
-  ).toBeUndefined();
-  await harness.waitForTurnBoundary(threadId, seen);
-
-  expect(sessionReplacements(threadId)).toHaveLength(1);
-}, TURN_OPTIONS_TEST_TIMEOUT_MS);
-
-it("compacts with the model the compaction turn selected", async () => {
-  const threadId = "thr_turn_options_compact";
-  await harness.startThread(threadId, { options: MINI });
-
-  expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
-  const seen = await harness.waitForTurnBoundary(threadId, 0);
-
-  // A standalone builtin /compact is bb's manual-compaction request, not
-  // model input. Reconciliation runs ahead of that branch too, so the
-  // summarization request goes to the model the user selected.
-  const compaction = await harness.request(2, "turn/start", {
-    threadId,
-    providerThreadId: threadId,
-    clientRequestId: "creq_abcdefghij",
-    input: [
-      {
-        type: "text",
-        text: "/compact",
-        mentions: [
-          {
-            start: 0,
-            end: 8,
-            resource: {
-              kind: "command",
-              trigger: "/",
-              name: "compact",
-              source: "command",
-              origin: "builtin",
-              label: "compact",
-              argumentHint: null,
+      clientRequestId: "creq_abcdefghij",
+      input: [
+        {
+          type: "text",
+          text: "/compact",
+          mentions: [
+            {
+              start: 0,
+              end: 8,
+              resource: {
+                kind: "command",
+                trigger: "/",
+                name: "compact",
+                source: "command",
+                origin: "builtin",
+                label: "compact",
+                argumentHint: null,
+              },
             },
-          },
-        ],
-      },
-    ],
-    options: FULL_MODEL,
-  });
-  expect(compaction.result).toMatchObject({ threadId });
+          ],
+        },
+      ],
+      options: FULL_MODEL,
+    });
+    expect(compaction.result).toMatchObject({ threadId });
 
-  await harness.waitForDelta(
-    threadId,
-    (delta) => delta.kind === "contextWindow" && delta.size === 200_000,
-    seen,
-  );
-  expect(sessionReplacements(threadId)).toHaveLength(1);
-}, TURN_OPTIONS_TEST_TIMEOUT_MS);
+    await harness.waitForDelta(
+      threadId,
+      (delta) => delta.kind === "contextWindow" && delta.size === 200_000,
+      seen,
+    );
+    expect(sessionReplacements(threadId)).toHaveLength(1);
+  },
+  TURN_OPTIONS_TEST_TIMEOUT_MS,
+);
 
-it("fails a turn whose model cannot be resolved and keeps the live session", async () => {
-  const threadId = "thr_turn_options_bad_model";
-  await harness.startThread(threadId, { options: MINI });
+it(
+  "fails a turn whose model cannot be resolved and keeps the live session",
+  async () => {
+    const threadId = "thr_turn_options_bad_model";
+    await harness.startThread(threadId, { options: MINI });
 
-  expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
-  const seen = await harness.waitForTurnBoundary(threadId, 0);
+    expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
+    const seen = await harness.waitForTurnBoundary(threadId, 0);
 
-  expect(
-    (await turnStart(2, threadId, "second", { ...MINI, model: "no-such-model" }))
-      .error,
-  ).toMatchObject({
-    code: -32000,
-    message: 'Failed to resolve Pi model "no-such-model"',
-  });
-  expect(sessionReplacements(threadId)).toEqual([]);
+    expect(
+      (
+        await turnStart(2, threadId, "second", {
+          ...MINI,
+          model: "no-such-model",
+        })
+      ).error,
+    ).toMatchObject({
+      code: -32000,
+      message: 'Failed to resolve Pi model "no-such-model"',
+    });
+    expect(sessionReplacements(threadId)).toEqual([]);
 
-  // The session that was live still serves the thread: the next turn runs
-  // on it, on the model it was constructed with.
-  expect((await turnStart(3, threadId, "third", MINI)).error).toBeUndefined();
-  await harness.waitForTurnBoundary(threadId, seen);
-  expect(contextWindowSizes(threadId).at(-1)).toBe(32_000);
-}, TURN_OPTIONS_TEST_TIMEOUT_MS);
+    expect((await turnStart(3, threadId, "third", MINI)).error).toBeUndefined();
+    await harness.waitForTurnBoundary(threadId, seen);
+    expect(contextWindowSizes(threadId).at(-1)).toBe(32_000);
+  },
+  TURN_OPTIONS_TEST_TIMEOUT_MS,
+);
 
-it("keeps serving the thread when the replacement child never starts", async () => {
-  const threadId = "thr_turn_options_dead_replacement";
-  await harness.startThread(threadId, { options: MINI });
+it(
+  "keeps serving the thread when the replacement child never starts",
+  async () => {
+    const threadId = "thr_turn_options_dead_replacement";
+    await harness.startThread(threadId, { options: MINI });
 
-  expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
-  const seen = await harness.waitForTurnBoundary(threadId, 0);
+    expect((await turnStart(1, threadId, "first", MINI)).error).toBeUndefined();
+    const seen = await harness.waitForTurnBoundary(threadId, 0);
 
-  // The next child dies at spawn: a `provider/id` pi accepts but cannot run,
-  // a readiness timeout, a crash. The live child must not be closed for it.
-  vi.stubEnv("FAKE_PI_EXIT_BEFORE_FIRST_RESPONSE", "1");
-  const failed = await turnStart(2, threadId, "second", FULL_MODEL);
-  vi.stubEnv("FAKE_PI_EXIT_BEFORE_FIRST_RESPONSE", undefined);
+    vi.stubEnv("FAKE_PI_EXIT_BEFORE_FIRST_RESPONSE", "1");
+    const failed = await turnStart(2, threadId, "second", FULL_MODEL);
+    vi.stubEnv("FAKE_PI_EXIT_BEFORE_FIRST_RESPONSE", undefined);
 
-  expect(failed.error).toMatchObject({ code: -32000 });
-  expect(sessionReplacements(threadId)).toEqual([]);
+    expect(failed.error).toMatchObject({ code: -32000 });
+    expect(sessionReplacements(threadId)).toEqual([]);
 
-  // The turn failed, the thread did not. Without keeping the previous child
-  // this answers "No active pi session" for the rest of the thread's life:
-  // the runtime still holds the thread, so nothing resumes it.
-  const recovered = await turnStart(3, threadId, "third", MINI);
-  expect(recovered.error).toBeUndefined();
-  await harness.waitForTurnBoundary(threadId, seen);
-  expect(contextWindowSizes(threadId).at(-1)).toBe(32_000);
-  expect(sessionReplacements(threadId)).toEqual([]);
-}, TURN_OPTIONS_TEST_TIMEOUT_MS);
+    const recovered = await turnStart(3, threadId, "third", MINI);
+    expect(recovered.error).toBeUndefined();
+    await harness.waitForTurnBoundary(threadId, seen);
+    expect(contextWindowSizes(threadId).at(-1)).toBe(32_000);
+    expect(sessionReplacements(threadId)).toEqual([]);
+  },
+  TURN_OPTIONS_TEST_TIMEOUT_MS,
+);
 
-it("steers the running turn without rebuilding on its options", async () => {
-  const threadId = "thr_turn_options_steer";
-  await harness.startThread(threadId, { options: MINI });
+it(
+  "steers the running turn without rebuilding on its options",
+  async () => {
+    const threadId = "thr_turn_options_steer";
+    await harness.startThread(threadId, { options: MINI });
 
-  // `/hold` opens a run that stays live until it is steered or aborted.
-  expect((await turnStart(1, threadId, "/hold", MINI)).error).toBeUndefined();
-  await harness.waitForDelta(threadId, (delta) => delta.kind === "turn.open");
+    expect((await turnStart(1, threadId, "/hold", MINI)).error).toBeUndefined();
+    await harness.waitForDelta(threadId, (delta) => delta.kind === "turn.open");
 
-  // A steer joins the turn already running on the model it started with;
-  // rebuilding here would kill that run, so a changed option waits for the
-  // next turn/start.
-  const steer = await harness.request(2, "turn/steer", {
-    threadId,
-    providerThreadId: threadId,
-    clientRequestId: "creq_abcdefghik",
-    expectedTurnId: "turn-1",
-    input: [{ type: "text", text: "steered", mentions: [] }],
-    options: FULL_MODEL,
-  });
-  expect(steer.result).toMatchObject({ threadId });
-  expect(sessionReplacements(threadId)).toEqual([]);
-}, TURN_OPTIONS_TEST_TIMEOUT_MS);
+    const steer = await harness.request(2, "turn/steer", {
+      threadId,
+      providerThreadId: threadId,
+      clientRequestId: "creq_abcdefghik",
+      expectedTurnId: "turn-1",
+      input: [{ type: "text", text: "steered", mentions: [] }],
+      options: FULL_MODEL,
+    });
+    expect(steer.result).toMatchObject({ threadId });
+    expect(sessionReplacements(threadId)).toEqual([]);
+  },
+  TURN_OPTIONS_TEST_TIMEOUT_MS,
+);

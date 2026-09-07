@@ -56,12 +56,7 @@ interface KillProcessGroupArgs {
 
 interface StopProcessGroupLeaderFirstArgs {
   child: ChildProcess;
-  /** Time after the leader SIGTERM before the whole group gets SIGKILL. */
   timeoutMs: number;
-  /**
-   * Time to wait for the exit after SIGKILL before the promise resolves
-   * anyway. Use 0 to resolve as soon as SIGKILL is sent.
-   */
   killGraceMs: number;
 }
 
@@ -76,7 +71,6 @@ interface ListProcessesWithCwdUnderArgs {
 
 interface KillProcessesWithCwdUnderArgs {
   directory: string;
-  /** Time to wait after SIGTERM before SIGKILL. Defaults to 2000ms. */
   graceMs?: number;
 }
 
@@ -87,14 +81,6 @@ interface ResolveContainedPathArgs {
 
 export interface SanitizeInheritedChildProcessEnvArgs {
   env: NodeJS.ProcessEnv;
-  /**
-   * The user's login-shell PATH, substituted for the inherited one. Omit to
-   * keep the parent's PATH: that is a real distinction, not a default. A
-   * daemon started by launchd or systemd inherits a minimal PATH that finds
-   * none of the user's tools, so anything spawning user-facing executables
-   * (plugin hosts, provider bridges) passes the resolved shell PATH, while a
-   * child that must run exactly what the parent runs must not.
-   */
   shellPath?: string;
 }
 
@@ -195,36 +181,20 @@ export function spawnPortableOutputProcess(
   return child;
 }
 
-/**
- * True when the platform supports POSIX process groups. Callers spawn with
- * `detached: true` so the child leads its own group and this helper can signal
- * the whole group, including grandchildren.
- */
 export function supportsProcessGroups(): boolean {
   return process.platform !== "win32";
 }
 
-/**
- * Sends `signal` to the child's process group when possible, and falls back
- * to the direct child when the group is gone or unsupported.
- */
 export function killProcessGroup(args: KillProcessGroupArgs): void {
   if (supportsProcessGroups() && args.child.pid !== undefined) {
     try {
       process.kill(-args.child.pid, args.signal);
       return;
-    } catch {
-      // Fall back to killing the direct child if the process group is gone.
-    }
+    } catch {}
   }
   args.child.kill(args.signal);
 }
 
-/**
- * True when at least one process still belongs to the group led by `child`.
- * Returns false when the platform has no process groups or the child was not
- * spawned as a group leader.
- */
 export function isProcessGroupAlive(child: {
   pid?: number | undefined;
 }): boolean {
@@ -245,16 +215,6 @@ function hasChildExited(child: ChildProcess): boolean {
 
 const PROCESS_GROUP_EXIT_POLL_MS = 100;
 
-/**
- * Stops a process-group leader and everything it started, leader first.
- *
- * SIGTERM goes to the leader alone so a provider bridge can drive its own
- * CLI down gracefully instead of racing a group-wide SIGTERM. Escalation keys
- * on "any group member still alive": when the leader exits and members
- * remain, the group gets SIGTERM and is polled; when `timeoutMs` passes and
- * anything remains, the group gets SIGKILL. Resolves once the group is gone
- * or `killGraceMs` after SIGKILL.
- */
 export function stopProcessGroupLeaderFirst(
   args: StopProcessGroupLeaderFirstArgs,
 ): Promise<void> {
@@ -295,8 +255,6 @@ export function stopProcessGroupLeaderFirst(
       hardTimer = setTimeout(finish, killGraceMs);
     }, timeoutMs);
 
-    // Group members outlive the leader: signal them and poll so the stop
-    // resolves as soon as they are gone instead of at the SIGKILL timer.
     const stopSurvivingMembers = (): void => {
       if (!isProcessGroupAlive(child)) {
         finish();
@@ -320,7 +278,6 @@ export function stopProcessGroupLeaderFirst(
 }
 
 function isPathUnderDirectory(candidate: string, directory: string): boolean {
-  // Linux reports a removed cwd as "<path> (deleted)".
   const normalized = candidate.endsWith(" (deleted)")
     ? candidate.slice(0, -" (deleted)".length)
     : candidate;
@@ -340,9 +297,7 @@ async function listLinuxProcessCwds(): Promise<ProcessWithCwd[]> {
       try {
         const cwd = await readlink(`/proc/${entry}/cwd`);
         results.push({ pid: Number(entry), cwd });
-      } catch {
-        // Process exited or is not readable by this user.
-      }
+      } catch {}
     }),
   );
   return results;
@@ -372,11 +327,6 @@ async function listLsofProcessCwds(): Promise<ProcessWithCwd[]> {
   return results;
 }
 
-/**
- * Resolves the canonical path of `directory` for cwd matching. Returns null
- * when the final path component is a symlink: a workspace root that was
- * swapped for a link must not redirect the sweep to unrelated processes.
- */
 async function resolveSweepDirectory(
   directory: string,
 ): Promise<string | null> {
@@ -384,26 +334,16 @@ async function resolveSweepDirectory(
   let parent = dirname(resolved);
   try {
     parent = await realpath(parent);
-  } catch {
-    // The parent may already be gone; match against the given path.
-  }
+  } catch {}
   const canonical = join(parent, basename(resolved));
   try {
     if ((await lstat(canonical)).isSymbolicLink()) {
       return null;
     }
-  } catch {
-    // The directory itself may already be removed. Processes can still hold
-    // it as a "(deleted)" cwd, so keep matching on the path.
-  }
+  } catch {}
   return canonical;
 }
 
-/**
- * Lists processes whose current working directory is `directory` or a path
- * inside it. Excludes the current process. Returns [] on unsupported
- * platforms and when `directory` is a symlink.
- */
 export async function listProcessesWithCwdUnder(
   args: ListProcessesWithCwdUnderArgs,
 ): Promise<ProcessWithCwd[]> {
@@ -448,22 +388,10 @@ function signalProcesses(
     try {
       process.kill(target.pid, signal);
       signalled.set(target.pid, target);
-    } catch {
-      // Already exited.
-    }
+    } catch {}
   }
 }
 
-/**
- * Sends SIGTERM to every process rooted in `directory`, waits up to
- * `graceMs`, rescans, and SIGKILLs the processes that are still rooted there.
- * Ownership-agnostic: any process of the current user with a cwd under
- * `directory` is a target, whether or not this process started it.
- * Each signal follows a fresh scan, so a reused pid or a process that
- * appeared during shutdown never receives a stale signal. Repeats until a
- * scan finds nothing, bounded by a small round limit. Returns the processes
- * that received a signal.
- */
 export async function killProcessesWithCwdUnder(
   args: KillProcessesWithCwdUnderArgs,
 ): Promise<ProcessWithCwd[]> {
@@ -518,12 +446,6 @@ export function resolveContainedPath(
   return resolvedCandidatePath;
 }
 
-/**
- * The one answer to "what does a bb-spawned child process inherit": the
- * parent's env minus bb runtime-owned variables (`BB_*`) and `NODE_ENV`,
- * optionally with the user's login-shell PATH substituted. Callers overlay
- * only the child-specific bb env they intentionally expose afterward.
- */
 export function sanitizeInheritedChildProcessEnv(
   args: SanitizeInheritedChildProcessEnvArgs,
 ): NodeJS.ProcessEnv {
@@ -543,34 +465,12 @@ export function sanitizeInheritedChildProcessEnv(
   return sanitizedEnv;
 }
 
-/**
- * The `npm_config_*` keys that decide whether package scripts run. npm reads
- * `npm_config_<key>` env as configuration above every `.npmrc` file (cli >
- * env > project > user > global), and it case-folds the key.
- *
- * bb's own npm children (plugin installs, the plugin build toolchain fetch)
- * always pass `--ignore-scripts`: nothing in a freshly fetched tree may
- * execute, and that policy is bb's, not the environment's. An inherited value
- * is also a live footgun: launching bb through a package manager (`pnpm
- * start`) exports the user's whole `~/.npmrc` as `npm_config_*`, so an
- * ordinary `allow-scripts=@github/keytar,node-pty` line reaches npm 11/12 as
- * if it were `--allow-scripts`, which npm refuses on project-scoped installs
- * (`EALLOWSCRIPTS`).
- *
- * Every other `npm_config_*` key is left alone on purpose: env is a supported
- * way to point bb's npm at a private registry, a shared cache, or an
- * alternate userconfig.
- */
 const NPM_SCRIPT_POLICY_ENV_KEYS: ReadonlySet<string> = new Set([
   "npm_config_allow_scripts",
   "npm_config_ignore_scripts",
   "npm_config_foreground_scripts",
 ]);
 
-/**
- * The environment a bb-owned npm child inherits: `env` minus the npm
- * script-policy keys (matched case-insensitively, as npm does).
- */
 export function omitNpmScriptPolicyEnv(
   env: NodeJS.ProcessEnv,
 ): NodeJS.ProcessEnv {
@@ -699,12 +599,6 @@ export function writeSafeProcessDiagnosticReport(
   return reportPath;
 }
 
-/**
- * Installs env-safe JS failure diagnostics. This intentionally avoids Node
- * process.report on supported runtimes because diagnostic reports can include
- * inherited environment secrets. It observes uncaught JS exceptions only;
- * native SIGSEGV/SIGABRT failures may terminate before JS can write anything.
- */
 export function installSafeProcessDiagnostics(
   options: SafeProcessDiagnosticsOptions,
 ): () => void {
@@ -718,9 +612,7 @@ export function installSafeProcessDiagnostics(
         kind: "uncaughtException",
         error,
       });
-    } catch {
-      // Preserve Node's original uncaught-exception behavior if logging fails.
-    }
+    } catch {}
   };
 
   process.on("uncaughtExceptionMonitor", handleUncaughtExceptionMonitor);

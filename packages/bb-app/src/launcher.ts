@@ -102,10 +102,6 @@ type ManagedConfigKey = "BB_SERVER_URL" | "serverUrl" | ManagedConfigValueKey;
 const MANAGED_CONFIG_KEYS = BB_APP_MANAGED_CONFIG_KEYS;
 const MANAGED_CONFIG_KEY_VALUES = new Set<string>(MANAGED_CONFIG_KEYS);
 const STARTUP_ONLY_MANAGED_CONFIG_KEYS = new Set<string>(["BB_LOG_LEVEL"]);
-// Keep this in sync with loadServerConfig and direct process.env reads made
-// while assembling the server. BB_APP_VERSION, BB_SERVER_LAUNCH_ID, and
-// NODE_ENV are omitted because the launcher owns and overwrites them rather
-// than applying env.json values.
 const STARTUP_ONLY_MANAGED_ENV_KEYS = new Set<string>([
   "BB_APP_SURFACE",
   "BB_APP_URL",
@@ -181,9 +177,6 @@ type ManagedConfigValues = BbAppManagedConfigValues;
 type ManagedEnvConfig = BbAppManagedEnvConfig;
 type ManagedEnvFile = BbAppManagedEnvFile;
 type ManagedConfig = BbAppManagedConfig;
-// Write flows carry customAcpAgents and customModels as raw JSON: the parser
-// skips invalid entries with a warning, and a rewrite from the parsed view
-// would silently delete them from the user's file.
 type ManagedConfigForWrite = Omit<
   ManagedConfig,
   "customAcpAgents" | "customModels"
@@ -227,6 +220,7 @@ interface ResolveWorktreeRuntimePolicyArgs {
 }
 
 interface RunBbAppOptions {
+  beforeServerStart?: () => Promise<void> | void;
   worktreePolicy: WorktreeRuntimePolicy | null;
 }
 
@@ -395,6 +389,7 @@ interface SpawnNamedManagedProcessArgs {
 }
 
 interface StartFullStackServerProcessArgs {
+  beforeStart?: () => Promise<void> | void;
   context: BbAppStartContext;
   env: NodeJS.ProcessEnv;
   outputBuffer: OutputBuffer;
@@ -419,6 +414,7 @@ interface RestartManagedProcessArgs {
 interface SuperviseFullStackProcessesArgs {
   context: BbAppStartContext;
   delayMilliseconds: DelayMillisecondsFn;
+  isHealthyServerAnswering?: (url: string) => Promise<boolean>;
   isShutdownRequested: () => boolean;
   processes: ManagedFullStackProcesses;
   startDaemon: StartManagedProcess;
@@ -446,7 +442,6 @@ export interface DelayMillisecondsArgs {
 
 interface WaitForServerHealthArgs {
   childProcess: ChildProcess | null;
-  /** Launch id handed to the server child; only a /health echoing it counts. */
   expectedLaunchId: string;
   timeoutMs?: number;
   url: string;
@@ -471,12 +466,6 @@ interface MaybeAddAutoJoinEnvArgs {
   serverUrl: string;
 }
 
-/**
- * A built artifact the launcher needs on disk. A `chunk-dir` is present only
- * once it holds a chunk: the code-split `bb` entry imports from it
- * statically, so an empty directory fails in Node's ESM loader exactly like
- * a missing one.
- */
 type ArtifactPath =
   | { kind: "file"; label: string; path: string }
   | { kind: "chunk-dir"; label: string; path: string };
@@ -693,14 +682,6 @@ function isManagedConfigValueKey(
   value: string,
 ): value is ManagedConfigValueKey {
   return MANAGED_CONFIG_KEY_VALUES.has(value);
-}
-
-function isPortableEnvName(value: string): boolean {
-  return PORTABLE_ENV_NAME_PATTERN.test(value);
-}
-
-function isSecretShapedEnvName(value: string): boolean {
-  return SECRET_SHAPED_ENV_NAME_PATTERN.test(value);
 }
 
 function supportedConfigKeysText(): string {
@@ -1462,12 +1443,6 @@ export function createHostEnrollKeyRequestBody(
   return requestBody;
 }
 
-/**
- * The token another process can look for in `ps` output to confirm that a PID
- * really is this launcher. `argv[1]` is the entry the runtime was invoked with,
- * which is what the command line shows; the module path is only a fallback for
- * an embedded runtime that passes no script argument.
- */
 function resolveLauncherEntryPath(): string {
   const scriptArgument = toOptionalString(process.argv[1]);
   return scriptArgument ?? fileURLToPath(import.meta.url);
@@ -1557,8 +1532,8 @@ Usage:
 
 Startup-only server and launcher keys:
   BB_APP_SURFACE, BB_APP_URL, BB_DATA_DIR, BB_DEV_APP_PORT,
-  BB_EXTERNAL_URL, BB_HOST_DAEMON_PORT, BB_INFERENCE,
-  BB_INFERENCE_FALLBACK, BB_INHERITED_SKILLS_ROOTS, BB_LOG_LEVEL,
+  BB_EXTERNAL_URL, BB_HOST_DAEMON_PORT, BB_INFERENCE, BB_INFERENCE_FALLBACK,
+  BB_INHERITED_SKILLS_ROOTS, BB_LOG_LEVEL,
   BB_MANAGED_DEV_BUILTIN_PLUGIN_HOT_RELOAD, BB_POSTHOG_API_KEY,
   BB_SERVER_BIND_HOST, BB_SERVER_PORT, BB_TELEMETRY, BB_TRANSCRIPTION,
   and BB_FF_* feature flags.
@@ -1593,7 +1568,7 @@ function resolveManagedConfigKey(rawKey: string): ManagedConfigKey {
   if (isManagedConfigValueKey(key)) {
     return key;
   }
-  if (isSecretShapedEnvName(key)) {
+  if (SECRET_SHAPED_ENV_NAME_PATTERN.test(key)) {
     throw new Error(
       `bb-app config does not store secrets. Use "bb-app env set ${key} <value>" instead.`,
     );
@@ -1634,7 +1609,7 @@ function unsetManagedConfigKey(
 
 function resolveManagedEnvKey(rawKey: string): string {
   const key = rawKey.trim();
-  if (!isPortableEnvName(key)) {
+  if (!PORTABLE_ENV_NAME_PATTERN.test(key)) {
     throw new Error(
       `Invalid env key "${rawKey}". Env keys must match ${PORTABLE_ENV_NAME_PATTERN.source}`,
     );
@@ -1676,9 +1651,6 @@ function formatManagedConfig(config: ManagedConfig): string {
       lines.push(`${key}=${value}`);
     }
   }
-  // customModels has no set/unset CLI surface (edit config.json directly),
-  // but list must still surface the entries so the file's contents are never
-  // invisible to the official inspection command.
   for (const [index, customModel] of (config.customModels ?? []).entries()) {
     lines.push(
       `customModels[${index}]=${customModel.providerId}:${customModel.model}`,
@@ -1838,9 +1810,7 @@ async function refreshRunningServerConfig(
     if (parsed.success) {
       message = parsed.data.message;
     }
-  } catch {
-    // Keep the generic HTTP status message.
-  }
+  } catch {}
   throw new Error(message);
 }
 
@@ -2126,9 +2096,8 @@ async function runClientCommand(args: RunClientCommandArgs): Promise<void> {
   );
 }
 
-function requiredArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
+function requiredHostArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
   return [
-    { kind: "file", label: "server entry", path: context.serverEntry },
     { kind: "file", label: "host daemon entry", path: context.daemonEntry },
     {
       kind: "file",
@@ -2136,10 +2105,6 @@ function requiredArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
       path: join(context.daemonBundleDir, "bb"),
     },
     {
-      // The CLI entry is code-split: it imports its shared chunks statically
-      // and each command group on demand from this directory, so without it
-      // even `bb --version` dies in Node's ESM loader before the CLI's own
-      // error handling runs.
       kind: "chunk-dir",
       label: "bundled bb CLI chunks",
       path: join(context.daemonBundleDir, "bb-chunks"),
@@ -2159,6 +2124,15 @@ function requiredArtifactPaths(context: BbAppStartContext): ArtifactPath[] {
       label: "plugin host worker",
       path: join(context.daemonBundleDir, "bb-plugin-host-worker.mjs"),
     },
+  ];
+}
+
+function requiredFullStackArtifactPaths(
+  context: BbAppStartContext,
+): ArtifactPath[] {
+  return [
+    ...requiredHostArtifactPaths(context),
+    { kind: "file", label: "server entry", path: context.serverEntry },
     {
       kind: "file",
       label: "web app",
@@ -2175,8 +2149,6 @@ function artifactPresent(artifact: ArtifactPath): boolean {
       try {
         return readdirSync(artifact.path).some((name) => name.endsWith(".js"));
       } catch (error) {
-        // No directory there (or a stray file in its place) is the same
-        // missing-artifact condition, not a launcher fault.
         if (
           error instanceof Error &&
           "code" in error &&
@@ -2190,12 +2162,23 @@ function artifactPresent(artifact: ArtifactPath): boolean {
 }
 
 export function assertBbAppArtifacts(context: BbAppStartContext): void {
-  const missingArtifact = requiredArtifactPaths(context).find(
+  const missingArtifact = requiredFullStackArtifactPaths(context).find(
     (artifact) => !artifactPresent(artifact),
   );
   if (missingArtifact) {
     throw new Error(
       `Missing ${missingArtifact.label} at ${missingArtifact.path}. Rebuild bb-app before running this package.`,
+    );
+  }
+}
+
+export function assertBbHostArtifacts(context: BbAppStartContext): void {
+  const missingArtifact = requiredHostArtifactPaths(context).find(
+    (artifact) => !artifactPresent(artifact),
+  );
+  if (missingArtifact) {
+    throw new Error(
+      `Missing ${missingArtifact.label} at ${missingArtifact.path}. Rebuild the bb host artifact before running this package.`,
     );
   }
 }
@@ -2317,14 +2300,21 @@ async function readServerHealthLaunchId(
   }
 }
 
-/**
- * Polls the server child's /health until it answers with the launch id the
- * launcher handed it. A 200 alone proves only that something listens on the
- * port: when another bb server already owns it, that server answers on the
- * first poll while the child is still booting and about to die with
- * EADDRINUSE. Accepting it would make the launcher enroll its daemon against
- * the wrong server (get-bb/bb#1558).
- */
+async function isHealthyServerAnswering(url: string): Promise<boolean> {
+  try {
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(HEALTH_CHECK_REQUEST_TIMEOUT_MS),
+    });
+    if (!response.ok) {
+      return false;
+    }
+    const health = serverHealthResponseSchema.safeParse(await response.json());
+    return health.success && health.data.ok;
+  } catch {
+    return false;
+  }
+}
+
 export async function waitForServerHealth(
   args: WaitForServerHealthArgs,
 ): Promise<void> {
@@ -2611,12 +2601,6 @@ function createSharedEnv(args: CreateSharedEnvArgs): NodeJS.ProcessEnv {
   };
 }
 
-/**
- * Surface the server reports for telemetry. The desktop shell spawns this
- * launcher with `BB_APP_SURFACE=desktop`, so an inherited (or env.json) value
- * wins; a plain `bb-app` start has none and is the web surface. Overwriting
- * this with `web` unconditionally made every desktop launch report `web`.
- */
 function resolveServerAppSurface(env: NodeJS.ProcessEnv): AppSurface {
   return parseAppSurface(env[APP_SURFACE_ENV_NAME]) ?? APP_SURFACE_WEB;
 }
@@ -2626,16 +2610,6 @@ export function createServerEnv(args: CreateServerEnvArgs): NodeJS.ProcessEnv {
     ...args.env,
     BB_APP_VERSION: args.context.appVersion,
     [APP_SURFACE_ENV_NAME]: resolveServerAppSurface(args.env),
-    // The daemon bundle holds the bb CLI. Server-side features that shell out
-    // — script automations put it on the script's PATH — otherwise have no way
-    // to find it: bb lives in the bundle directory, which is on no shell PATH.
-    // BB_CLI_DIR matches createDaemonEnv, which has always passed it through.
-    //
-    // BB_CLI is set rather than inherited on purpose. Launching bb-app from an
-    // agent shell brings that shell's BB_CLI along, pointing at whichever
-    // install spawned it. That binary can be older than this bundle and still
-    // answer `--version`, so an inherited value would quietly win over the
-    // bundle actually being run.
     BB_CLI: join(args.context.daemonBundleDir, "bb"),
     BB_CLI_DIR: args.context.daemonBundleDir,
     BB_DATA_DIR: args.context.dataDir,
@@ -2783,8 +2757,6 @@ export async function createHostDaemonJoinEnv(
 export async function runBundledCliCommand(
   args: RunBundledCliCommandArgs,
 ): Promise<number> {
-  // Prefer the daemon-injected absolute CLI when present so packaged `bb`
-  // trampolines match the running host daemon (dev workspace or this install).
   const bbCliOverride = toOptionalString(args.env.BB_CLI);
   const cliPath = bbCliOverride ?? join(args.context.daemonBundleDir, "bb");
   const childProcess = spawn(cliPath, args.args, {
@@ -2806,7 +2778,7 @@ export async function runBbCli(
     options: createDefaultLauncherOptions(),
     serverUrlMode: "managed",
   });
-  assertBbAppArtifacts(runtime.context);
+  assertBbHostArtifacts(runtime.context);
   process.exitCode = await runBundledCliCommand({
     args: cliArgs,
     context: runtime.context,
@@ -3020,7 +2992,7 @@ Usage:
     options: parsedArgs.options,
     serverUrlMode: "managed",
   });
-  assertBbAppArtifacts(runtime.context);
+  assertBbHostArtifacts(runtime.context);
   await runHostDaemonOnly({
     args: parsedArgs.positionals,
     context: runtime.context,
@@ -3076,7 +3048,8 @@ function logManagedProcessStartupFailureContext(
 export async function startFullStackServerProcess(
   args: StartFullStackServerProcessArgs,
 ): Promise<ManagedProcessRun> {
-  // Fresh per spawn: the probe must match this child, not any earlier one.
+  await args.beforeStart?.();
+
   const launchId = randomUUID();
   const serverRun = spawnNamedManagedProcess({
     args: [args.context.serverEntry],
@@ -3209,6 +3182,29 @@ export async function superviseFullStackProcesses(
       return "shutdown";
     }
 
+    if (exitedProcess.processName === "server") {
+      if (args.processes.serverRun === serverRun) {
+        args.processes.serverRun = null;
+      }
+      if (
+        await (args.isHealthyServerAnswering ?? isHealthyServerAnswering)(
+          `${args.context.serverUrl}/health`,
+        )
+      ) {
+        log(
+          yellow("!"),
+          `${formatManagedProcessLabel(exitedProcess.processName)} exited with ${formatProcessExitResult(
+            exitedProcess.result,
+          )} - another server is healthy; stopping host daemon`,
+        );
+        await terminateManagedFullStackProcesses({
+          processes: args.processes,
+          signal: "SIGTERM",
+        });
+        return "stopped";
+      }
+    }
+
     log(
       yellow("!"),
       `${formatManagedProcessLabel(exitedProcess.processName)} exited with ${formatProcessExitResult(
@@ -3217,9 +3213,6 @@ export async function superviseFullStackProcesses(
     );
 
     if (exitedProcess.processName === "server") {
-      if (args.processes.serverRun === serverRun) {
-        args.processes.serverRun = null;
-      }
       await args.delayMilliseconds({
         ms: MANAGED_PROCESS_RESTART_RETRY_DELAY_MS,
       });
@@ -3273,11 +3266,6 @@ export async function completeFullStackSupervision(
   }
 }
 
-/**
- * Stop the `bb-app start` that owns this data directory. It reads the runtime
- * file that the running launcher wrote, verifies the recorded process really is
- * that launcher, then sends SIGTERM and escalates to SIGKILL.
- */
 async function runStopCommand(args: { dataDir: string }): Promise<void> {
   const runtimeFile = await readBbAppRuntimeFile(args.dataDir);
   if (runtimeFile === null) {
@@ -3318,7 +3306,6 @@ async function runStopCommand(args: { dataDir: string }): Promise<void> {
     return;
   }
 
-  // Keep the record when the process survived, so a later stop can retry it.
   if (result.kind === "still-running") {
     process.stderr.write(
       `bb (pid ${String(runtimeFile.pid)}) did not stop, even after SIGKILL.\n`,
@@ -3434,9 +3421,8 @@ export async function runBbApp(
     return;
   }
 
-  assertBbAppArtifacts(runtime.context);
-
   if (command.kind === "host-daemon") {
+    assertBbHostArtifacts(runtime.context);
     await runHostDaemonOnly({
       args: command.args,
       context: runtime.context,
@@ -3445,9 +3431,9 @@ export async function runBbApp(
     return;
   }
 
+  assertBbAppArtifacts(runtime.context);
+
   const context = runtime.context;
-  // context.serverUrl is deliberately loopback-reachable for health checks and
-  // the colocated daemon. Report the distinct socket address users exposed.
   const serverListenerUrl = resolveServerListenerUrl({
     bindHost: runtime.serverEnv.BB_SERVER_BIND_HOST,
     port: context.serverPort,
@@ -3468,10 +3454,6 @@ export async function runBbApp(
     warnExistingDaemonLock(runtime.context.daemonLockDir);
   }
 
-  // Publish this launcher before the server binds its port, so a desktop app
-  // that probes the port can always describe and stop whatever it finds. A live
-  // record from another launcher stays untouched: this start is about to fail on
-  // the port anyway, and overwriting would hide the bb that actually runs.
   const runtimeRecordOwned = await claimBbAppRuntimeFile({
     dataDir: context.dataDir,
     entryPath: resolveLauncherEntryPath(),
@@ -3508,6 +3490,9 @@ export async function runBbApp(
   };
   const startServer = (): Promise<ManagedProcessRun> =>
     startFullStackServerProcess({
+      ...(options.beforeServerStart === undefined
+        ? {}
+        : { beforeStart: options.beforeServerStart }),
       context,
       env: serverEnv,
       outputBuffer,

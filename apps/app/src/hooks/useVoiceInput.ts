@@ -216,9 +216,7 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
       if (recorder && recorder.state === "recording") {
         try {
           recorder.stop();
-        } catch {
-          // noop
-        }
+        } catch {}
       }
       mediaRecorderRef.current = null;
       chunksRef.current = [];
@@ -423,7 +421,6 @@ export function useVoiceInput(options: UseVoiceInputOptions) {
   return {
     state,
     isSupported,
-    /** Non-null only when `isSupported` is false. Drives the button label. */
     unsupportedReason,
     stream,
     isRecording: state === "recording",

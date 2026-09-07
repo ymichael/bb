@@ -71,7 +71,6 @@ describe("dropNeighborsForIndex", () => {
   });
 
   it("excludes the dragged card on a same-column reorder", () => {
-    // Moving "a" one visual slot down lands between "b" and "c".
     expect(dropNeighborsForIndex(column, "a", 1)).toEqual({
       beforeTaskId: "b",
       afterTaskId: "c",

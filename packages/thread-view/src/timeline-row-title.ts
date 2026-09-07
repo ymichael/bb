@@ -60,65 +60,31 @@ import {
 export type TimelineTitleTone = "default" | "summary";
 type TimelineStatusDecorationStatus = "denied" | "error" | "interrupted";
 
-/**
- * Optional link target attached to a title segment. Renderers that support
- * navigation (the App) can wrap the segment in a link; CLI renderers ignore
- * the link and render the segment text directly.
- */
 export type TimelineTitleLink = { kind: "thread"; threadId: string };
 
-/**
- * One slice of the title's text. Renderers walk the segment list and apply
- * `em`/`shimmer`/`truncate` per slice. There is no implicit "prefix vs content"
- * positional meaning — segment order is the only positional cue.
- */
-/**
- * Optional per-segment color intent. App renderers map this to a token; CLI /
- * plain renderers ignore it. `muted`/`subtle` step a segment down the neutral
- * text ramp (lighter); `file` tints file-path segments with the file accent.
- */
 export type TimelineTitleSegmentAccent = "muted" | "subtle" | "file";
 
 export interface TimelineTitleSegment {
   text: string;
-  /** Optional plain-text override for CLI rendering. Defaults to `text`. */
   plainText?: string;
   em: boolean;
   shimmer: boolean;
   truncate: boolean;
   accent?: TimelineTitleSegmentAccent;
-  /**
-   * Optional navigation target. App renderers wrap the segment in a link;
-   * CLI/plain renderers ignore this field.
-   */
   link?: TimelineTitleLink;
 }
 
 export type TimelineTitleDecoration =
   | {
       kind: "duration";
-      /** Wall-clock millis when the work began. */
       startedAt: number;
-      /**
-       * Wall-clock millis when the work reached a terminal status. `null`
-       * while pending; renderers derive elapsed from `now - startedAt` and
-       * tick locally. When non-null the decoration renders statically as
-       * `completedAt - startedAt`.
-       */
       completedAt: number | null;
-      /** Render with title-emphasis tone instead of the default muted decoration tone. */
       em: boolean;
     }
   | {
       kind: "status";
       status: TimelineStatusDecorationStatus;
       durationMs: number | null;
-      /**
-       * Whether this status is the row's primary signal and should be colored
-       * (system error rows) rather than rendered as a muted annotation next to
-       * a work row's content (a failed command, an interrupted fetch). Only
-       * emphasized error statuses pick up the destructive color.
-       */
       emphasis: boolean;
     }
   | {
@@ -126,23 +92,22 @@ export type TimelineTitleDecoration =
       errorCount: number;
       interruptedCount: number;
     }
-  | { kind: "diff-stats"; added: number; removed: number };
+  | { kind: "diff-stats"; added: number; removed: number }
+  | {
+      kind: "badge";
+      glyph: string;
+      label: string;
+      hint: string;
+      tone: "neutral" | "destructive";
+    };
 
-/**
- * Describes what the title's content semantically represents when it's also an
- * actionable target (e.g. a file path that the consumer can open). Renderers
- * decide whether to surface the action; the title-builder only declares what's
- * available. New action kinds extend this union.
- */
 export type TimelineTitleAction =
   | {
       kind: "open-file-diff";
-      /** Workspace-relative path of the file. For renames, the destination path. */
       path: string;
     }
   | {
       kind: "open-plugin-side-chat";
-      /** A side-chat plugin fork to open in that plugin's panel tab. */
       threadId: string;
     };
 
@@ -151,19 +116,12 @@ export interface TimelineTitle {
   decorations: TimelineTitleDecoration[];
   tone: TimelineTitleTone;
   action: TimelineTitleAction | null;
-  /** CLI plain rendering — segments + decorations joined per `renderTitlePlain`. */
   plain: string;
 }
 
 export interface BuildTimelineRowTitleOptions {
   summaryStyle: "bundle" | "background";
   workStyle: "default" | "summary";
-  /**
-   * Whether this row is the open step's currently-active bundle. Determined by
-   * the list-level renderer that walks the row sequence; only bundles that are
-   * the latest bundle-summary in the trailing open step set this to `true`.
-   * Defaults to `false` so non-bundle rows and displaced bundles render past.
-   */
   isActiveLatestBundle?: boolean;
 }
 
@@ -171,20 +129,14 @@ export interface TimelineActivityIntentTitle {
   id: string;
   intent: TimelineActivityIntent;
   title: TimelineTitle;
-  /** The exploration kind, so renderers can pick a per-intent leading glyph. */
   intentType: "read" | "list_files" | "search";
 }
 
 interface BuildTimelineActivityIntentTitleArgs {
   intent: TimelineActivityIntent;
   pending: boolean;
-  /**
-   * When set, append an error/interrupted status decoration after the intent's
-   * title segments. The compact intent rendering used inside activity bundles
-   * relies on this to surface row-level outcomes — the bundle's own label only
-   * conveys an aggregate count.
-   */
   failureStatus?: "error" | "interrupted";
+  badges: readonly TimelineTitleDecoration[];
 }
 
 interface DisplayStatusArgs {
@@ -220,12 +172,6 @@ interface SegmentOptions {
   accent?: TimelineTitleSegmentAccent;
 }
 
-// Titles are always rendered on a single line — both in the App (segments
-// use `whitespace-pre`, which would otherwise honor `\n` as a line break)
-// and in the CLI/tooltip plain text. Normalizing newlines at segment
-// construction means any caller that passes user-supplied content
-// (commands, tool labels, file paths) gets single-line rendering for free,
-// without each call site having to remember to sanitize.
 function collapseTitleNewlines(text: string): string {
   return text.replace(/[\r\n]+/gu, " ");
 }
@@ -255,10 +201,6 @@ function visibleDurationMs(durationMs: number | null): number | null {
   return durationMs !== null && durationMs > 1_000 ? durationMs : null;
 }
 
-/**
- * Most below-threshold elapsed durations don't render — sub-second flickers
- * would be noisy for active rows and too much detail for small work rows.
- */
 function durationDecoration(
   startedAt: number,
   completedAt: number | null,
@@ -285,10 +227,26 @@ function completedTurnDurationDecoration(
     kind: "duration",
     startedAt,
     completedAt,
-    // A completed turn is a recap — the duration renders muted (not emphasized
-    // foreground) so the "Worked for …" header sits a step quieter.
     em: false,
   };
+}
+
+function badgeDecorations(row: {
+  presentation?: TimelineRowPresentation;
+}): TimelineTitleDecoration[] {
+  const badge = row.presentation?.badge;
+  if (badge === undefined) {
+    return [];
+  }
+  return [
+    {
+      kind: "badge",
+      glyph: badge.glyph,
+      label: badge.label,
+      hint: badge.hint,
+      tone: badge.tone,
+    },
+  ];
 }
 
 function statusDecoration(
@@ -329,19 +287,11 @@ function diffStatsDecoration(
   return { kind: "diff-stats", added, removed };
 }
 
-/**
- * Canonical text rendering for a decoration. Used by the CLI plain renderer
- * directly and by the App renderer when it falls back to a plain text node
- * (App may also render structured spans for tone/styling).
- */
 export function formatTimelineDecorationText(
   d: TimelineTitleDecoration,
 ): string {
   switch (d.kind) {
     case "duration": {
-      // CLI is a static snapshot; pending rows have no captured end yet,
-      // so we omit the duration entirely rather than print a placeholder
-      // or a sub-second number.
       if (d.completedAt === null) return "";
       return `(${durationToCompactString(d.completedAt - d.startedAt)})`;
     }
@@ -365,6 +315,8 @@ export function formatTimelineDecorationText(
         removed: d.removed,
         hideZero: true,
       });
+    case "badge":
+      return `(${d.label})`;
     default:
       return assertNever(d);
   }
@@ -422,16 +374,6 @@ function displayStatus({
   return status;
 }
 
-// ---------------------------------------------------------------------------
-// Presentation-driven titles
-// ---------------------------------------------------------------------------
-
-/**
- * The bridge's label for the row's lifecycle state: the present-tense label
- * while pending, the past-tense label once settled. A failed or interrupted
- * row keeps the settled label and says how it ended through a status
- * decoration, so the row stays identifiable without a second verb table.
- */
 function presentationLabel(
   presentation: TimelineRowPresentation,
   status: TimelineRowStatus,
@@ -446,20 +388,11 @@ interface PresentedTitleArgs {
   status: TimelineRowStatus;
   startedAt: number;
   completedAt: number | null;
-  /** Row content beside the label; defaults to the presentation's headline. */
   content?: string | null;
-  /** CLI plain-text override for `content`. */
   plainContent?: string;
-  /** Emphasize the content segment (a path, a command), not plain prose. */
   em?: boolean;
 }
 
-/**
- * Label + content + lifecycle decoration, the one shape every row with a
- * bridge presentation renders through. Core kinds pass their own structured
- * content (a path, a query, a child description) so a generic bridge label
- * such as "Read file" still names what was read.
- */
 function presentedTitle({
   presentation,
   status,
@@ -486,18 +419,16 @@ function presentedTitle({
     );
   }
   const durationMs = completedAt !== null ? completedAt - startedAt : null;
-  const decorations: TimelineTitleDecoration[] =
-    status === "error"
+  const decorations: TimelineTitleDecoration[] = [
+    ...badgeDecorations({ presentation }),
+    ...(status === "error"
       ? [statusDecoration("error", durationMs)]
       : status === "interrupted"
         ? [statusDecoration("interrupted", durationMs)]
-        : filterNull([durationDecoration(startedAt, completedAt)]);
+        : filterNull([durationDecoration(startedAt, completedAt)])),
+  ];
   return makeTitle({ segments, decorations });
 }
-
-// ---------------------------------------------------------------------------
-// Mappers — one per row kind. Each produces a structured Title.
-// ---------------------------------------------------------------------------
 
 function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
   const status = displayStatus({
@@ -505,18 +436,12 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
     status: row.status,
   });
   const isCommand = row.workKind === "command";
-  // Approval states keep the core phrasing: the bridge's label describes the
-  // work, not the gate bb put in front of it.
   if (
     row.presentation &&
     status !== "waiting" &&
     status !== "denied" &&
-    // A command's own text already says what ran; the bridge label would
-    // only repeat "Ran command".
     !isCommand
   ) {
-    // The bridge's label already names the tool, and its headline (when it
-    // set one) is the content; the raw arguments stay in the expanded body.
     return presentedTitle({
       presentation: row.presentation,
       status,
@@ -532,6 +457,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
   if (explorationTitle !== null) {
     return explorationTitle;
   }
+  const badges = badgeDecorations(row);
   switch (status) {
     case "waiting":
       return makeTitle({
@@ -540,6 +466,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(isCommand ? "to run" : "to use"),
           segment(content, { em: true, truncate: true }),
         ],
+        decorations: badges,
       });
     case "denied":
       return makeTitle({
@@ -547,9 +474,10 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment("Permission denied:"),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: filterNull([
-          durationDecoration(row.startedAt, row.completedAt),
-        ]),
+        decorations: [
+          ...badges,
+          ...filterNull([durationDecoration(row.startedAt, row.completedAt)]),
+        ],
       });
     case "pending":
       return makeTitle({
@@ -557,9 +485,10 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(isCommand ? "Running" : "Running tool:", { shimmer: true }),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: filterNull([
-          durationDecoration(row.startedAt, row.completedAt),
-        ]),
+        decorations: [
+          ...badges,
+          ...filterNull([durationDecoration(row.startedAt, row.completedAt)]),
+        ],
       });
     case "completed":
       return makeTitle({
@@ -567,9 +496,10 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(isCommand ? "Ran" : "Ran tool"),
           segment(content, { em: true, truncate: true }),
         ],
-        decorations: filterNull([
-          durationDecoration(row.startedAt, row.completedAt),
-        ]),
+        decorations: [
+          ...badges,
+          ...filterNull([durationDecoration(row.startedAt, row.completedAt)]),
+        ],
       });
     case "error":
       return makeTitle({
@@ -578,6 +508,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(content, { em: true, truncate: true }),
         ],
         decorations: [
+          ...badges,
           statusDecoration(
             "error",
             row.completedAt !== null ? row.completedAt - row.startedAt : null,
@@ -591,6 +522,7 @@ function mapExecutionTitle(row: TimelineExecutionWorkRow): TimelineTitle {
           segment(content, { em: true, truncate: true }),
         ],
         decorations: [
+          ...badges,
           statusDecoration(
             "interrupted",
             row.completedAt !== null ? row.completedAt - row.startedAt : null,
@@ -634,6 +566,7 @@ function mapSingleExplorationIntentTitle(
     pending,
   });
 
+  const badges = badgeDecorations(row);
   if (status === "denied") {
     const verbContent = detail.prefix
       ? `${detail.prefix} ${detail.content}`
@@ -650,6 +583,7 @@ function mapSingleExplorationIntentTitle(
           plainText: plainVerbContent,
         }),
       ],
+      decorations: badges,
     });
   }
   if (status === "waiting") {
@@ -669,6 +603,7 @@ function mapSingleExplorationIntentTitle(
           plainText: plainVerbContent,
         }),
       ],
+      decorations: badges,
     });
   }
 
@@ -684,12 +619,14 @@ function mapSingleExplorationIntentTitle(
     }),
   );
 
-  const decorations: TimelineTitleDecoration[] =
-    status === "error"
+  const decorations: TimelineTitleDecoration[] = [
+    ...badges,
+    ...(status === "error"
       ? [statusDecoration("error", null)]
       : status === "interrupted"
         ? [statusDecoration("interrupted", null)]
-        : [];
+        : []),
+  ];
 
   return makeTitle({ segments, decorations });
 }
@@ -707,8 +644,6 @@ function mapFileChangeTitle(row: TimelineFileChangeWorkRow): TimelineTitle {
   const fullPath = formatFileChangePath({ change: row.change, mode: "full" });
   const titleAction: TimelineTitleAction = {
     kind: "open-file-diff",
-    // For renames, the destination path is the canonical workspace location
-    // and matches what TimelineFileDiffBlock renders against.
     path: row.change.movePath ?? row.change.path,
   };
   const pathSegment = segment(compactPath, {
@@ -792,7 +727,6 @@ function mapWebSearchTitle(row: TimelineWebSearchWorkRow): TimelineTitle {
   });
   switch (row.status) {
     case "pending":
-      // No live duration: the projection only sets `durationMs` at completion.
       return makeTitle({
         segments: [
           segment("Running web search:", { shimmer: true }),
@@ -845,7 +779,6 @@ function mapWebFetchTitle(row: TimelineWebFetchWorkRow): TimelineTitle {
   const urlSegment = segment(row.url, { em: false, truncate: true });
   switch (row.status) {
     case "pending":
-      // No live duration: the projection only sets `durationMs` at completion.
       return makeTitle({
         segments: [segment("Fetching:", { shimmer: true }), urlSegment],
       });
@@ -973,8 +906,6 @@ function mapDelegationTitle(row: TimelineViewDelegationWorkRow): TimelineTitle {
       segment(`(${row.subagentType})`, { em: false, truncate: true }),
     );
   }
-  // The verb prefix (Failed/Interrupted/Ran subagent) already conveys the
-  // status, so the decoration only carries duration.
   return makeTitle({
     segments,
     decorations: filterNull([
@@ -1234,11 +1165,6 @@ function singleQuestion(
   return row.questions.length === 1 ? (row.questions[0] ?? null) : null;
 }
 
-/**
- * Selected option labels (plus any free text) for an answered single question,
- * so the title can read "Answered <prompt> — <answer>". Null when there's no
- * recorded answer.
- */
 function singleQuestionAnswerSummary(
   row: TimelineQuestionViewWorkRow,
   question: TimelineQuestionViewWorkRow["questions"][number],
@@ -1262,9 +1188,6 @@ function singleQuestionAnswerSummary(
 
 function mapQuestionTitle(row: TimelineQuestionViewWorkRow): TimelineTitle {
   const question = singleQuestion(row);
-  // Single question → surface the prompt (and answer once given). Multiple →
-  // a per-prompt title would only show the first and read as if it were the
-  // whole interaction, so summarize the count instead.
   const subject = question
     ? segment(question.prompt, { em: true, truncate: true })
     : segment(`${row.questions.length} questions`, { em: true });
@@ -1303,10 +1226,6 @@ function mapQuestionTitle(row: TimelineQuestionViewWorkRow): TimelineTitle {
       });
     }
     case "interrupted":
-      // Mirror the command/tool/web-search interrupted pattern: a past-tense
-      // verb plus a status decoration. Keeps the title shape consistent with
-      // peer rows; the longer statusReason lives on the row itself if a
-      // reader wants the detail.
       return makeTitle({
         segments: [segment("Asked"), subject],
         decorations: [statusDecoration("interrupted", null)],
@@ -1340,7 +1259,6 @@ function mapFileReadTitle(row: TimelineFileReadWorkRow): TimelineTitle {
   );
 }
 
-/** What a search row searched, phrased to follow the bridge's label. */
 function searchContent(row: TimelineSearchWorkRow): string {
   const root = row.path ? ` in ${row.path}` : "";
   switch (row.mode) {
@@ -1468,8 +1386,6 @@ function mapWorkTitle(
   if (options.workStyle === "default") {
     return title;
   }
-  // Summary work-style mutes the title via tone; segment-level `em` is kept
-  // so content emphasis stays visible inside the muted wrapper, per spec.
   return {
     ...title,
     tone: "summary",
@@ -1480,8 +1396,6 @@ function mapWorkSummaryTitle(
   row: TimelineWorkSummaryRow,
   options: BuildTimelineRowTitleOptions,
 ): TimelineTitle {
-  // Bundles only render with active/present-tense treatment when the caller
-  // (a list-level renderer) tells us this is the open step's latest bundle.
   const isActive =
     row.kind === "bundle-summary" && options.isActiveLatestBundle === true;
   const { verb, rest } = buildTimelineWorkSummaryLabelParts(row, {
@@ -1496,9 +1410,6 @@ function mapWorkSummaryTitle(
       tone: "summary",
     });
   }
-  // Bundle summaryStyle: a settled recap (e.g. "Explored 3 files") recedes two
-  // steps down the ramp so it reads as background; an active-latest bundle keeps
-  // full contrast + shimmer as the frontier tell.
   const settledAccent: TimelineTitleSegmentAccent | undefined = isActive
     ? undefined
     : "subtle";
@@ -1529,10 +1440,6 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
   const hasCapturedDuration =
     !isPending && row.completedAt !== null && durationDeco !== null;
   if (hasCapturedDuration) {
-    // Completed turn with a visible captured duration: "Worked for (8m 14s)".
-    // The whole header sits one step down the ramp — it's a recap, not active
-    // work — so the verb is subtle and the duration renders muted (see
-    // completedTurnDurationDecoration: em=false).
     return makeTitle({
       segments: [segment("Worked for", { shimmer: false, accent: "subtle" })],
       decorations: [durationDeco],
@@ -1545,18 +1452,10 @@ function mapTurnTitle(row: TimelineViewTurnRow): TimelineTitle {
         accent: isPending ? undefined : "subtle",
       }),
     ],
-    // Pending rows still emit the decoration so the App's `LiveDurationText`
-    // can tick locally; CLI formatters return "" for pending and
-    // `renderTitlePlain` filters that out.
     decorations: isPending && durationDeco !== null ? [durationDeco] : [],
   });
 }
 
-/**
- * The thread (not parent) segment for a parent-change row: emphasized, linked to
- * `row.threadId`. Rendered unlinked (plain emphasized) when the row carries no
- * thread id.
- */
 function parentChangeThreadSegment(
   row: TimelineParentChangeSystemRow,
   name: string,
@@ -1572,12 +1471,6 @@ function parentChangeThreadSegment(
   });
 }
 
-/**
- * The parent segment for a parent-change row. Links to the (new/previous) parent
- * thread when its id is present; falls back to an UNLINKED literal `parent`
- * segment when the parent id/title is null (deleted/renamed/untitled parent), so
- * the title reads `[thread] assigned to parent` rather than a dangling verb.
- */
 function parentChangeParentSegment(
   threadId: string | null,
   title: string | null,
@@ -1592,16 +1485,6 @@ function parentChangeParentSegment(
   });
 }
 
-/**
- * Recover the thread name from a parent-change row's flat title. The projection
- * builds the title as `"{threadName} {verb} {parent}"` (see
- * `ownershipChangeOperationTitle`); removing the exact trailing verb+parent
- * suffix yields the leading thread name without truncating names that themselves
- * contain ownership verbs. Returns the row's thread id as a fallback when the
- * flat title doesn't carry that suffix (e.g. non-completed statuses whose title
- * is a generic "Ownership change …" string), so the row still names something
- * linkable rather than rendering a bare verb.
- */
 function parentChangeThreadName(row: TimelineParentChangeSystemRow): string {
   const verb = OWNERSHIP_CHANGE_VERBS[row.parentChange.action];
   const parentTitle =
@@ -1630,8 +1513,6 @@ function mapParentChangeSystemTitle(
     parentChangeThreadName(row),
     shimmer,
   );
-  // Assign/transfer name the destination parent; release names the parent the
-  // thread is leaving.
   const parentSegment =
     assignment.action === "release"
       ? parentChangeParentSegment(
@@ -1678,19 +1559,11 @@ function mapSystemTitle(row: TimelineSystemViewRow): TimelineTitle {
     row.systemKind === "operation" && row.operationKind === "compaction";
   const titleText =
     isCompaction && row.status === "pending" ? `${row.title}…` : row.title;
-  // Error system rows read like every other terminal row: a neutral title plus
-  // a status decoration that carries the error color (see TimelineTitleView).
-  // They no longer recolor the whole title — full-destructive tone was unique
-  // among timeline rows and made error rows shout relative to their peers.
   const decorations: TimelineTitleDecoration[] = hasError
     ? [statusDecoration("error", null, { emphasis: true })]
     : isCompaction && (row.status === "pending" || row.status === "completed")
       ? filterNull([durationDecoration(row.startedAt, row.completedAt)])
       : [];
-  // Shimmer means "in progress right now" — true only for pending rows. Only
-  // operations (provisioning, compaction) ever reach this branch with a pending
-  // status; error rows are terminal and reconnect rows carry no status, so this
-  // uniform rule leaves both static.
   const shimmer = row.status === "pending";
   return makeTitle({
     segments: [segment(titleText, { shimmer, truncate: true })],
@@ -1710,6 +1583,7 @@ function mapTimelineActivityIntentTitle({
   intent,
   pending,
   failureStatus,
+  badges,
 }: BuildTimelineActivityIntentTitleArgs): TimelineTitle {
   const detail = formatTimelineActivityIntentDetailParts({
     intent,
@@ -1732,15 +1606,12 @@ function mapTimelineActivityIntentTitle({
       plainText: plainDetail.content,
     }),
   );
-  const decorations = failureStatus
-    ? [statusDecoration(failureStatus, null)]
-    : [];
+  const decorations = [
+    ...badges,
+    ...(failureStatus ? [statusDecoration(failureStatus, null)] : []),
+  ];
   return makeTitle({ segments, decorations });
 }
-
-// ---------------------------------------------------------------------------
-// Public dispatch
-// ---------------------------------------------------------------------------
 
 export function buildTimelineActivityIntentTitles(
   row: TimelineExplorationWorkRow,
@@ -1751,6 +1622,7 @@ export function buildTimelineActivityIntentTitles(
 
   let lastEmittedKey: string | null = null;
   const titles: TimelineActivityIntentTitle[] = [];
+  const badges = badgeDecorations(row);
   const failureStatus =
     row.status === "error"
       ? "error"
@@ -1773,6 +1645,7 @@ export function buildTimelineActivityIntentTitles(
       title: mapTimelineActivityIntentTitle({
         intent,
         pending: row.status === "pending",
+        badges: titles.length === 0 ? badges : [],
         ...(failureStatus ? { failureStatus } : {}),
       }),
     });
@@ -1786,13 +1659,6 @@ function isUserConversationRow(row: ThreadTimelineViewRow): boolean {
   return row.kind === "conversation" && row.role === "user";
 }
 
-/**
- * Returns the trailing row of `rows` for auto-expand and active-latest bundle
- * styling. User-role conversation rows are transparent: they are *requests*
- * to the agent rather than events the agent produced, so a user message at
- * the tail (initial message, follow-up, pending steer, accepted steer) does
- * not displace the previous frontier of activity.
- */
 export function findTimelineFrontierRow(
   rows: readonly ThreadTimelineViewRow[],
 ): ThreadTimelineViewRow | null {
@@ -1805,16 +1671,6 @@ export function findTimelineFrontierRow(
   return null;
 }
 
-/**
- * Returns the `id` of the trailing bundle-summary in `rows`, or `null` if the
- * trailing row is anything else. Callers pair this with a scope-active gate:
- * in active scopes (top-level when the thread is active, delegation childRows
- * when the delegation is pending), this id receives present-tense
- * "Exploring/Running" treatment. We do not search backward past a non-bundle
- * trailing row — a non-bundle tail means no bundle is currently the frontier
- * of activity. User-role conversation rows are skipped because they are
- * inputs to the agent, not events on the activity timeline.
- */
 export function findActiveLatestBundleId(
   rows: readonly ThreadTimelineViewRow[],
 ): string | null {

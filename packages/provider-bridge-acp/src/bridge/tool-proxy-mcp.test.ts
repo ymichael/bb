@@ -1,15 +1,3 @@
-/**
- * The `bb-bridge` MCP server proxies bb's dynamic tools (AskUserQuestion and
- * friends) to ACP agents such as OpenCode. Those agents use the MCP TypeScript
- * SDK client, whose `callTool` request times out after 60 seconds unless the
- * server sends `notifications/progress` for the call's `progressToken`
- * (OpenCode passes `resetTimeoutOnProgress: true`). A user answering a
- * question takes longer than that, so the server must keep the call alive.
- *
- * This test drives the MCP server exactly the way OpenCode does: the real SDK
- * client over stdio, a short request timeout, `resetTimeoutOnProgress`, and an
- * `onprogress` hook (which is what makes the SDK attach a progress token).
- */
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
@@ -31,7 +19,6 @@ afterEach(async () => {
   }
 });
 
-/** A stand-in for the bridge's TCP dynamic-tool socket that answers late. */
 async function listenFakeBridge(args: {
   responseDelayMs: number;
   response?: unknown;
@@ -103,7 +90,6 @@ async function connectLikeOpenCode(port: number): Promise<Client> {
     if (value !== undefined) env[key] = value;
   }
   for (const { name, value } of config.env) env[name] = value;
-  // Heartbeat faster than the scaled-down client timeout below.
   env.BB_ACP_DYNAMIC_TOOL_PROGRESS_INTERVAL_MS = "200";
   const transport = new StdioClientTransport({
     command: config.command,
@@ -133,8 +119,6 @@ describe("bb-bridge MCP server keeps long tool calls alive", () => {
       },
       CallToolResultSchema,
       {
-        // OpenCode's defaults are the SDK's 60s timeout with resets on
-        // progress; scale the timeout down so the test stays fast.
         timeout: 1_000,
         resetTimeoutOnProgress: true,
         onprogress: () => {
@@ -151,8 +135,6 @@ describe("bb-bridge MCP server keeps long tool calls alive", () => {
     expect(fakeBridge.requests).toHaveLength(1);
   }, 20_000);
 
-  // The response above carries neither image field, pinning compatibility with
-  // the text-only socket shape. This one carries an image-only result.
   it("relays an image-only result as an MCP image block", async () => {
     const fakeBridge = await listenFakeBridge({
       responseDelayMs: 0,

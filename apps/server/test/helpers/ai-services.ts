@@ -10,11 +10,6 @@ import type {
   AiServiceRegistry,
 } from "../../src/services/ai/ai-service-registry.js";
 
-/**
- * A fake AI service registered straight into the harness registry: the
- * in-process stand-in for a plugin's host entry, so a test drives core's
- * routing, retry, and fallback policy without a daemon in the loop.
- */
 export interface FakeAiServiceCall<Input> {
   input: Input;
   options: AiServiceCallOptions;
@@ -41,8 +36,10 @@ export function registerFakeAiService(
   voiceCalls: FakeAiServiceCall<ExperimentalAiVoiceTranscribeInput>[];
   dispose(): void;
 } {
-  const inferenceCalls: FakeAiServiceCall<ExperimentalAiInferenceCompleteInput>[] = [];
-  const voiceCalls: FakeAiServiceCall<ExperimentalAiVoiceTranscribeInput>[] = [];
+  const inferenceCalls: FakeAiServiceCall<ExperimentalAiInferenceCompleteInput>[] =
+    [];
+  const voiceCalls: FakeAiServiceCall<ExperimentalAiVoiceTranscribeInput>[] =
+    [];
   const registration = registry.register({
     id: args.id ?? "codex",
     displayName: "Fake service",

@@ -7,8 +7,6 @@ import { getCreateExamples } from "./create-via-prompt-examples";
 
 describe("getCreateExamples", () => {
   it("serves the Browse archetypes as the plugin templates, one source", () => {
-    // The New plugin menu and the Browse page must never show two divergent
-    // example lists, so the menu templates ARE the hero archetypes.
     const { examples } = getCreateExamples("plugin");
 
     expect(examples.map((example) => example.label)).toEqual(

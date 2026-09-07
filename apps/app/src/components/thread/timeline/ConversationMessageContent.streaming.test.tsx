@@ -6,10 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RouteNavigationProvider } from "@/components/ui/app-route-anchor";
 import { ConversationMessageContent } from "./ConversationMessageContent";
 
-// Record every markdown document parse. `react-markdown` is a plain function
-// component, so it renders exactly once per `MarkdownPreview` render and never
-// when the memoized preview bails out — which is what the streaming split has
-// to guarantee for the settled prefix.
 const markdownRenders = vi.hoisted(() => [] as string[]);
 vi.mock("react-markdown", () => ({
   default: ({ children }: { children: string }) => {
@@ -87,11 +83,8 @@ describe("ConversationMessageContent streaming split", () => {
 
     markdownRenders.length = 0;
     update("Para one.\n\nPara two.\n\nPara three.", true);
-    // The settled prefix keeps its memoized render; only the tail re-parses.
     expect(markdownRenders).toEqual(["Para two.\n\nPara three."]);
 
-    // A new blank line moves the boundary forward: the prefix grows once and
-    // the tail shrinks to the newest paragraph.
     markdownRenders.length = 0;
     update("Para one.\n\nPara two.\n\nPara three.\n\nPara four", true);
     expect(documents(view.container)).toEqual([
@@ -99,7 +92,6 @@ describe("ConversationMessageContent streaming split", () => {
       "Para three.\n\nPara four",
     ]);
 
-    // Completion renders the whole message as one document again.
     markdownRenders.length = 0;
     update("Para one.\n\nPara two.\n\nPara three.\n\nPara four.", false);
     expect(documents(view.container)).toEqual([

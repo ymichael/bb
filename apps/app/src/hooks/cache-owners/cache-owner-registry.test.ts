@@ -89,9 +89,7 @@ const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
     "environmentQueryKey",
     "threadSearchQueryKeyPrefix",
   ],
-  "hooks/cache-owners/host-directory-cache-owner.ts": [
-    "hostDirectoryQueryKey",
-  ],
+  "hooks/cache-owners/host-directory-cache-owner.ts": ["hostDirectoryQueryKey"],
   "hooks/cache-owners/mutation-cache-effects.ts": [
     "hostsQueryKey",
     "projectPathsQueryKeyPrefix",
@@ -232,9 +230,7 @@ const CACHE_OWNER_QUERY_KEY_IMPORTS: CacheOwnerQueryKeyImportRegistry = {
   ],
   "hooks/cache-owners/thread-tabs-cache-owner.ts": ["threadTabsQueryKey"],
   "hooks/cache-owners/thread-list-cache-owner.ts": [
-    "sidebarNavigationQueryKey",
     "threadQueryKey",
-    "threadSearchQueryKeyPrefix",
     "threadsQueryKey",
   ],
   "hooks/cache-owners/thread-runtime-cache-owner.ts": [

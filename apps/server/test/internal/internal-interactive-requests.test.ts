@@ -611,9 +611,6 @@ describe("internal interactive request lifecycle", () => {
         providerThreadId: "provider-hidden-child-needs-attention-parent",
         threadId: parentThread.id,
       });
-      // Legacy fork rows keep a parent id next to their origin; the origin,
-      // not the hidden visibility, is what excludes them. Side chats never
-      // reach this gate because approval requests reject them earlier.
       const childThread = seedThread(harness.deps, {
         environmentId: childEnvironment.id,
         originKind: "fork",

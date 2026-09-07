@@ -39,19 +39,10 @@ async function serializeGuardedWrite<T>(
 }
 
 interface ResolvedWriteTarget {
-  /** Real (symlink-resolved) path to write, existing or not. */
   writePath: string;
-  /** True when the write target's direct parent directory is missing. */
   parentMissing: boolean;
 }
 
-/**
- * Resolve the write target through symlinks even though it may not exist yet:
- * realpath the nearest existing ancestor and re-append the missing segments.
- * Containment (when a root is declared) is checked against this resolved
- * path, so a symlinked directory inside the root cannot smuggle a write
- * outside it.
- */
 export async function resolveWriteTarget(
   resolvedPath: string,
   resultPath: string,
@@ -195,7 +186,6 @@ async function writeResolvedHostFile(
 
       if (command.expectedSha256 === null) {
         try {
-          // Linking is an atomic no-replace create on every supported host.
           await fs.link(temporaryPath, target.writePath);
         } catch (error) {
           if (isFsErrorWithCode(error, "EEXIST")) {
@@ -210,8 +200,6 @@ async function writeResolvedHostFile(
           throw error;
         }
       } else {
-        // Recheck after preparing the complete replacement, then swap it into
-        // place with one rename so readers never observe partial content.
         const latest = await fs.readFile(target.writePath).catch(() => null);
         const latestSha256 = latest === null ? null : sha256Hex(latest);
         if (latestSha256 !== command.expectedSha256) {

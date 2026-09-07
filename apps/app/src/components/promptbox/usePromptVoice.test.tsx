@@ -18,7 +18,7 @@ vi.mock("@/hooks/useVoiceInput", () => ({
 const voiceInput = {
   state: "transcribing" as const,
   isSupported: true,
-    unsupportedReason: null,
+  unsupportedReason: null,
   stream: null,
   start: vi.fn(),
   stop: vi.fn(),

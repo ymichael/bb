@@ -1,6 +1,3 @@
-// Provider brand icons, copied from apps/app/src/components/icons/
-// (the landing app is standalone and cannot depend on @bb/app).
-
 export function ClaudeIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -40,7 +37,7 @@ export function PiIcon({ className }: { className?: string }) {
       className={className}
     >
       <title>Pi</title>
-      {/* P shape: outer boundary clockwise, inner hole counter-clockwise */}
+      {}
       <path
         d="
         M165.29 165.29
@@ -59,13 +56,12 @@ export function PiIcon({ className }: { className?: string }) {
         Z
       "
       />
-      {/* i dot */}
+      {}
       <path d="M517.36 400 H634.72 V634.72 H517.36 Z" />
     </svg>
   );
 }
 
-// Cursor brand glyph (cursor.com), monochrome path via Simple Icons.
 export function CursorIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -80,12 +76,6 @@ export function CursorIcon({ className }: { className?: string }) {
   );
 }
 
-// opencode brand mark (opencode.ai/brand). Rendered in currentColor so it
-// adapts to light/dark like the other provider glyphs; the lower-inner square
-// uses reduced opacity to preserve the two-tone layered look of the mark.
-// The viewBox pads the 240x300 mark into a centered square at ~80% so it sits
-// at a comparable visual size to the other (square) provider icons rather than
-// filling the slot edge-to-edge.
 export function OpencodeIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -95,7 +85,11 @@ export function OpencodeIcon({ className }: { className?: string }) {
       className={className}
     >
       <title>opencode</title>
-      <path d="M180 240H60V120H180V240Z" fill="currentColor" fillOpacity={0.45} />
+      <path
+        d="M180 240H60V120H180V240Z"
+        fill="currentColor"
+        fillOpacity={0.45}
+      />
       <path
         d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z"
         fill="currentColor"
@@ -104,8 +98,6 @@ export function OpencodeIcon({ className }: { className?: string }) {
   );
 }
 
-// Grok Build brand mark from xAI's supplied SVG. Rendered in currentColor so
-// it follows light/dark theme color rather than staying hardcoded black.
 export function GrokIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -127,7 +119,6 @@ export function GrokIcon({ className }: { className?: string }) {
   );
 }
 
-// omp (oh-my-pi) brand mark: the official Π glyph, monochrome via currentColor.
 export function OmpIcon({ className }: { className?: string }) {
   return (
     <svg
@@ -142,7 +133,6 @@ export function OmpIcon({ className }: { className?: string }) {
   );
 }
 
-// Hermes Agent brand mark. Rendered in currentColor for light/dark theming.
 export function HermesAgentIcon({ className }: { className?: string }) {
   return (
     <svg

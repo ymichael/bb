@@ -5,7 +5,7 @@ Settings buckets are declared in `apps/app/src/components/settings/settings-nav.
 ### Server-persisted (visible to any client)
 All served by `GET /system/config` (`packages/server-contract/src/api/system.ts:197-233`) and written by `PUT /settings/general|keyboard|experiments|appearance` (`packages/server-contract/src/public-api.ts:1332-1358`; SDK `packages/sdk/src/areas/system.ts:207-217`, `theme.ts:53`):
 - `AppSettings` (`packages/domain/src/app-settings.ts:7-51`): showKeyboardHints, steerActiveThreadOnEnter, showUnhandledProviderEvents, codexMemoryEnabled, claudeCodeMemoryEnabled, codexSubagentsDisabled, claudeCodeSubagentsDisabled, claudeCodeWorkflowsDisabled, onboardingCompletedAt. Used by General (`SettingsView.tsx:1256-1299`), Provider pages (`:930-991, 1107-1150`), Debug (`:903-917`).
-- Experiments (`packages/domain/src/experiments.ts:13-34`): claudeCodeMockCliTraffic, editMessages, newOnboarding, providerSessionReaping (`SettingsView.tsx:998-1066`).
+- Experiments (`packages/domain/src/experiments.ts`): changelogPreview, editMessages, mobileApp, timelineWindowing.
 - Appearance palette + favicon color (`packages/domain/src/app-theme.ts:122-134, 145-160`); custom themes are server-resolved CSS strings; built-ins are CSS-with-`color-mix` in `apps/app/src/lib/themes/*.ts` (e.g. `nord.ts:9-45`).
 - Keybinding overrides (`packages/domain/src/app-keybindings.ts:232-249`; `KeyboardSettingsSection.tsx`, uses `navigator.platform` at `:63-65`).
 - Hosts: `GET/PATCH/DELETE /hosts/:id`, `PATCH /hosts/:id/permission-ceiling`, `POST /hosts/:id/retry-update`, `POST /hosts/join-codes` (`packages/server-contract/src/api/hosts.ts:59-100`; `MachinesSettingsSection.tsx:200-375`; `MachineSettingsView.tsx:165-471`).

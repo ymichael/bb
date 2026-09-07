@@ -7,12 +7,6 @@ import { describeError } from "@/lib/describe-error";
 import { Button, GroupedRow, Spinner, Text, toast } from "@/ui";
 import { SettingsSection } from "../settings/SettingsRows";
 
-/**
- * The other bb servers on the same getbb.app account, one tap to save each
- * as a profile. The machine credential just enrolled is account-scoped and
- * the gate's desktop-session cookie is a `.getbb.app` cookie, so no second
- * pairing code is needed (the desktop app's Server menu works the same way).
- */
 export function AccountServersList({
   credential,
 }: {

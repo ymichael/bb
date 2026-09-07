@@ -16,7 +16,7 @@
   "name": "bb-web-staging",
   "compatibility_date": "2026-06-11",
   "compatibility_flags": ["nodejs_compat"],
-  "main": "@tanstack/react-start/server-entry",
+  "main": "./src/server-entry.ts",
   "workers_dev": false,
   "observability": { "enabled": true },
   "vars": {

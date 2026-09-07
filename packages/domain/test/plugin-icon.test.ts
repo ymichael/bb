@@ -59,9 +59,6 @@ describe("bb.branding.icon grammar", () => {
   });
 
   it("refuses the namespaced declared-icon form, naming the value", () => {
-    // Even a self-reference to an entry of the plugin's own map: the
-    // plugin's mark points at its file, and no branding.icon reader
-    // resolves the map.
     const parsed = manifest("icons/logo");
     expect(parsed.success).toBe(false);
     expect(parsed.error?.issues[0]?.path).toEqual(["bb", "branding", "icon"]);

@@ -1,6 +1,3 @@
-// Pure helpers for sidebar section row identity. Section names are display text;
-// membership lives in `thread.sectionId`.
-
 export function buildSectionKey(
   containerId: string,
   sectionId: string,

@@ -226,6 +226,10 @@
       "type": "registry:hook"
     },
     {
+      "name": "use-pointer-coarse",
+      "type": "registry:hook"
+    },
+    {
       "name": "utils",
       "type": "registry:lib"
     }

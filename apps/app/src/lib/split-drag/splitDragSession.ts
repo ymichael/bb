@@ -1,6 +1,5 @@
 import { pickZone, zoneBox, type SplitZone, type ZoneDecision } from "./zones";
 
-/** Marks a pane's root element so the drag layer can hit-test it. */
 export const SPLIT_PANE_DATA_ATTR = "data-split-pane-id";
 
 export interface SplitDropTarget {
@@ -9,55 +8,20 @@ export interface SplitDropTarget {
 }
 
 export interface SplitDragFallbackTarget {
-  /** Pane id to attribute a drop to when no marked pane is under the pointer. */
   paneId: string;
-  /**
-   * Element whose rect stands in for the pane. Used by the single-pane surface,
-   * which renders no wrapper element (so it stays byte-identical to the page):
-   * the whole content container becomes the drop target for creating the first
-   * split.
-   */
   container: HTMLElement | null;
 }
 
 export interface SplitDragConfig {
-  /** Text shown in the cursor-following ghost. */
   ghostLabel: string;
-  /** Element dimmed while dragging (the source row or pane); restored on end. */
   sourceEl?: HTMLElement | null;
-  /**
-   * Resolves the hovered pane + raw zone into a highlighted target, or null
-   * when the pane is not a valid target (the overlay hides). The layout ops
-   * still enforce legality on drop; this only picks and labels the region.
-   */
   decide: (paneId: string, zone: SplitZone) => ZoneDecision | null;
-  /** Runs on release when a valid target is under the pointer. */
   onDrop: (target: SplitDropTarget) => void;
-  /**
-   * Gate that flips the drag from "pending" to "engaged". Until it returns
-   * true nothing is shown and no default is prevented, so an in-sidebar
-   * reorder or a plain click still works.
-   */
   shouldEngage: (clientX: number, clientY: number) => boolean;
-  /** Runs once when the pending gesture becomes an owned split drag. */
   onEngage?: () => void;
-  /**
-   * Runs after teardown on every engaged exit path. `dropped` is true only
-   * when a valid target was handed to {@link onDrop}.
-   */
   onEnd?: (result: { dropped: boolean }) => void;
-  /**
-   * Hit-test fallback for when no {@link SPLIT_PANE_DATA_ATTR} element is under
-   * the pointer (the wrapper-less single-pane surface).
-   */
   fallback?: SplitDragFallbackTarget;
-  /**
-   * When true, engaging the drag cancels any in-flight dnd-kit reorder so a
-   * sidebar tear-out can't both split and reorder the same row (Finding 1).
-   * The two gestures become mutually exclusive: a tear-out that crosses the
-   * sidebar edge owns the gesture; a drag that never engages leaves reorder
-   * untouched.
-   */
+  targetBoundary?: HTMLElement;
   cancelSidebarReorderOnEngage?: boolean;
 }
 
@@ -66,22 +30,12 @@ interface ResolvedTarget {
   rect: DOMRect;
 }
 
-/**
- * Shared pointer-driven drag session for the split area, used by sidebar thread
- * rows and pane headers alike. It intentionally does NOT nest a second dnd-kit
- * context (plan §3): it renders a cursor ghost + a drop-zone overlay directly,
- * hit-tests panes by their {@link SPLIT_PANE_DATA_ATTR}, and calls back with the
- * chosen target. Colors come from theme tokens (never hardcoded), per AGENTS.md.
- */
 export function beginSplitDrag(config: SplitDragConfig): void {
   let engaged = false;
   let target: SplitDropTarget | null = null;
   let ghostEl: HTMLElement | null = null;
   let overlayEl: HTMLElement | null = null;
 
-  // Sidebar rows carry a native-draggable `<a>` overlay; without this a
-  // mousedown+move starts a native anchor drag that swallows the pointermove
-  // stream the session depends on. Suppress it for the whole gesture.
   const preventNativeDrag = (event: DragEvent): void => {
     event.preventDefault();
   };
@@ -90,8 +44,6 @@ export function beginSplitDrag(config: SplitDragConfig): void {
   const engage = (): void => {
     engaged = true;
     if (config.cancelSidebarReorderOnEngage) {
-      // dnd-kit's pointer sensors cancel on an Escape keydown; dispatching one
-      // hands exclusive ownership of the gesture to the split drag.
       document.dispatchEvent(
         new KeyboardEvent("keydown", {
           key: "Escape",
@@ -116,11 +68,20 @@ export function beginSplitDrag(config: SplitDragConfig): void {
   ): ResolvedTarget | null => {
     const paneEl = paneElementAt(clientX, clientY);
     const paneId = paneEl?.getAttribute(SPLIT_PANE_DATA_ATTR) ?? null;
-    if (paneEl && paneId !== null) {
+    if (
+      paneEl &&
+      paneId !== null &&
+      (config.targetBoundary == null || config.targetBoundary.contains(paneEl))
+    ) {
       return { paneId, rect: paneEl.getBoundingClientRect() };
     }
     const fallback = config.fallback;
-    if (fallback && fallback.container) {
+    if (
+      fallback &&
+      fallback.container &&
+      (config.targetBoundary == null ||
+        config.targetBoundary.contains(fallback.container))
+    ) {
       const rect = fallback.container.getBoundingClientRect();
       if (
         clientX >= rect.left &&
@@ -141,8 +102,6 @@ export function beginSplitDrag(config: SplitDragConfig): void {
       }
       engage();
     }
-    // Only suppress the default (text selection / native drag) once we own the
-    // gesture, so pending in-sidebar interactions stay untouched.
     event.preventDefault();
     if (ghostEl) {
       ghostEl.style.left = `${event.clientX + 12}px`;
@@ -187,9 +146,6 @@ export function beginSplitDrag(config: SplitDragConfig): void {
     const dropTarget = engaged ? target : null;
     teardown();
     if (wasEngaged) {
-      // Swallow the click the browser synthesizes after a drag release so a
-      // dragged-out sidebar row's NavLink (or a header's focus click) doesn't
-      // fire on top of the drop.
       swallowNextClick();
     }
     if (dropTarget) {
@@ -221,8 +177,6 @@ function swallowNextClick(): void {
     window.removeEventListener("click", swallow, true);
   };
   window.addEventListener("click", swallow, true);
-  // If no click follows (some pointer paths don't synthesize one), drop the
-  // listener shortly so it can't swallow a later, unrelated click.
   window.setTimeout(
     () => window.removeEventListener("click", swallow, true),
     300,

@@ -13,13 +13,6 @@ import { TimelineDetailScroll } from "./TimelineDetailScroll.js";
 
 export interface TimelineFileDiffBlockProps {
   change: TimelineFileChange;
-  /**
-   * Workspace root path the agent ran in (`environment.path`). When defined,
-   * the prefix is stripped from `change.path`/`change.movePath` before the
-   * patch is synthesized so the card header shows repo-relative paths
-   * matching what the secondary-panel diff renders. Pass `undefined` only
-   * when the environment hasn't loaded yet — the strip becomes a no-op.
-   */
   workspaceRootPath: string | undefined;
 }
 

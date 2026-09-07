@@ -7,19 +7,12 @@ const cachedModelCatalogSchema = z.object({
   selectedOnlyModels: z.array(availableModelSchema),
 });
 
-/**
- * The last catalog a successful probe returned, keyed by the same routing
- * dimensions as the execution-options query: two hosts can be signed into
- * different accounts with different entitlements, and each provider reports
- * its own catalog. Used to preload the picker with real model ids rather than
- * a loading placeholder. A cached catalog can be stale, so callers must keep
- * reporting preloaded rows as provisional: only a fresh probe may retire a
- * stored selection.
- */
 const modelCatalogCache = createLastKnownCache({
   prefix: "bb.model-catalog",
   version: "1",
   schema: cachedModelCatalogSchema,
+  maxEntries: 8,
+  obsoletePrefixes: ["bb.claude-model-catalog"],
 });
 
 export function modelCatalogCacheKey({
@@ -36,8 +29,4 @@ export function modelCatalogCacheKey({
 
 export const readCachedModelCatalog = modelCatalogCache.read;
 export const writeCachedModelCatalog = modelCatalogCache.write;
-/**
- * Drop every remembered catalog. Streamer mode changes which models the server
- * lists, so a catalog cached before the toggle must not preload the picker.
- */
 export const clearCachedModelCatalogs = modelCatalogCache.clear;

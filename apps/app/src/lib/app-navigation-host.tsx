@@ -1,9 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useMemo,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import type {
   ExperimentalAppPanelSurface,
   ExperimentalFileOpenOptions,
@@ -16,11 +11,9 @@ interface AppUrlOpenIntent {
 }
 
 export interface AppFilePreviewIntent extends ExperimentalFileOpenOptions {
-  /** Internal per-activation override used by BB-owned Open with… menus. */
   viewer?: FileOpenerOverride;
 }
 
-/** Internal identity. Public plugin callers never supply `ownerId`. */
 export interface AppFixedTabReference {
   ownerId: string;
   tabId: string;
@@ -59,10 +52,6 @@ const AppNavigationHostContext =
     DEFAULT_APP_NAVIGATION_HOST,
   );
 
-/**
- * Adds the navigation capabilities owned by one app surface. Providers compose:
- * an omitted capability inherits the nearest outer host instead of disabling it.
- */
 export function AppNavigationHostProvider({
   capabilities,
   children,
@@ -75,8 +64,7 @@ export function AppNavigationHostProvider({
     () => ({
       openFileExternally:
         capabilities.openFileExternally ?? parent.openFileExternally,
-      openFilePreview:
-        capabilities.openFilePreview ?? parent.openFilePreview,
+      openFilePreview: capabilities.openFilePreview ?? parent.openFilePreview,
       openFixedTab: capabilities.openFixedTab ?? parent.openFixedTab,
       openUrl: capabilities.openUrl ?? parent.openUrl,
     }),
@@ -98,7 +86,6 @@ export function AppNavigationHostProvider({
   );
 }
 
-/** Semantic navigation intents accepted by the current app surface. */
 export function useAppNavigationHost() {
   return useContext(AppNavigationHostContext);
 }

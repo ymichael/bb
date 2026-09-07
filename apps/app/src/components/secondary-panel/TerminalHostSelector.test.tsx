@@ -1,29 +1,22 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Host } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   resolveTerminalHost,
   TerminalHostSelector,
 } from "./TerminalHostSelector";
 
-const studio: Host = {
+const studio = makeHost({
   id: "host-studio",
   name: "Studio",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: null,
-  maxPermissionMode: "full",
-  lastRejectedProtocolVersion: null,
-  createdAt: 0,
-  updatedAt: 0,
-};
-const laptop: Host = {
+});
+const laptop = makeHost({
   ...studio,
   id: "host-laptop",
   name: "Laptop",
-};
+});
 
 afterEach(cleanup);
 

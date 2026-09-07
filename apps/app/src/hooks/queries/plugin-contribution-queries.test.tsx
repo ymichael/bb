@@ -63,7 +63,7 @@ describe("usePluginContributions", () => {
           label: "Empty trigger",
           triggers: [],
         },
-        { pluginId: "broken" }, // malformed: dropped at the boundary
+        { pluginId: "broken" },
       ],
     });
 

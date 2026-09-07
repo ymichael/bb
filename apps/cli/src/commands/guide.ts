@@ -14,8 +14,6 @@ export function registerGuideCommand(program: Command): void {
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (chapter: string | undefined, opts: GuideCommandOptions) => {
-        // The guide renders local templates only; it must keep working in
-        // environments where no BB server is configured.
         const rendered = createGuideArea().render({ chapter });
         if (chapter) {
           if (outputJson(opts, rendered)) return;

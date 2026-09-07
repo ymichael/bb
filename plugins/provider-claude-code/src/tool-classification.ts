@@ -1,14 +1,3 @@
-/**
- * Claude Code tool calls → grammar v3 item shapes with presentation.
- *
- * The dialect's tool vocabulary lives here and in `presentation.ts`: which
- * built-in maps to which core kind (`Bash` → command, `Read` → fileRead,
- * `Grep`/`Glob` → search, `Edit`/`Write`/`MultiEdit`/`NotebookEdit` →
- * fileChange, `WebSearch`/`WebFetch` → web items, `Agent`/`Task` →
- * delegation), which calls also carry a plan snapshot (`TodoWrite`), and how
- * an MCP-served tool splits into `{ server, tool }`. Everything else is a
- * generic `tool` item whose presentation says how it reads.
- */
 import {
   type DeltaItemShape,
   type DeltaPresentation,
@@ -41,38 +30,24 @@ import {
 export interface ClaudeClassifiedTool {
   shape: DeltaItemShape;
   presentation: DeltaPresentation;
-  /**
-   * The full plan snapshot a `TodoWrite` call carries in its arguments,
-   * emitted as a settled `planSteps` item beside the (collapsed) call row.
-   */
   planSteps?: ThreadEventPlanStep[];
 }
 
-/**
- * A bb-injected tool the session was constructed with (Q31). The definition
- * carries its presentation once the server resolved one; a definition from
- * before the field existed presents generically.
- */
 export interface ClaudeInjectedTool {
   name: string;
   presentation?: DeltaPresentation;
 }
 
-/**
- * The MCP server the bridge serves bb's injected tools through; Claude names
- * their calls `mcp__bb-bridge__<tool>`.
- */
 export const BB_BRIDGE_MCP_SERVER_NAME = "bb-bridge";
 
-/** The `server` a bb-injected tool call carries on the wire (Q31). */
 const BB_TOOL_SERVER = "bb";
-
-// ---------------------------------------------------------------------------
-// Argument schemas (one-off, dialect-local)
-// ---------------------------------------------------------------------------
 
 const claudeBackgroundFlagSchema = z
   .object({ run_in_background: z.boolean().optional() })
+  .passthrough();
+
+const claudeSandboxOverrideFlagSchema = z
+  .object({ dangerouslyDisableSandbox: z.boolean().optional() })
   .passthrough();
 
 const claudeReadArgsSchema = z
@@ -125,14 +100,11 @@ const claudeTodoWriteArgsSchema = z
   })
   .passthrough();
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 interface ClaudeBashCommand {
   command: string;
   cwd: string | null;
   background: boolean;
+  sandboxOverridden: boolean;
 }
 
 export function parseClaudeBashCommand(
@@ -147,11 +119,15 @@ export function parseClaudeBashCommand(
     return null;
   }
   const background = claudeBackgroundFlagSchema.safeParse(input);
+  const sandboxOverride = claudeSandboxOverrideFlagSchema.safeParse(input);
   return {
     command,
     cwd: toOptionalString(parsed.data.cwd) ?? null,
     background:
       background.success && background.data.run_in_background === true,
+    sandboxOverridden:
+      sandboxOverride.success &&
+      sandboxOverride.data.dangerouslyDisableSandbox === true,
   };
 }
 
@@ -171,7 +147,6 @@ function genericTool(toolName: string, args: unknown): ClaudeClassifiedTool {
   };
 }
 
-/** `mcp__<server>__<tool>`: the Claude SDK's name for an MCP-served tool. */
 const MCP_TOOL_NAME_PATTERN = /^mcp__(.+?)__(.+)$/;
 
 export function parseClaudeMcpToolName(
@@ -210,10 +185,6 @@ const PLAN_STEP_STATUSES: Readonly<
   completed: "completed",
 };
 
-/**
- * TodoWrite's full list as plan steps. Unknown statuses drop the step, not
- * the snapshot; the step text is the in-progress form while active.
- */
 export function todoWritePlanSteps(
   args: unknown,
 ): ThreadEventPlanStep[] | null {
@@ -234,10 +205,6 @@ export function todoWritePlanSteps(
   }
   return steps;
 }
-
-// ---------------------------------------------------------------------------
-// Classification
-// ---------------------------------------------------------------------------
 
 function classifyFileChange(
   toolName: string,
@@ -343,8 +310,6 @@ function classifyDelegation(
     toolName;
   const background = parsed.data.run_in_background === true;
   return {
-    // The child's provider-native id is the call id: the SDK streams the
-    // sub-agent's own messages under `parent_tool_use_id` = this id.
     shape: {
       type: "delegation",
       childRef: toolUseId,
@@ -360,11 +325,6 @@ function classifyDelegation(
   };
 }
 
-/**
- * A call to a bb-injected tool: `server: "bb"` names its origin and the
- * definition the server handed the bridge says how the row reads, so no
- * tool-name table is needed anywhere downstream.
- */
 function bbTool(
   tool: string,
   args: unknown,
@@ -386,10 +346,10 @@ export function classifyClaudeToolUse(args: {
   toolName: string;
   toolUseId: string;
   input: unknown;
-  /** The session's bb-injected tools, by bare name. */
   injectedTools: ReadonlyMap<string, ClaudeInjectedTool>;
+  sandboxEnabled: boolean;
 }): ClaudeClassifiedTool {
-  const { toolName, toolUseId, input } = args;
+  const { toolName, toolUseId, input, sandboxEnabled } = args;
   switch (toolName) {
     case "Bash": {
       const command = parseClaudeBashCommand(input);
@@ -400,7 +360,10 @@ export function classifyClaudeToolUse(args: {
               command: command.command,
               cwd: command.cwd ?? "",
             },
-            presentation: commandPresentation(command),
+            presentation: commandPresentation({
+              ...command,
+              sandboxEscaped: sandboxEnabled && command.sandboxOverridden,
+            }),
           }
         : genericTool(toolName, input);
     }
@@ -500,13 +463,6 @@ export function classifyClaudeToolUse(args: {
   }
 }
 
-/**
- * A tool result whose call the translator never saw (the turn opened before
- * the bridge attached, or the open was lost): the best-effort terminal shape
- * from the name alone. A Bash result reads as a command only when the
- * session cwd is known — bb fabricates no `commandExecution { cwd: "" }`
- * (design §4); otherwise it stays a generic tool item.
- */
 export function classifyClaudeToolResultFallback(
   toolName: string | undefined,
   sessionCwd: string | undefined,
@@ -517,7 +473,11 @@ export function classifyClaudeToolResultFallback(
     }
     return {
       shape: { type: "command", command: "", cwd: sessionCwd },
-      presentation: commandPresentation({ command: "", background: false }),
+      presentation: commandPresentation({
+        command: "",
+        background: false,
+        sandboxEscaped: false,
+      }),
     };
   }
   if (
@@ -542,10 +502,6 @@ export function classifyClaudeToolResultFallback(
   return genericTool(toolName ?? "unknown", undefined);
 }
 
-/**
- * The Agent tool's result text, without the internal metadata lines Claude
- * appends for its own bookkeeping (`agentId: …`, `<usage>…`).
- */
 export function stripClaudeAgentOutputMetadata(output: string): string {
   return output
     .split("\n")

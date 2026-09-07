@@ -130,8 +130,6 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
           TURN_TIMEOUT_MS,
         );
 
-        // What the provider really received: the bridge records every
-        // request it handles.
         const requests = await record.read();
         const parentRuntimeCommand = findSessionConstruction(
           requests,
@@ -163,11 +161,6 @@ describe.sequential("fake provider smoke lifecycle integration", () => {
         expect(childRuntimeCommand.instructions).toContain("Markdown links");
         expect(parentRuntimeCommand.instructions).not.toContain("manager");
         expect(childRuntimeCommand.instructions).not.toContain("manager");
-
-        // Skill roots are not asserted here: this harness stages no injected
-        // skill sources, so the runtime configures none. The generic root
-        // shape every provider receives is pinned in
-        // `bridge-protocol-adapter.test.ts` and `injected-skills.test.ts`.
       });
     } finally {
       await record.dispose();

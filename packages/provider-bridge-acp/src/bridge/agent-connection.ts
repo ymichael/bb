@@ -1,11 +1,3 @@
-/**
- * Minimal JSON-RPC 2.0 endpoint over a spawned ACP agent's stdio.
- *
- * ACP frames messages as newline-delimited JSON. BB only consumes a small,
- * stable subset of the protocol, so the bridge validates traffic with the
- * schemas in `../wire.ts` instead of depending on an external ACP SDK.
- */
-
 import { spawn, type ChildProcess } from "node:child_process";
 import { createInterface } from "node:readline";
 import { experimental_recordProviderChildIo } from "@bb/provider-bridge-protocol/bridge-kit";
@@ -30,10 +22,6 @@ interface CreateAcpAgentConnectionOptions {
   args: string[];
   cwd: string;
   env: Record<string, string | undefined>;
-  /**
-   * The bb thread this agent serves, for record mode; null for process-level
-   * agents (model discovery).
-   */
   recordThreadId: string | null;
   onNotification(method: string, params: unknown): void;
   onRequest(
@@ -64,11 +52,6 @@ export class AcpAgentExitedError extends Error {
   }
 }
 
-/**
- * The agent answered a request with a JSON-RPC error. The code rides along
- * so the bridge can act on what the protocol says (ACP reserves `-32000` for
- * "Authentication required") instead of matching the message.
- */
 export class AcpAgentResponseError extends Error {
   readonly code: number | undefined;
 
@@ -106,12 +89,6 @@ function isClosedAgentStdinError(error: Error): boolean {
   );
 }
 
-/**
- * ACP agents answer a failed request with a generic JSON-RPC message such as
- * "Internal error" and put the real cause in `error.data` (for example
- * `{ details: "bb-bridge: Transport closed" }`). Carry that cause into the
- * rejection so agent-side failures are diagnosable from bb logs.
- */
 export function formatAgentError(error: AgentErrorObject): string {
   const message =
     error.message ?? `ACP agent returned error code ${error.code ?? "unknown"}`;
@@ -174,6 +151,7 @@ export function createAcpAgentConnection(
   const stderrChunks: string[] = [];
   let nextRequestId = 1;
   let exited = false;
+  let stopping = false;
 
   function rejectAllPending(error: Error): void {
     for (const [, request] of pending) {
@@ -195,14 +173,15 @@ export function createAcpAgentConnection(
     rejectAllPending(
       new AcpAgentExitedError(`ACP agent "${options.command}" ${detail}`),
     );
-    // The protocol cannot recover once the agent stops reading requests.
-    // Kill immediately so a child that keeps other handles open cannot leak.
     child.kill("SIGKILL");
     const stderrTail = [...stderrChunks, detail].join("\n");
     options.onExit({ code: null, signal: null, stderrTail });
   }
 
   function writeLine(message: object): void {
+    if (stopping) {
+      return;
+    }
     const stdin = child.stdin;
     if (!stdin || stdin.destroyed || !stdin.writable) {
       closeForAgentStdin(new Error("stdin is not writable"));
@@ -211,13 +190,13 @@ export function createAcpAgentConnection(
     stdin.write(JSON.stringify(message) + "\n");
   }
 
-  // The agent can close its read end between the writable check in writeLine
-  // and the kernel accepting the write. Node reports that race asynchronously
-  // on the stream. A closed input is an irrecoverable transport failure: all
-  // requests must settle even when the child keeps other handles open.
   child.stdin?.on("error", (error) => {
     if (!isClosedAgentStdinError(error)) {
       throw error;
+    }
+    if (stopping) {
+      child.kill("SIGKILL");
+      return;
     }
     closeForAgentStdin(error);
   });
@@ -228,6 +207,9 @@ export function createAcpAgentConnection(
       terminal: false,
     });
     stdoutLines.on("line", (line) => {
+      if (stopping) {
+        return;
+      }
       const message = parseAgentLine(line);
       if (!message) {
         return;
@@ -330,11 +312,11 @@ export function createAcpAgentConnection(
 
   return {
     get exited() {
-      return exited;
+      return stopping || exited;
     },
 
     request({ method, params, resultSchema }) {
-      if (exited) {
+      if (stopping || exited) {
         return Promise.reject(
           new AcpAgentExitedError(
             `ACP agent "${options.command}" is not running`,
@@ -364,16 +346,22 @@ export function createAcpAgentConnection(
     },
 
     notify(method, params) {
-      if (exited) {
+      if (stopping || exited) {
         return;
       }
       writeLine({ jsonrpc: "2.0", method, params });
     },
 
     kill() {
-      if (exited) {
+      if (stopping || exited) {
         return;
       }
+      stopping = true;
+      rejectAllPending(
+        new AcpAgentExitedError(
+          `ACP agent "${options.command}" is not running`,
+        ),
+      );
       child.kill("SIGTERM");
     },
   };

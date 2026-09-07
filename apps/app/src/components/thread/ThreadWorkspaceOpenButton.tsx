@@ -60,9 +60,6 @@ export function ThreadWorkspaceOpenButton({
       void openTarget(preferredTarget, onOpenPreferredTarget);
     },
     content: (
-      // Pending previously only disabled the button, giving no signal that the
-      // open was in flight. Shimmering the existing icon matches the plugin
-      // action buttons beside it and the app's working idiom generally.
       <WorkspaceOpenTargetIcon
         target={preferredTarget}
         className={cn("size-4", isPending && "animate-shine-icon")}

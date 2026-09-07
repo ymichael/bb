@@ -1,7 +1,6 @@
 import type { Host } from "@bb/domain";
 import { HOST_DAEMON_PROTOCOL_VERSION } from "@bb/host-daemon-contract/protocol";
 
-/** A normal self-update needs time to download, install, and restart. */
 const HOST_UPDATE_STALL_THRESHOLD_MS = 2 * 60 * 1000;
 
 export function hostNeedsUpdate(host: Host): boolean {

@@ -333,7 +333,6 @@ echo "Reports written to $output_dir"`,
   },
 };
 
-/** Enabled and recurring, but the server has not computed a next run. */
 const UNSCHEDULED_AUTOMATION: AutomationResponse = {
   ...DETAIL_AUTOMATION,
   id: "unscheduled-digest",
@@ -344,7 +343,6 @@ const UNSCHEDULED_AUTOMATION: AutomationResponse = {
   lastRunStatus: "succeeded",
 };
 
-/** A one-time automation that already ran and will not run again. */
 const COMPLETED_AUTOMATION: AutomationResponse = {
   ...DETAIL_AUTOMATION,
   id: "one-time-backfill",

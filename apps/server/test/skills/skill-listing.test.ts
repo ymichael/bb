@@ -187,8 +187,6 @@ describe("assembleSkillList", () => {
         ],
       },
     ]);
-    // bb-project sorts before claude-user before codex-user; the two `zed` skills are
-    // distinct files under different providers.
     expect(result.map((skill) => [skill.scope, skill.name])).toEqual([
       ["bb-project", "alpha"],
       ["provider-user", "zed"],

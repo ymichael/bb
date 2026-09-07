@@ -7,7 +7,6 @@ export default {
   title: "pickers/Permission Mode Picker",
 };
 
-// Mirrors PERMISSION_MODE_OPTIONS in useThreadCreationOptions.ts
 const allOptions: readonly PickerOption<PermissionMode>[] = [
   {
     value: "accept-edits",
@@ -57,7 +56,10 @@ const noop = () => {};
 export function Overview() {
   return (
     <StoryCard>
-      <StoryRow label="default" hint="muted by default — used in prompt-box only">
+      <StoryRow
+        label="default"
+        hint="muted by default — used in prompt-box only"
+      >
         <PermissionModePicker
           value="accept-edits"
           options={allOptions}
@@ -65,7 +67,7 @@ export function Overview() {
           supported
         />
       </StoryRow>
-      <StoryRow label="full access selected" hint='warning tone'>
+      <StoryRow label="full access selected" hint="warning tone">
         <PermissionModePicker
           value="full"
           options={allOptions}

@@ -106,11 +106,6 @@ export function buildMachineSharePublicOrigin(
   return `${connectPublicProtocol(identity.baseDomain)}//${identity.label}--${port}.${identity.baseDomain}`;
 }
 
-/**
- * Host-local connect primitive. The server supplies only desired ports. This
- * daemon derives the credential-bearing gate destination from its own trusted
- * enrollment URL and assigns its own label using its machine credential.
- */
 export class ConnectTunnelClient {
   private readonly createWebSocket: CreateTunnelWebSocket;
   private readonly fetchFn: ConnectTunnelFetch;
@@ -153,7 +148,6 @@ export class ConnectTunnelClient {
     };
   }
 
-  /** Apply a pushed replacement only when it advances the host generation. */
   replaceShareSet(shares: HostDaemonConnectShares): boolean {
     if (shares.generation <= this.generation) {
       return false;
@@ -162,13 +156,11 @@ export class ConnectTunnelClient {
     return true;
   }
 
-  /** Session-open state resets the in-memory server generation epoch. */
   replaceAuthoritativeShareSet(shares: HostDaemonConnectShares): void {
     this.applyShareSet(shares);
     this.reportCurrentIdentity();
   }
 
-  /** Idempotent RPC seam used by the server to obtain read-only share URLs. */
   ensureTunnelIdentity(): Promise<HostDaemonConnectTunnelIdentity> {
     if (this.identity) {
       return Promise.resolve(this.identity);
@@ -266,8 +258,6 @@ export class ConnectTunnelClient {
       (port) => !this.ports.has(port),
     );
     if (removedPort) {
-      // TunnelSession resolves only new opens dynamically. Restarting revokes
-      // already-live HTTP and WebSocket streams to every removed target.
       this.stopCurrentConnection();
     }
     this.state = "reconnecting";

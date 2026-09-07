@@ -9,7 +9,6 @@ export default {
   title: "thread/timeline/rows/Unread Divider",
 };
 
-// Match production: ThreadTimelinePane's PageShell caps content at 760px.
 function TimelineStage({ children }: { children: React.ReactNode }) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
@@ -18,12 +17,6 @@ const baseProps = {
   threadRuntimeDisplayStatus: "idle" as const,
   workspaceRootPath: undefined,
 };
-
-// ---------------------------------------------------------------------------
-// Keep these fixtures to plain conversation rows so the divider placement is
-// easy to scan. `createdAt` values are spaced a minute apart so the
-// `after-cutoff` placement has a clean millisecond boundary to land on.
-// ---------------------------------------------------------------------------
 
 const THREAD_ID = "thr_threadUnreadDivider";
 const TURN_PREFIX = "019dd000-0000-7000-aa00-00000000000";
@@ -111,9 +104,6 @@ const conversationRows: TimelineRow[] = [
   }),
 ];
 
-// Cutoff between row 4 (read) and row 5 (unread). Picking a value strictly
-// greater than row 4's createdAt and strictly less than row 5's makes the
-// `findIndex(row.createdAt > cutoffAt)` resolve at row 5 deterministically.
 const afterCutoffPlacement: ThreadTimelineUnreadDividerPlacement = {
   kind: "after-cutoff",
   cutoffAt: T0 + 3 * MINUTE + 30_000,

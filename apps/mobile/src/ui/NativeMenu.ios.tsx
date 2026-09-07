@@ -9,16 +9,11 @@ function toMenuAction(action: NativeMenuAction): MenuAction {
   const disabled = action.disabled === true;
   return {
     id: action.key,
-    // The native item has no subtitle line: a disabled item folds its
-    // subtitle (the reason it is unavailable) into the title so the
-    // explanation survives; enabled items drop their description.
     title:
       disabled && action.subtitle
         ? `${action.label} — ${action.subtitle}`
         : action.label,
-    // Brand marks (Discord, Github) have no symbol; the item renders text-only.
     ...(symbol ? { image: symbol } : {}),
-    // `state` switches the item to a toggle row; leave it off for commands.
     ...(action.checked === undefined
       ? {}
       : { state: action.checked ? ("on" as const) : ("off" as const) }),
@@ -35,7 +30,6 @@ function toMenuAction(action: NativeMenuAction): MenuAction {
   };
 }
 
-/** Every leaf item, so a submenu pick resolves to its own handler. */
 function findAction(
   actions: readonly NativeMenuAction[],
   key: string,
@@ -48,21 +42,6 @@ function findAction(
   return undefined;
 }
 
-/**
- * iOS: a native pull-down menu (tap) or context menu (`longPress`) anchored
- * to the trigger, built from `@expo/ui`'s `MenuView`.
- *
- * The rule (see `NativeMenuProps`): the trigger is an icon-only button. The
- * SwiftUI menu host drops the wrapped React Native subtree from the
- * accessibility tree, so an `accessible` wrapper is the one element
- * VoiceOver and Maestro see — it carries the label, the button role, the
- * disabled state and the `testID`; activating it (a tap at its centre)
- * reaches the native menu underneath. The menu items themselves are native
- * and stay accessible. Icons come from the SF Symbol map; the native menu
- * has no `subtitle` line, so only a disabled item keeps it (folded into the
- * title as the reason it is unavailable). Metro picks this file on iOS;
- * `NativeMenu.tsx` is the fallback.
- */
 export function NativeMenu({
   title,
   actions,

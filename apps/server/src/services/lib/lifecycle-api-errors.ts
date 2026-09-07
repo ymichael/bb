@@ -58,13 +58,6 @@ export function destroyedThreadEnvironmentDetails(
   return threadEnvironmentUnavailableDetails("destroyed", environment.status);
 }
 
-/**
- * The single definition of "the environment is gone": an environment with a
- * destroy RPC in flight (`destroying`) or already gone (`destroyed`) is never
- * reprovisioned, so any work request against it is rejected with the
- * "environment is gone" surface the frontend banner keys off. `retiring` is
- * deliberately absent because it is revivable before destroy starts.
- */
 export function goneThreadEnvironmentDetails(
   environment: ThreadEnvironmentStatusFields,
 ): ThreadEnvironmentUnavailableErrorDetails | null {
@@ -106,6 +99,12 @@ export function threadNotWritableReasonForStatus(
   status: ThreadStatus,
 ): ThreadNotWritableReason {
   switch (status) {
+    // A pending thread has never dispatched, so "not started" is literally
+    // what it is. It reuses `starting`'s reason rather than earning its own:
+    // the caller's remedy is identical (wait for the first dispatch to clear),
+    // and a distinct reason would only be worth its fan-out once a surface
+    // renders pending differently.
+    case "pending":
     case "starting":
       return "not_started";
     case "idle":

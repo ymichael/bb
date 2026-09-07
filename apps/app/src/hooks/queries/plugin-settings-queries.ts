@@ -4,7 +4,7 @@ import type {
   PluginSettingsResponse,
 } from "@bb/server-contract";
 import { pluginSettingsUpdateRequestSchema } from "@bb/server-contract";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createPluginsClient } from "./plugin-client";
 import { pluginListQueryKey, pluginSettingsViewQueryKey } from "./query-keys";
 
@@ -52,7 +52,6 @@ export interface PluginListItem {
   source: string;
   isOrphanedBuiltin: boolean;
   catalogEntryId: string | null;
-  /** Publisher badge, or null for a plugin the user installed from a source. */
   publisherLabel: string | null;
   sourceDisplay: string;
   updateState: PluginUpdateState;
@@ -132,9 +131,17 @@ export function toPluginListItem(plugin: InstalledPlugin): PluginListItem {
 
 export async function fetchPluginList(
   fetchImpl: FetchLike,
+  signal?: AbortSignal,
 ): Promise<PluginListResult> {
-  const result = await createPluginsClient(fetchImpl).list();
-  return { plugins: result.plugins.map(toPluginListItem) };
+  const plugins = await fetchInstalledPlugins(fetchImpl, signal);
+  return { plugins: plugins.map(toPluginListItem) };
+}
+
+export async function fetchInstalledPlugins(
+  fetchImpl: FetchLike,
+  signal?: AbortSignal,
+): Promise<InstalledPlugin[]> {
+  return (await createPluginsClient(fetchImpl).list({ signal })).plugins;
 }
 
 export type PluginSettingFieldDescriptor = PluginSettingDescriptor;
@@ -195,12 +202,21 @@ export async function removePlugin(
   await createPluginsClient(fetchImpl).remove({ pluginId });
 }
 
-export function usePluginList(args: { enabled: boolean }) {
-  return useQuery({
+export function pluginListQueryOptions(args: { enabled: boolean }) {
+  return queryOptions({
     queryKey: pluginListQueryKey(args.enabled),
-    queryFn: () => fetchPluginList(fetch),
+    queryFn: ({ signal }) => fetchInstalledPlugins(fetch, signal),
     enabled: args.enabled,
     staleTime: 30_000,
+  });
+}
+
+export function usePluginList(args: { enabled: boolean }) {
+  return useQuery({
+    ...pluginListQueryOptions(args),
+    select: (plugins): PluginListResult => ({
+      plugins: plugins.map(toPluginListItem),
+    }),
   });
 }
 

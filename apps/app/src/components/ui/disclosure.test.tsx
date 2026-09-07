@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+} from "@testing-library/react";
 import { Provider, createStore } from "jotai";
 import { useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
@@ -62,16 +68,11 @@ describe("ExpandablePanel body height", () => {
       throw new Error("Panel body region was not rendered");
     }
 
-    // Mount is not a toggle: no easing.
     expect(region.style.transitionDuration).toBe("0s");
 
-    // A streaming delta grows the open body: still no easing, so the region
-    // does not restart a 200ms tween per delta under the timeline's
-    // AutoHeightContainer.
     fireResize();
     expect(region.style.transitionDuration).toBe("0s");
 
-    // An expand/collapse toggle restores the class-driven 200ms ease.
     view.rerender(
       <ExpandablePanel
         isExpanded={false}
@@ -84,17 +85,12 @@ describe("ExpandablePanel body height", () => {
     );
     expect(region.style.transitionDuration).toBe("");
 
-    // Growth after the toggle window is over snaps again.
     vi.spyOn(performance, "now").mockReturnValue(performance.now() + 10_000);
     fireResize();
     expect(region.style.transitionDuration).toBe("0s");
   });
 });
 
-/**
- * A toggleable panel driven by its own header, like a timeline tool row.
- * With `collapsedContent` it is a row that shows a preview while collapsed.
- */
 function TogglablePanel({
   collapsedContent,
 }: {
@@ -122,9 +118,6 @@ describe("ExpandablePanel deferred body realization", () => {
     let bodyMountedInToggleCommit: boolean | null = null;
     let headerExpandedInToggleCommit: string | null = null;
     act(() => {
-      // flushSync stands in for the tap's discrete event: it flushes only the
-      // urgent lane, so the deferred body re-render is still pending when the
-      // samples are taken and lands when act exits.
       flushSync(() => {
         header.click();
       });
@@ -132,8 +125,6 @@ describe("ExpandablePanel deferred body realization", () => {
       headerExpandedInToggleCommit = header.getAttribute("aria-expanded");
     });
 
-    // The tap's synchronous commit flips the caret without paying for the
-    // body subtree; the body lands in the follow-up interruptible commit.
     expect(headerExpandedInToggleCommit).toBe("true");
     expect(bodyMountedInToggleCommit).toBe(false);
     expect(screen.getByText("Expanded body")).toBeTruthy();
@@ -148,8 +139,6 @@ describe("ExpandablePanel deferred body realization", () => {
 
     fireEvent.click(header);
 
-    // The collapse animates from the still-rendered subtree: the same body
-    // element stays mounted for the 200ms transition, then unmounts.
     expect(header.getAttribute("aria-expanded")).toBe("false");
     expect(screen.getByText("Expanded body")).toBe(body);
 
@@ -160,8 +149,6 @@ describe("ExpandablePanel deferred body realization", () => {
   });
 
   it("keeps the preview, its height and the in-flight window until the body's commit", () => {
-    // jsdom lays nothing out: stand in a text-length metric so the region's
-    // height write tells the preview, an empty body wrapper and the body apart.
     vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
       function (this: HTMLElement) {
         return this.textContent?.length ?? 0;
@@ -204,9 +191,6 @@ describe("ExpandablePanel deferred body realization", () => {
       };
     });
 
-    // The tap's commit flips the caret only. The preview stays on screen at
-    // its own height; no tween or in-flight window opens against the empty
-    // wrapper the body has not filled yet.
     expect(toggleCommit).toEqual({
       ariaExpanded: "true",
       previewMounted: true,
@@ -215,8 +199,6 @@ describe("ExpandablePanel deferred body realization", () => {
       inFlight: 0,
     });
 
-    // The deferred commit swaps the preview for the body, eases the region
-    // toward the body's real height and opens the 200ms in-flight window.
     expect(screen.queryByText("Collapsed summary")).toBeNull();
     expect(screen.getByText("Expanded body")).toBeTruthy();
     expect(region.style.height).toBe(bodyHeight);
@@ -243,7 +225,6 @@ describe("ExpandablePanel deferred body realization", () => {
     act(() => {
       vi.advanceTimersByTime(100);
     });
-    // The element the close window is retaining while it animates out.
     const body = screen.getByText("Expanded body");
 
     let reopenCommitBody: Element | null = null;
@@ -256,15 +237,10 @@ describe("ExpandablePanel deferred body realization", () => {
       reopenCommitAriaHidden = region.getAttribute("aria-hidden");
     });
 
-    // The reopen tap's commit reopens the region around the subtree the close
-    // window retained instead of blanking it until the deferred body lands,
-    // and that deferred commit reconciles into the same element.
     expect(reopenCommitBody).toBe(body);
     expect(reopenCommitAriaHidden).toBe("false");
     expect(screen.getByText("Expanded body")).toBe(body);
 
-    // The cancelled close no longer unmounts the body when its timer would
-    // have fired.
     act(() => {
       vi.advanceTimersByTime(200);
     });

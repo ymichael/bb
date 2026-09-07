@@ -1,12 +1,8 @@
 // @vitest-environment jsdom
-// Frontend tests: slot registrations, the reply action's fork+open flow, and
-// the panel's ThreadChat wiring (ReplyingTo header, send-to-main action).
 import { cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadPluginApp, renderSlot } from "@get-bb/plugin-sdk/testing/app";
 
-// Load through the thunk so the test runtime is installed before app.tsx
-// binds `definePluginApp`; pull the pure helpers from the same evaluation.
 const app = await loadPluginApp(() => import("./app"));
 const { parsePanelParams } = await import("./app");
 
@@ -142,8 +138,6 @@ describe("reply-in-side-chat message action", () => {
       openPanel,
     };
 
-    // Double click before the backend responds: both invocations share one
-    // in-flight open, so exactly one fork is created and one tab opened.
     const first = app.messageActions[0]!.run(context);
     const second = app.messageActions[0]!.run(context);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -154,7 +148,6 @@ describe("reply-in-side-chat message action", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(openPanel).toHaveBeenCalledTimes(1);
 
-    // Settled: a later deliberate re-open is a fresh flight again.
     await app.messageActions[0]!.run(context);
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
@@ -206,15 +199,11 @@ describe("SideChatPanel", () => {
     expect(chat.getAttribute("data-thread-id")).toBe("thr_fork");
     expect(chat.getAttribute("data-variant")).toBe("compact");
     expect(chat.getAttribute("data-layout")).toBe("contained");
-    // The side chat sets its own permission mode rather than mirroring the
-    // thread it forked from.
     expect(chat.getAttribute("data-permission-policy")).toBe("editable");
     expect(chat.getAttribute("data-message-actions")).toBe("send-to-main");
 
     const leading = slot.getByTestId("bb-thread-chat-leading-content");
     expect(leading.textContent).toContain("Replying to");
-    // The anchor renders through the host Markdown component (SDK stub emits
-    // the raw source) so the header matches chat-message typography.
     const markdown = leading.querySelector("[data-testid='bb-markdown']");
     expect(markdown?.textContent).toContain("**anchor**");
 

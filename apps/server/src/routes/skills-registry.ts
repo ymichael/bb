@@ -25,11 +25,6 @@ import { installServerRegistrySkill } from "../services/skills/registry-skill-in
 import type { AppDeps } from "../types.js";
 
 export function registerSkillsRegistryRoutes(app: Hono, deps: AppDeps): void {
-  /**
-   * skills.sh is a third-party dependency: a timeout or a shape change there
-   * is an upstream outage, not a bug in this server. Map it to 503 so clients
-   * can retry, and log it once rather than surfacing an opaque 500.
-   */
   async function proxyUpstream<T>(run: () => Promise<T>): Promise<T> {
     try {
       return await run();
@@ -72,14 +67,6 @@ export function registerSkillsRegistryRoutes(app: Hono, deps: AppDeps): void {
     );
   });
 
-  /**
-   * Batch counterpart of `/skills-registry/entry`: the browse grid needs an
-   * entry per visible card (lifetime installs on the trending ranking, missing
-   * summaries elsewhere), and issuing those as one request instead of one per
-   * card keeps a page load at a single round trip. Per-id upstream fetches are
-   * cached and de-duplicated by the proxy; ids that fail to resolve are
-   * omitted from the response rather than failing the batch.
-   */
   app.post("/skills-registry/entries", async (context) => {
     const body = registrySkillEntriesRequestSchema.safeParse(
       await context.req.json().catch(() => null),

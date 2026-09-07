@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 
-import { cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { PERSONAL_PROJECT_ID, type ThreadListEntry } from "@bb/domain";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { makeThreadListEntry } from "@/test/fixtures/thread-list-entries";
-import { useSidebarThreads } from "./plugin-sidebar-hooks";
+import { makeThreadListEntry } from "@bb/test-helpers/domain-fixtures";
+import {
+  useSidebarThreadActions,
+  useSidebarThreads,
+} from "./plugin-sidebar-hooks";
+
+const actions = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  setRootComposeProjectId: vi.fn(),
+}));
 
 const state = vi.hoisted(() => ({
   data: undefined as
@@ -25,11 +33,34 @@ vi.mock("@/hooks/queries/sidebar-navigation-query", () => ({
 }));
 
 vi.mock("@/hooks/queries/host-queries", () => {
-  // Stable like the real query result; a fresh array per render would rebuild
-  // the host-name map and (correctly) invalidate every cached DTO.
   const hosts: never[] = [];
   return { useHosts: () => ({ data: hosts }) };
 });
+
+vi.mock("@/components/thread/ThreadActionsProvider", () => ({
+  useThreadActions: () => ({
+    archiveThreadAndChildren: vi.fn(),
+    requestDelete: vi.fn(),
+    togglePin: vi.fn(),
+    toggleRead: vi.fn(),
+  }),
+}));
+
+vi.mock("@/hooks/mutations/thread-state-mutations", () => ({
+  useUpdateThread: () => ({ mutateAsync: vi.fn() }),
+}));
+
+vi.mock("@/components/ui/app-route-anchor", () => ({
+  useRouteNavigate: () => actions.navigate,
+}));
+
+vi.mock("@bb/shared-ui/hooks/use-compact-viewport", () => ({
+  useIsCompactViewport: () => false,
+}));
+
+vi.mock("./root-compose-selection", () => ({
+  useSetRootComposeProjectId: () => actions.setRootComposeProjectId,
+}));
 
 function payload(threads: ThreadListEntry[]) {
   return {
@@ -41,6 +72,7 @@ function payload(threads: ThreadListEntry[]) {
 
 afterEach(() => {
   cleanup();
+  vi.clearAllMocks();
   state.data = undefined;
 });
 
@@ -56,9 +88,6 @@ describe("useSidebarThreads", () => {
       "thr_changing",
     ]);
 
-    // React Query structurally shares the payload: a refetch that touched
-    // one thread keeps the other entry objects. Plugin rows memoized on their
-    // thread DTO must get the same object back for the untouched thread.
     state.data = payload([
       stable,
       makeThreadListEntry({ id: "thr_changing", title: "Two" }),
@@ -76,9 +105,6 @@ describe("useSidebarThreads", () => {
     state.data = payload([stable]);
     const first = renderHook(() => useSidebarThreads());
     const second = renderHook(() => useSidebarThreads());
-    // Two plugin lists mounted at once (or one list plus the built-in
-    // sidebar's plugin surfaces): each derives the host-name map from the
-    // same hosts payload, so they must not evict each other's cached DTOs.
     expect(second.result.current.threads[0]).toBe(
       first.result.current.threads[0],
     );
@@ -87,5 +113,24 @@ describe("useSidebarThreads", () => {
     second.rerender();
     expect(first.result.current.threads[0]).toBe(before);
     expect(second.result.current.threads[0]).toBe(before);
+  });
+});
+
+describe("useSidebarThreadActions", () => {
+  it("opens a project composer without a legacy route transition", () => {
+    state.data = payload([]);
+    const { result } = renderHook(() => useSidebarThreadActions());
+
+    act(() => {
+      result.current.openNewThread({
+        projectId: "proj_target",
+        focusPrompt: true,
+      });
+    });
+
+    expect(actions.setRootComposeProjectId).toHaveBeenCalledWith("proj_target");
+    expect(actions.navigate).toHaveBeenCalledWith("/", {
+      state: { focusPrompt: true },
+    });
   });
 });

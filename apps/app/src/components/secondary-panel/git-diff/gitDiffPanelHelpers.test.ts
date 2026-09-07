@@ -27,9 +27,7 @@ describe("gitDiffPanelHelpers", () => {
       sha: "commit-sha",
       type: "commit",
     });
-    expect(
-      buildGitDiffTarget(COMMITTED_GIT_DIFF_SELECTION, "main"),
-    ).toEqual({
+    expect(buildGitDiffTarget(COMMITTED_GIT_DIFF_SELECTION, "main")).toEqual({
       mergeBaseBranch: "main",
       type: "branch_committed",
     });

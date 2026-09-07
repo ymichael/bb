@@ -7,7 +7,7 @@
   "files": [
     {
       "path": "registry/hooks/useBrowserDimmingModal.ts",
-      "content": "/**\n * Plugin/registry flavor of the app's `hooks/useBrowserDimmingModal.ts`: a\n * no-op. In the host app this hook hides the native in-app browser\n * `WebContentsView` while a modal is open (a DOM backdrop cannot dim an\n * OS-level overlay); that coordination lives in host state a plugin bundle\n * deliberately does not share. The app injects its real jotai-backed flavor\n * over this file at build time (see apps/app/vite.config.ts's shared-ui env\n * seam); plugins and the vendored registry keep this no-op so `dialog.tsx`\n * stays byte-identical across every consumer without stripping the call.\n */\nexport function useBrowserDimmingModal(_active: boolean): void {}\n\n/** Host flavor reports live modal state; plugins have none. */\nexport function useIsBrowserDimmingModalOpen(): boolean {\n  return false;\n}\n",
+      "content": "export function useBrowserDimmingModal(_active: boolean): void {}\n\nexport function useIsBrowserDimmingModalOpen(): boolean {\n  return false;\n}\n",
       "type": "registry:hook",
       "target": "hooks/useBrowserDimmingModal.ts"
     }

@@ -6,8 +6,6 @@ import {
   type ModelPickerToggleInput,
 } from "./modelPickerToggle";
 
-// A focused, split, primary composer with the caret sitting inside it — the
-// simplest "open" case. Individual tests override just the fields they exercise.
 const base: ModelPickerToggleInput = {
   open: false,
   disabled: false,
@@ -38,8 +36,6 @@ describe("resolveModelPickerToggle", () => {
 
   it("closes only the focused pane's open picker", () => {
     expect(resolveModelPickerToggle({ ...base, open: true })).toBe("close");
-    // Focus is checked before close, so an unfocused pane's stale-open picker
-    // cannot swallow the chord away from the focused pane.
     expect(
       resolveModelPickerToggle({ ...base, open: true, isFocusedPane: false }),
     ).toBe("ignore");
@@ -56,7 +52,6 @@ describe("resolveModelPickerToggle", () => {
   });
 
   it("defers to a sibling composer the caret is actually in", () => {
-    // A side-chat caret toggles the side chat's picker, not the main one.
     expect(
       resolveModelPickerToggle({
         ...base,
@@ -67,7 +62,6 @@ describe("resolveModelPickerToggle", () => {
   });
 
   it("opens the focused split pane's primary composer when the caret is outside every composer", () => {
-    // Keyboard pane navigation leaves the caret off the text field.
     expect(
       resolveModelPickerToggle({ ...base, caretInThisComposer: false }),
     ).toBe("open");
@@ -84,8 +78,6 @@ describe("resolveModelPickerToggle", () => {
   });
 
   it("does NOT open a hidden secondary (side-chat) composer on the caret-outside fallback", () => {
-    // The regression the reviewer flagged: a mounted-but-hidden side chat
-    // must not win the fallback in a focused split pane.
     expect(
       resolveModelPickerToggle({
         ...base,
@@ -136,8 +128,6 @@ describe("ownsModelPickerCycleChord", () => {
     ).toBe(false);
   });
 
-  // The popover portals out of the composer, so once it opens the caret is in
-  // neither composer. Without this rule the cycle chords would die on open.
   it("owns the chord while the picker is open and the caret is nowhere", () => {
     expect(
       ownsModelPickerCycleChord({

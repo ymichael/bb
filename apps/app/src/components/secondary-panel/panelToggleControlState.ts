@@ -1,31 +1,13 @@
-import { useIsCompactViewport } from "@bb/shared-ui/hooks/use-compact-viewport";
-
 type PanelToggleAction = "enter-full-screen" | "exit-full-screen";
 
-/**
- * Icon names the toggle can render. A subset of the Icon component's `IconName`
- * union; validity is enforced where the value flows into `<Icon name={…} />`.
- */
 type PanelToggleIconName = "Maximize2" | "Minimize2";
 
 interface PanelToggleActionPresentation {
   label: string;
   iconName: PanelToggleIconName;
-  /**
-   * Whether the action is currently presenting the panel in full-screen mode.
-   * This drives the toggle button's `aria-pressed` state.
-   */
   isFullScreen: boolean;
 }
 
-/**
- * The single source of truth for each action's copy, icon, and disclosure
- * state:
- *
- *   enter-full-screen    → expand the right panel to fill the content area.
- *   exit-full-screen     → restore the previous thread-and-panel layout.
- * Both actions stay in the panel header so the control transforms in place.
- */
 const PANEL_TOGGLE_ACTION_PRESENTATION = {
   "enter-full-screen": {
     label: "Full Screen",
@@ -52,11 +34,6 @@ interface ResolveConversationCollapseControlArgs {
   onToggleConversationCollapse: () => void;
 }
 
-/**
- * Resolves the paired conversation disclosure states. One control in the panel
- * header renders both: it expands the panel while the conversation is visible,
- * and restores the conversation while the panel owns the full canvas.
- */
 export function resolveConversationCollapseControl({
   isConversationCollapsed,
   onToggleConversationCollapse,
@@ -71,30 +48,14 @@ export function resolveConversationCollapseControl({
   };
 }
 
-/**
- * Icon names the right-panel show/hide control can render. A subset of the Icon
- * component's `IconName` union; validity is enforced where the value flows into
- * `<Icon name={…} />`.
- */
-type RightPanelToggleIconName = "PanelBottom" | "PanelRight";
+export const RIGHT_PANEL_TOGGLE_ICON_NAME = "PanelRight";
 
-/**
- * The glyph for every control that shows or hides the right panel. Compact
- * viewports present that panel as a bottom drawer (`SecondaryPanelLayout`), so
- * the control has to disclose the edge the panel actually opens from.
- *
- * Trigger sites differ too much in chrome (tooltip, shortcut hint, macOS
- * drag region) to share one button, so this resolver is what they share
- * instead: pass the presentation a site already tracks, or call
- * {@link useRightPanelToggleIconName} when it doesn't track one.
- */
-export function getRightPanelToggleIconName(
-  renderAsDrawer: boolean,
-): RightPanelToggleIconName {
-  return renderAsDrawer ? "PanelBottom" : "PanelRight";
-}
-
-/** {@link getRightPanelToggleIconName} against the live viewport. */
-export function useRightPanelToggleIconName(): RightPanelToggleIconName {
-  return getRightPanelToggleIconName(useIsCompactViewport());
+export function getCompactPanelPresentation(
+  activeTabKind: string | undefined,
+  fallbackTabKind?: string,
+): "shelf" | "full" {
+  const resolvedTabKind = activeTabKind ?? fallbackTabKind;
+  return resolvedTabKind === undefined || resolvedTabKind === "thread-info"
+    ? "shelf"
+    : "full";
 }

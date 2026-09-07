@@ -9,9 +9,6 @@ import {
 } from "./provider-maintenance-kit.js";
 
 describe("provider maintenance kit", () => {
-  // Both "needs update" and "version unsupported" hang on this ordering; a
-  // prerelease must sort below its release or an installed beta is never
-  // offered the release.
   it("compares the numeric core of CLI versions, prerelease below release", () => {
     expect(compareVersions("0.135.9", "0.136.0")).toBeLessThan(0);
     expect(compareVersions("0.136.0-beta.1", "0.136.0")).toBeLessThan(0);
@@ -29,9 +26,9 @@ describe("provider maintenance kit", () => {
   });
 
   it("quotes only the arguments a shell would mangle", () => {
-    expect(formatCommand("npm", ["install", "-g", "@openai/codex@latest"])).toBe(
-      "npm install -g @openai/codex@latest",
-    );
+    expect(
+      formatCommand("npm", ["install", "-g", "@openai/codex@latest"]),
+    ).toBe("npm install -g @openai/codex@latest");
     expect(formatCommand("sh", ["-c", "echo 'hi' && ls"])).toBe(
       "sh -c 'echo '\\''hi'\\'' && ls'",
     );

@@ -115,7 +115,11 @@ function ToolbarExample() {
   );
 }
 
-function SidebarRowExample({ shortcut }: { shortcut: AppShortcutPresentation }) {
+function SidebarRowExample({
+  shortcut,
+}: {
+  shortcut: AppShortcutPresentation;
+}) {
   return (
     <div className="w-80 rounded-md bg-sidebar p-2 text-sidebar-foreground">
       <div
@@ -160,13 +164,19 @@ export function Overview() {
           label="text-xs"
           hint="baseline frame shows the row center line"
         >
-          <TextBaselineExample className="text-xs" shortcut={MAC_SHORTCUTS[0]} />
+          <TextBaselineExample
+            className="text-xs"
+            shortcut={MAC_SHORTCUTS[0]}
+          />
         </StoryRow>
         <StoryRow
           label="text-sm"
           hint="matches most sidebar and toolbar labels"
         >
-          <TextBaselineExample className="text-sm" shortcut={MAC_SHORTCUTS[0]} />
+          <TextBaselineExample
+            className="text-sm"
+            shortcut={MAC_SHORTCUTS[0]}
+          />
         </StoryRow>
         <StoryRow label="text-base">
           <TextBaselineExample

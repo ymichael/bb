@@ -26,14 +26,6 @@ interface BrowserRecentRowProps {
   onNavigate: (url: string) => void;
 }
 
-/**
- * A recently-visited row, styled like the New tab page's recent rows: the page
- * title leads with the host trailing as muted metadata, and the visit time gives
- * way to an "open" affordance on hover. Reopening routes through `onNavigate`.
- *
- * Favicons are intentionally not persisted (they are untrusted remote URLs), so
- * every row shows the same browser glyph as a uniform placeholder.
- */
 function BrowserRecentRow({ entry, now, onNavigate }: BrowserRecentRowProps) {
   const host = getBrowserUrlHost(entry.url);
   const title = entry.title?.trim();

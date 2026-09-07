@@ -11,13 +11,6 @@ import { AppNavigationHostProvider } from "./app-navigation-host";
 
 afterEach(cleanup);
 
-/**
- * Bundles built against an SDK before 0.4.16 reach the runtime through the
- * old names (`export const { experimental_UrlLink } = runtime.pluginSdkApp`
- * in the build shim; `navigate.experimental_openUrl(url)` in plugin code).
- * The aliases are off-contract, so the tests read them the way such a bundle
- * does: by name, through Reflect.
- */
 describe("plugin SDK deprecated aliases", () => {
   beforeEach(() => {
     resetDeprecatedAliasWarningsForTests();
@@ -28,11 +21,9 @@ describe("plugin SDK deprecated aliases", () => {
     try {
       const runtime = pluginSdkAppImplementation;
       const alias = Reflect.get(runtime, "experimental_UrlLink");
-      // Destructuring at bundle load is silent; the same alias comes back.
       expect(typeof alias).toBe("function");
       expect(Reflect.get(runtime, "experimental_UrlLink")).toBe(alias);
       expect(warn).not.toHaveBeenCalled();
-      // Off-contract: never part of the enumerated surface.
       expect(Object.keys(runtime)).not.toContain("experimental_UrlLink");
 
       const LegacyUrlLink = alias as typeof runtime.UrlLink;
@@ -40,7 +31,9 @@ describe("plugin SDK deprecated aliases", () => {
         <MemoryRouter>
           <AppNavigationHostProvider capabilities={{ openUrl: () => true }}>
             <PluginSlotMount pluginId="demo" slotKind="test" slotId="probe">
-              <LegacyUrlLink href="https://example.com/docs">Docs</LegacyUrlLink>
+              <LegacyUrlLink href="https://example.com/docs">
+                Docs
+              </LegacyUrlLink>
             </PluginSlotMount>
           </AppNavigationHostProvider>
         </MemoryRouter>,
@@ -52,7 +45,9 @@ describe("plugin SDK deprecated aliases", () => {
         <MemoryRouter>
           <AppNavigationHostProvider capabilities={{ openUrl: () => true }}>
             <PluginSlotMount pluginId="demo" slotKind="test" slotId="probe">
-              <LegacyUrlLink href="https://example.com/docs">Docs again</LegacyUrlLink>
+              <LegacyUrlLink href="https://example.com/docs">
+                Docs again
+              </LegacyUrlLink>
             </PluginSlotMount>
           </AppNavigationHostProvider>
         </MemoryRouter>,

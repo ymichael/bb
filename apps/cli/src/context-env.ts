@@ -68,7 +68,6 @@ export function requireThreadId(positionalId?: string): string {
 
 export interface ResolvedId {
   id: string;
-  /** "arg" when provided as a positional/flag, "env" when resolved from BB_* env. */
   source: "arg" | "env";
 }
 
@@ -76,13 +75,6 @@ interface ThreadSelfTargetOptions {
   self?: boolean;
 }
 
-/**
- * Require a thread ID for commands that support `--self`.
- *
- * - Positional `<id>` and `--self` are mutually exclusive.
- * - `--self` resolves from BB_THREAD_ID.
- * - If neither is provided, error with guidance.
- */
 export function requireThreadIdOrSelf(
   positionalId: string | undefined,
   opts: ThreadSelfTargetOptions,

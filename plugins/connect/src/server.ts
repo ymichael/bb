@@ -18,7 +18,6 @@ import {
 
 export default async function plugin(bb: BbPluginApi) {
   const store = createKvCredentialStore(bb.storage.kv);
-  // Tunnel is assigned below; ShareRegistry reads the live credential via this.
   let tunnel!: ConnectTunnel;
   const hostResolver = new ShareHostResolver(() => bb.sdk);
   const getLoopbackBaseUrl = () =>
@@ -49,8 +48,6 @@ export default async function plugin(bb: BbPluginApi) {
       bb.realtime.publish(CONNECT_REALTIME_CHANNEL, status),
   });
 
-  // Experiments are server-owned settings; the plugin reads them through its
-  // loopback SDK binding rather than through a dedicated plugin API.
   const mobilePairing: MobilePairingGate = {
     enabled: async () => (await bb.sdk.system.config()).experiments.mobileApp,
   };
@@ -77,11 +74,6 @@ export default async function plugin(bb: BbPluginApi) {
     );
   });
 
-  // The tunnel lives inside this service: idle while unpaired, dialing when
-  // a credential exists, torn down on abort (reload/disable/shutdown) —
-  // disabling the plugin cuts off all remote access. The tunnel keeps its
-  // own capped-backoff reconnect; the host's restart-with-backoff is crash
-  // supervision on top.
   bb.background.service("tunnel", {
     async start(signal) {
       await tunnel.start();

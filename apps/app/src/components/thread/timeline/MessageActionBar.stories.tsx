@@ -8,9 +8,6 @@ export default {
 
 const noop = () => undefined;
 
-// In production the actions hide until the surrounding `group/message` row is
-// hovered or focused. The wrapper supplies that group and force-reveals the
-// buttons (`[&_button]:opacity-100`) so every action is visible in the story.
 function HoverRevealStage({ children }: { children: ReactNode }) {
   return (
     <div className="group/message flex items-center gap-2 [&_button]:opacity-100">

@@ -16,10 +16,6 @@ export type ViewProviderExecutionMessage =
   | EventProjectionCommandMessage
   | EventProjectionToolCallMessage
   | EventProjectionDelegationMessage;
-/**
- * The begin/end item family (see web-activity-lifecycle.ts): web research,
- * the v3 exploration kinds, plan snapshots and plugin extension items.
- */
 export type ViewWebActivityMessage =
   | EventProjectionWebSearchMessage
   | EventProjectionWebFetchMessage

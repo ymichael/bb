@@ -26,17 +26,6 @@ import { PluginRowSignalView, PluginSignalLogo } from "./PluginRowSignal";
 import { UpdatePluginDialog } from "./UpdatePluginDialog";
 import { PluginLogo } from "./plugin-ui";
 
-/**
- * Layer 1 (sketch v2 A): rows at rest are logo, name, description, switch —
- * no versions, no source strings, no menus. A row earns at most one signal:
- * the "Update x.y.z" pill IS the action (opens the confirmation directly),
- * while abnormal runtime health is an icon action that opens plugin details.
- * Newer-incompatible and pinned never badge. Hover reveals the chevron; the
- * row navigates to the plugin's detail page where depth lives.
- * An enabled plugin that is not running shows its status word beside the
- * name, its status detail instead of the description, and a "not running"
- * marker on the switch, so an "on" switch never claims the plugin works (#1915).
- */
 export function InstalledPluginsTab({
   plugins,
 }: {
@@ -80,7 +69,6 @@ export function InstalledPluginsTab({
   );
 }
 
-/** Exported for tests (pill states + enable/disable round-trip). */
 export function InstalledPluginRow({
   plugin,
   onUpdateClick,
@@ -91,6 +79,7 @@ export function InstalledPluginRow({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const toggle = useMutation({
+    meta: { showErrorToast: false },
     mutationFn: (enabled: boolean) =>
       setPluginEnabled(fetch, plugin.id, enabled),
     onError: (error, enabled) => {
@@ -103,7 +92,6 @@ export function InstalledPluginRow({
     },
     onSettled: () => invalidatePluginList({ queryClient }),
   });
-  // Reflect the in-flight target immediately; the invalidated list settles it.
   const enabled = toggle.isPending ? toggle.variables : plugin.enabled;
   const signal = pluginRowSignal(plugin);
   const statusSignal = signal?.kind === "status" ? signal : null;

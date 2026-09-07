@@ -2,20 +2,14 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { Host, ProjectSource } from "@bb/domain";
+import { makeHost } from "@bb/test-helpers/domain-fixtures";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ProjectlessMachineSlot, ThreadEnvSlot } from "./NewThreadPromptBox";
 
-const host: Host = {
+const host = makeHost({
   id: "host_test",
   name: "Local host",
-  type: "persistent",
-  status: "connected",
-  lastSeenAt: null,
-  maxPermissionMode: "full",
-  lastRejectedProtocolVersion: null,
-  createdAt: 0,
-  updatedAt: 0,
-};
+});
 
 const sources: readonly ProjectSource[] = [
   {

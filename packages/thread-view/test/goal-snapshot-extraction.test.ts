@@ -7,7 +7,6 @@ import { describe, expect, it } from "vitest";
 import { extractThreadTimelineGoal } from "../src/goal-snapshot-extraction.js";
 import type { ThreadEventWithMeta } from "../src/build-event-projection.js";
 
-/** The codex plugin's goal state, as the assembler emits it today. */
 function goalUpdatedEvent({
   objective,
   seq,
@@ -56,7 +55,6 @@ function goalClearedEvent(seq: number): ThreadEventWithMeta {
   };
 }
 
-/** A goal row persisted before the extension kind existed, read back. */
 function legacyGoalRow(
   type: "thread/goal/updated" | "thread/goal/cleared",
   seq: number,

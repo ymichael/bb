@@ -5,11 +5,6 @@ interface SafeRelativeRoutePath {
   relativePath: string;
 }
 
-/**
- * Validate a workspace-relative path captured by a `:filePath{.+}` route
- * param (already percent-decoded by hono). Rejects absolute paths, NUL
- * bytes, backslashes, and empty/`.`/`..` segments with a 400.
- */
 export function parseSafeRelativeRoutePath(
   relativePath: string,
 ): SafeRelativeRoutePath {

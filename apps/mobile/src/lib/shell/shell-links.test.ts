@@ -35,13 +35,10 @@ describe("isNativeOnlyShellPath", () => {
     expect(isNativeOnlyShellPath("/connect?code=ABCD")).toBe(true);
     expect(isNativeOnlyShellPath("/settings/servers/add")).toBe(true);
     expect(isNativeOnlyShellPath("/settings")).toBe(false);
-    // The escape hatch. If the page owned it, a user on a broken page could
-    // not turn the shell off again.
     expect(isNativeOnlyShellPath("/settings/device")).toBe(true);
-    // General is server-backed and goes to the page like the rest of Settings.
+    expect(isNativeOnlyShellPath("/settings/notifications")).toBe(true);
     expect(isNativeOnlyShellPath("/settings/general")).toBe(false);
     expect(isNativeOnlyShellPath("/threads/x")).toBe(false);
-    // A prefix must match a whole segment, not a substring.
     expect(isNativeOnlyShellPath("/connections")).toBe(false);
   });
 });
@@ -56,13 +53,21 @@ describe("resolveShellIncomingLink", () => {
   });
 
   it("keeps connect enrolment native", () => {
-    // The `bbcm_` credential lives in the Keychain, so pairing can never move
-    // into the page.
     expect(
       resolveShellIncomingLink("bb://connect?code=ABCD-EFGH", context),
     ).toEqual({
       kind: "navigate",
       path: "/connect?code=ABCD-EFGH",
+      profileId: null,
+    });
+  });
+
+  it("keeps notification settings native", () => {
+    expect(
+      resolveShellIncomingLink("bb://settings/notifications", context),
+    ).toEqual({
+      kind: "navigate",
+      path: "/settings/notifications",
       profileId: null,
     });
   });

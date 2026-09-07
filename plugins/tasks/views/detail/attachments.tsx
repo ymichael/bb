@@ -4,18 +4,12 @@ import { formatFileSize } from "../activity/time.js";
 import { ConfirmDialog } from "../../components/confirm-dialog.js";
 import { Icon } from "@bb/shared-ui/icon";
 
-/** Frontend twin of attachments/index.ts `buildAttachmentUrl`. */
 export function attachmentDownloadUrl(attachmentId: string): string {
   return `/api/v1/plugins/tasks/http/attachments/download?attachmentId=${encodeURIComponent(attachmentId)}`;
 }
 
 let tokenPromise: Promise<string> | null = null;
 
-/**
- * The upload route accepts a raw body and therefore uses plugin-token auth
- * (see attachments/README.md); the token comes from the local-auth token
- * route once per session.
- */
 function pluginToken(): Promise<string> {
   tokenPromise ??= (async () => {
     const response = await fetch("/api/v1/plugins/tasks/token", {
@@ -39,7 +33,6 @@ function pluginToken(): Promise<string> {
   return tokenPromise;
 }
 
-/** Client-side twin of attachments/index.ts `AttachmentOwner`. */
 export type AttachmentOwnerRef = { taskId: string } | { commentId: string };
 
 export async function uploadAttachment(
@@ -72,7 +65,6 @@ export async function uploadAttachment(
   return { attachmentId: result.attachmentId, url: result.url };
 }
 
-/** Full-viewport image overlay, shared by the detail grid and comment feed. */
 export function Lightbox({
   attachment,
   onClose,
@@ -87,12 +79,9 @@ export function Lightbox({
       event.stopPropagation();
       onClose();
     };
-    // Capture phase so the shell's Esc-to-close-task handler never sees it.
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [onClose]);
-  // Rendered inline (not portaled) so the plugin's scoped stylesheet applies;
-  // `fixed` still overlays the whole viewport from inside the panel.
   return (
     <div
       role="dialog"
@@ -125,7 +114,6 @@ export function Lightbox({
   );
 }
 
-/** Small circular spinner used while a removal request is in flight. */
 function RemovalSpinner() {
   return (
     <span
@@ -142,15 +130,11 @@ export function AttachmentsGrid({
   onError,
 }: {
   attachments: Attachment[];
-  /** When provided, each attachment gains a remove affordance. */
   onRemove?: (attachment: Attachment) => Promise<void>;
   onError?: (message: string) => void;
 }) {
   const [lightbox, setLightbox] = useState<Attachment | null>(null);
-  // Snapshot of the attachment awaiting confirmation, kept independent of the
-  // live `attachments` prop so a concurrent realtime refresh can't drop it.
   const [confirm, setConfirm] = useState<Attachment | null>(null);
-  // Ids with a delete request in flight, keyed so refreshes don't reset them.
   const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
   const removable = onRemove !== undefined;
 
@@ -175,9 +159,6 @@ export function AttachmentsGrid({
 
   if (attachments.length === 0) return null;
 
-  // Files render before images, each group in upload order. A single mixed
-  // wrap lets `align-items: stretch` inflate compact file cards to image
-  // height; separate tracks keep every card at its natural height.
   const files = attachments.filter((attachment) => !attachment.isImage);
   const images = attachments.filter((attachment) => attachment.isImage);
 

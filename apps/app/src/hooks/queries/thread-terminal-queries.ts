@@ -11,22 +11,17 @@ import {
   applyTerminalSessionClose,
   applyTerminalSessionUpsert,
 } from "../cache-owners/terminal-cache-owner";
-import {
-  terminalsQueryKey,
-  type TerminalQueryScope,
-} from "./query-keys";
+import { terminalsQueryKey, type TerminalQueryScope } from "./query-keys";
 import { requireEnabledQueryArg, type QueryOptions } from "./query-helpers";
 import { REALTIME_OWNED_NO_FOCUS_QUERY_POLICY } from "./query-policies";
 
 type ScopedCreateTerminalRequest = Omit<CreateTerminalRequest, "target">;
 
-interface CreateThreadTerminalMutationRequest
-  extends ScopedCreateTerminalRequest {
+interface CreateThreadTerminalMutationRequest extends ScopedCreateTerminalRequest {
   threadId: string;
 }
 
-interface CreateEnvironmentTerminalMutationRequest
-  extends ScopedCreateTerminalRequest {
+interface CreateEnvironmentTerminalMutationRequest extends ScopedCreateTerminalRequest {
   environmentId: string;
 }
 
@@ -34,13 +29,11 @@ interface RenameTerminalMutationRequest extends UpdateTerminalRequest {
   terminalId: string;
 }
 
-interface RenameThreadTerminalMutationRequest
-  extends RenameTerminalMutationRequest {
+interface RenameThreadTerminalMutationRequest extends RenameTerminalMutationRequest {
   threadId: string;
 }
 
-interface RenameEnvironmentTerminalMutationRequest
-  extends RenameTerminalMutationRequest {
+interface RenameEnvironmentTerminalMutationRequest extends RenameTerminalMutationRequest {
   environmentId: string;
 }
 
@@ -49,13 +42,11 @@ interface CloseTerminalMutationRequest {
   terminalId: string;
 }
 
-interface CloseThreadTerminalMutationRequest
-  extends CloseTerminalMutationRequest {
+interface CloseThreadTerminalMutationRequest extends CloseTerminalMutationRequest {
   threadId: string;
 }
 
-interface CloseEnvironmentTerminalMutationRequest
-  extends CloseTerminalMutationRequest {
+interface CloseEnvironmentTerminalMutationRequest extends CloseTerminalMutationRequest {
   environmentId: string;
 }
 
@@ -76,22 +67,17 @@ export function useTerminals(
         }),
         signal,
       }),
-    enabled: (options?.enabled ?? true) && scope !== null && scope !== undefined,
+    enabled:
+      (options?.enabled ?? true) && scope !== null && scope !== undefined,
     ...REALTIME_OWNED_NO_FOCUS_QUERY_POLICY,
   });
 }
 
 export function useThreadTerminals(id: string, options?: QueryOptions) {
-  return useTerminals(
-    id ? { kind: "thread", threadId: id } : null,
-    options,
-  );
+  return useTerminals(id ? { kind: "thread", threadId: id } : null, options);
 }
 
-export function useEnvironmentTerminals(
-  id: string,
-  options?: QueryOptions,
-) {
+export function useEnvironmentTerminals(id: string, options?: QueryOptions) {
   return useTerminals(
     id ? { kind: "environment", environmentId: id } : null,
     options,
@@ -130,7 +116,10 @@ export function useCreateThreadTerminal() {
         },
         options,
       ),
-    mutateAsync: ({ threadId, ...request }: CreateThreadTerminalMutationRequest) =>
+    mutateAsync: ({
+      threadId,
+      ...request
+    }: CreateThreadTerminalMutationRequest) =>
       createTerminal.mutateAsync({
         ...request,
         target: { kind: "thread", threadId },

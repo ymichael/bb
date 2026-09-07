@@ -1,20 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
-/**
- * The last boundary above the router.
- *
- * Without one, React has nowhere to send an uncaught render or commit error, so
- * it unmounts the whole root and the window goes white — no message, no way
- * back except a manual reload. That is a total loss for a fault that usually
- * belongs to one subtree.
- *
- * The fallback deliberately renders plain elements and theme tokens only. It
- * pulls in no shared-ui component, no query client, and no router hook, so
- * whatever crashed cannot also take the recovery screen down with it.
- * `applyCachedAppThemeCss` runs before the first render, so the tokens resolve
- * even when React never reached the app.
- */
-
 interface AppErrorBoundaryProps {
   children: ReactNode;
 }
@@ -34,8 +19,6 @@ export class AppErrorBoundary extends Component<
   }
 
   override componentDidCatch(error: Error, info: ErrorInfo): void {
-    // The component stack is the part a screenshot of the console never has,
-    // and the part that names the subtree at fault.
     console.error("[bb] the app crashed", error, info.componentStack);
   }
 
@@ -50,8 +33,8 @@ export class AppErrorBoundary extends Component<
           <h1 className="text-base font-medium">bb hit an error and stopped</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             A reload is safe. Your threads live on the server and an unsent
-            draft is kept locally. If this repeats, open the browser console
-            and send us the message below.
+            draft is kept locally. If this repeats, open the browser console and
+            send us the message below.
           </p>
           <details className="mt-4">
             <summary className="cursor-pointer text-sm text-muted-foreground">

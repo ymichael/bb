@@ -15,20 +15,10 @@ interface PluginReplacementRegistration {
 
 const PluginOwnerRendererContext = createContext<ReactNode>(null);
 
-/**
- * A module-stable component type whose content stays bound to the nearest
- * replacement instance. Live owner props flow through context instead of
- * changing the component identity plugins receive as `Original`.
- */
 function PluginOwnerRenderer() {
   return useContext(PluginOwnerRendererContext);
 }
 
-/**
- * Mount one exclusive provider with an instance-bound owner renderer.
- * `Original` bypasses resolution, so plugin delegation and crash fallback
- * cannot recurse into the selected provider.
- */
 export function PluginReplacementSlot<
   Registration extends PluginReplacementRegistration,
 >({

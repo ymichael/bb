@@ -24,8 +24,6 @@ describe("app link association files", () => {
         details: Record<string, unknown>[];
       };
     };
-    // Modern form only: Apple TN3155 warns against mixing `appIDs`/`components`
-    // with the legacy `appID`/`paths` keys.
     expect(body.applinks.details).toEqual([
       {
         appIDs: [BB_MOBILE_IOS_APP_ID],

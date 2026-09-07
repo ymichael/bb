@@ -85,19 +85,13 @@ describe("WorkflowWorkRowBody", () => {
       />,
     );
 
-    // Discover still has a running agent, so it stays open alongside the
-    // Review phase even though Review is the pipeline's newest phase.
     expect(screen.getByText("Straggler scan")).toBeTruthy();
     expect(screen.getByText("Adversarial review")).toBeTruthy();
     expect(screen.getByText("not started")).toBeTruthy();
 
-    // Manually collapse the running Review phase to prove overrides survive
-    // later default flips.
     fireEvent.click(screen.getByRole("button", { name: /Review0\/1/ }));
     expect(screen.queryByText("Adversarial review")).toBeNull();
 
-    // Discover's straggler settles mid-run: the live component folds it
-    // automatically, while Review keeps its manual override.
     const settledDiscover = {
       ...pipelined,
       agents: pipelined.agents.map((agent) =>
@@ -114,7 +108,6 @@ describe("WorkflowWorkRowBody", () => {
     expect(screen.queryByText("Straggler scan")).toBeNull();
     expect(screen.queryByText("Adversarial review")).toBeNull();
 
-    // Manual reopen still wins over the collapsed default.
     fireEvent.click(screen.getByRole("button", { name: /Discover2\/2/ }));
     expect(screen.getByText("Straggler scan")).toBeTruthy();
   });
@@ -145,8 +138,6 @@ describe("WorkflowWorkRowBody", () => {
       />,
     );
 
-    // Discover's agents are all settled, but the failure keeps it open so the
-    // problem stays visible while the rest of the run continues.
     expect(screen.getByText("Broken scan")).toBeTruthy();
     expect(screen.getByText("Adversarial review")).toBeTruthy();
   });

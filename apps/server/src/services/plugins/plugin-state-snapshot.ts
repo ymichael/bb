@@ -62,8 +62,6 @@ const installedPluginRowFields = {
   sourceGitSubdirectory: z.string().nullable(),
   sourceGitRequestedRef: z.string().nullable(),
   sourceGitRefKind: z.enum(["branch", "tag", "commit"]).nullable(),
-  // Snapshots written before git ranges existed omit these; those rows all
-  // pinned one ref.
   sourceGitRange: z.string().nullable().default(null),
   sourceGitTagPrefix: z.string().nullable().default(null),
   sourceGitResolvedTag: z.string().nullable().default(null),
@@ -91,8 +89,6 @@ const installedPluginRowSchema = z
     ...installedPluginRowFields,
     provenance: z.enum(["builtin", "direct", "catalog"]),
     catalogEntryId: z.string().nullable(),
-    // Snapshots written before marketplaces were named omit this; those rows
-    // all came from the official catalog.
     catalogMarketplaceName: z.string().nullable().default(null),
   })
   .strict();
@@ -184,8 +180,6 @@ export async function createPluginStateSnapshotOnDisk(args: {
       await copyFile(sourceDatabasePath, databasePath);
     }
     if (hasSecrets) {
-      // Secret files are deliberately opaque: names and contents never enter
-      // the snapshot record, JSON state, or logs.
       await cp(sourceSecretsPath, secretsPath, { recursive: true });
     }
     await writeFile(

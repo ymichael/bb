@@ -1,4 +1,6 @@
-import { useCallback, useState } from "react";
+import { useAtom } from "jotai";
+import { atom } from "jotai/vanilla";
+import { useCallback, useEffect, useState } from "react";
 import type { RootComposeSelectedBranch } from "./root-compose-thread-environment";
 
 interface BranchSelectionScopeArgs {
@@ -14,23 +16,25 @@ interface UseScopedBranchSelectionResult {
   selectedBranch: RootComposeSelectedBranch | null;
 }
 
-// Identifies the picker's active scope. A null key means there is no usable
-// scope yet (missing project or environment), so branch picks are inert.
+interface BranchSelectionState {
+  scopeKey: string | null;
+  selectedBranch: RootComposeSelectedBranch | null;
+}
+
+const newThreadBranchSelectionAtom = atom<BranchSelectionState>({
+  scopeKey: null,
+  selectedBranch: null,
+});
+
 export function getBranchSelectionScopeKey(
   args: BranchSelectionScopeArgs,
 ): string | null {
   if (!args.projectId || !args.environmentValue) {
     return null;
   }
-  // NUL separates the parts so distinct (project, environment) pairs can never
-  // collide into the same key.
   return `${args.projectId}\u0000${args.environmentValue}`;
 }
 
-// Carries a picked branch only while the scope is unchanged. Switching
-// environment mode (e.g. New Worktree -> Working Locally) or project changes
-// the scope key and drops the pick, so re-entering a mode re-seeds from its
-// fresh default instead of restoring a stale selection.
 export function carryBranchSelectionAcrossScope(args: {
   previousScopeKey: string | null;
   currentScopeKey: string | null;
@@ -42,62 +46,73 @@ export function carryBranchSelectionAcrossScope(args: {
 }
 
 export function useScopedBranchSelection(
-  args: BranchSelectionScopeArgs,
+  args: BranchSelectionScopeArgs & {
+    selectionScope: "component-local" | "new-thread";
+  },
 ): UseScopedBranchSelectionResult {
   const scopeKey = getBranchSelectionScopeKey(args);
   const scopeUsable = scopeKey !== null;
-  const [selectedBranchState, setSelectedBranchState] =
-    useState<RootComposeSelectedBranch | null>(null);
-  const [trackedScopeKey, setTrackedScopeKey] = useState<string | null>(
+  const [localState, setLocalState] = useState<BranchSelectionState>(() => ({
     scopeKey,
+    selectedBranch: null,
+  }));
+  const [newThreadState, setNewThreadState] = useAtom(
+    newThreadBranchSelectionAtom,
   );
+  const selectionState =
+    args.selectionScope === "new-thread" ? newThreadState : localState;
+  const setSelectionState =
+    args.selectionScope === "new-thread" ? setNewThreadState : setLocalState;
 
   const selectedBranch = carryBranchSelectionAcrossScope({
-    previousScopeKey: trackedScopeKey,
+    previousScopeKey: selectionState.scopeKey,
     currentScopeKey: scopeKey,
-    selectedBranch: selectedBranchState,
+    selectedBranch: selectionState.selectedBranch,
   });
 
-  // Reset during render (not in an effect) so a stale pick never paints for a
-  // frame before clearing when the scope changes.
-  if (trackedScopeKey !== scopeKey) {
-    setTrackedScopeKey(scopeKey);
-    if (selectedBranchState !== null) {
-      setSelectedBranchState(null);
-    }
-  }
+  useEffect(() => {
+    if (selectionState.scopeKey === scopeKey) return;
+    setSelectionState({ scopeKey, selectedBranch: null });
+  }, [scopeKey, selectionState.scopeKey, setSelectionState]);
 
   const onBranchChange = useCallback(
     (name: string) => {
       if (!scopeUsable) return;
-      setSelectedBranchState({ name, isNew: false });
+      setSelectionState({
+        scopeKey,
+        selectedBranch: { name, isNew: false },
+      });
     },
-    [scopeUsable],
+    [scopeKey, scopeUsable, setSelectionState],
   );
 
   const onCreateBranch = useCallback(
     (currentBranch: string | null) => {
       if (!scopeUsable) return;
       const branchName = selectedBranch?.name ?? currentBranch;
-      setSelectedBranchState(
-        branchName ? { name: branchName, isNew: true } : null,
-      );
+      setSelectionState({
+        scopeKey,
+        selectedBranch: branchName ? { name: branchName, isNew: true } : null,
+      });
     },
-    [scopeUsable, selectedBranch?.name],
+    [scopeKey, scopeUsable, selectedBranch?.name, setSelectionState],
   );
 
   const onCreateBranchFrom = useCallback(
     (name: string) => {
       if (!scopeUsable) return;
-      setSelectedBranchState({ name, isNew: true });
+      setSelectionState({
+        scopeKey,
+        selectedBranch: { name, isNew: true },
+      });
     },
-    [scopeUsable],
+    [scopeKey, scopeUsable, setSelectionState],
   );
 
   const onClearBranch = useCallback(() => {
     if (!scopeUsable) return;
-    setSelectedBranchState(null);
-  }, [scopeUsable]);
+    setSelectionState({ scopeKey, selectedBranch: null });
+  }, [scopeKey, scopeUsable, setSelectionState]);
 
   return {
     onBranchChange,

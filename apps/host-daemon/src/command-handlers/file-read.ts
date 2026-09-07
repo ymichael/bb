@@ -65,13 +65,9 @@ interface ValidatedRootRelativePath {
 }
 
 interface ReadFileFromGitRefArgs extends GitProcessOptions {
-  /** Repo root — `git -C <rootPath>` runs from here. Must be absolute. */
   rootPath: string;
-  /** Path under rootPath the caller asked about. Must be absolute, must be within rootPath. */
   resolvedPath: string;
-  /** Path string echoed back in the result + used for mime-type lookup. */
   resultPath: string;
-  /** Git ref to read from (e.g. "HEAD", a SHA, "main"). Caller should sanitize. */
   ref: string;
 }
 
@@ -121,15 +117,6 @@ export function createMissingTargetError(
   );
 }
 
-function createDotfileDeniedError(
-  resultPath: string,
-): ExpectedCommandDispatchError {
-  return new ExpectedCommandDispatchError(
-    "ENOENT",
-    `Path does not exist: ${resultPath}`,
-  );
-}
-
 function validateRootRelativePath(
   args: ValidateRootRelativePathArgs,
 ): ValidatedRootRelativePath {
@@ -154,7 +141,7 @@ function validateRootRelativePath(
     args.dotfiles === "deny" &&
     segments.some((segment) => segment.startsWith("."))
   ) {
-    throw createDotfileDeniedError(args.relativePath);
+    throw createMissingTargetError(args.relativePath);
   }
 
   return {
@@ -225,17 +212,6 @@ async function resolveReadablePath(
   return realResolvedPath;
 }
 
-/**
- * Read a file's contents at a specific git ref via `git cat-file`. Mirrors
- * `readFileForTransport`'s result shape (same caps, same utf-8/base64
- * detection, same `file_too_large` throw) so callers can treat disk and
- * git-ref reads identically.
- *
- * When the object does not exist at the ref (e.g. the file did not exist at
- * that ref, or the path was renamed and the caller passed the new name with
- * an old ref), returns empty content rather than throwing — the caller
- * decides whether "no context on this side" is meaningful.
- */
 export async function readFileFromGitRef(
   args: ReadFileFromGitRefArgs,
 ): Promise<ReadFileForTransportResult> {
@@ -256,8 +232,6 @@ export async function readFileFromGitRef(
       `Path "${args.resultPath}" escapes read root`,
     );
   }
-  // `git cat-file` is happy with `\` on Windows but `<ref>:<path>` syntax wants
-  // forward slashes regardless of host OS — normalize once here.
   const gitRelativePath = relativePath.split(path.sep).join("/");
   const mimeType = mimeTypes.lookup(args.resultPath) || undefined;
   const fileSizeLimitBytes = getFileSizeLimitBytes(mimeType);

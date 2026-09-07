@@ -8,6 +8,9 @@
   "env": {
     "builtin": true
   },
+  "rules": {
+    "bb/no-comments": "error"
+  },
   "ignorePatterns": [
     "**/node_modules/**",
     "**/dist/**",
@@ -23,6 +26,17 @@
   ],
   "overrides": [
     {
+      "files": [
+        "packages/domain/src/native-roots.ts",
+        "packages/plugin-sdk/src/*.{ts,tsx}",
+        "packages/plugin-sdk/src/internal/*.{ts,tsx}",
+        "packages/plugin-sdk/src/testing/*.{ts,tsx}"
+      ],
+      "rules": {
+        "bb/no-comments": "off"
+      }
+    },
+    {
       "files": ["**/*.{ts,tsx}"],
       "plugins": ["react"],
       "rules": {
@@ -31,8 +45,6 @@
         "react/static-components": "error",
         "react/use-memo": "error",
         "react/void-use-memo": "error",
-        // Oxlint's native analyzer finds additional existing adoption issues;
-        // keep them visible without making the tooling migration blocking.
         "react/preserve-manual-memoization": "warn",
         "react/incompatible-library": "warn",
         "react/immutability": "warn",

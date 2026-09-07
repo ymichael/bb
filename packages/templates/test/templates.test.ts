@@ -103,7 +103,6 @@ describe("@bb/templates", () => {
   it("renders all templates without error", () => {
     const templates = templateDefinitions;
 
-    // Build placeholder variables for each template
     const placeholderVariables: Record<string, Record<string, string>> = {};
     for (const template of templates) {
       const vars: Record<string, string> = {};

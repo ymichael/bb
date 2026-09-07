@@ -16,14 +16,6 @@ import {
   type TestAppHarness,
 } from "../../helpers/test-app.js";
 
-/**
- * The ask-user-question plugin ships an `AskUserQuestion` tool for providers
- * that lack one. Claude Code has the tool natively and BB routes that native
- * call through the provider's own pending-interaction path, so the plugin must
- * not also advertise it there — otherwise the model gets two ways to ask one
- * question. This exercises the real plugin against the real thread.start
- * command builder, which is the only place that answer is authoritative.
- */
 describe("ask-user-question builtin plugin", () => {
   let harness: TestAppHarness;
   let requestValue = 1;
@@ -105,8 +97,6 @@ describe("ask-user-question builtin plugin", () => {
     expect(tool?.description).toContain(
       "Use this tool only when you are blocked on a decision that is genuinely the user's to make",
     );
-    // The advertised schema is Claude's hand-mirrored one, not zod's output:
-    // multiSelect stays required-with-a-default and `preview` is offered.
     const schema = tool?.inputSchema as {
       required: string[];
       properties: {
@@ -150,8 +140,6 @@ describe("ask-user-question builtin plugin", () => {
         schema.properties.questions.items.properties.options.items.properties,
       ).sort(),
     ).toEqual(["description", "label", "preview"]);
-    // The harness-injected round-trip fields Claude carries are deliberately
-    // absent: BB returns them in the result instead.
     expect(Object.keys(schema.properties)).toEqual(["questions"]);
   });
 

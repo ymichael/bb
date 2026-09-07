@@ -108,8 +108,6 @@ describe("desktop update feed parsing", () => {
   });
 
   it("rejects a feed that describes another platform", () => {
-    // macOS and Linux feeds share a release tag, so a swapped upload would
-    // otherwise advertise a Linux build to macOS users as an update.
     const result = parseDesktopVersionFeed({
       channel: "latest",
       checkedAt,
@@ -129,7 +127,6 @@ describe("desktop update feed parsing", () => {
   });
 
   it("rejects a feed that describes another channel", () => {
-    // A stable build must never take an update from the nightly feed.
     const result = parseDesktopVersionFeed({
       channel: "latest",
       checkedAt,

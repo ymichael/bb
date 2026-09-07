@@ -9,7 +9,6 @@ import type { PluginPendingInteractionProps } from "@get-bb/plugin-sdk";
 import {
   resetPluginSlotStoreForTest,
   setPluginSlotRegistrations,
-  type PluginRegistrationSet,
 } from "@/lib/plugin-slots";
 import {
   resetPluginLogoStoreForTest,
@@ -17,6 +16,7 @@ import {
 } from "@/lib/plugin-logos";
 import { resetAllCrashedPluginSlotsForTest } from "../../plugin/PluginSlotMount";
 import { ThreadPendingInteractionBanner } from "./ThreadPendingInteractionBanner";
+import { makePluginRegistrationSet as registrationSet } from "@/test/fixtures/plugins";
 
 const mocks = vi.hoisted(() => ({
   resolveMutateAsync: vi.fn(async () => ({})),
@@ -97,7 +97,6 @@ const toolUseApproval: PendingInteraction = {
   },
 };
 
-/** A plugin-defined request the agent raised through a provider. */
 const providerPluginRequest: PendingInteraction = {
   ...planReview,
   id: "pint_provider_request",
@@ -124,32 +123,55 @@ const pluginRequest: PluginPendingInteraction = {
   payload: { kind: "plugin", title: "Add secrets", data: { fields: ["KEY"] } },
 };
 
-function registrationSet(
-  overrides: Partial<PluginRegistrationSet>,
-): PluginRegistrationSet {
-  return {
-    homepageSections: [],
-    settingsSections: [],
-    navPanels: [],
-    threadPanelActions: [],
-    sidebarFooterActions: [],
-    fileOpeners: [],
-    messageDirectives: [],
-    ...overrides,
-  };
+const commandApproval: PendingInteraction = {
+  ...planReview,
+  id: "pint_cmd",
+  providerId: "acp-cursor",
+  payload: {
+    kind: "approval",
+    reason: "Not in allowlist: bash",
+    availableDecisions: ["allow_once", "allow_for_session", "deny"],
+    subject: {
+      kind: "command",
+      itemId: "call_cmd",
+      command:
+        "`python3 -m unittest discover -s tests 2>&1 | tail -20\necho '=== bash -n ==='\nbash -n install.sh && echo OK\necho '=== watcher untouched ==='\ngit diff --stat -- watcher.py\necho '=== live flag ==='`",
+      cwd: "/home/user/immortal-agents",
+      actions: [
+        {
+          type: "unknown",
+          command:
+            "`python3 -m unittest discover -s tests 2>&1 | tail -20\necho '=== bash -n ==='\nbash -n install.sh && echo OK\necho '=== watcher untouched ==='\ngit diff --stat -- watcher.py\necho '=== live flag ==='`",
+        },
+      ],
+      sessionGrant: null,
+    },
+  },
+};
+
+function bannerElement(interaction: PendingInteraction) {
+  return (
+    <ThreadPendingInteractionBanner
+      interaction={interaction}
+      threadId="thr_1"
+    />
+  );
 }
 
 function renderBanner(interaction: PendingInteraction) {
   return render(
     <QueryClientProvider client={new QueryClient()}>
-      <MemoryRouter>
-        <ThreadPendingInteractionBanner
-          interaction={interaction}
-          threadId="thr_1"
-        />
-      </MemoryRouter>
+      <MemoryRouter>{bannerElement(interaction)}</MemoryRouter>
     </QueryClientProvider>,
   );
+}
+
+function expandBanner() {
+  fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+}
+
+function isHidden(element: HTMLElement): boolean {
+  return element.closest("[hidden]") !== null;
 }
 
 afterEach(() => {
@@ -164,14 +186,12 @@ afterEach(() => {
 describe("ThreadPendingInteractionBanner tool-use approval", () => {
   it("renders the ask from the subject's presentation with the permission decisions", () => {
     renderBanner(toolUseApproval);
-    expect(screen.getByText("Creating issue")).toBeTruthy();
+    expect(screen.getAllByText("Creating issue").length).toBeGreaterThan(0);
+    expandBanner();
     const ask = screen.getByTestId("tool-use-ask");
     expect(ask.textContent).toContain("get-bb/bb#42");
     expect(ask.textContent).toContain("Tool: mcp__github__create_issue");
-    // The bridge's Markdown detail renders as Markdown, not as its source.
     expect(ask.querySelector("strong")?.textContent).toBe("bug");
-    // jsdom serialises the hex tints to rgb(); the `light-dark()` wrapper is
-    // what proves the glyph took the bridge's tint.
     expect(ask.querySelector("svg")?.getAttribute("style")).toMatch(
       /light-dark\(rgb\(18, 52, 86\), rgb\(171, 205, 239\)\)/,
     );
@@ -185,8 +205,6 @@ describe("ThreadPendingInteractionBanner tool-use approval", () => {
   });
 
   it("draws a plugin-declared icon as a tinted mask when the inventory has it, else the per-kind glyph with no mask", () => {
-    // The same resolution the timeline row makes: the echo canary's receipt
-    // tool asks for approval with its plugin's declared icon.
     const namespacedAsk: PendingInteraction = {
       ...toolUseApproval,
       payload: {
@@ -221,10 +239,9 @@ describe("ThreadPendingInteractionBanner tool-use approval", () => {
       ]),
     );
     const withIcon = renderBanner(namespacedAsk);
+    expandBanner();
     const ask = screen.getByTestId("tool-use-ask");
     const mask = ask.querySelector(`[data-plugin-icon-asset="${iconUrl}"]`);
-    // Resolved against the inventory before any mask is emitted, and the
-    // mask takes the bridge's tint like the host glyph would.
     expect(mask).not.toBeNull();
     expect(mask?.getAttribute("style")).toMatch(
       /light-dark\(rgb\(18, 52, 86\), rgb\(171, 205, 239\)\)/,
@@ -232,10 +249,9 @@ describe("ThreadPendingInteractionBanner tool-use approval", () => {
     expect(ask.querySelector("[data-icon]")).toBeNull();
     withIcon.unmount();
 
-    // The plugin is gone (or renamed the icon): not found, so the per-kind
-    // glyph draws and no mask URL that would 404 is emitted.
     resetPluginLogoStoreForTest();
     renderBanner(namespacedAsk);
+    expandBanner();
     const fallback = screen.getByTestId("tool-use-ask");
     expect(fallback.querySelector("[data-plugin-icon-asset]")).toBeNull();
     expect(fallback.querySelector("svg")?.getAttribute("data-icon")).toBe(
@@ -247,12 +263,14 @@ describe("ThreadPendingInteractionBanner tool-use approval", () => {
 describe("ThreadPendingInteractionBanner request family", () => {
   it("renders a plan review as a request with plan-verdict actions, resolved through today's approval", () => {
     renderBanner(planReview);
-    expect(screen.getByText("Ready to code?")).toBeTruthy();
+    expect(screen.getAllByText("Ready to code?").length).toBeGreaterThan(0);
+    expect(isHidden(screen.getByTestId("plan-review-request"))).toBe(true);
+    expandBanner();
+    expect(isHidden(screen.getByTestId("plan-review-request"))).toBe(false);
     expect(screen.getByTestId("plan-review-request").textContent).toContain(
       "Read labels from the declaration",
     );
     expect(screen.getByText("/tmp/plans/picker.md")).toBeTruthy();
-    // Plan verdict vocabulary, not permission vocabulary.
     expect(screen.queryByRole("button", { name: "Allow once" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Approve plan" }));
     expect(mocks.resolveMutateAsync).toHaveBeenCalledWith(
@@ -315,7 +333,6 @@ describe("ThreadPendingInteractionBanner request family", () => {
   });
 
   it("backs out of a provider's request by stopping the turn, never by cancelling", () => {
-    // No renderer installed: the host fallback offers the only way out.
     renderBanner(providerPluginRequest);
     expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Stop turn" }));
@@ -325,8 +342,6 @@ describe("ThreadPendingInteractionBanner request family", () => {
 
 describe("ThreadPendingInteractionBanner presentation detail images", () => {
   it("renders an image in the bridge's detail as alt text, like the timeline row body", () => {
-    // The detail is agent-authored Markdown shown before the user decides;
-    // a remote image in it must not be fetched by the banner.
     const { container } = renderBanner({
       ...toolUseApproval,
       payload: {
@@ -343,8 +358,165 @@ describe("ThreadPendingInteractionBanner presentation detail images", () => {
         },
       },
     });
+    expandBanner();
     const ask = screen.getByTestId("tool-use-ask");
     expect(container.querySelector("img")).toBeNull();
     expect(ask.textContent).toContain("[Image: pixel]");
+  });
+});
+
+describe("ThreadPendingInteractionBanner collapsed strip", () => {
+  it("arrives collapsed with the reason, the first command line, and every decision", () => {
+    renderBanner(commandApproval);
+    const banner = screen.getByTestId("approval-banner");
+    expect(banner.hasAttribute("data-expanded")).toBe(false);
+    expect(banner.textContent).toContain("Not in allowlist: bash");
+    expect(banner.textContent).toContain(
+      "python3 -m unittest discover -s tests 2>&1 | tail -20",
+    );
+    expect(isHidden(screen.getByTestId("command-preview"))).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Allow once" }));
+    expect(mocks.resolveMutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        interactionId: "pint_cmd",
+        resolution: { decision: "allow_once", grantedPermissions: null },
+      }),
+    );
+  });
+
+  it("opens the full card on demand, shows a four-line preview, and never repeats the command as an action line", () => {
+    renderBanner(commandApproval);
+    expandBanner();
+    const banner = screen.getByTestId("approval-banner");
+    expect(banner.hasAttribute("data-expanded")).toBe(true);
+    expect(screen.getByText("Approval needed")).toBeTruthy();
+    const preview = screen.getByTestId("command-preview");
+    const pre = preview.querySelector("pre");
+    expect(pre?.textContent).toContain("bash -n install.sh && echo OK");
+    expect(pre?.textContent).toContain("echo '=== watcher untouched ==='");
+    expect(pre?.textContent).not.toContain("git diff --stat -- watcher.py");
+    expect(preview.textContent).not.toContain("Action:");
+    expect(preview.textContent).toContain("/home/user/immortal-agents");
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more lines" }));
+    expect(preview.querySelector("pre")?.textContent).toContain(
+      "git diff --stat -- watcher.py",
+    );
+    expect(screen.getByRole("button", { name: "Show less" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Hide details" }));
+    expect(banner.hasAttribute("data-expanded")).toBe(false);
+  });
+
+  it("keeps focus on the disclosure button across toggles so Escape works right after opening", () => {
+    renderBanner(commandApproval);
+    const show = screen.getByRole("button", { name: "Show details" });
+    show.focus();
+    fireEvent.click(show);
+    const hide = screen.getByRole("button", { name: "Hide details" });
+    expect(document.activeElement).toBe(hide);
+    fireEvent.keyDown(hide, { key: "Escape" });
+    expect(
+      screen.getByTestId("approval-banner").hasAttribute("data-expanded"),
+    ).toBe(false);
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Show details" }),
+    );
+  });
+
+  it("collapses on Escape while open and forgets the open state when a different request arrives", () => {
+    const client = new QueryClient();
+    const view = render(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>{bannerElement(commandApproval)}</MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expandBanner();
+    fireEvent.keyDown(screen.getByRole("button", { name: "Deny" }), {
+      key: "Escape",
+    });
+    expect(
+      screen.getByTestId("approval-banner").hasAttribute("data-expanded"),
+    ).toBe(false);
+    expandBanner();
+    expect(
+      screen.getByTestId("approval-banner").hasAttribute("data-expanded"),
+    ).toBe(true);
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <MemoryRouter>
+          {bannerElement({ ...commandApproval, id: "pint_cmd_next" })}
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(
+      screen.getByTestId("approval-banner").hasAttribute("data-expanded"),
+    ).toBe(false);
+  });
+
+  it("keeps the source thread reachable from the strip and the card", () => {
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <MemoryRouter>
+          <ThreadPendingInteractionBanner
+            interaction={commandApproval}
+            sourceThread={{
+              href: "/threads/thr_child",
+              title: "Install tools",
+            }}
+            threadId="thr_child"
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    expect(
+      screen
+        .getByRole("link", { name: "From Install tools" })
+        .getAttribute("href"),
+    ).toBe("/threads/thr_child");
+    expandBanner();
+    expect(
+      screen.getByRole("link", { name: "From Install tools" }),
+    ).toBeTruthy();
+  });
+
+  it("renders a user question open by default and keeps draft answers across collapse", () => {
+    const question: PendingInteraction = {
+      ...planReview,
+      id: "pint_question",
+      resolution: null,
+      payload: {
+        kind: "user_question",
+        questions: [
+          {
+            id: "path",
+            prompt: "Which path should I take?",
+            shortLabel: "Path",
+            multiSelect: false,
+            allowFreeText: false,
+            options: [{ value: "a", label: "A", description: "Option A" }],
+          },
+        ],
+      },
+    };
+    renderBanner(question);
+    const banner = screen.getByTestId("user-question-banner");
+    expect(banner.hasAttribute("data-expanded")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "AOption A" }));
+    expect(
+      screen
+        .getByRole("button", { name: "AOption A" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+    fireEvent.click(screen.getByRole("button", { name: "Hide details" }));
+    expect(banner.hasAttribute("data-expanded")).toBe(false);
+    expect(
+      isHidden(screen.getByRole("button", { name: "AOption A", hidden: true })),
+    ).toBe(true);
+    expect(banner.textContent).toContain("Which path should I take?");
+    fireEvent.click(screen.getByRole("button", { name: "Show details" }));
+    expect(
+      screen
+        .getByRole("button", { name: "AOption A" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
   });
 });

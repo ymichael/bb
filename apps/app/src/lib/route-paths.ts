@@ -6,9 +6,6 @@ import {
   stripRoutePathSuffix,
 } from "@bb/client-core";
 
-// Route constants and path builders live in @bb/client-core so the native app
-// can build the same links; re-exported here so web imports keep resolving.
-// Only the react-router `matchPath` consumers stay in this file.
 export {
   APP_ROOT_ROUTE_PATH,
   AUTH_CALLBACK_ROUTE_PATH,
@@ -69,7 +66,6 @@ export {
 } from "@bb/client-core";
 export type { ThreadRoutePathArgs } from "@bb/client-core";
 
-/** The plugin whose panel `pathname` shows, or null off the panel route. */
 export function getPluginPanelRoutePluginId(pathname: string): string | null {
   return matchPath(PLUGIN_PANEL_ROUTE_PATH, pathname)?.params.pluginId ?? null;
 }
@@ -87,11 +83,6 @@ interface RouteHrefResolution {
   path: string;
 }
 
-/**
- * True on Extensions and every canonical route nested under it. Legacy /tools
- * URLs return false: they only exist long enough to redirect, and the
- * automations ones leave Extensions entirely for their plugin-owned panel.
- */
 export function isToolsRoutePath(pathname: string): boolean {
   return (
     pathname === TOOLS_ROUTE_PATH ||

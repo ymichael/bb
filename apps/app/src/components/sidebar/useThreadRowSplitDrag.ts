@@ -30,32 +30,14 @@ interface UseThreadRowSplitDragArgs {
 }
 
 const SIDEBAR_SELECTOR = '[data-sidebar="sidebar"]';
-// The single-pane surface renders no wrapper element, so its drop target is the
-// whole main content region.
 const MAIN_CONTENT_SELECTOR = "main";
 
-/**
- * Makes a sidebar thread row a drag source for the split area via the shared
- * pointer-driven layer. It engages only once the pointer leaves the sidebar
- * toward the main area (so the existing dnd-kit vertical reorder always wins
- * inside the sidebar — plan §3), then hit-tests panes: an edge splits, the
- * center replaces, and a thread already open focuses its pane instead of
- * duplicating. The layout ops enforce the pane cap and no-duplicate invariants;
- * this only picks targets. Disabled on compact viewports, where splits are off.
- */
 export function useThreadRowSplitDrag({
   projectId,
   threadId,
   title,
 }: UseThreadRowSplitDragArgs): {
   onPointerDown: ((event: ReactPointerEvent<HTMLElement>) => void) | undefined;
-  /**
-   * Opens this thread in the split via the second entry point (cmd/ctrl-click,
-   * context-menu "Open in split"), using the SAME placement rules as drag:
-   * default to a right split, focus the pane if already open, and coerce to
-   * replace at the pane cap. Falls back to plain navigation on compact
-   * viewports (splits disabled) and non-thread routes (no layout to split).
-   */
   openInSplit: () => void;
 } {
   const store = useStore();
@@ -117,9 +99,6 @@ export function useThreadRowSplitDrag({
           if (next !== layout) {
             store.set(splitLayoutAtom, next);
           }
-          // The dropped thread now owns the focused pane, so the URL follows it.
-          // An already-open focus is a replace (no history entry); a split or
-          // replace pushes like a sidebar click.
           navigate(
             getThreadRoutePath({ projectId, threadId }),
             existing !== null ? { replace: true } : undefined,
@@ -146,9 +125,6 @@ export function useThreadRowSplitDrag({
   };
 }
 
-// The single-pane surface renders no `[data-split-pane-id]` wrapper, so drops
-// hit-test against the main content region instead. Only meaningful when the
-// layout holds exactly one pane; multi-pane layouts have real pane elements.
 function singlePaneFallback(
   layout: SplitLayout | null,
 ): SplitDragFallbackTarget | null {

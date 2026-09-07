@@ -1,7 +1,7 @@
 {
   "extends": ["@bb/tsconfig/base.json"],
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "../..",
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "jsx": "react-jsx",

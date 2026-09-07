@@ -15,8 +15,6 @@ export default {
   title: "thread/timeline/Generated Conversation Message",
 };
 
-// ThreadTimelinePane caps content at 760px; match it so the rows reflect
-// production width.
 function TimelineStage({ children }: { children: ReactNode }) {
   return <div className="w-full max-w-[760px]">{children}</div>;
 }
@@ -42,14 +40,9 @@ interface SystemRowFixture {
   systemMessageKind: SystemMessageKind;
   systemMessageSubject: SystemMessageSubject | null;
   text: string;
-  // Optional body mentions; the expanded body renders `@thread:<id>` tokens as
-  // pills resolved from these. Most rows carry none.
   mentions?: readonly PromptTextMention[];
 }
 
-// The child-completed body is a realistic markdown report — heading, bold, a
-// list, inline code, and an `@thread:` mention — so the markdown rendering of
-// generated bodies is visible in the story.
 const CHILD_COMPLETED_BODY = [
   "# Rebuild threaded comments — final report",
   "",
@@ -77,8 +70,6 @@ const CHILD_COMPLETED_MENTIONS: readonly PromptTextMention[] = [
   },
 ];
 
-// One representative row per Family-B systemMessageKind. The title + icon are
-// derived from the kind/subject; the body text is the stripped message body.
 const SYSTEM_ROWS: readonly SystemRowFixture[] = [
   {
     label: "ownership-assigned (title-only)",
@@ -261,11 +252,6 @@ export function ClippedAgentMessage() {
   );
 }
 
-// Markdown bodies, rendered EXPANDED so the formatting is visible without a
-// click. System-message bodies (sourceKind "system") render through
-// MarkdownPreview — headings, bold, lists, inline code, fenced code, and
-// @thread mention pills inside the markdown. Driven through the real timeline
-// path (ThreadTimelineRows) with `initialExpanded` seeding the open body.
 const MARKDOWN_ROWS: readonly {
   label: string;
   hint: string;

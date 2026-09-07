@@ -8,3 +8,4 @@ export * from "./api/plugins.js";
 export * from "./api/system.js";
 export * from "./api/terminals.js";
 export * from "./api/threads.js";
+export * from "./api/desktop-browsers.js";

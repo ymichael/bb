@@ -19,7 +19,6 @@ interface ChunkSpec {
   facade?: string | null;
 }
 
-// Every chunk stays under 1 KiB so the boot check does not demand .br files.
 function chunk(fileName: string, spec: ChunkSpec = {}): BundleChunk {
   return {
     fileName,
@@ -30,7 +29,6 @@ function chunk(fileName: string, spec: ChunkSpec = {}): BundleChunk {
   };
 }
 
-// index -> (dynamic) route -> markdown-preview -> (dynamic) markdown-katex -> katex
 function buildStats({
   markdownPreviewImports,
   katexGate = KATEX_GATE,
@@ -118,7 +116,6 @@ describe("check-bundle-budget on-demand packages", () => {
     expect(result.output).toContain(
       "katex is in the static import closure of route.js, markdown-preview.js",
     );
-    // rehype-katex still sits behind the gate, so it must not be reported.
     expect(result.output).not.toContain("rehype-katex is in the static");
   });
 

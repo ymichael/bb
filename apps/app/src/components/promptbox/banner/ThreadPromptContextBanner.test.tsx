@@ -643,8 +643,6 @@ describe("ThreadPromptContextBanner git section body", () => {
   }
 
   it("does not mount the changed-files list until the section first expands", () => {
-    // The list can hold thousands of rows. A collapsed body still costs
-    // layout for every node inside it, so it must stay out of the DOM.
     const { rerender } = render(renderBanner(null));
     expect(screen.queryByRole("list", { hidden: true })).toBeNull();
 
@@ -654,7 +652,6 @@ describe("ThreadPromptContextBanner git section body", () => {
       screen.getByRole("button", { name: `Open ${changedFile.path}` }),
     ).toBeTruthy();
 
-    // Retain the realized body after collapse so re-opening is instant.
     rerender(renderBanner(null));
     expect(screen.getByRole("list", { hidden: true })).toBeTruthy();
   });

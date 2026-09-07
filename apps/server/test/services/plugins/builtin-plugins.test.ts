@@ -61,14 +61,9 @@ async function writePackagedBuiltinSource(workDir: string): Promise<{
   sourceModuleDir: string;
 }> {
   const sourceModuleDir = join(workDir, "source-module");
-  // copyBuiltinPlugins packages EVERY declared builtin, so the synthetic
-  // source tree must carry one packaged plugin per BUILTIN_PLUGIN_NAMES
-  // entry — a name added to the registry is covered here automatically.
   for (const name of BUILTIN_PLUGIN_NAMES) {
     const sourceRoot = join(sourceModuleDir, "builtin-plugins", name);
     const usesPluginOwnedIcon = name === "automations";
-    // Declared icons (`bb.branding.experimental_icons`) are manifest assets
-    // too: a provider logo named through them must reach the packaged root.
     const usesDeclaredIcons = name === "provider-acp";
     await mkdir(join(sourceRoot, "dist"), { recursive: true });
     await mkdir(join(sourceRoot, "skills", name), { recursive: true });
@@ -213,7 +208,14 @@ describe("builtin plugin reconciliation", () => {
 
   it("keeps official plugins bundled but out of the auto-install builtins", () => {
     const optionalNames = OFFICIAL_PLUGINS.map((plugin) => plugin.name);
-    expect(optionalNames).toEqual(["github", "docs", "memory", "tasks"]);
+    expect(optionalNames).toEqual([
+      "browser-automation",
+      "github",
+      "docs",
+      "memory",
+      "tasks",
+      "theme-preview",
+    ]);
     for (const name of optionalNames) {
       expect(BUILTIN_PLUGINS.map((plugin) => plugin.name)).not.toContain(name);
     }
@@ -222,8 +224,10 @@ describe("builtin plugin reconciliation", () => {
 
   it("gives every builtin plugin a deliberate settings icon", async () => {
     const expectedIcons = new Map([
+      ["account-pool", "Layers"],
       ["ask-user-question", "MessageQuestion"],
       ["automations", "Clock"],
+      ["concurrency-limit", "Limitation"],
       ["connect", "Smartphone"],
       ["custom-instructions", "EditFile"],
       ["plugin-api-tester", "Beaker"],
@@ -237,6 +241,9 @@ describe("builtin plugin reconciliation", () => {
       ["provider-codex", "./icons/codex.svg"],
       ["provider-pi", "./icons/pi.svg"],
       ["provider-retry", "ArrowReloadHorizontal"],
+      ["provider-usage", "ChartColumn"],
+      ["push-notifications", "BellDot"],
+      ["scheduled-send", "Calendar"],
       ["secrets", "Lock"],
       ["side-chat", "SideChat"],
       ["workflows", "Workflow"],
@@ -472,6 +479,31 @@ describe("builtin plugin reconciliation", () => {
     expect(monacoEditor?.defaultEnabled).toBe(false);
   });
 
+  it("ships the Plugin Guide disabled on a fresh database", async () => {
+    const pluginGuide = BUILTIN_PLUGINS.find(
+      (builtin) => builtin.name === "plugin-api-docs",
+    );
+    expect(pluginGuide?.defaultEnabled).toBe(false);
+
+    service = createService({
+      db,
+      dataDir: join(workDir, "data"),
+      builtinName: "plugin-api-docs",
+      defaultEnabled: pluginGuide?.defaultEnabled,
+      rootDir: resolveBuiltinPluginRootPath("plugin-api-docs"),
+    });
+    await service.start();
+
+    expect(service.list()).toMatchObject([
+      {
+        id: "plugin-api-docs",
+        source: "builtin:plugin-api-docs",
+        enabled: false,
+        status: "disabled",
+      },
+    ]);
+  });
+
   it("ships Workflows disabled on a fresh database", async () => {
     const workflows = BUILTIN_PLUGINS.find(
       (builtin) => builtin.name === "workflows",
@@ -497,6 +529,47 @@ describe("builtin plugin reconciliation", () => {
     ]);
   });
 
+  it("ships Provider usage disabled on a fresh database", async () => {
+    const providerUsage = BUILTIN_PLUGINS.find(
+      (builtin) => builtin.name === "provider-usage",
+    );
+    expect(providerUsage?.defaultEnabled).toBe(false);
+
+    service = createService({
+      db,
+      dataDir: join(workDir, "data"),
+      builtinName: "provider-usage",
+      defaultEnabled: providerUsage?.defaultEnabled,
+      rootDir: resolveBuiltinPluginRootPath("provider-usage"),
+    });
+    await service.start();
+
+    expect(service.list()).toMatchObject([
+      {
+        id: "provider-usage",
+        source: "builtin:provider-usage",
+        enabled: false,
+        status: "disabled",
+      },
+    ]);
+  });
+
+  it("ships Concurrency limit enabled on a fresh database", () => {
+    const limiter = BUILTIN_PLUGINS.find(
+      (builtin) => builtin.name === "concurrency-limit",
+    );
+    expect(limiter).toBeDefined();
+    expect(limiter?.defaultEnabled).toBe(true);
+  });
+
+  it("ships Send later enabled on a fresh database", () => {
+    const scheduledSend = BUILTIN_PLUGINS.find(
+      (builtin) => builtin.name === "scheduled-send",
+    );
+    expect(scheduledSend).toBeDefined();
+    expect(scheduledSend?.defaultEnabled).toBe(true);
+  });
+
   it("ships Provider retry enabled on a fresh database", async () => {
     const providerRetry = BUILTIN_PLUGINS.find(
       (builtin) => builtin.name === "provider-retry",
@@ -520,6 +593,13 @@ describe("builtin plugin reconciliation", () => {
         status: "running",
       },
     ]);
+  });
+
+  it("ships Push notifications enabled on a fresh database", () => {
+    const pushPlugin = BUILTIN_PLUGINS.find(
+      (builtin) => builtin.name === "push-notifications",
+    );
+    expect(pushPlugin?.defaultEnabled).toBe(true);
   });
 
   it("loads the builtin connect plugin like other builtins", async () => {
@@ -665,8 +745,6 @@ describe("builtin plugin reconciliation", () => {
       join(mutableRoot, "server.ts"),
       'export default function plugin() { globalThis.__hotBuiltinServerVersion = "before"; }\n',
     );
-    // A source-layout builtin may retain artifacts from a production build.
-    // Dev reloads must still execute the edited source entry.
     await writeFile(
       join(mutableRoot, "dist", "server.js"),
       'export default function plugin() { globalThis.__hotBuiltinServerVersion = "stale-dist"; }\n',
@@ -1007,13 +1085,15 @@ describe("builtin plugin packaging", () => {
     ).resolves.toBeTruthy();
     await expect(stat(join(copiedRoot, "skills"))).resolves.toBeTruthy();
     await expect(
+      readFile(join(targetRoot, "marketplace.json"), "utf8"),
+    ).resolves.toContain('"name": "bb-official"');
+    await expect(
       readFile(join(copiedRoot, "assets", "icon.svg"), "utf8"),
     ).resolves.toBe("<svg/>\n");
     await expect(stat(join(copiedRoot, "src"))).rejects.toThrow();
     await expect(stat(join(copiedRoot, "app.tsx"))).rejects.toThrow();
     await expect(stat(join(copiedRoot, "node_modules"))).rejects.toThrow();
 
-    // A declared icon ships with the manifest that names it.
     await expect(
       readFile(join(targetRoot, "provider-acp", "icons", "cursor.svg"), "utf8"),
     ).resolves.toBe("<svg/>\n");

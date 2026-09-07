@@ -1,8 +1,6 @@
 import { z } from "zod";
 import { terminalCreateTargetSchema } from "./terminals.js";
 
-// Plugin-panel ids include encoded params, so allow the bounded 1 MiB params
-// payload to expand under URI encoding while still capping request size.
 const THREAD_TAB_ID_MAX_LENGTH = 4_194_304;
 const THREAD_TAB_PATH_MAX_LENGTH = 32_768;
 const THREAD_TAB_TITLE_MAX_LENGTH = 1_024;
@@ -32,11 +30,6 @@ const threadTabEnvironmentFileSourceSchema = z.discriminatedUnion("kind", [
     .strict(),
 ]);
 
-/**
- * The native file preview a plugin file-opener panel diverted, retained so the
- * tab can restore the built-in `Original` view. Present only on plugin-panel
- * tabs that replaced a native file preview.
- */
 export const threadTabFileOpenerOwnerSchema = z.discriminatedUnion("kind", [
   z
     .object({
@@ -145,6 +138,14 @@ export const threadTabSchema = z.discriminatedUnion("kind", [
       environmentId: z.string().min(1).nullable(),
       id: threadTabIdSchema,
       kind: z.literal("browser"),
+      desktopTarget: z
+        .object({
+          hostId: z.string().min(1),
+          instanceId: z.string().min(1),
+          generation: z.string().min(1),
+        })
+        .strict()
+        .optional(),
       title: z.string().min(1).max(THREAD_TAB_TITLE_MAX_LENGTH).nullable(),
       url: z.string().max(THREAD_TAB_URL_MAX_LENGTH),
     })
@@ -164,9 +165,6 @@ export const threadTabSchema = z.discriminatedUnion("kind", [
     .object({
       id: threadTabIdSchema,
       kind: z.literal("terminal"),
-      // Nav-panel right panels open terminals against an explicit target and
-      // record it here. Absent on thread/root-compose tabs, whose surface
-      // owns the target. Same shape the terminal was created with.
       target: terminalCreateTargetSchema.optional(),
       terminalId: z.string().min(1).max(THREAD_TAB_PATH_MAX_LENGTH),
     })
@@ -204,10 +202,6 @@ export const threadTabsResponseSchema = z
   })
   .strict();
 export type ThreadTabsResponse = z.infer<typeof threadTabsResponseSchema>;
-/**
- * The JSON the tabs routes send: defaulted fields (`hostId`) may be absent.
- * Clients parse it with `threadTabsResponseSchema`, which fills them in.
- */
 export type ThreadTabsWireResponse = z.input<typeof threadTabsResponseSchema>;
 
 export const updateThreadTabsRequestSchema = z

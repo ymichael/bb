@@ -22,10 +22,6 @@ async function importFreshLogger() {
 async function importFreshLoggerWithPinoTransportSpy() {
   vi.resetModules();
 
-  // pino uses `export = pino` (CJS), but the runtime module after Node's
-  // ESM interop exposes `default` alongside the named callable. The TS type
-  // for `typeof import("pino")` is the function itself, so type the actual
-  // module shape explicitly to access `default`.
   const actual = await vi.importActual<{ default: typeof import("pino") }>(
     "pino",
   );
@@ -84,8 +80,6 @@ async function runLoggerInSubprocess(args: {
     BB_DATA_DIR: args.dataDir,
     TZ: args.timezone,
   };
-  // The logger skips pino-pretty under VITEST; clear it so the spawned
-  // process exercises the real stdout transport like production does.
   delete childEnv.VITEST;
 
   return new Promise((resolve, reject) => {
@@ -262,11 +256,8 @@ describe("createLogger", () => {
     });
 
     expect(result.exitCode).toBe(0);
-    // Pretty output to stdout is the load-bearing half of the contract —
-    // the previous regression was silent dropping of this target.
     expect(result.stdout).toContain(message);
     expect(result.stdout).toContain("[19:53:23]");
-    // Structured JSON to the rolling file is the other half.
     const entries = readComponentLogLines(logDir, "behavior-check");
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({

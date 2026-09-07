@@ -126,7 +126,6 @@ beforeEach(() => {
     defaultOptions: { queries: { retry: false } },
   });
   resetProviderCliInstallStoreForTests();
-  // main.tsx does this at bootstrap; the store never reads React context.
   registerProviderCliInstallQueryClient(queryClient);
   installHostProviderCliMock.mockImplementation(
     (args) =>
@@ -250,8 +249,6 @@ describe("useProviderCliInstallRunner", () => {
     expect(appToastMock.success).not.toHaveBeenCalled();
   });
 
-  // The whole point of the module-level store: leaving Settings → Updates must
-  // not abandon the queue or drop the status refresh on the floor.
   it("keeps draining the queue after every consumer unmounts", async () => {
     const invalidateQueries = vi.spyOn(queryClient, "invalidateQueries");
     const { result, unmount } = renderRunner();
@@ -290,7 +287,6 @@ describe("useProviderCliInstallRunner", () => {
       queryKey: hostProviderCliStatusQueryKey("host_1"),
     });
 
-    // Remounting elsewhere in the app picks the still-running job back up.
     const remounted = renderRunner();
     expect(remounted.result.current.runningJobKey).toBe("host_1:claude-code");
   });

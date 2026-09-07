@@ -49,24 +49,6 @@ const baseProps: TimelineRowsStoryBaseProps = {
   workspaceRootPath: undefined,
 };
 
-// ---------------------------------------------------------------------------
-// System error rows drawn from the dev db. These fixtures are the projected
-// TimelineSystemRow shape emitted by packages/thread-view/src/build-thread-
-// timeline.ts (via error-display.ts), not raw event JSON, so the titles/details
-// mirror exactly what the projector produces for the underlying events. Real
-// provider/error events carry `message: "Provider error"` plus a `detail`; the
-// projector derives the row title from the detail. Source events found with:
-//
-//   SELECT type, data FROM events
-//   WHERE type IN ('provider/error', 'system/error')
-//   ORDER BY created_at DESC;
-// ---------------------------------------------------------------------------
-
-// thr_ggp8mmze2q, seq 5947..5952. The provider emitted five willRetry=true
-// reconnect events then a final willRetry=false failure. `buildThreadTimeline`
-// collapses consecutive reconnect rows in place (appendRows), so the timeline
-// shows a single reconnect row holding the latest progress ("Reconnecting...
-// 5/5"), not one row per attempt. The terminal failure is a separate error row.
 const providerStreamReconnect: TimelineNonOperationSystemRow = systemRow({
   id: "thr_ggp8mmze2q:error:5951",
   threadId: "thr_ggp8mmze2q",
@@ -168,29 +150,31 @@ const systemTurnSubmitTooLarge: TimelineNonOperationSystemRow = systemRow({
   status: "error",
 });
 
-const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = systemRow({
-  id: "thr_2twyaj9bbg:error:5",
-  threadId: "thr_2twyaj9bbg",
-  turnId: null,
-  sourceSeqStart: 5,
-  sourceSeqEnd: 5,
-  startedAt: 1778565234271,
-  createdAt: 1778565234271,
-  systemKind: "error",
-  title: "Command thread.start failed",
-  detail:
-    'Provider "claude-code" exited unexpectedly\n' +
-    "stderr: node:internal/modules/esm/resolve:274\n" +
-    "    throw new ERR_MODULE_NOT_FOUND(\n" +
-    "          ^\n" +
-    "\n" +
-    "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/michael/Projects/bb/packages/domain/src/shared-types.js' imported from /Users/michael/Projects/bb/packages/domain/src/index.ts\n" +
-    "    at finalizeResolution (node:internal/modules/esm/resolve:274:11)\n" +
-    "    at moduleResolve (node:internal/modules/esm/resolve:859:10)\n" +
-    "    at defaultResolve (node:internal/modules/esm/resolve:983:11)\n" +
-    "    at ModuleLoader.defaultReso",
-  status: "error",
-});
+const systemThreadStartModuleMissing: TimelineNonOperationSystemRow = systemRow(
+  {
+    id: "thr_2twyaj9bbg:error:5",
+    threadId: "thr_2twyaj9bbg",
+    turnId: null,
+    sourceSeqStart: 5,
+    sourceSeqEnd: 5,
+    startedAt: 1778565234271,
+    createdAt: 1778565234271,
+    systemKind: "error",
+    title: "Command thread.start failed",
+    detail:
+      'Provider "claude-code" exited unexpectedly\n' +
+      "stderr: node:internal/modules/esm/resolve:274\n" +
+      "    throw new ERR_MODULE_NOT_FOUND(\n" +
+      "          ^\n" +
+      "\n" +
+      "Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/Users/michael/Projects/bb/packages/domain/src/shared-types.js' imported from /Users/michael/Projects/bb/packages/domain/src/index.ts\n" +
+      "    at finalizeResolution (node:internal/modules/esm/resolve:274:11)\n" +
+      "    at moduleResolve (node:internal/modules/esm/resolve:859:10)\n" +
+      "    at defaultResolve (node:internal/modules/esm/resolve:983:11)\n" +
+      "    at ModuleLoader.defaultReso",
+    status: "error",
+  },
+);
 
 const providerStreamDisconnectRows: TimelineRow[] = [
   providerStreamReconnect,

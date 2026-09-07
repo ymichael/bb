@@ -198,8 +198,6 @@ describe("PluginHostManager", () => {
       warn: vi.fn(),
     };
     const { dataDir, manager } = await createManagerFixture({ logger });
-    // A host cache can live below a package owned by another tool. Its module
-    // type must not affect how the downloaded ESM artifact is classified.
     await writeFile(join(dataDir, "package.json"), '{"private":true}\n');
     const command = callCommand();
 
@@ -381,8 +379,6 @@ describe("PluginHostManager", () => {
     const tampered = await createManager({
       fetchArtifact: async () => Buffer.from("tampered"),
     });
-    // Retried once, then refused: the daemon never executes bytes whose
-    // digest it has not just confirmed.
     await expect(tampered.call(callCommand())).rejects.toThrow(
       /failed verification after retry/u,
     );
@@ -550,7 +546,6 @@ describe("PluginHostManager", () => {
       input: { rootPath: "/tmp/workspace", listenerDelayMs: 100 },
     });
     const call = manager.call(command);
-    // This registration crosses a real worker process startup boundary.
     await vi.waitFor(() => expect(watcher).toBeDefined(), { timeout: 5_000 });
     watcher?.onReady();
     await expect(call).resolves.toEqual({ output: { watching: true } });

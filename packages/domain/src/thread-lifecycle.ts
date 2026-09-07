@@ -1,30 +1,5 @@
 import type { ThreadStatus } from "./thread-status.js";
 
-/**
- * What happened to a thread, in product terms. Callers report events instead
- * of choosing target statuses; THREAD_LIFECYCLE maps (status, event) → next
- * status and THREAD_LIFECYCLE_EVENT_PREDICATES declares which staleness
- * signals supersede each event.
- *
- * The execution status is the single source of truth for "what is this thread
- * doing": `idle` (quiescent), `starting` (preparing a run), `active` (agent
- * work is in progress), `stopping` (the current run/start is winding down),
- * and `error` (quiescent after failure). In-progress intent lives in the
- * status, not in side-fields: a requested stop IS `status = stopping`, not a
- * separate `stopRequestedAt`. Only the orthogonal record dimensions
- * (deletedAt/archivedAt) are fields, surfaced here as supersession predicates.
- *
- * Events carry no payloads yet: the threads row stores no turn id, and neither
- * the table, the predicates, nor the db writer consumes any event data.
- *
- * Vocabulary:
- * - `run.preparing` — new work needs preparation before it can run.
- * - `run.started` — the current run is in progress.
- * - `run.succeeded` — the current run completed successfully.
- * - `run.failed` — the current run/start failed.
- * - `stop.requested` — the user/system asked to stop the current run/start.
- * - `stop.settled` — stop/interruption finished and the thread is idle.
- */
 export type ThreadLifecycleEvent =
   | { type: "run.preparing" }
   | { type: "run.started" }
@@ -35,13 +10,6 @@ export type ThreadLifecycleEvent =
 
 export type ThreadLifecycleEventType = ThreadLifecycleEvent["type"];
 
-/**
- * Declarative supersession predicates: row-level staleness signals that turn
- * an otherwise-legal event into a "superseded" no-op. Only the orthogonal
- * record dimensions remain — stop intent is no longer a predicate because it
- * is the `stopping` status (the table simply has no "begin new work"
- * transition out of `stopping`).
- */
 interface ThreadLifecycleSupersessionPredicates {
   notArchived?: true;
   notDeleted?: true;
@@ -59,30 +27,29 @@ export const THREAD_LIFECYCLE_EVENT_PREDICATES: Record<
   "stop.settled": {},
 };
 
-/**
- * The thread execution state machine. `stopping` is a first-class status that
- * captures the "stop requested" intent durably; dispatching new work into it
- * is structurally impossible (no `run.started` cell), which is what makes a
- * scheduled/queued turn unable to reactivate a stopping thread. Absent cell =
- * the event is a no-op in that status.
- */
 export const THREAD_LIFECYCLE: Record<
   ThreadStatus,
   Partial<Record<ThreadLifecycleEventType, ThreadStatus>>
 > = {
+  // A thread that has never dispatched. `run.preparing` is the one way out:
+  // it is emitted when the first message's dispatch attempt clears every
+  // wait, and `starting` then absorbs provisioning and session start exactly
+  // as it does for a thread that has run before. There is deliberately no
+  // `run.started` cell — a pending thread has no session for a turn to start
+  // in, so a turn event arriving here is a bug, not a shortcut. There is no
+  // `run.failed` cell either: an attempt that a gate rejects fails the send
+  // and leaves the thread pending and unprovisioned, exactly where it was.
+  // Archival and deletion are the orthogonal record dimensions and stay legal
+  // from here without a cell, as they do from every status.
+  pending: {
+    "run.preparing": "starting",
+  },
   idle: {
     "run.preparing": "starting",
     "run.started": "active",
   },
   starting: {
     "run.started": "active",
-    // A start that establishes the thread without dispatching a turn — a native
-    // fork cloned with empty input, or a seed-without-run anchor — settles its
-    // zero-work run here. The runtime emits a turn/completed for the no-turn
-    // establish (or the seed path fires it directly), and run.succeeded lands
-    // the established thread idle with an empty timeline, no turn ever run. This
-    // also closes the race where a real turn's turn/completed arrives before the
-    // start command settles run.started: the completed run still settles to idle.
     "run.succeeded": "idle",
     "run.failed": "error",
     "stop.requested": "stopping",
@@ -103,7 +70,6 @@ export const THREAD_LIFECYCLE: Record<
   },
 };
 
-/** The thread-row fields supersession predicates evaluate against. */
 export interface ThreadLifecycleRowState {
   archivedAt: number | null;
   deletedAt: number | null;
@@ -121,12 +87,6 @@ interface EvaluateThreadLifecycleEventArgs {
   thread: ThreadLifecycleRowState;
 }
 
-/**
- * Pure evaluation of a lifecycle event against a loaded thread row.
- * Supersession is checked before table lookup so a stale event on a
- * deleted/archived thread reports "superseded" even when the current status
- * has no cell for it.
- */
 export function evaluateThreadLifecycleEvent(
   args: EvaluateThreadLifecycleEventArgs,
 ): ThreadLifecycleEvaluation {

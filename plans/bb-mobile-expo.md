@@ -354,11 +354,11 @@ Each fact comes from the code. Paths are relative to the repo root.
 14. `x-bb-app-surface` only accepts `desktop|web`
     (`packages/config/src/app-surface.ts`), and the same union is also the
     server's own configured surface (`packages/config/src/server.ts:48,108-113`).
-15. Environment git actions are `commit`, `squash_merge`, `pull_request_ready`,
+15. Environment git actions are `commit`, `pull_request_ready`,
     `pull_request_draft`, `pull_request_merge`
     (`packages/server-contract/src/api/environments.ts:189-216`); the PR
     actions live in the composer context banner
-    (`ThreadPromptContextBanner.tsx:525-605`), the commit/squash dialog is
+    (`ThreadPromptContextBanner.tsx:525-605`), the commit dialog is
     separate.
 16. The fake provider adapter (`packages/agent-runtime/src/test/fake-adapter.ts`)
     supports `delay:<ms>`, `call_tool:<name>`, and `ask_user` (only with
@@ -605,7 +605,7 @@ createdAt, lastSeenAt}` (Drizzle migration + regenerated snapshot), routes
 | M1 – Read (Direct mode dogfood over Tailscale/LAN) | Profiles, shell, theme, sidebar, thread list, search, read-only timeline with all row kinds, markdown, inline diffs, realtime                                                                           | 1, 2, 3, 4a |
 | M2 – Act                                           | Composer, send/queue/steer/stop, queued list, approvals + questions (incl. plugin forms), new thread with pickers, thread/project/section actions, fork, child threads, context banner incl. PR actions | 4b          |
 | M2.5 – Reach                                       | bb connect enrollment + session, push notifications, deep links                                                                                                                                         | 5           |
-| M3 – Workspace                                     | Info, Diff, Files/preview, storage browser, terminal, commit/squash dialog, thread tabs sync, root compose panel                                                                                        | 6           |
+| M3 – Workspace                                     | Info, Diff, Files/preview, storage browser, terminal, commit dialog, thread tabs sync, root compose panel                                                                                               | 6           |
 | M4 – Settings + extras                             | Settings screens, machines, updates, plugins mgmt, extensions/skills, share sheet, haptics, keep-awake                                                                                                  | 7           |
 | M5 – Optional                                      | SPA-in-WebView for plugin panels/settings sections, tablet layout, web sign-in onboarding, custom palette anchors, KaTeX/Mermaid WebView, TestFlight/Play                                               | 8           |
 
@@ -822,7 +822,7 @@ green per PR.
    the `bufferedAmount` socket adapter (+ vitest proving input flushes with
    `bufferedAmount` undefined), batched `postMessage`, throughput measurement,
    accessory key bar, create/restart/close/rename.
-6. Commit + squash-merge dialog with 409 blocked messages.
+6. Commit dialog with 409 blocked messages.
 7. Tests: Maestro: open Diff after a fake file change; open a text file;
    start a terminal and type `echo hi`.
 

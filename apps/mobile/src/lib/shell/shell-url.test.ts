@@ -21,8 +21,6 @@ describe("buildShellUrl", () => {
   });
 
   it("keeps a server's path prefix", () => {
-    // A reverse proxy or Tailscale Serve mount must not be dropped, or every
-    // navigation lands on the proxy's root instead of bb.
     expect(buildShellUrl(PREFIXED, "/")).toBe("https://box.example.ts.net/bb/");
     expect(buildShellUrl(PREFIXED, "/threads/thr_1")).toBe(
       "https://box.example.ts.net/bb/threads/thr_1",
@@ -46,7 +44,6 @@ describe("isShellNavigation", () => {
 
   it("sends another origin to the system browser", () => {
     expect(isShellNavigation("https://example.com/docs", ROOT)).toBe(false);
-    // A neighbouring handle on the same apex is a different server.
     expect(isShellNavigation("https://other.getbb.app/", ROOT)).toBe(false);
     expect(isShellNavigation("http://bee.getbb.app/", ROOT)).toBe(false);
   });

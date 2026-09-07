@@ -67,12 +67,6 @@ export interface EventProjectionMessageBase {
   parentToolCallId?: string;
 }
 
-/**
- * Messages projected from a provider item carry the bridge's declarative
- * presentation (grammar v3) when the persisted item had one. Absent on
- * events persisted before presentation existed; the row then renders
- * through its kind's legacy derivation.
- */
 interface EventProjectionPresentedMessage {
   presentation?: ThreadEventItemPresentation;
 }
@@ -99,8 +93,6 @@ export interface EventProjectionUserMessage extends EventProjectionMessageBase {
   kind: "user";
   initiator: ThreadTurnInitiator;
   senderThreadId: string | null;
-  // Family-B taxonomy fields carried from the decoded `client/turn/requested`
-  // event. Legacy events lacking them project as `unlabeled` / `null`.
   systemMessageKind: SystemMessageKind;
   systemMessageSubject: SystemMessageSubject | null;
   turnRequest: EventProjectionTurnRequest;
@@ -120,7 +112,6 @@ export interface EventProjectionAssistantTextMessage extends EventProjectionMess
   kind: "assistant-text";
   text: string;
   status: Extract<EventProjectionMessageStatus, "streaming" | "completed">;
-  /** True when this message came from a legacy persisted user-visible system event. */
   isLegacyUserMessage?: boolean;
 }
 
@@ -229,7 +220,6 @@ type EventProjectionItemActivityStatus = Extract<
   "pending" | "completed" | "error" | "interrupted"
 >;
 
-/** A grammar v3 `fileRead` item. */
 export interface EventProjectionFileReadMessage
   extends EventProjectionMessageBase, EventProjectionPresentedMessage {
   kind: "file-read";
@@ -240,7 +230,6 @@ export interface EventProjectionFileReadMessage
   status: EventProjectionItemActivityStatus;
 }
 
-/** A grammar v3 `search` item (content search, path match, or listing). */
 export interface EventProjectionSearchMessage
   extends EventProjectionMessageBase, EventProjectionPresentedMessage {
   kind: "search";
@@ -253,7 +242,6 @@ export interface EventProjectionSearchMessage
   status: EventProjectionItemActivityStatus;
 }
 
-/** A grammar v3 `planSteps` snapshot. */
 export interface EventProjectionPlanStepsMessage
   extends EventProjectionMessageBase, EventProjectionPresentedMessage {
   kind: "plan-steps";
@@ -264,7 +252,6 @@ export interface EventProjectionPlanStepsMessage
   status: EventProjectionItemActivityStatus;
 }
 
-/** A plugin extension item; `presentation` is mandatory on the item. */
 export interface EventProjectionExtensionMessage extends EventProjectionMessageBase {
   kind: "extension";
   callId: string;
@@ -298,6 +285,7 @@ export interface EventProjectionFileEditMessage
 
 const eventProjectionOperationTypeValues = [
   "provider-unhandled",
+  "provider-environment",
   "warning",
   "deprecation",
   "thread-interrupted",
@@ -414,13 +402,13 @@ export interface EventProjectionUserQuestionLifecycleMessage extends EventProjec
 }
 
 export interface EventProjectionDelegationMessage
-  extends EventProjectionMessageBase,
+  extends
+    EventProjectionMessageBase,
     EventProjectionDelegationMetadata,
     EventProjectionPresentedMessage {
   kind: "delegation";
   toolName: string;
   callId: string;
-  /** Provider-native child id (grammar v3); null for legacy tool-call delegations. */
   childRef: string | null;
   background: boolean;
   output: string;
@@ -432,27 +420,14 @@ export interface EventProjectionDelegationMessage
   childProjection: EventProjection;
 }
 
-/**
- * A provider background task — a dynamic workflow or a backgrounded shell
- * command, discriminated by `taskType`. One message per item across the whole
- * thread: the turn-scoped item/started anchors placement and later
- * thread-scoped progress/completed events replace its payload in place.
- */
 export interface EventProjectionWorkflowMessage
   extends EventProjectionMessageBase, EventProjectionPresentedMessage {
   kind: "workflow";
   itemId: string;
-  /**
-   * The provider's stable task id shared across restarted generations of the
-   * same task. Null for events persisted before the item carried it — those
-   * encode the family in the item id's legacy `#N` suffix.
-   */
   familyId: string | null;
-  /** Raw SDK task discriminant (e.g. "local_workflow", "local_bash"). */
   taskType: string;
   workflowName: string | null;
   description: string;
-  /** Model requested by the spawning delegation, when the provider exposed it. */
   model: string | null;
   status: Extract<
     EventProjectionMessageStatus,
@@ -501,15 +476,6 @@ export type EventProjectionMessage =
 export interface BuildEventProjectionMessagesOptions {
   includeProviderUnhandledOperations?: boolean;
   threadStatus?: Thread["status"];
-  /**
-   * Display name of the thread these messages belong to. Used by operation rows
-   * that describe a relationship to another thread. Empty string when the thread
-   * has no name; the title builders fall back to a bare verb.
-   */
   threadName: string;
-  /**
-   * Server-provided display name for the provider that owns this projection.
-   * Dynamic providers may not be known to this package's static fallback table.
-   */
   providerDisplayName?: string;
 }

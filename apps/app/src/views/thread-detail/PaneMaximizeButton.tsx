@@ -6,7 +6,11 @@ import { useAppCommandShortcut } from "@/components/commands/AppCommandProvider"
 import { HEADER_PANE_ACTION_ICON_BUTTON_CLASS } from "@/components/layout/AppPageHeader";
 import { CHROME_SUBTLE_ICON_BUTTON_FOREGROUND_CLASS } from "@bb/shared-ui/chrome-style-tokens";
 import { useHoverPopover } from "@/components/ui/hooks/use-hover-popover";
+import { useBrowserDimmingOverlay } from "@/hooks/useBrowserDimmingModal";
 import type { AppShortcutPresentation } from "@/lib/app-keybindings";
+import { getBbDesktopInfo } from "@/lib/bb-desktop";
+import type { KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useRef } from "react";
 import type { SplitSide } from "@/lib/split-layout";
 import { cn } from "@bb/shared-ui/lib/utils";
 import { usePaneContext } from "./PaneContext";
@@ -30,6 +34,19 @@ const ARRANGEMENT_REGION_CLASS: Record<SplitSide, string> = {
   top: "inset-x-[3px] top-[3px] h-1.5",
   bottom: "inset-x-[3px] bottom-[3px] h-1.5",
 };
+
+export function resolvePaneArrangementLabel({
+  isDesktopApp,
+  isFullScreen,
+}: {
+  isDesktopApp: boolean;
+  isFullScreen: boolean;
+}): string {
+  if (isDesktopApp) {
+    return isFullScreen ? "Exit Full Screen" : "Full Screen";
+  }
+  return isFullScreen ? "Restore split" : "Maximize pane";
+}
 
 function ArrangementGlyph({ side }: { side: SplitSide }) {
   return (
@@ -77,8 +94,6 @@ export function PaneArrangementButton({
   onToggleFullScreen: () => void;
   shortcut?: AppShortcutPresentation;
 }) {
-  // The pointer crosses this button on the way to the close control, so the
-  // menu waits before it appears.
   const {
     open: hoverOpen,
     triggerHoverProps,
@@ -86,9 +101,27 @@ export function PaneArrangementButton({
     handleOpenChange,
   } = useHoverPopover({ openDelayMs: 400, closeDelayMs: 100 });
 
-  const label = isFullScreen ? "Exit Full Screen" : "Full Screen";
+  const label = resolvePaneArrangementLabel({
+    isDesktopApp: getBbDesktopInfo() !== null,
+    isFullScreen,
+  });
   const accessibleLabel = shortcut ? `${label} (${shortcut.label})` : label;
   const menuOpen = !isFullScreen && hoverOpen;
+  const menuRef = useRef<HTMLDivElement>(null);
+  const focusFirstMenuItem = () => {
+    window.setTimeout(() => {
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')?.focus();
+    }, 0);
+  };
+  const handleTriggerKeyDown = (
+    event: ReactKeyboardEvent<HTMLButtonElement>,
+  ) => {
+    if (event.key !== "ArrowDown" || isFullScreen) return;
+    event.preventDefault();
+    handleOpenChange(true);
+    focusFirstMenuItem();
+  };
+  useBrowserDimmingOverlay(menuOpen);
   const button = (
     <Button
       type="button"
@@ -104,7 +137,7 @@ export function PaneArrangementButton({
       aria-pressed={isFullScreen}
       aria-haspopup={!isFullScreen ? "menu" : undefined}
       aria-expanded={!isFullScreen ? menuOpen : undefined}
-      onFocus={!isFullScreen ? () => handleOpenChange(true) : undefined}
+      onKeyDown={handleTriggerKeyDown}
       onClick={() => {
         handleOpenChange(false);
         onToggleFullScreen();
@@ -120,7 +153,7 @@ export function PaneArrangementButton({
       <Tooltip>
         <TooltipTrigger asChild>{button}</TooltipTrigger>
         <TooltipContent side="bottom">
-          <span>Exit Full Screen</span>
+          <span>{label}</span>
           {shortcut ? ` (${shortcut.label})` : ""}
         </TooltipContent>
       </Tooltip>
@@ -131,6 +164,7 @@ export function PaneArrangementButton({
     <Popover open={menuOpen} onOpenChange={handleOpenChange}>
       <PopoverAnchor asChild>{button}</PopoverAnchor>
       <PopoverContent
+        ref={menuRef}
         role="menu"
         aria-label="Pane arrangement"
         side="bottom"
@@ -149,7 +183,7 @@ export function PaneArrangementButton({
           }}
         >
           <Icon name="Maximize2" />
-          <span className="flex-1">Full Screen</span>
+          <span className="flex-1">{label}</span>
           {shortcut ? (
             <span className="text-subtle-foreground">{shortcut.label}</span>
           ) : null}

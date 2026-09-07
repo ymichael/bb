@@ -17,20 +17,9 @@ import {
   TaskContextMenu,
 } from "./property-menus.js";
 
-/**
- * Every trailing-rail element shares this pill treatment (Linear-style), so
- * the rail reads as one aligned system rather than mixed chips and bare text.
- */
 const RAIL_CHIP_CLASS =
   "flex items-center gap-1 rounded-md border border-border px-1.5 py-px text-xs text-muted-foreground";
 
-/**
- * Live-activity chip: a green dot plus an "Active" pill, styled like the label
- * chips so the rail stays uniform. Renders only while an agent is actively
- * starting/working; historical attachments show nothing. The pill text stays
- * constant; the tooltip carries the specific state (starting vs working, agent
- * count).
- */
 function ActiveChip({ threads }: { threads: readonly TaskThread[] }) {
   if (threads.length === 0) return null;
   return (
@@ -82,12 +71,6 @@ function LabelChipRow({
   );
 }
 
-/**
- * Row label chips, capped so rows keep a bounded metadata width: two chips in
- * regular containers, one in narrow ones (both variants render; container
- * queries on the list body pick which is displayed). Overflow collapses into a
- * "+N" chip whose tooltip lists the hidden names.
- */
 function LabelChips({
   task,
   labelsById,
@@ -110,28 +93,17 @@ function LabelChips({
 }
 
 interface TaskRowProps {
-  /** Task with any pending optimistic edit already applied. */
   task: Task;
   meta: TaskRowMeta | undefined;
   project: Project | undefined;
   showProject: boolean;
   labelsById: Map<string, Label>;
-  /** Labels belonging to this task's project, for the context menu. */
   projectLabels: readonly Label[];
   onEdit: EditFn;
   onOpen: () => void;
-  /** A mutation for this row is in flight. */
   pending: boolean;
 }
 
-/**
- * One task-list row. Primary navigation is a stretched overlay button so the
- * whole row opens the task, while the inline status/priority pickers sit above
- * it (z-10) and stay independently clickable — so editing never triggers an
- * accidental open. A focused row also opens the pickers with `S`/`P`, and
- * right-click (or the context-menu key / touch long-press) opens the property
- * menu.
- */
 export function TaskRow({
   task,
   meta,
@@ -151,11 +123,6 @@ export function TaskRow({
         data-task-key={task.key}
         aria-busy={pending || undefined}
         className={cn(
-          // Narrow containers get a two-line hierarchy: status + full-width
-          // title on top, then priority, key, and the metadata rail below.
-          // From @md up the same children lay out as the classic single flex
-          // row (the grid placement classes are inert in flex), so desktop
-          // keeps its exact 34px rows.
           "relative grid w-full grid-cols-[auto_auto_minmax(0,1fr)] items-center gap-x-2 gap-y-1 border-b border-border-hairline px-3.5 py-1.5 text-left transition-opacity hover:bg-state-hover",
           "@md:flex @md:h-[34px] @md:py-0",
           pending && "opacity-70",

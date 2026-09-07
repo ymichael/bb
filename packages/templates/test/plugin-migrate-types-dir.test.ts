@@ -11,11 +11,6 @@ import { join, sep } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { migratePluginToPackageLayout } from "../src/plugin-scaffold.js";
 
-/**
- * Arm one race: the next `readdir` of a `types/` directory drops a file into it
- * after reporting its (empty-of-declarations) contents — exactly the window
- * between the migration deciding `types/` will be empty and it running `rmdir`.
- */
 const race = vi.hoisted(() => ({ armed: false }));
 
 vi.mock("node:fs/promises", async () => {
@@ -43,13 +38,6 @@ vi.mock("node:fs/promises", async () => {
 
 const SDK_VERSION = "0.4.3";
 
-/**
- * `rmdir` failing is not a hypothetical: an editor save or a concurrent tool
- * can land a file in `types/` between the plan and the removal. Reporting the
- * directory as removed anyway would be a lie the tsconfig rewrite acts on — it
- * drops the `types` include on the strength of that flag, which would leave the
- * new file on disk and outside the program.
- */
 describe("migratePluginToPackageLayout when types/ survives the rmdir", () => {
   let rootDir: string;
 
@@ -97,19 +85,16 @@ describe("migratePluginToPackageLayout when types/ survives the rmdir", () => {
       sdkVersion: SDK_VERSION,
     });
 
-    // The vendored declaration still goes; the directory does not.
     expect(result.deletedFiles).toEqual(["types/bb-plugin-sdk.d.ts"]);
     expect(result.removedTypesDir).toBe(false);
-    expect(await stat(join(rootDir, "types")).then((s) => s.isDirectory())).toBe(
-      true,
-    );
-    // The include has to survive with it, or appeared.d.ts is stranded.
+    expect(
+      await stat(join(rootDir, "types")).then((s) => s.isDirectory()),
+    ).toBe(true);
     expect(result.removedIncludes).toEqual([]);
     const tsconfig: { include: string[] } = JSON.parse(
       await readFile(join(rootDir, "tsconfig.json"), "utf8"),
     );
     expect(tsconfig.include).toEqual(["server.ts", "types"]);
-    // The path map — the actual point of the migration — is still gone.
     const compilerOptions: { paths?: unknown } = JSON.parse(
       await readFile(join(rootDir, "tsconfig.json"), "utf8"),
     ).compilerOptions;

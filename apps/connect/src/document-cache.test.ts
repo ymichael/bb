@@ -1,17 +1,3 @@
-// The revalidated shell cache, exercised through the real TunnelDO and the
-// real serveWithCache inside workerd (miniflare) — the same harness as
-// response-encoding.test.ts, because `encodeBody` and caches.default's
-// storage rules exist only in workerd.
-//
-// The fake tunnel client plays a bb server that speaks the shell contract:
-// `Cache-Control: no-cache` plus a build-id ETag, 304 for a matching
-// If-None-Match. The tests pin the design's properties: a repeat navigation
-// is served from caches.default with only a 304 on the tunnel, a build change
-// takes effect on the next navigation, every visitor response carries the
-// origin's `no-cache` (so the browser revalidates too, instead of booting a
-// stale shell whose hashed assets are gone), a visitor's own conditional
-// request relays the origin's 304, and a server from before the contract
-// (`no-cache` without a validator) is proxied uncached.
 import { fileURLToPath } from "node:url";
 import { gzipSync } from "node:zlib";
 import { build } from "esbuild";
@@ -37,9 +23,7 @@ type ClientWebSocket = NonNullable<
 let mf: Miniflare;
 let tunnel: ClientWebSocket;
 
-/** What the fake bb server serves right now; tests flip it to ship a build. */
 let currentBuild = BUILD_A;
-/** One entry per relayed request: what the origin saw and had to send. */
 const originLog: { ifNoneMatch: string | null; sentBody: boolean }[] = [];
 
 async function bundleFixture(): Promise<string> {
@@ -56,11 +40,6 @@ async function bundleFixture(): Promise<string> {
   return result.outputFiles[0].text;
 }
 
-/**
- * A tunnel client whose origin serves the shell contract for every path —
- * except under /legacy/, where it plays a bb server from before the contract:
- * `no-cache` with no validator and no 304.
- */
 function serveShellOverTunnel(ws: ClientWebSocket): void {
   const send = (frame: Frame) => ws.send(new Uint8Array(encodeFrame(frame)));
   ws.addEventListener("message", (event) => {
@@ -134,10 +113,6 @@ async function get(
   };
 }
 
-/**
- * Cache writes ride ctx.waitUntil; poll the fixture's probe before relying on
- * them. Resolves to the Cache-Control the copy was stored under.
- */
 async function waitForShellCached(path: string): Promise<string> {
   for (let i = 0; i < 50; i += 1) {
     const res = await mf.dispatchFetch(
@@ -189,21 +164,14 @@ afterAll(async () => {
 describe("revalidated shell cache", () => {
   it("serves repeats from caches.default with only a 304 on the tunnel, and ships a new build on the next navigation", async () => {
     currentBuild = BUILD_A;
-    // Cold: full document through the tunnel, stored at the edge. The
-    // visitor gets the origin's own `no-cache`, so its browser revalidates
-    // on the next navigation exactly like a direct client would.
     const cold = await get("/threads/t1");
     expect(cold.status).toBe(200);
     expect(cold.body).toBe(BUILD_A.html);
     expect(cold.cacheMarker).toBe("miss");
     expect(cold.cacheControl).toBe("no-cache");
     expect(originLog.at(-1)).toEqual({ ifNoneMatch: null, sentBody: true });
-    // caches.default would not hold a `no-cache` response at all: the edge
-    // copy is stored under an internal freshness bound instead.
     expect(await waitForShellCached("/threads/t1")).toMatch(/^max-age=\d+$/u);
 
-    // Repeat: the origin only confirms the ETag; the body comes from the
-    // edge cache, still under the origin's `no-cache`.
     const repeat = await get("/threads/t1");
     expect(repeat.status).toBe(200);
     expect(repeat.body).toBe(BUILD_A.html);
@@ -214,8 +182,6 @@ describe("revalidated shell cache", () => {
       sentBody: false,
     });
 
-    // Ship a build: the same conditional request now returns the fresh 200,
-    // so the next navigation renders the new shell.
     currentBuild = BUILD_B;
     const upgraded = await get("/threads/t1");
     expect(upgraded.status).toBe(200);
@@ -229,7 +195,6 @@ describe("revalidated shell cache", () => {
     });
     await waitForShellCached("/threads/t1");
 
-    // And the new build revalidates from the edge like the old one did.
     const settled = await get("/threads/t1");
     expect(settled.body).toBe(BUILD_B.html);
     expect(settled.cacheMarker).toBe("revalidated");
@@ -241,11 +206,7 @@ describe("revalidated shell cache", () => {
   }, 30_000);
 
   it("relays the origin's 304 when the visitor presents a current validator", async () => {
-    // Own path, stored first: the relay only consults the visitor's validator
-    // once an edge copy exists, so this must not lean on the previous test.
     currentBuild = BUILD_B;
-    // Cold path: nothing stored yet, the visitor's own validator rides the
-    // proxied request and the origin's 304 comes straight back.
     const cold = await get("/threads/t2", { "if-none-match": BUILD_B.etag });
     expect(cold.status).toBe(304);
     expect(cold.body).toBe("");
@@ -254,7 +215,6 @@ describe("revalidated shell cache", () => {
       sentBody: false,
     });
 
-    // Stored path: the visitor's validator still wins over the stored ETag.
     const miss = await get("/threads/t2");
     expect(miss.cacheMarker).toBe("miss");
     await waitForShellCached("/threads/t2");
@@ -270,8 +230,6 @@ describe("revalidated shell cache", () => {
   }, 30_000);
 
   it("proxies a no-cache document without a validator uncached (a server from before the contract)", async () => {
-    // Twice: were `no-cache` enough for either cache flavor, the second
-    // navigation would be a hit or a revalidation instead of a full relay.
     for (let i = 0; i < 2; i += 1) {
       const res = await get("/legacy/threads/t1");
       expect(res.status).toBe(200);

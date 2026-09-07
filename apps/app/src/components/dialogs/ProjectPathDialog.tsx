@@ -133,8 +133,6 @@ function getPlatformCopy(
   hostName: string | null,
 ): PlatformCopy {
   const placeholder = "/path/to/project";
-  // The path is resolved on the host machine, not the device showing this
-  // dialog — name the host so remote users don't type a local path.
   const hostSuffix = hostName ? ` on ${hostName}` : "";
   if (platform === "wsl") {
     return {
@@ -179,11 +177,7 @@ export function ProjectPathDialogContent({
   const selectedHostConnected =
     selectedHost === undefined || selectedHost.status === "connected";
   const showMachinePicker = (machineOptions?.length ?? 0) > 1;
-  // Machines are listed but none can be browsed. The manual-path fallback is
-  // meaningless here — there is no host to resolve the path against, so a
-  // submit would be dropped without feedback.
   const noMachineAvailable = showMachinePicker && selectedHostId === null;
-  // No-host fallback only: the browser owns the path when a host is present.
   const [manualPath, setManualPath] = useState(
     target.kind === "update" ? target.currentPath : "",
   );

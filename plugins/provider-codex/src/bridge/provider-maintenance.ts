@@ -47,11 +47,6 @@ function fetchCodexUsage(headers: Headers): Promise<Response> {
   });
 }
 
-/**
- * The credential read behind health and usage: no `auth.json`, or one that
- * holds no usable login, reads as "not logged in"; a file that cannot be
- * read or parsed is the error the probe reports as-is.
- */
 async function readCredentials(): Promise<CodexAuthCredentials | null> {
   const auth = await readCodexAuthFile();
   switch (auth.state) {
@@ -74,7 +69,6 @@ function minimumSupportedVersionForRequirement(
     : CODEX_MINIMUM_SUPPORTED_VERSION;
 }
 
-/** Codex updates itself; only a missing install goes through npm. */
 function codexUpdateCommand(): {
   command: string;
   args: string[];
@@ -288,10 +282,7 @@ function planLabel(plan: string | null | undefined): string | null {
   return labels[plan] ?? plan.charAt(0).toUpperCase() + plan.slice(1);
 }
 
-function normalizeUsage(
-  raw: unknown,
-  email: string | null,
-): ProviderUsage {
+function normalizeUsage(raw: unknown, email: string | null): ProviderUsage {
   const parsed = codexUsageResponseSchema.safeParse(raw);
   if (!parsed.success) {
     return {
@@ -304,9 +295,7 @@ function normalizeUsage(
   const windows = [
     usageWindow(parsed.data.rate_limit?.primary_window, "Current session"),
     usageWindow(parsed.data.rate_limit?.secondary_window, "Weekly limit"),
-  ].filter(
-    (window): window is ProviderUsageWindow => window !== null,
-  );
+  ].filter((window): window is ProviderUsageWindow => window !== null);
   return {
     status: "ok",
     accountEmail: email,

@@ -156,12 +156,11 @@ export async function listPathsRecursively(
           name: entry.name,
         });
       }
-      results.push(
-        ...(await listPathsRecursively({
-          ...args,
-          dir: fullPath,
-        })),
-      );
+      const childResults = await listPathsRecursively({
+        ...args,
+        dir: fullPath,
+      });
+      for (const childResult of childResults) results.push(childResult);
       continue;
     }
 

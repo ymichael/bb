@@ -155,15 +155,7 @@ function outputPreviewNoteText({
   }
 }
 
-/**
- * Footer under a previewed command/tool output. Says why the body is short
- * and offers a retry when the full-output load failed. Nothing renders once
- * the full output is in place.
- */
-function OutputPreviewNote({
-  fullOutput,
-  row,
-}: OutputPreviewNoteProps) {
+function OutputPreviewNote({ fullOutput, row }: OutputPreviewNoteProps) {
   if (row.outputPreview === undefined) {
     return null;
   }
@@ -264,10 +256,6 @@ export function WorkRowBody({
         </div>
       );
     case "delegation":
-      // Delegation expanded bodies are dispatched by `TimelineExpandableBody`
-      // (in `ThreadTimelineRows.tsx`), which wraps childRows + output text in
-      // a delegation-tier scroll container. This branch is unreachable for
-      // the App renderer; kept exhaustive for the type.
       return null;
     case "question":
       return <QuestionWorkRowBody row={row} />;
@@ -281,10 +269,6 @@ export function WorkRowBody({
     case "plan-steps":
       return <PlanStepsWorkRowBody row={row} />;
     case "extension":
-      // The declarative base: label/icon/title live in the row title; the
-      // body is the bridge's detail. A plugin renderer for the kind replaces
-      // this through `experimental_timelineRenderer` (see
-      // TimelineExpandableBody).
       return <PresentationDetail presentation={row.presentation} />;
     case "image-view":
       return (
@@ -298,7 +282,6 @@ export function WorkRowBody({
     case "web-fetch":
     case "file-read":
     case "search":
-      // Title-only rows: the title carries the bridge's label and headline.
       return null;
     default:
       return assertNever(row);

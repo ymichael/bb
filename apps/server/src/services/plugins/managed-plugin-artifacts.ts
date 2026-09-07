@@ -82,24 +82,10 @@ export interface RegisterInstalledArgs extends InstallRegistrationIdentity {
 
 export interface InstallContext {
   provenance: PluginProvenance;
-  /**
-   * Manifest id the caller expects (catalog installs). Present means the
-   * install must abort before build or load when the fetched manifest
-   * declares any other id; absent means direct installs with no expectation.
-   */
   expectedPluginId?: string;
-  /** Git commit shown in the third-party install confirmation. */
   expectedGitCommit?: string;
-  /** npm registry a listing pins, replacing the host's npm configuration. */
   npmRegistry?: string;
-  /**
-   * Exact npm version the user confirmed for a third-party listing. Present
-   * means the install must refuse when the registry now resolves the same
-   * range or dist-tag to another version — the npm counterpart of
-   * {@link InstallContext.expectedGitCommit}.
-   */
   expectedNpmVersion?: string;
-  /** Integrity confirmed with that version, when the registry published one. */
   expectedNpmIntegrity?: string;
 }
 
@@ -136,27 +122,10 @@ interface ManagedPluginArtifactsContext {
   activateManagedUpdate: (args: ActivateManagedUpdateArgs) => Promise<void>;
 }
 
-/**
- * Install a git plugin's runtime dependencies into its staging dir.
- *
- * Nothing here executes plugin code: `--ignore-scripts` means npm only
- * downloads tarballs and writes files, and esbuild bundles by parsing rather
- * than evaluating. Resolving a dependency tree still reaches the registry (and
- * any `file:`/`git:` dependency the author declared), which is why this runs
- * only on the install/apply path and never on an update check.
- *
- * Run unconditionally: `git:` installs require npm regardless, because the
- * build toolchain itself is fetched on demand.
- */
 async function installGitDependencies(args: {
   rootDir: string;
   manifest: PluginManifest;
 }): Promise<void> {
-  // `--prefix` makes npm read `.npmrc` from the cloned repository, and that
-  // file can redirect the registry, relax TLS checks, or interpolate `${ENV}`
-  // from the server's environment into request URLs. The plugin author
-  // controls it, so drop it before npm ever looks. Staging is ours to edit and
-  // the promoted artifact has no use for it.
   for (const name of [".npmrc", ".yarnrc", ".yarnrc.yml"]) {
     await rm(join(args.rootDir, name), { force: true });
   }
@@ -204,12 +173,6 @@ async function installNpmCandidate(args: {
   );
 }
 
-/**
- * The npm resolver for a marketplace listing's registry: the guarded
- * marketplace transport (public address only, no redirects, timeout) plus a
- * bounded JSON reader. The URL check runs inside the request so an update
- * sweep over a bad registry yields an `unavailable` result, not a crash.
- */
 export function createListedRegistryNpmResolverRun(listedRegistry: string) {
   return createNpmResolverRun({
     fetch: (input, init) => {
@@ -248,11 +211,8 @@ export function createManagedPluginArtifacts(
     provenance: { kind: "direct" },
   };
 
-  /** Use the guarded network and byte policy only for a listing's registry. */
   function npmResolverRun(listedRegistry: string | undefined) {
     if (listedRegistry === undefined) return createNpmResolverRun();
-    // Installs refuse a non-public registry up front; the run below re-checks
-    // on every request so a later DNS or redirect answer cannot widen it.
     assertPublicMarketplaceUrl(listedRegistry);
     return createListedRegistryNpmResolverRun(listedRegistry);
   }
@@ -272,15 +232,6 @@ export function createManagedPluginArtifacts(
     }
   }
 
-  /**
-   * Manifest and engine checks only — no npm, no bundling, no plugin code and
-   * no network beyond the clone that already happened.
-   *
-   * This is what an update *check* runs. Checks are read-only by contract, so
-   * they must not resolve a dependency tree: a `file:` or `git:` dependency an
-   * author declared would otherwise reach local paths or new hosts every time
-   * bb polled for updates.
-   */
   async function validateManifestOnly(args: {
     rootDir: string;
     source: string;
@@ -299,12 +250,6 @@ export function createManagedPluginArtifacts(
     return manifest;
   }
 
-  /**
-   * Validation half of an install or update-apply: everything
-   * {@link validateManifestOnly} does, plus dependency installation, bundle
-   * builds, and artifact-metadata checks. Runs against a staging dir so a
-   * failure never touches the installed files.
-   */
   async function validateInstallDir(args: {
     rootDir: string;
     source: string;
@@ -313,16 +258,6 @@ export function createManagedPluginArtifacts(
     const manifest = await validateManifestOnly(args);
     const kind = sourceKind(args.source);
     const managed = kind === "git" || kind === "npm";
-    // Dependency + bundle policy (design §5.1):
-    // - git: bb installs declared runtime deps (scripts disabled — nothing
-    //   executes) and builds BOTH bundles so those deps are inlined.
-    //   node_modules is kept: esbuild only bundles statically reachable code,
-    //   so a dependency that reads a data file or .wasm at runtime still needs
-    //   its tree, and the source fallback in `resolveServerEntry` needs it too.
-    // - path: the author owns that directory. Never install into it and
-    //   never prune it; only the frontend is built.
-    // - npm: never built here; must ship a prebuilt dist whose metadata is
-    //   compatible with this SDK.
     if (kind === "git") {
       await installGitDependencies({ rootDir: args.rootDir, manifest });
     }
@@ -382,10 +317,6 @@ export function createManagedPluginArtifacts(
           );
         }
       }
-      // node_modules is deliberately retained. esbuild only bundles what it
-      // can discover statically, so a dependency that reads a data file,
-      // template, or .wasm at runtime would break if the tree were pruned —
-      // and the source fallback at `resolveServerEntry` needs it too.
     }
     async function validateArtifact(
       artifact: "server" | "app" | "host",
@@ -415,8 +346,6 @@ export function createManagedPluginArtifacts(
     }
 
     if (managed) {
-      // git builds its own server bundle above, so a missing one is a bug
-      // rather than an author choice. npm sources may still omit it.
       await validateArtifact("server", kind === "git");
       if (manifest.appEntry !== undefined) {
         await validateArtifact("app", kind === "npm");
@@ -490,11 +419,6 @@ export function createManagedPluginArtifacts(
     throw new Error(`npm did not resolve a registry for ${packageName}`);
   }
 
-  /**
-   * Plugin roots of other plugins that live inside `root`. A multi-plugin
-   * repository shares one checkout per commit, so a promote of `root` must
-   * carry these trees over instead of replacing them with pristine sources.
-   */
   function preservedNestedRoots(root: string): string[] {
     return nestedPluginRoots(
       root,
@@ -549,14 +473,6 @@ export function createManagedPluginArtifacts(
     }
   }
 
-  /**
-   * Decide what a `git:` spec resolves to.
-   *
-   * An implicit spec such as `1.x` reads as a semver range, but a repository
-   * can also name a branch `1.x`. Classification decides: with no ref of that
-   * name the spec is a range; with one, the install stops and asks the user to
-   * choose. bb does not guess, because each answer installs different code.
-   */
   async function resolveGitSelector(
     parsed: Extract<ReturnType<typeof parsePluginSource>, { kind: "git" }>,
     source: string,
@@ -755,10 +671,6 @@ export function createManagedPluginArtifacts(
     return withArtifactLock(targetDir, async () => {
       const stagingDir = `${targetDir}.staging`;
       await rm(stagingDir, { recursive: true, force: true });
-      // The cache holds one checkout per repository+commit, so a plugin the
-      // selection names may already be there — including one a sibling
-      // install of the same commit cloned. A selection this checkout cannot
-      // answer falls through to the clone, which reports the real problem.
       const cachedSubdirectory = await resolveSelectedSubdirectory({
         checkoutDir: targetDir,
         selection,
@@ -883,8 +795,6 @@ export function createManagedPluginArtifacts(
           source,
           refuseEngineMismatch: true,
         });
-        // The hash covers the plugin root, not the whole checkout: siblings
-        // from the same commit build into the same clone.
         const contentHash = await hashInstallDir(stagedRealRoot);
         const ownedArtifact = getPluginArtifactByResolution(deps.db, {
           sourceKind: "git",
@@ -960,15 +870,8 @@ export function createManagedPluginArtifacts(
     });
   }
 
-  /**
-   * The exact version and integrity a listing's npm spec resolves to now.
-   * The install confirmation needs this before anything runs, and it must
-   * resolve through the same registry and the same selection rules the
-   * install itself will use, or the two would disagree by construction.
-   */
   async function resolveNpmCandidateForPlan(args: {
     packageName: string;
-    /** Registry the listing pins; absent uses the host's npm configuration. */
     registry?: string;
     requestedSpec: string;
     specKind: NpmSpecKind;
@@ -1014,11 +917,6 @@ export function createManagedPluginArtifacts(
   ): Promise<PluginListEntry> {
     const registryProbe = join(deps.dataDir, "plugins", "npm", ".registry");
     await mkdir(registryProbe, { recursive: true });
-    // A listing that pins its own registry wins over the host's npm config;
-    // the pinned value is persisted, so updates re-resolve against it too.
-    // The host's own configured registry is the operator's choice, but a
-    // listing is untrusted input: it gets the marketplace network policy, so
-    // it cannot aim BB at an internal service.
     const listedRegistry = context.npmRegistry;
     const registry =
       listedRegistry ?? (await resolveNpmRegistry(registryProbe, parsed.name));
@@ -1033,8 +931,6 @@ export function createManagedPluginArtifacts(
       sourceIntent: { kind: "npm", ...intent },
     };
     const pluginId = derivePluginId(parsed.name);
-    // An npm plugin's id comes from its package name, so a listing that names
-    // the wrong plugin fails before any registry request.
     assertExpectedPluginId(context, pluginId, source);
     assertInstallRegistrationAvailable(
       getInstalledPlugin(deps.db, pluginId),
@@ -1044,8 +940,6 @@ export function createManagedPluginArtifacts(
     const selected = await selectNpmCandidate({
       intent,
       appVersion: deps.appVersion,
-      // A listed registry is contacted through the guarded socket, so a
-      // hostile DNS answer cannot reach a private host either.
       run: npmResolverRun(listedRegistry),
     });
     if (selected.outcome === "unavailable") {
@@ -1080,8 +974,6 @@ export function createManagedPluginArtifacts(
     );
     const rootDir = join(prefix, "node_modules", ...parsed.name.split("/"));
     return withArtifactLock(prefix, async () => {
-      // Materialize + validate in a staging sibling; swap only once good, so
-      // a failed refresh keeps the previous (still-loadable) install intact.
       const stagingPrefix = `${prefix}.staging`;
       await rm(stagingPrefix, { recursive: true, force: true });
       const cachedManifest = await readPluginManifest(rootDir).catch(
@@ -1243,11 +1135,6 @@ export function createManagedPluginArtifacts(
     row: InstalledPluginRow;
     commit: string;
     promote: boolean;
-    /**
-     * Source intent to persist when the candidate activates. A range install
-     * records the tag this commit came from, so it must be the tag the update
-     * resolved, not the one the row still holds.
-     */
     activationSelector?: PluginGitSelector;
     artifactLocked?: boolean;
   }): Promise<
@@ -1347,9 +1234,6 @@ export function createManagedPluginArtifacts(
         artifactId: existingArtifact.id,
       };
     }
-    // Both staging trees stay beside the checkout, never inside it: a nested
-    // plugin root is a directory of the checkout, and a clone dropped in there
-    // would join the plugin root of the repository root plugin.
     const stagingDir = args.promote
       ? `${targetDir}.staging`
       : `${targetDir}.update-staging-${randomUUID()}`;
@@ -1416,8 +1300,6 @@ export function createManagedPluginArtifacts(
         };
       }
       try {
-        // A check validates the manifest only; an apply additionally installs
-        // dependencies and builds. See `validateManifestOnly`.
         await (args.promote ? validateInstallDir : validateManifestOnly)({
           rootDir: realPluginRoot,
           source: args.row.source,

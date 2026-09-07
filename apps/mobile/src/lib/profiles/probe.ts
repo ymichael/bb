@@ -7,20 +7,12 @@ export type ProbeStage = "health" | "config";
 export type ProbeServerResult =
   | {
       ok: true;
-      /** The URL the user entered (normalized), never the server's own idea of it. */
       serverUrl: string;
       primaryHostId: string | null;
-      /**
-       * `serverUrl` as reported by `GET /system/config` when it differs from
-       * the entered URL and is not a loopback address; null otherwise. The
-       * simulator/emulator case (server says `127.0.0.1`) is deliberately not
-       * surfaced: the phone must keep talking to the URL that worked.
-       */
       advertisedServerUrl: string | null;
     }
   | { ok: false; serverUrl: string; stage: ProbeStage; error: string };
 
-// Only the fields the probe needs; unknown fields (and a newer server) pass.
 const probeConfigSchema = z.object({
   serverUrl: z.string(),
   primaryHostId: z.string().nullable(),
@@ -74,11 +66,6 @@ async function getJson(
   }
 }
 
-/**
- * Check that `serverUrl` is a reachable bb server: `/health` first (cheap,
- * proves routing), then `/api/v1/system/config` (proves it is bb and yields the
- * primary host).
- */
 export async function probeServer(
   serverUrl: string,
   fetchImpl: ProbeFetch,

@@ -5,6 +5,7 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CompactViewportOverrideProvider } from "@bb/shared-ui/hooks/use-compact-viewport";
 import { dispatchBrowserViewBoundsSync } from "@/lib/browser-view-bounds-sync";
+import { setCompactSidebarDrawerShowing } from "@/components/ui/sidebar-mobile-drawer-visibility";
 import {
   PaneContext,
   type PaneContextValue,
@@ -66,12 +67,10 @@ vi.mock("react-resizable-panels", async () => {
   return { Panel, PanelGroup };
 });
 
-vi.mock("@bb/shared-ui/responsive-overlay", async (importOriginal) => {
+vi.mock("./CompactSecondaryPanelShelf", async () => {
   const React = await import("react");
-  const actual =
-    await importOriginal<typeof import("@bb/shared-ui/responsive-overlay")>();
 
-  const PersistentResponsiveDrawerShell = ({
+  const CompactSecondaryPanelShelf = ({
     children,
     onContentAnimationEnd,
     open,
@@ -91,7 +90,7 @@ vi.mock("@bb/shared-ui/responsive-overlay", async (importOriginal) => {
     );
   };
 
-  return { ...actual, PersistentResponsiveDrawerShell };
+  return { CompactSecondaryPanelShelf };
 });
 
 interface QueuedAnimationFrames {
@@ -103,7 +102,9 @@ interface QueuedAnimationFrames {
 
 interface RenderLayoutArgs {
   collapseActive?: boolean;
+  compactPresentation?: "shelf" | "full";
   isCompactViewport: boolean;
+  onClose?: () => void;
   isFocusedHosted?: boolean;
   open: boolean;
   panelGroupKey?: string;
@@ -156,7 +157,7 @@ function renderLayout(args: RenderLayoutArgs) {
         <SecondaryPanelLayout
           open={renderArgs.open}
           onToggle={noop}
-          onClose={noop}
+          onClose={renderArgs.onClose ?? noop}
           panelGroupKey={renderArgs.panelGroupKey}
           resetKey={renderArgs.resetKey}
           contentKey={renderArgs.resetKey}
@@ -171,6 +172,7 @@ function renderLayout(args: RenderLayoutArgs) {
           }
           renderPanel={renderArgs.renderPanel}
           composerHost={null}
+          compactPresentation={renderArgs.compactPresentation ?? "shelf"}
         />
       </CompactViewportOverrideProvider>,
       renderArgs.isFocusedHosted,
@@ -271,12 +273,6 @@ function expectNativeBrowserVisibility(visible: boolean) {
   ).toBe(String(visible));
 }
 
-// `installAnimationFrameQueue` overwrites these with `Object.defineProperty`
-// before spying on them, so `vi.restoreAllMocks` restores the spy to that
-// overwrite rather than to the real function — leaving every test that runs
-// afterwards with a `requestAnimationFrame` that never invokes its callback.
-// Captured once at module load, before any test has had a chance to replace
-// them.
 const PRISTINE_REQUEST_ANIMATION_FRAME = window.requestAnimationFrame;
 const PRISTINE_CANCEL_ANIMATION_FRAME = window.cancelAnimationFrame;
 
@@ -305,6 +301,19 @@ beforeEach(() => {
 });
 
 describe("SecondaryPanelLayout", () => {
+  it("registers the thread and right panel as one two-pane resize grid", () => {
+    renderLayout({
+      isCompactViewport: false,
+      open: true,
+      renderPanel: createPanelRenderer(),
+      resetKey: "thread-grid",
+    });
+
+    expect(screen.getByTestId("panel-group").dataset.splitResizeGridRoot).toBe(
+      "",
+    );
+  });
+
   it("preserves routed main content when the panel state identity changes", () => {
     const frames = installAnimationFrameQueue();
     const view = renderLayout({
@@ -323,6 +332,9 @@ describe("SecondaryPanelLayout", () => {
     const mainContent = screen.getByTestId("main-content");
     expect(panelGroup.style.getPropertyValue("--panel-collapse-duration")).toBe(
       "220ms",
+    );
+    expect(mainContent.parentElement?.className).toContain(
+      "motion-reduce:transition-none",
     );
 
     view.rerenderWith({ resetKey: "plugin-page-b" });
@@ -348,8 +360,6 @@ describe("SecondaryPanelLayout", () => {
       "0ms",
     );
 
-    // This mirrors storage hydration dropping a transient New tab. The panel
-    // closes while transitions are still suppressed.
     view.rerenderWith({ open: false });
     act(() => frames.flushAll());
     expect(panelGroup.style.getPropertyValue("--panel-collapse-duration")).toBe(
@@ -663,5 +673,57 @@ describe("SecondaryPanelLayout", () => {
 
     expect(unmountFrames.cancelAnimationFrame).toHaveBeenCalledWith(3);
     expect(dispatchBrowserViewBoundsSync).not.toHaveBeenCalled();
+  });
+});
+
+describe("compact sidebar and right panel", () => {
+  it("closes the right panel when the sidebar drawer opens so only one shelf is engaged", () => {
+    const onClose = vi.fn();
+    renderLayout({
+      isCompactViewport: true,
+      onClose,
+      open: true,
+      renderPanel: createPanelRenderer(),
+      resetKey: "thread-1",
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+
+    act(() => setCompactSidebarDrawerShowing(true));
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    act(() => setCompactSidebarDrawerShowing(false));
+  });
+
+  it("leaves a closed right panel alone when the sidebar drawer opens", () => {
+    const onClose = vi.fn();
+    renderLayout({
+      isCompactViewport: true,
+      onClose,
+      open: false,
+      renderPanel: createPanelRenderer(),
+      resetKey: "thread-1",
+    });
+
+    act(() => setCompactSidebarDrawerShowing(true));
+    expect(onClose).not.toHaveBeenCalled();
+
+    act(() => setCompactSidebarDrawerShowing(false));
+  });
+
+  it("keeps the desktop panel open when the sidebar drawer flag flips", () => {
+    const onClose = vi.fn();
+    renderLayout({
+      isCompactViewport: false,
+      onClose,
+      open: true,
+      renderPanel: createPanelRenderer(),
+      resetKey: "thread-1",
+    });
+
+    act(() => setCompactSidebarDrawerShowing(true));
+    expect(onClose).not.toHaveBeenCalled();
+
+    act(() => setCompactSidebarDrawerShowing(false));
   });
 });

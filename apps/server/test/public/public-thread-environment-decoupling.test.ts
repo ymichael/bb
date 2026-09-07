@@ -5,21 +5,17 @@ import {
 } from "@bb/db/internal-environment-lifecycle";
 import type { EnvironmentStatus } from "@bb/domain";
 import { describe, expect, it } from "vitest";
+import { listQueuedThreadCommands } from "../helpers/commands.js";
 import { readJson } from "../helpers/json.js";
 import {
   seedEnvironment,
   seedHostSession,
   seedProjectWithSource,
   seedThread,
+  seedThreadRuntimeState,
 } from "../helpers/seed.js";
 import { withTestHarness } from "../helpers/test-app.js";
 
-/**
- * The thread record-lifecycle (archive/un-archive) is decoupled from the
- * environment lifecycle. Un-archive is a pure record op, and a thread pointing
- * at a gone environment surfaces the "environment is gone" condition instead
- * of reprovisioning.
- */
 describe("thread environment decoupling (B*)", () => {
   it("revives a retiring environment on un-archive (lossless undo of an accidental archive)", async () => {
     await withTestHarness(async (harness) => {
@@ -42,6 +38,12 @@ describe("thread environment decoupling (B*)", () => {
         environmentId: environment.id,
         status: "idle",
       });
+      const providerThreadId = "provider-unarchive-revive";
+      seedThreadRuntimeState(harness.deps, {
+        environmentId: environment.id,
+        providerThreadId,
+        threadId: thread.id,
+      });
       archiveThread(harness.db, harness.hub, thread.id);
 
       const response = await harness.app.request(
@@ -51,12 +53,20 @@ describe("thread environment decoupling (B*)", () => {
 
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeNull();
-      // The retiring environment is revived to ready via retire.cancelled: its
-      // worktree was never destroyed during the grace window, so the undo is
-      // lossless.
       expect(getEnvironment(harness.db, environment.id)).toMatchObject({
         status: "ready",
       });
+      expect(
+        listQueuedThreadCommands(harness, "thread.unarchive", thread.id),
+      ).toEqual([
+        expect.objectContaining({
+          environmentId: environment.id,
+          providerThreadId,
+          providerId: thread.providerId,
+          threadId: thread.id,
+          type: "thread.unarchive",
+        }),
+      ]);
     });
   });
 
@@ -100,8 +110,6 @@ describe("thread environment decoupling (B*)", () => {
         { method: "POST" },
       );
 
-      // The old 409 "environment cleanup in progress" path is gone — un-archive
-      // succeeds as a pure record op and the destroy keeps running.
       expect(response.status).toBe(200);
       expect(getThread(harness.db, thread.id)?.archivedAt).toBeNull();
       expect(getEnvironment(harness.db, environment.id)?.status).toBe(
@@ -150,7 +158,10 @@ describe("thread environment decoupling (B*)", () => {
     });
   });
 
-  for (const status of ["destroying", "destroyed"] as const satisfies readonly EnvironmentStatus[]) {
+  for (const status of [
+    "destroying",
+    "destroyed",
+  ] as const satisfies readonly EnvironmentStatus[]) {
     it(`rejects a send to a thread whose environment is ${status} without reprovisioning`, async () => {
       await withTestHarness(async (harness) => {
         const { host } = seedHostSession(harness.deps, {
@@ -172,6 +183,15 @@ describe("thread environment decoupling (B*)", () => {
           environmentId: environment.id,
           status: "idle",
         });
+        // An `idle` thread has always run a turn, and the dispatch checkpoint
+        // resolves this send's execution tuple before it reaches the
+        // environment. Without a prior turn the fixture would fail on the
+        // missing model instead of on the gone workspace.
+        seedThreadRuntimeState(harness.deps, {
+          environmentId: environment.id,
+          providerThreadId: `provider-send-${status}`,
+          threadId: thread.id,
+        });
 
         const response = await harness.app.request(
           `/api/v1/threads/${thread.id}/send`,
@@ -191,7 +211,6 @@ describe("thread environment decoupling (B*)", () => {
           code: "thread_environment_unavailable",
           details: { reason: status, environmentStatus: status },
         });
-        // The environment was not reprovisioned: its status is unchanged.
         expect(getEnvironment(harness.db, environment.id)?.status).toBe(status);
       });
     });

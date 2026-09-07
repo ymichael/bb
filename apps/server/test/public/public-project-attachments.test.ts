@@ -70,8 +70,6 @@ describe("public project attachments", () => {
         expect(new Uint8Array(await content.arrayBuffer())).toEqual(
           fixture.bytes,
         );
-        // Stored names are unique per upload, so the bytes are immutable and
-        // the browser may keep them; the validator still answers 304.
         expect(content.headers.get("cache-control")).toBe(
           "private, immutable, max-age=31536000",
         );
@@ -147,7 +145,6 @@ describe("public project attachments", () => {
       const { project } = seedProjectWithSource(harness.deps, {
         hostId: host.id,
       });
-      // ISO BMFF `ftyp` box with the `heic` brand, as an iPhone photo starts.
       const heicBytes = new Uint8Array([
         0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x68, 0x65, 0x69, 0x63,
         0x00, 0x00, 0x00, 0x00, 0x6d, 0x69, 0x66, 0x31, 0x68, 0x65, 0x69, 0x63,
@@ -158,8 +155,6 @@ describe("public project attachments", () => {
           "HEIC images are not supported. Convert the image to JPEG or PNG before attaching it.",
       };
 
-      // Chromium labels a dropped or pasted .heic file `image/heic`, and the
-      // CLI infers the same from the extension.
       const heic = await upload(
         harness.app,
         project.id,
@@ -178,10 +173,6 @@ describe("public project attachments", () => {
       expect(heif.status).toBe(400);
       await expect(readJson(heif)).resolves.toEqual(rejected);
 
-      // Only the image classification is broken. The same bytes sent as a
-      // non-image (`bb project attachment upload photo.heic --mime-type
-      // application/octet-stream`) still store as a plain file chip that an
-      // agent can convert on the host.
       const asFile = await upload(
         harness.app,
         project.id,

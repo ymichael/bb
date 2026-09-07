@@ -29,11 +29,6 @@ const STANDALONE_TMP_PREFIX = "bb-standalone-";
 const PROCESS_SCAN_MAX_BUFFER = 10 * 1024 * 1024;
 
 type EnvironmentMap = Record<string, string>;
-// Thread-context env the parent agent injects into every shell. A standalone
-// pair must not inherit it: BB_THREAD_STORAGE in particular points at the parent
-// thread's own storage subdirectory, which the daemon would otherwise adopt as
-// its storage root and diverge from the server's data-dir-derived path, breaking
-// thread.start with "Thread storage path escapes the storage root".
 const STANDALONE_THREAD_CONTEXT_ENV = [
   "BB_THREAD_ID",
   "BB_ENVIRONMENT_ID",
@@ -94,10 +89,6 @@ interface SpawnLoggedProcessOptions {
 
 interface StartQaServerArgs {
   dataDir: string;
-  /**
-   * Complete server process environment. This is not merged over process.env;
-   * callers that need inherited variables must include them explicitly.
-   */
   env?: NodeJS.ProcessEnv;
   logPath: string;
   port: number;
@@ -236,12 +227,6 @@ export function buildStandaloneShellExports(env: EnvironmentMap): string {
   return [...unsetThreadContext, buildShellExports(env)].join("\n");
 }
 
-/**
- * Builds the standalone QA process environment. Isolates the pair from the
- * parent agent by stripping inherited thread context (see
- * STANDALONE_THREAD_CONTEXT_ENV) and applies provider-key policy: ambient
- * OPENAI_API_KEY is stripped unless BB_QA_OPENAI_API_KEY opts in.
- */
 export function buildStandaloneRuntimeEnv(
   args: BuildStandaloneRuntimeEnvArgs,
 ): NodeJS.ProcessEnv {
@@ -475,8 +460,6 @@ export function spawnLoggedProcess(
   try {
     const child = spawn(options.command, options.args, {
       cwd: options.cwd,
-      // Standalone QA commands return after startup, so the child must leave the
-      // wrapper's process group or pnpm tears the stack down immediately.
       detached: true,
       env: options.env,
       stdio: ["ignore", logFd, logFd],

@@ -1,7 +1,6 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
-  toPluginListItem,
-  type PluginListResult,
+  pluginListQueryOptions,
   type PluginSettingsView,
 } from "../queries/plugin-settings-queries";
 import type { InstalledPlugin } from "@bb/server-contract";
@@ -13,12 +12,6 @@ import {
   pluginSettingsViewQueryKey,
 } from "../queries/query-keys";
 
-/**
- * Cache owner for plugin management data. The PUT /plugins/:id/settings
- * response is the refreshed settings view, so the mutation seeds it directly
- * instead of refetching; realtime `plugins-changed` invalidation (the
- * registry) covers every other writer.
- */
 export function applyPluginSettingsView(args: {
   queryClient: QueryClient;
   pluginId: string;
@@ -30,40 +23,27 @@ export function applyPluginSettingsView(args: {
   );
 }
 
-/**
- * Seed the canonical installed-plugin response before a post-install route
- * transition. The detail route reads this list, so waiting for invalidation to
- * refetch can otherwise flash a false "Plugin not found" state.
- */
 export function applyInstalledPlugin(args: {
   queryClient: QueryClient;
   plugin: InstalledPlugin;
 }): void {
-  const installed = toPluginListItem(args.plugin);
-  args.queryClient.setQueryData<PluginListResult>(
+  args.queryClient.setQueryData<InstalledPlugin[]>(
     pluginListQueryKey(true),
     (current) => {
-      const plugins = current?.plugins ?? [];
+      const plugins = current ?? [];
       const existingIndex = plugins.findIndex(
-        (candidate) => candidate.id === installed.id,
+        (candidate) => candidate.id === args.plugin.id,
       );
       if (existingIndex === -1) {
-        return { plugins: [...plugins, installed] };
+        return [...plugins, args.plugin];
       }
-      return {
-        plugins: plugins.map((candidate, index) =>
-          index === existingIndex ? installed : candidate,
-        ),
-      };
+      return plugins.map((candidate, index) =>
+        index === existingIndex ? args.plugin : candidate,
+      );
     },
   );
 }
 
-/**
- * Refetch the installed-plugin list after an enable/disable POST. The
- * realtime `plugins-changed` broadcast covers other windows; this gives the
- * acting window an immediate refresh.
- */
 export function invalidatePluginList(args: {
   queryClient: QueryClient;
 }): Promise<void> {
@@ -72,11 +52,24 @@ export function invalidatePluginList(args: {
   });
 }
 
-/**
- * Refetch catalog results after an install. Search rows carry installed and
- * compatibility state, so plugin lifecycle changes also invalidate this
- * prefix.
- */
+export async function markEnabledPluginListStale(args: {
+  queryClient: QueryClient;
+}): Promise<void> {
+  const queryKey = pluginListQueryKey(true);
+  if (args.queryClient.getQueryState(queryKey)?.fetchStatus === "fetching") {
+    try {
+      await args.queryClient.fetchQuery(
+        pluginListQueryOptions({ enabled: true }),
+      );
+    } catch {}
+  }
+  await args.queryClient.invalidateQueries({
+    exact: true,
+    queryKey,
+    refetchType: "none",
+  });
+}
+
 export function invalidatePluginCatalogSearch(args: {
   queryClient: QueryClient;
 }): void {
@@ -85,10 +78,6 @@ export function invalidatePluginCatalogSearch(args: {
   });
 }
 
-/**
- * Refetch the marketplace list after an add, refresh, or remove. The catalog
- * the store reads changes with it, so both prefixes go together.
- */
 export function invalidatePluginMarketplaces(args: {
   queryClient: QueryClient;
 }): void {

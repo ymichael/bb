@@ -12,7 +12,6 @@ import type {
 } from "@bb/server-contract";
 import type { FollowUpSubmitMode } from "./follow-up-submit-mode.js";
 
-/** `POST /threads/:id/messages` body plus the thread id it targets. */
 export interface SendMessageMutationRequest extends SendMessageRequest {
   id: string;
 }
@@ -23,7 +22,7 @@ export interface CreateQueuedFollowUpRequest extends CreateQueuedMessageRequest 
 
 export interface SendQueuedMessageByIdRequest {
   id: string;
-  mode: "auto";
+  mode: "steer";
   queuedMessageId: string;
 }
 
@@ -93,7 +92,9 @@ interface BuildFollowUpSubmitModeArgs {
 
 interface BuildSideChatSubmitModeArgs {
   childThreadId: string | null;
+  hasPendingInteraction: boolean;
   isDefaultExecutionOptionsLoading: boolean;
+  isPendingInteractionsInitialLoading: boolean;
   isStopRequested: boolean;
   onStop: () => void;
   runtimeDisplayStatus: ThreadRuntimeDisplayStatus;
@@ -158,7 +159,9 @@ export function buildFollowUpSubmitMode({
 
 export function buildSideChatSubmitMode({
   childThreadId,
+  hasPendingInteraction,
   isDefaultExecutionOptionsLoading,
+  isPendingInteractionsInitialLoading,
   isStopRequested,
   onStop,
   runtimeDisplayStatus,
@@ -169,9 +172,9 @@ export function buildSideChatSubmitMode({
       : { kind: "ready" };
   }
   return buildFollowUpSubmitMode({
-    hasPendingInteraction: false,
+    hasPendingInteraction,
     isDefaultExecutionOptionsLoading,
-    isPendingInteractionsInitialLoading: false,
+    isPendingInteractionsInitialLoading,
     isStopRequested,
     onStop,
     runtimeDisplayStatus,
@@ -187,7 +190,9 @@ export function canSubmitFollowUpShortcut({
   submitModeKind,
 }: CanSubmitFollowUpShortcutArgs): boolean {
   return (
-    runtimeDisplayStatus === "active" &&
+    (runtimeDisplayStatus === "active" ||
+      runtimeDisplayStatus === "provisioning" ||
+      runtimeDisplayStatus === "starting") &&
     submitModeKind === "queue" &&
     !isFollowUpSubmitting &&
     !isQueueMutationPending &&
@@ -235,9 +240,6 @@ function buildSteerFollowUpRequest({
     return null;
   }
 
-  // The composer picker stays editable while a turn runs. Without the
-  // selection the server resolves the steer from the thread's last execution,
-  // i.e. the active turn's tuple, and silently ignores the new pick.
   return {
     id: threadId,
     input,
@@ -268,16 +270,11 @@ function buildSendQueuedMessageByIdRequest({
 }: BuildSendQueuedMessageByIdRequestArgs): SendQueuedMessageByIdRequest {
   return {
     id: threadId,
-    mode: "auto",
+    mode: "steer",
     queuedMessageId,
   };
 }
 
-/**
- * Cmd+Enter on an active follow-up composer sends current draft input as an
- * explicit steer. If the composer is empty, it sends only the current queue
- * head through the same auto path as the queued-card "Send now" action.
- */
 export function buildFollowUpShortcutRequest({
   execution,
   input,

@@ -73,10 +73,6 @@ describe("useStickyBottomScroll", () => {
   });
 
   it("refreshes the cached maximum when only the content grows", () => {
-    // The scroll port has a fixed box, so a content-only growth (an image
-    // load, a disclosure toggle) fires no resize on it. The hook must
-    // observe the content wrapper too, or the stale maximum re-sticks a
-    // user who sits at the OLD bottom.
     const observed: Element[] = [];
     let fireResize: (() => void) | undefined;
     class StubResizeObserver {
@@ -116,7 +112,6 @@ describe("useStickyBottomScroll", () => {
           scrollTop = value;
         },
       },
-      // Deterministic smooth-scroll target; jsdom does not implement it.
       scrollTo: {
         configurable: true,
         value: (options: ScrollToOptions) => {
@@ -128,13 +123,10 @@ describe("useStickyBottomScroll", () => {
     rerender(<StickyScrollProbe contentKey="second" />);
     expect(scrollTop).toBe(100);
 
-    // The user scrolls up; stickiness disengages.
     scrollTop = 40;
     fireEvent.wheel(scroll);
     fireEvent.scroll(scroll);
 
-    // Content grows to a 200px maximum; the wrapper observer refreshes the
-    // cache. Scrolling back to the stale bottom (100) must NOT re-stick.
     scrollHeight = 220;
     fireResize?.();
     scrollTop = 100;
@@ -143,7 +135,6 @@ describe("useStickyBottomScroll", () => {
     rerender(<StickyScrollProbe contentKey="third" />);
     expect(scrollTop).toBe(100);
 
-    // Scrolling to the real bottom re-sticks, so the next tick follows.
     scrollTop = 200;
     fireEvent.scroll(scroll);
     scrollHeight = 260;

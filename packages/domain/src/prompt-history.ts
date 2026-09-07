@@ -34,10 +34,7 @@ export function arePromptHistoryInputsEqual(
 
 export function takeVisiblePromptHistoryEntries<
   TEntry extends PromptHistoryComparableEntry,
->({
-  entries,
-  limit,
-}: TakeVisiblePromptHistoryEntriesArgs<TEntry>): TEntry[] {
+>({ entries, limit }: TakeVisiblePromptHistoryEntriesArgs<TEntry>): TEntry[] {
   if (limit <= 0 || entries.length === 0) {
     return [];
   }

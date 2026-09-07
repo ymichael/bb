@@ -12,7 +12,11 @@ interface CollectTimelineAutoExpansionRowIdsArgs {
 }
 
 export interface TimelineAutoExpansionRowIds {
-  liveFrontierRowIds: ReadonlySet<string>;
+  /**
+   * Rows the timeline opens for as long as the condition holds and closes
+   * again when it stops: the active scope's live frontier.
+   */
+  liveExpandedRowIds: ReadonlySet<string>;
   terminalFrontierRowIds: ReadonlySet<string>;
 }
 
@@ -25,9 +29,6 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
     case "image-view":
       return true;
     case "question":
-      // Resolving and answered rows both carry a recorded answer in their
-      // body. Pending/interrupted stay title-only. Matches the
-      // body-collapse rule in QuestionWorkRowBody.
       return row.lifecycle === "answered" || row.lifecycle === "resolving";
     case "command":
       return !hasTimelineExplorationIntent(row);
@@ -35,15 +36,10 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
       return true;
     case "file-read":
     case "search":
-      // Exploration rows are title-only, like the legacy Read/Grep bundles.
       return false;
     case "plan-steps":
       return row.steps.length > 0;
     case "extension":
-      // The declarative base shows the bridge's detail in the body; a row
-      // without one, or with a blank one, stays title-only (a plugin
-      // renderer may still expand). Same rule as the `system` case and the
-      // body renderers, so a chevron never opens onto an empty body.
       return (
         row.presentation.detail !== undefined &&
         row.presentation.detail.trim().length > 0
@@ -53,9 +49,6 @@ export function isWorkRowExpandable(row: TimelineViewWorkRow): boolean {
     case "delegation":
       return row.childRows.length > 0 || row.output.trim().length > 0;
     case "workflow":
-      // The phase/agent tree (or terminal summary/error) lives in the body; a
-      // degraded row with none of them stays title-only. Matches the
-      // body-collapse rule in WorkflowWorkRowBody.
       return (
         row.workflow !== null || row.summary !== null || row.error !== null
       );
@@ -82,14 +75,6 @@ export function isRowExpandable(row: ThreadTimelineViewRow): boolean {
   }
 }
 
-/**
- * Bundle and step summaries whose children are all non-expandable get the
- * base max-height cap with overflow fades. Summaries that contain any
- * expandable child do not — capping then would put the child's own scroll
- * body inside a scrolling parent, which is poor UX. The expandability test
- * reuses `isWorkRowExpandable` so the cap rule and the per-row expand
- * affordance can never disagree.
- */
 export function isNonExpandableSummary(
   children: readonly TimelineViewWorkRow[],
 ): boolean {
@@ -112,7 +97,6 @@ function shouldAutoExpandLiveFrontierRow(row: ThreadTimelineViewRow): boolean {
       return (
         row.workKind === "delegation" ||
         row.workKind === "image-view" ||
-        // A running workflow auto-opens so live agent progress is visible.
         (row.workKind === "workflow" && row.status === "pending")
       );
     case "conversation":
@@ -200,11 +184,11 @@ export function collectTimelineAutoExpansionRowIds({
   scopeActive,
 }: CollectTimelineAutoExpansionRowIdsArgs): TimelineAutoExpansionRowIds {
   const terminalFrontierRowIds = new Set<string>();
-  const liveFrontierRowIds = new Set<string>();
+  const liveExpandedRowIds = new Set<string>();
   visitForTerminalFrontierAutoExpand(rows, terminalFrontierRowIds);
-  visitForLiveFrontierAutoExpand(rows, scopeActive, liveFrontierRowIds);
+  visitForLiveFrontierAutoExpand(rows, scopeActive, liveExpandedRowIds);
   return {
-    liveFrontierRowIds,
+    liveExpandedRowIds,
     terminalFrontierRowIds,
   };
 }

@@ -1,13 +1,3 @@
-/**
- * Namespaced presentation glyphs (`"<pluginId>/<name>"`) are validated at
- * ingest against the icons the thread's provider plugin declares. A glyph
- * naming the plugin's own declared icon persists as-is; one naming another
- * plugin or an undeclared name persists as a visible `provider/unhandled` in
- * the same batch slot, with the glyph in the reason. Host glyphs are never
- * touched here. A `server: "bb"` tool row is the exception: its presentation
- * came from the plugin that registered the tool, so its glyph is checked
- * against that plugin, not the thread's provider plugin.
- */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { eq } from "drizzle-orm";
@@ -38,6 +28,7 @@ async function setup() {
   const harness = await createTestAppHarness();
   harness.deps.providerRegistry.register({
     ...buildPluginProviderRegistration({
+      iconHash: null,
       available: true,
       pluginId: PLUGIN_ID,
       declaration: validatePluginProviderDeclaration({
@@ -59,7 +50,6 @@ async function setup() {
       readSettings: () => ({}),
     }),
     pluginId: PLUGIN_ID,
-    // What `bb.branding.experimental_icons` declared for this plugin.
     iconNames: new Set(["gauge"]),
   });
   const { host, session } = seedHostSession(harness.deps);
@@ -164,15 +154,17 @@ describe("presentation icon ingest validation", () => {
         toolItem(thread.id, "item-1", `${PLUGIN_ID}/gauge`, "item/started"),
         toolItem(thread.id, "item-1", `${PLUGIN_ID}/gauge`),
         toolItem(thread.id, "item-2", "Terminal"),
-        // A host glyph the client may not know is still the client's call.
         toolItem(thread.id, "item-3", "NotAGlyphAnyoneKnows"),
       ]);
       expect(response.status).toBe(200);
       expect(
         storedRows(harness, thread.id).map((row) => [
           row.type,
-          (row.data as { item?: { presentation?: { icon: { glyph: string } } } })
-            .item?.presentation?.icon.glyph,
+          (
+            row.data as {
+              item?: { presentation?: { icon: { glyph: string } } };
+            }
+          ).item?.presentation?.icon.glyph,
         ]),
       ).toEqual([
         ["turn/started", undefined],
@@ -196,7 +188,6 @@ describe("presentation icon ingest validation", () => {
         toolItem(thread.id, "item-3", `${PLUGIN_ID}/gauge`),
       ]);
       expect(response.status).toBe(200);
-      // Every slot was accepted: the replacement keeps the batch shape.
       await expect(readJson(response)).resolves.toMatchObject({
         acceptedEvents: [
           { eventIndex: 0 },
@@ -248,13 +239,6 @@ describe("presentation icon ingest validation", () => {
   });
 });
 
-/**
- * The thread-scoped snapshots of a background delegation or task carry the
- * full item, presentation included, and the assembler stamps the close's
- * presentation on the terminal one — so they are where a background item's
- * final glyph actually persists. They are held to the same rule as the
- * turn-scoped open/close pair.
- */
 function presentationOf(glyph: string) {
   return {
     label: { pending: "Working", completed: "Worked" },
@@ -345,8 +329,6 @@ describe("presentation icon ingest validation on thread-scoped item snapshots", 
   ])("holds %s to the provider plugin's declared icons", async (type) => {
     const { harness, session, thread } = await setup();
     try {
-      // One item per snapshot: a second terminal snapshot of the same
-      // item would be dropped as a duplicate settlement, not for its glyph.
       const response = await post(harness, session.id, [
         turnStarted(thread.id),
         itemSnapshot(thread.id, type, "item-1", `${PLUGIN_ID}/gauge`),
@@ -376,8 +358,6 @@ describe("presentation icon ingest validation on thread-scoped item snapshots", 
       const itemType = type.startsWith("item/delegation/")
         ? "delegation"
         : "backgroundTask";
-      // The replacement sits where the snapshot would have: thread scope,
-      // the item's identity and parent, the glyph and the reason.
       expect(rows[3]).toMatchObject({
         itemKind: null,
         scopeKind: "thread",
@@ -416,11 +396,6 @@ describe("presentation icon ingest validation on thread-scoped item snapshots", 
   });
 });
 
-/**
- * A plugin (`tooled`) that declares one icon and registers one bb tool whose
- * presentation names it. It is not a provider plugin: the thread it is
- * exercised on belongs to `widgets`.
- */
 const TOOL_PLUGIN_ID = "tooled";
 const TOOL_ICON_GLYPH = `${TOOL_PLUGIN_ID}/stamp`;
 const STAMP_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h16v16H4z"/></svg>`;
@@ -450,7 +425,6 @@ async function writeToolPluginFixture(rootDir: string): Promise<void> {
   await writeFile(join(rootDir, "icons", "stamp.svg"), STAMP_SVG);
 }
 
-/** A call to a bb-injected tool, as the provider bridge stamps it. */
 function bbToolItem(
   threadId: string,
   id: string,
@@ -496,8 +470,6 @@ describe("presentation icon ingest validation for bb-injected tool rows", () => 
       await writeToolPluginFixture(rootDir);
       const entry = await harness.pluginService.installPath(rootDir);
       expect(entry.status, entry.statusDetail ?? "").toBe("running");
-      // registerTool verified the glyph against the `tooled` manifest; the
-      // server resolves this presentation for the bridge to stamp on the row.
       harness.pluginService.getApi(TOOL_PLUGIN_ID)!.agents.registerTool({
         name: "stamp_tool",
         description: "Names a declared icon",
@@ -508,15 +480,9 @@ describe("presentation icon ingest validation for bb-injected tool rows", () => 
 
       const response = await post(harness, session.id, [
         turnStarted(thread.id),
-        // The feature: the tool's own icon survives ingest on a thread whose
-        // provider plugin (`provider-widgets`) never declared it.
         bbToolItem(thread.id, "item-1", "stamp_tool", TOOL_ICON_GLYPH),
-        // The glyph names a plugin other than the one that registered the tool.
         bbToolItem(thread.id, "item-2", "stamp_tool", "other-plugin/stamp"),
-        // No plugin registers a tool by this name.
         bbToolItem(thread.id, "item-3", "no_such_tool", TOOL_ICON_GLYPH),
-        // A provider-authored row (no `server: "bb"`) borrowing the tool
-        // plugin's icon is still held to the provider plugin's declarations.
         toolItem(thread.id, "item-4", TOOL_ICON_GLYPH),
       ]);
       expect(response.status).toBe(200);

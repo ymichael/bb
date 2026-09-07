@@ -1,19 +1,3 @@
-/**
- * Reader for the private provider corpus: real production threads extracted
- * from a bb database for the provider-plugin migration regression gates.
- *
- * The corpus is never committed. Tests find it through
- * `BB_PROVIDER_CORPUS_DIR` and must skip when it is absent
- * (`describe.skipIf(!corpusAvailable())`). Layout:
- *
- *   manifest.json                          thread selection and reasons
- *   threads/<provider>/<threadId>/meta.json      `threads` row + reasons
- *   threads/<provider>/<threadId>/events.ndjson  raw `events` rows in order
- *
- * Event payloads decode through the same `@bb/domain` parser the server uses
- * for stored rows, so a corpus thread that fails to load here would also fail
- * to load in production.
- */
 import fs from "node:fs";
 import path from "node:path";
 import {
@@ -34,9 +18,7 @@ import type {
 } from "@bb/domain";
 import { z } from "zod";
 
-/** The `scope_kind` column; the domain keeps its enum schema private. */
 const corpusScopeKindSchema = z.enum(["thread", "turn"]);
-// Fails to compile if the domain's scope kinds ever diverge from this list.
 const corpusScopeKindCoversDomain: ThreadEventScopeKind extends z.infer<
   typeof corpusScopeKindSchema
 >
@@ -48,11 +30,6 @@ void corpusScopeKindCoversDomain;
 
 export const PROVIDER_CORPUS_DIR_ENV = "BB_PROVIDER_CORPUS_DIR";
 
-/**
- * Thread and provider ids name directories under the corpus and under the
- * snapshot tree, so they must be single path segments: no separators, no
- * `.`/`..`, nothing the filesystem could interpret.
- */
 const corpusPathSegmentSchema = z
   .string()
   .regex(/^[A-Za-z0-9][A-Za-z0-9_-]*$/, "must be one safe path segment");
@@ -110,7 +87,6 @@ const corpusEventRowSchema = z.object({
 
 export type CorpusManifestThread = z.infer<typeof corpusManifestThreadSchema>;
 
-/** The `threads` row as extracted, with the column subset the extractor kept. */
 export interface CorpusThreadRow {
   id: string;
   providerId: string;
@@ -127,7 +103,6 @@ export interface CorpusThreadRow {
   reasoningLevelOverride: z.infer<typeof reasoningLevelSchema> | null;
 }
 
-/** One raw `events` row, column-for-column, ready to insert as stored. */
 export interface CorpusStoredEventRow {
   id: string;
   threadId: string;
@@ -150,15 +125,12 @@ export interface CorpusThread {
   reasons: string[];
   features: Record<string, number | string>;
   thread: CorpusThreadRow;
-  /** Raw rows in sequence order, for inserting into a test database. */
   eventRows: CorpusStoredEventRow[];
-  /** The same rows decoded with the server's stored-event parser. */
   events: ThreadEventRow[];
 }
 
 export interface ListCorpusThreadsArgs {
   provider?: string;
-  /** Keep threads whose manifest reasons include at least one of these. */
   reasons?: readonly string[];
 }
 
@@ -264,10 +236,6 @@ function toStoredEventScope(row: CorpusStoredEventRow): ThreadEventScope {
   return turnScope(row.turnId);
 }
 
-/**
- * Decodes a raw row the way `apps/server` `parseStoredEventRow` does: the
- * `data` JSON plus the scope columns go through `parseStoredThreadEvent`.
- */
 export function decodeCorpusStoredEventRow(
   row: CorpusStoredEventRow,
 ): ThreadEventRow {
@@ -305,12 +273,6 @@ function sameStringSet(
   );
 }
 
-/**
- * Loads one thread through its manifest entry and checks that the manifest,
- * `meta.json`, and every event row agree on the thread id, provider, reasons,
- * and row count. A corpus whose files drifted apart must fail here rather
- * than produce a plausible baseline for the wrong thread.
- */
 export function loadCorpusThread(threadId: string): CorpusThread {
   const dir = requireProviderCorpusDir();
   const entry = listCorpusThreads().find((thread) => thread.id === threadId);

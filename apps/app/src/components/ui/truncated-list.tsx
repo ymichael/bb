@@ -8,15 +8,9 @@ interface TruncatedListProps<T> {
   items: readonly T[];
   renderItem: (item: T) => ReactNode;
   getKey: (item: T) => string;
-  /** Maximum items shown before truncating. Defaults to 5. */
   limit?: number;
 }
 
-/**
- * Renders a vertical list that caps at `limit` items and reveals the rest
- * behind a "Show N more" / "Show less" toggle. The toggle only appears when
- * the list exceeds the limit.
- */
 export function TruncatedList<T>({
   items,
   renderItem,

@@ -1,8 +1,3 @@
-/**
- * Solarized palette (Ethan Schoonover). Uses the canonical base3/base03 canvases
- * with darkened accents in light mode so text/fills clear contrast on the warm
- * paper background. See nord.ts for how the minimal override set cascades.
- */
 export const solarizedThemeCss = `
 :root, .light {
   --canvas: #fdf6e3;

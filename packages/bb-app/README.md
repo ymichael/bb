@@ -232,4 +232,4 @@ behavior, see the
 - [Platform support](https://github.com/get-bb/bb/blob/main/docs/platform-support.md)
 - [Configuration](https://github.com/get-bb/bb/blob/main/docs/configuration.md)
 - [Using bb on multiple devices](https://github.com/get-bb/bb/blob/main/docs/multiple-devices.md)
-- [Worktrees and setup scripts](https://github.com/get-bb/bb/blob/main/docs/worktrees.md)
+- [Worktree setup and teardown scripts](https://github.com/get-bb/bb/blob/main/docs/worktrees.md)

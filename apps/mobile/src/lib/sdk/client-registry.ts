@@ -11,16 +11,10 @@ import {
   type MobileSdk,
 } from "./create-mobile-sdk";
 
-/**
- * The server (or the connect gate in front of it) rejected a request as
- * unauthenticated: a 401/403 on an API call, or a `/ws` upgrade whose error
- * names an auth status. Connect profiles re-check their session on it.
- */
 export type ProfileAuthFailure =
   | { source: "fetch"; status: number }
   | { source: "realtime"; message: string | null };
 
-/** Everything a profile needs to talk to its server, created once per profile. */
 export interface ProfileClient extends MobileSdk {
   profileId: string;
   serverUrl: string;
@@ -35,11 +29,6 @@ export interface CreateProfileClientRegistryOptions {
 }
 
 export interface ProfileClientRegistry {
-  /**
-   * Return the client for `profile`, creating it on first use. A profile whose
-   * `serverUrl` changed since the client was built gets a fresh client (the old
-   * one is disposed).
-   */
   getClientForProfile(
     profile: Pick<ServerProfile, "id" | "serverUrl">,
   ): ProfileClient;

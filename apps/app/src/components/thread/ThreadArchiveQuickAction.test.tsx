@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { Thread } from "@bb/domain";
+import { makeThread } from "@bb/test-helpers/domain-fixtures";
 import { TooltipProvider } from "@bb/shared-ui/tooltip";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ThreadArchiveQuickAction } from "./ThreadActionsMenu";
@@ -18,14 +18,6 @@ vi.mock("./ThreadActionsProvider", () => ({
   }),
 }));
 
-function createThread(overrides: Partial<Thread> = {}): Thread {
-  return {
-    id: "thr_test",
-    archivedAt: null,
-    ...overrides,
-  } as Thread;
-}
-
 afterEach(() => {
   cleanup();
   mocks.archiveThreadAndChildren.mockReset();
@@ -35,7 +27,7 @@ afterEach(() => {
 describe("ThreadArchiveQuickAction", () => {
   it("archives the thread on one click without bubbling to the row", () => {
     const onRowClick = vi.fn();
-    const thread = createThread();
+    const thread = makeThread();
     render(
       <TooltipProvider>
         <div onClick={onRowClick}>
@@ -52,7 +44,7 @@ describe("ThreadArchiveQuickAction", () => {
   });
 
   it("unarchives an archived thread instead", () => {
-    const thread = createThread({ archivedAt: 5 });
+    const thread = makeThread({ archivedAt: 5 });
     render(
       <TooltipProvider>
         <ThreadArchiveQuickAction thread={thread} />

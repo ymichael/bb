@@ -32,14 +32,10 @@ describe("scopePluginUtilities", () => {
   });
 
   it("drops the self arm for sibling combinators so a portal root cannot reach host siblings", () => {
-    // `[&~*]:hidden` compiles to `.X ~ *`. With the root itself as `.X` the
-    // subject would be a sibling of the root in document.body; @scope never
-    // matched that, and neither may this.
     const hidden = String.raw`.\[\&\~\*\]\:hidden`;
     expect(scopeUtilities(`${hidden}{&~*{display:none}}`)).toBe(
       `@layer utilities{${SCOPE} ${hidden}{&~*{display:none}}}`,
     );
-    // Flat, relative, and nested-under-@media forms leak the same way.
     expect(scopeUtilities(`${hidden} ~ *{display:none}`)).toBe(
       `@layer utilities{${SCOPE} ${hidden} ~ *{display:none}}`,
     );
@@ -72,7 +68,6 @@ describe("scopePluginUtilities", () => {
   });
 
   it("keeps the scope in front of a pseudo-element so the selector stays valid", () => {
-    // A suffix form would produce the invalid `.foo::before:where(…)`.
     expect(scopeUtilities(".content-x::before{content:'x'}")).toContain(
       `${SCOPE}.content-x::before`,
     );
@@ -118,16 +113,12 @@ describe("scopePluginUtilities", () => {
   });
 
   it("accepts a build with no utilities layer", () => {
-    // A plugin that uses no utility classes compiles to no utilities layer.
-    // Nothing to scope, nothing to leak.
     expect(scopePluginUtilities("@layer theme{:root{--a:1}}", ROOTS)).toBe(
       "@layer theme{:root{--a:1}}",
     );
   });
 
   it("throws when a class rule lands outside the utilities layer", () => {
-    // A Tailwind upgrade that moves utilities out of the layer must fail the
-    // build: a globally-scoped `.flex-col` overrides the host's own layout.
     expect(() =>
       scopePluginUtilities(
         "@layer theme{.flex-col{flex-direction:column}}",

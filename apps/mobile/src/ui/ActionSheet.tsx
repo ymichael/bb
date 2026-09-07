@@ -15,14 +15,11 @@ const IS_IOS = process.env.EXPO_OS === "ios";
 export interface ActionSheetAction {
   key: string;
   label: string;
-  /** Secondary line under the label (the fallback sheet only; native menus drop it). */
   subtitle?: string;
   icon?: IconName;
   destructive?: boolean;
   disabled?: boolean;
-  /** Current choice in a single-select menu (check mark). Omit for commands. */
   checked?: boolean;
-  /** Runs after the sheet starts dismissing. */
   onPress: () => void;
 }
 
@@ -32,23 +29,11 @@ export interface ActionSheetProps {
   message?: string;
   actions: readonly ActionSheetAction[];
   onDismiss?: () => void;
-  /** `"push"` keeps a presenting sheet in place underneath (default: switch). */
   stackBehavior?: SheetProps["stackBehavior"];
 }
 
-/** Separator inset past a leading glyph to the label column. */
 const ACTION_SEPARATOR_INSET = SEPARATOR_INSET + LIST_ROW_ICON_SIZE + 12;
 
-/**
- * A list of actions in a bottom sheet, styled like the system action
- * sheet: a card of 17pt rows (SF glyphs, destructive in red) and a separate
- * Cancel card. On iOS this is the long-list / Android fallback — short,
- * button-anchored menus use `NativeMenu`, confirmations `confirmDestructive`.
- * Present it through `useSheet()`:
- *
- *   const menu = useSheet();
- *   <ActionSheet controller={menu} actions={[…]} />  … onLongPress={menu.present}
- */
 export function ActionSheet({
   controller,
   title,
@@ -120,7 +105,6 @@ export function ActionSheet({
                 disabled={action.disabled}
                 selected={action.checked === true}
                 onPress={() => {
-                  // A destructive row is a confirmation step: warn physically.
                   if (action.destructive) haptic("warning");
                   controller.dismiss();
                   action.onPress();

@@ -356,8 +356,6 @@ export function closeSecondaryPanelTabInState(
     return state;
   }
 
-  // Closing the last active content tab falls back to a remaining fixed tab.
-  // Only a genuinely empty panel closes; closing content never creates New tab.
   if (
     isClosingActiveTab &&
     isSecondaryFileTab(tab) &&

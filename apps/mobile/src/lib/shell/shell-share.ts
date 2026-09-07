@@ -1,11 +1,5 @@
 import type { BridgeSharePayload } from "@bb/mobile-bridge";
 
-/**
- * Turn a page's share request into `Share.share` arguments. Pure, so the
- * platform difference is testable: iOS renders a real `url` item as a link,
- * and Android reads only `message`.
- */
-
 export interface NativeSharePayload {
   content:
     | { title?: string; url: string }
@@ -21,8 +15,6 @@ export function buildBridgeSharePayload(
   const text = payload.text?.trim() ?? "";
   const url = payload.url ?? "";
   const dialogTitle = title && title.length > 0 ? `Share ${title}` : "Share";
-  // A url with no text is the common case (a thread link). iOS gets the real
-  // url item; everything else gets one message so nothing is dropped.
   if (platform === "ios" && url.length > 0 && text.length === 0) {
     return {
       content: { title, url },

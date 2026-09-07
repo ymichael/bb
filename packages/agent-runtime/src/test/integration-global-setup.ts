@@ -1,13 +1,3 @@
-/**
- * Global setup for the live-CLI integration suite: build the first-party
- * provider bridges from source and record them where the harness can find
- * them (see `integration-provider-bridges.ts`).
- *
- * This is the same work the plugin runtime does on load — build the bundle,
- * hash it, record it — done once per run so every test file shares one build.
- * Bridges are rebuilt rather than reused from `dist/` so a stale artifact
- * cannot make a live test pass against yesterday's bridge.
- */
 import { writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -23,10 +13,6 @@ import {
   type IntegrationProviderBridgeManifest,
 } from "./integration-provider-bridges.js";
 
-/**
- * Every first-party provider plugin; each ships its bridge as a `bb.host`
- * artifact.
- */
 const PROVIDER_BRIDGE_PLUGIN_IDS = [
   "provider-codex",
   "provider-claude-code",
@@ -34,11 +20,6 @@ const PROVIDER_BRIDGE_PLUGIN_IDS = [
   "provider-pi",
 ] as const;
 
-/**
- * The same five execution capabilities the server puts on the wire (see
- * resolveBridgeLaunchForProviderId): the daemon has no registry to read a
- * declaration from.
- */
 function wireCapabilities(
   declaration: NormalizedPluginProviderDeclaration,
 ): IntegrationProviderBridgeManifest[string]["capabilities"] {
@@ -77,8 +58,6 @@ export async function setup(): Promise<void> {
         source: {
           kind: "artifact",
           digest: build.artifactDigest,
-          // No download step here: the daemon caches the verified bytes, the
-          // test launches the freshly built file in place.
           artifactPath: build.jsPath,
         },
         providerOptions: declaration.experimental_bridgeOptions ?? {},

@@ -11,7 +11,6 @@ import {
 import { mapAuthError } from "@/lib/session";
 
 export interface EnrollmentFailure {
-  /** Stable code for tests/analytics; the message is what the user reads. */
   code:
     | "invalid_code"
     | "expired"
@@ -25,11 +24,6 @@ export interface EnrollmentFailure {
   message: string;
 }
 
-/**
- * Copy for a failed machine-code redeem. The apex answers with a wire error
- * the client maps to a code; `machine_limit` is the 409 for the 20-machine
- * account cap and needs a clear way out (revoke an old device).
- */
 export function describeEnrollmentError(error: unknown): EnrollmentFailure {
   if (error instanceof ConnectMachineRedeemError) {
     switch (error.code) {
@@ -107,11 +101,6 @@ export interface RedeemedEnrollment {
   profile: Extract<NewServerProfile, { mode: "connect" }>;
 }
 
-/**
- * Redeem a one-time machine code at the apex for this phone's own durable
- * machine credential and shape it into a connect profile. The label defaults
- * to the handle the apex reports (the user can rename later).
- */
 export async function redeemEnrollment(
   args: { apexUrl: string; code: string; label?: string },
   fetchImpl: typeof fetch = globalThis.fetch,
@@ -136,13 +125,6 @@ export async function redeemEnrollment(
   };
 }
 
-/**
- * A profile for another server on the same account. The machine credential
- * is account-scoped (the gate checks it against the label's owner, and the
- * desktop-session cookie it mints is a `.getbb.app` cookie carrying only the
- * user id), so one enrollment serves every server the account owns — the
- * same thing the desktop app's Server menu does. No second code is needed.
- */
 export function accountServerProfile(
   credential: ConnectCredential,
   server: { handle: string; name: string; url: string },

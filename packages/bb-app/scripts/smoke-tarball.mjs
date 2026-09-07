@@ -24,18 +24,20 @@ const HOST_PLUGIN_WORKER_TIMEOUT_MS = 60_000;
 // every builtin unable to resolve @get-bb/plugin-sdk at import time).
 const EXPECTED_RUNNING_BUILTIN_PLUGINS = [
   "automations",
+  "concurrency-limit",
   // Providers whose bridge ships as a plugin artifact: if the plugin does not
   // load, its provider disappears from the install entirely.
   "provider-acp",
   "provider-claude-code",
   "provider-codex",
+  "push-notifications",
   "connect",
   "custom-instructions",
   "inline-vis",
   "keep-awake",
   "pdf-preview",
-  "plugin-api-docs",
   "provider-retry",
+  "scheduled-send",
   "secrets",
 ];
 // The smoke drives every bridge as a canonical Provider Bridge Protocol
@@ -44,9 +46,6 @@ const EXPECTED_RUNNING_BUILTIN_PLUGINS = [
 // version.ts); this script imports nothing from the workspace so it can run
 // against a packed tarball.
 const PROVIDER_BRIDGE_PROTOCOL_VERSION = 2;
-// A canonical turn/start carries a client request id (`creq_` + ten
-// Crockford-ish characters, @bb/domain's clientTurnRequestIdSchema).
-const SMOKE_CLIENT_REQUEST_ID = "creq_smkptest23";
 const BRIDGE_WAIT_TIMEOUT_MS = 10_000;
 const PROCESS_STOP_TIMEOUT_MS = 5_000;
 const DEFAULT_HOST_DAEMON_LOCAL_BIND_HOST = "127.0.0.1";
@@ -57,6 +56,21 @@ const tempRoot = await mkdtemp(join(tmpdir(), "bb-app-tarball-"));
 const smokeProcessEnv = {
   BB_TELEMETRY: "false",
 };
+
+function formatElapsed(startedAt) {
+  return `${((performance.now() - startedAt) / 1000).toFixed(1)}s`;
+}
+
+async function timed(label, run) {
+  const startedAt = performance.now();
+  try {
+    return await run();
+  } finally {
+    process.stdout.write(
+      `bb-app tarball smoke: ${label} ${formatElapsed(startedAt)}\n`,
+    );
+  }
+}
 
 function delay(ms) {
   return new Promise((resolvePromise) => {
@@ -285,11 +299,22 @@ async function smokeNpxEntrypoint(tarballPath) {
   // Keep one real invocation through the package's advertised npx path. Once
   // npx dispatches the bin, the installed-package smokes below cover the same
   // launcher without repeatedly charging npm startup to readiness budgets.
-  await runCommand({
-    args: ["--yes", "--package", tarballPath, "--", "bb-app", "--help"],
-    command: "npx",
-    label: "bb-app npx help",
-  });
+  await timed("npx install and help", () =>
+    runCommand({
+      args: [
+        "--yes",
+        "--no-audit",
+        "--no-fund",
+        "--package",
+        tarballPath,
+        "--",
+        "bb-app",
+        "--help",
+      ],
+      command: "npx",
+      label: "bb-app npx help",
+    }),
+  );
 }
 
 async function packTarball() {
@@ -654,57 +679,6 @@ async function smokePluginHostWorkerBundle(packageDir) {
   }
 }
 
-function collectJsonRpcMessages({ childProcess, onMessage }) {
-  const messages = [];
-  let buffer = "";
-  childProcess.stdout?.on("data", (chunk) => {
-    buffer += chunk.toString("utf8");
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        continue;
-      }
-      const message = JSON.parse(trimmed);
-      messages.push(message);
-      onMessage?.(message);
-    }
-  });
-  return messages;
-}
-
-async function waitForBridgeMessage({
-  childProcess,
-  label,
-  messages,
-  output,
-  predicate,
-}) {
-  const deadline = Date.now() + BRIDGE_WAIT_TIMEOUT_MS;
-  while (Date.now() <= deadline) {
-    const message = messages.find(predicate);
-    if (message) {
-      return message;
-    }
-    if (childProcess.exitCode !== null || childProcess.signalCode !== null) {
-      throw new Error(
-        `${label} exited before the expected message\n${formatProcessOutput(output)}`,
-      );
-    }
-    await delay(10);
-  }
-  throw new Error(
-    `${label} timed out waiting for the expected message\n${formatProcessOutput(output)}`,
-  );
-}
-
-function sendBridgeRequest(childProcess, id, method, params) {
-  childProcess.stdin.write(
-    `${JSON.stringify({ jsonrpc: "2.0", id, method, params })}\n`,
-  );
-}
-
 /**
  * The semantic deltas a `thread/delta` notification batches, or [] for
  * anything else. Bridge-protocol v2 carries no finished timeline events on
@@ -722,14 +696,6 @@ function threadDeltas(message) {
   }
   return message.params.deltas.filter(isRecord);
 }
-
-/** The full permission policy a canonical request carries in `options`. */
-const SMOKE_EXECUTION_OPTIONS = {
-  permissionMode: "full",
-  permissionScope: "full",
-  approvalReviewer: null,
-  permissionEscalation: null,
-};
 
 async function smokeHelpCommands(binDir) {
   await runCommand({
@@ -794,23 +760,25 @@ async function smokeSdkPackage(tarballPath) {
     join(sdkDir, "package.json"),
     JSON.stringify({ type: "module", private: true }, null, 2),
   );
-  await runCommand({
-    args: [
-      "install",
-      "--ignore-scripts=false",
-      "--no-audit",
-      "--no-fund",
-      tarballPath,
-    ],
-    command: "npm",
-    cwd: sdkDir,
-    label: "install bb-app SDK smoke package",
-  });
+  await timed("npm install tarball", () =>
+    runCommand({
+      args: [
+        "install",
+        "--ignore-scripts=false",
+        "--no-audit",
+        "--no-fund",
+        tarballPath,
+      ],
+      command: "npm",
+      cwd: sdkDir,
+      label: "install bb-app SDK smoke package",
+    }),
+  );
   await runCommand({
     args: [
       "--input-type=module",
       "-e",
-      'import { BBSdk } from "bb-app"; if (typeof BBSdk !== "function") process.exit(1);',
+      'import { BBSdk } from "bb-app"; if (typeof BBSdk !== "function" || typeof new BBSdk().experimental_desktopBrowsers?.listInstances !== "function") process.exit(1);',
     ],
     command: "node",
     cwd: sdkDir,
@@ -824,30 +792,35 @@ async function smokeSdkPackage(tarballPath) {
       'const bb = new BBSdk({ baseUrl: "http://127.0.0.1:38886" });',
       "const error: typeof BbHttpError = BbHttpError;",
       "void bb.status.get();",
+      'void bb.experimental_desktopBrowsers.listInstances({ hostId: "smoke-host" });',
       "void error;",
       "",
     ].join("\n"),
   );
-  await runCommand({
-    args: [
-      "--yes",
-      "--package",
-      "typescript",
-      "--",
-      "tsc",
-      "--module",
-      "NodeNext",
-      "--moduleResolution",
-      "NodeNext",
-      "--target",
-      "ES2022",
-      "--noEmit",
-      "sdk-smoke.ts",
-    ],
-    command: "npx",
-    cwd: sdkDir,
-    label: "bb-app SDK TypeScript import",
-  });
+  await timed("npx typescript check", () =>
+    runCommand({
+      args: [
+        "--yes",
+        "--no-audit",
+        "--no-fund",
+        "--package",
+        "typescript",
+        "--",
+        "tsc",
+        "--module",
+        "NodeNext",
+        "--moduleResolution",
+        "NodeNext",
+        "--target",
+        "ES2022",
+        "--noEmit",
+        "sdk-smoke.ts",
+      ],
+      command: "npx",
+      cwd: sdkDir,
+      label: "bb-app SDK TypeScript import",
+    }),
+  );
   return sdkDir;
 }
 
@@ -1094,19 +1067,28 @@ async function smokeDaemonJoin(binDir) {
 }
 
 try {
-  const tarballPath = await packTarball();
-  await smokeNpxEntrypoint(tarballPath);
-  const sdkDir = await smokeSdkPackage(tarballPath);
+  const smokeStartedAt = performance.now();
+  const tarballPath = await timed("npm pack", () => packTarball());
+  await timed("npx entrypoint", () => smokeNpxEntrypoint(tarballPath));
+  const sdkDir = await timed("sdk package", () => smokeSdkPackage(tarballPath));
   const installedBinDir = join(sdkDir, "node_modules", ".bin");
   const installedPackageDir = join(sdkDir, "node_modules", "bb-app");
-  await smokeHelpCommands(installedBinDir);
-  await smokeConfigCommand(installedBinDir);
-  await smokeInstalledRepack(installedPackageDir);
-  await smokeProviderBridgeBundles(installedPackageDir);
-  await smokePluginHostWorkerBundle(installedPackageDir);
-  await smokeFullStack(installedBinDir, sdkDir);
-  await smokeDaemonJoin(installedBinDir);
-  process.stdout.write("bb-app tarball smoke passed\n");
+  await timed("help commands", () => smokeHelpCommands(installedBinDir));
+  await timed("config command", () => smokeConfigCommand(installedBinDir));
+  await timed("installed repack", () =>
+    smokeInstalledRepack(installedPackageDir),
+  );
+  await timed("provider bridge bundles", () =>
+    smokeProviderBridgeBundles(installedPackageDir),
+  );
+  await timed("plugin host worker bundle", () =>
+    smokePluginHostWorkerBundle(installedPackageDir),
+  );
+  await timed("full stack", () => smokeFullStack(installedBinDir, sdkDir));
+  await timed("daemon join", () => smokeDaemonJoin(installedBinDir));
+  process.stdout.write(
+    `bb-app tarball smoke passed in ${formatElapsed(smokeStartedAt)}\n`,
+  );
 } finally {
   await rm(tempRoot, { force: true, recursive: true });
 }

@@ -4,11 +4,6 @@ import {
   validatePluginAiServiceDeclaration,
 } from "../internal/host-policy.js";
 
-/**
- * `bb.experimental_aiServices.register` runs this validator in the
- * production host and the fake host alike; a declaration that passes here
- * is exactly what core routes `BB_INFERENCE` / `BB_TRANSCRIPTION` to.
- */
 describe("validatePluginAiServiceDeclaration", () => {
   it("normalizes a valid declaration to a frozen copy of the contract fields", () => {
     const normalized = validatePluginAiServiceDeclaration({
@@ -35,13 +30,21 @@ describe("validatePluginAiServiceDeclaration", () => {
     ["a".repeat(65), "too long"],
   ])("rejects the id %j (%s)", (id) => {
     expect(() =>
-      validatePluginAiServiceDeclaration({ id, displayName: "Acme", kinds: ["inference"] }),
+      validatePluginAiServiceDeclaration({
+        id,
+        displayName: "Acme",
+        kinds: ["inference"],
+      }),
     ).toThrow(/invalid AI service id/u);
   });
 
   it("rejects an empty or oversized displayName", () => {
     expect(() =>
-      validatePluginAiServiceDeclaration({ id: "acme-ai", displayName: "   ", kinds: ["voice"] }),
+      validatePluginAiServiceDeclaration({
+        id: "acme-ai",
+        displayName: "   ",
+        kinds: ["voice"],
+      }),
     ).toThrow(/displayName must be 1-64 characters/u);
     expect(() =>
       validatePluginAiServiceDeclaration({
@@ -54,7 +57,11 @@ describe("validatePluginAiServiceDeclaration", () => {
 
   it("rejects empty, unknown, and repeated kinds", () => {
     expect(() =>
-      validatePluginAiServiceDeclaration({ id: "acme-ai", displayName: "Acme", kinds: [] }),
+      validatePluginAiServiceDeclaration({
+        id: "acme-ai",
+        displayName: "Acme",
+        kinds: [],
+      }),
     ).toThrow(/must declare at least one kind/u);
     expect(() =>
       validatePluginAiServiceDeclaration({
@@ -74,12 +81,6 @@ describe("validatePluginAiServiceDeclaration", () => {
   });
 });
 
-/**
- * The register-call refusals both hosts make, and the one outcome that is
- * not a refusal: a declared `bb.host` entry that failed to build stages the
- * service unbound, so the factory completes and the load can still retain
- * the plugin's provider declarations as unavailable.
- */
 describe("assertAiServiceRegistrable", () => {
   it("binds the service to the built host artifact", () => {
     expect(
@@ -98,7 +99,10 @@ describe("assertAiServiceRegistrable", () => {
         hostArtifact: null,
         hostArtifactProblem: 'Could not resolve "missing-host-runtime"',
       }),
-    ).toEqual({ artifact: null, problem: 'Could not resolve "missing-host-runtime"' });
+    ).toEqual({
+      artifact: null,
+      problem: 'Could not resolve "missing-host-runtime"',
+    });
   });
 
   it("refuses a plugin that declares no bb.host entry at all", () => {

@@ -124,14 +124,16 @@ type RoutePath<Descriptor> =
 
 export type ApiSchemaFromRouteUnion<Routes extends RouteDefinition> = {
   [Path in RoutePath<Routes>]: {
-    [Descriptor in Routes as Descriptor extends RouteDefinition<
-      Path,
-      infer Method,
-      any,
-      any
-    >
-      ? MethodKeyFromRouteMethod<Method>
-      : never]: EndpointFromRouteDescriptor<Descriptor>;
+    [
+      Descriptor in Routes as Descriptor extends RouteDefinition<
+        Path,
+        infer Method,
+        any,
+        any
+      >
+        ? MethodKeyFromRouteMethod<Method>
+        : never
+    ]: EndpointFromRouteDescriptor<Descriptor>;
   };
 };
 
@@ -203,10 +205,7 @@ export function optionalQueryRequest<
   Schema extends ZodType = ZodType<QueryInput>,
 >(
   schema: Schema,
-): QueryRouteRequest<
-  InputPrefix & { query?: QueryInput },
-  z.output<Schema>
-> {
+): QueryRouteRequest<InputPrefix & { query?: QueryInput }, z.output<Schema>> {
   return { source: "query", schema };
 }
 

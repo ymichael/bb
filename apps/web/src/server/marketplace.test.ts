@@ -8,7 +8,6 @@ interface StoredObject {
   contentType?: string;
 }
 
-/** Minimal stand-in for the R2 binding: get() plus conditional handling. */
 function bucketOf(objects: Record<string, StoredObject>) {
   const get = async (key: string, options?: { onlyIf?: Headers }) => {
     const stored = objects[key];
@@ -37,7 +36,13 @@ const bucket = bucketOf({
     etag: "v1",
     contentType: "application/json",
   },
+  "v2/marketplace.json": {
+    body: '{"schemaVersion":2}',
+    etag: "v2",
+    contentType: "application/json",
+  },
   "icons/widgets.svg": { body: "<svg/>", etag: "icon-1" },
+  "v2/screenshots/acme/1.jpg": { body: "jpeg", etag: "screenshot-1" },
 });
 
 function request(path: string, headers: Record<string, string> = {}): Request {
@@ -52,6 +57,9 @@ describe("marketplaceObjectKey", () => {
     expect(marketplaceObjectKey("/marketplace/v1/icons/a.svg")).toBe(
       "icons/a.svg",
     );
+    expect(marketplaceObjectKey("/marketplace/v2/marketplace.json")).toBe(
+      "v2/marketplace.json",
+    );
   });
 
   it("refuses traversal, empty segments, and other paths", () => {
@@ -59,6 +67,7 @@ describe("marketplaceObjectKey", () => {
     expect(marketplaceObjectKey("/marketplace/v1/../secrets")).toBe(null);
     expect(marketplaceObjectKey("/marketplace/v1/icons//a.svg")).toBe(null);
     expect(marketplaceObjectKey("/marketplace/v1/%2e%2e/secrets")).toBe(null);
+    expect(marketplaceObjectKey("/marketplace/v2/%2e%2e/secrets")).toBe(null);
     expect(marketplaceObjectKey("/marketplace/v1/icons/%broken.svg")).toBe(
       null,
     );
@@ -89,6 +98,17 @@ describe("serveMarketplaceObject", () => {
     expect(response.headers.get("content-type")).toBe("image/svg+xml");
     expect(response.headers.get("cache-control")).toContain("immutable");
     expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+  });
+
+  it("serves v2 JPEG assets with revalidation", async () => {
+    const response = await serveMarketplaceObject({
+      bucket,
+      request: request("/marketplace/v2/screenshots/acme/1.jpg"),
+    });
+    expect(response.headers.get("content-type")).toBe("image/jpeg");
+    expect(response.headers.get("cache-control")).toBe(
+      "public, max-age=300, must-revalidate",
+    );
   });
 
   it("answers 304 for a matching conditional request", async () => {

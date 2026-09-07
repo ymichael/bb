@@ -26,11 +26,37 @@ const customNameTarget: EnvironmentRenameDialogTarget = {
   canClearName: true,
 };
 
+export function BranchContext() {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  return (
+    <StoryCard>
+      <StoryRow
+        label="branch context"
+        hint="current branch beneath the custom worktree name"
+      >
+        <DialogStage>
+          <EnvironmentRenameDialogContent
+            target={{
+              id: "env_named",
+              currentName: "Design system polish",
+              branchName: "bb/design-system-polish",
+              canClearName: true,
+            }}
+            pending={false}
+            onRename={noop}
+            inputRef={inputRef}
+          />
+        </DialogStage>
+      </StoryRow>
+    </StoryCard>
+  );
+}
+
 export function Overview() {
   const inputRef = useRef<HTMLInputElement | null>(null);
   return (
     <StoryCard>
-      <StoryRow label="branch placeholder" hint="unnamed environment">
+      <StoryRow label="branch placeholder" hint="unnamed worktree">
         <DialogStage>
           <EnvironmentRenameDialogContent
             target={unnamedTarget}
@@ -65,7 +91,7 @@ export function Overview() {
           <EnvironmentRenameDialogContent
             target={customNameTarget}
             pending={false}
-            errorMessage="Environment name must be 80 characters or fewer."
+            errorMessage="Worktree name must be 80 characters or fewer."
             onRename={noop}
             inputRef={inputRef}
           />

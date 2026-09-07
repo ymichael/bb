@@ -32,9 +32,6 @@ describe("decodeClaudeCodeJsonRpcRequest", () => {
     });
   });
 
-  // Reply, never drop (#853): the caller is waiting on `id` and would
-  // otherwise learn nothing until its request timed out, and the reply has to
-  // name the field that was wrong.
   it("names the missing field on invalid params", () => {
     const { options: _omitted, ...withoutOptions } = baseThreadStartParams;
     expect(

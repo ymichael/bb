@@ -17,8 +17,6 @@ const BASE = { storeReady: true, hasAnyProfile: true };
 
 describe("resolveShellScreenState", () => {
   it("sends a phone with no server to the add-server screen", () => {
-    // The shell switch survives a state wipe, so first run can land here.
-    // Spinning forever is the failure this guards.
     expect(
       resolveShellScreenState({
         storeReady: true,
@@ -53,8 +51,6 @@ describe("resolveShellScreenState", () => {
   });
 
   it("asks for re-pairing when the gate rejected the credential", () => {
-    // A revoked machine credential otherwise renders the gate's own HTML
-    // sign-in page inside the WebView, which reads as a broken app.
     const state = resolveShellScreenState({
       ...BASE,
       hasProfile: true,
@@ -109,8 +105,6 @@ describe("resolveShellScreenState", () => {
   });
 
   it("keeps the WebView mounted while a load is in flight", () => {
-    // Replacing it with a spinner would throw away the page's own progressive
-    // render and restart the load.
     expect(
       resolveShellScreenState({
         ...BASE,

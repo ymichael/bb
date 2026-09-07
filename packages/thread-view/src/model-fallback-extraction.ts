@@ -23,10 +23,6 @@ function nonEmptyString(value: JsonValue | undefined): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
-/**
- * Reads both the current typed event and the legacy provider/unhandled shape
- * persisted before bb normalized Claude's model fallback system messages.
- */
 export function getProviderModelFallbackData(
   event: ThreadEvent,
 ): ProviderModelFallbackData | null {
@@ -71,11 +67,6 @@ export function getProviderModelFallbackData(
   };
 }
 
-/**
- * Returns the fallback that currently controls the next composer selection.
- * A later outbound turn request supersedes it because that request has already
- * committed an explicit model choice.
- */
 export function extractThreadTimelineModelFallback(
   events: readonly ThreadEventWithMeta[],
 ): ThreadTimelineModelFallback | null {

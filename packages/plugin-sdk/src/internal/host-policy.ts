@@ -19,10 +19,13 @@ import type {
   PluginAiServiceKind,
   PluginCliExecutionResult,
   PluginCliOutputLimitError,
+  PluginHookHandler,
+  PluginHookName,
   PluginMentionTrigger,
   PluginProviderCapabilities,
   PluginProviderComposerAction,
   PluginProviderDeclaration,
+  ExperimentalPluginProviderEnvEntry,
   PluginProviderExtensionKindDeclaration,
   PluginProviderFallbackModel,
   PluginProviderModelCatalogScope,
@@ -81,7 +84,7 @@ export const PLUGIN_HTTP_METHODS: ReadonlySet<string> = new Set([
 ]);
 
 // Rpc method names become URL path segments.
-export const RPC_METHOD_PATTERN = /^[a-zA-Z0-9_-]+$/;
+export const RPC_METHOD_PATTERN = /^[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*$/;
 
 // Service/schedule names appear in status text and plugin_schedules rows.
 export const BACKGROUND_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
@@ -91,6 +94,52 @@ export const CLI_COMMAND_NAME_PATTERN = /^[a-z0-9-]+$/;
 
 // Agent tool names are shown to (and called by) the model.
 export const AGENT_TOOL_NAME_PATTERN = /^[a-zA-Z0-9_-]+$/;
+export const PLUGIN_PROVIDER_ENV_NAME_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
+export const PLUGIN_PROVIDER_ENV_MAX_ENTRIES = 32;
+
+const pluginProviderEnvEntrySchema = z
+  .object({
+    name: z.string().regex(PLUGIN_PROVIDER_ENV_NAME_PATTERN),
+    value: z.union([
+      z.string(),
+      z.object({ serverPath: z.string().startsWith("/") }).strict(),
+    ]),
+    reason: z.string(),
+    secret: z.boolean(),
+  })
+  .strict();
+
+const pluginProviderEnvEntriesSchema = z
+  .array(pluginProviderEnvEntrySchema)
+  .max(PLUGIN_PROVIDER_ENV_MAX_ENTRIES)
+  .superRefine((entries, context) => {
+    const names = new Set<string>();
+    for (let index = 0; index < entries.length; index += 1) {
+      const name = entries[index]?.name;
+      if (name !== undefined && names.has(name)) {
+        context.addIssue({
+          code: "custom",
+          path: [index, "name"],
+          message: "must be unique within one resolver",
+        });
+      }
+      if (name !== undefined) names.add(name);
+    }
+  });
+
+export function validatePluginProviderEnvEntries(
+  value: unknown,
+): ExperimentalPluginProviderEnvEntry[] {
+  const parsed = pluginProviderEnvEntriesSchema.safeParse(value);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    const path = issue?.path.length ? `[${issue.path.join(".")}] ` : "";
+    throw new Error(
+      `provider environment contribution ${path}${issue?.message ?? "is invalid"}`,
+    );
+  }
+  return parsed.data;
+}
 
 export const PLUGIN_AGENT_STATIC_INSTRUCTIONS_MAX_CHARS = 4096;
 /** Status labels ride on every tool-call event and share one timeline row. */
@@ -116,6 +165,16 @@ const settingsBaseFields = {
   description: z.string().min(1).optional(),
 };
 
+const stringSettingSchemaSchema = z.custom<StandardSchemaV1<string, string>>(
+  (value) => isStandardSchema(value),
+);
+const booleanSettingSchemaSchema = z.custom<StandardSchemaV1<boolean, boolean>>(
+  (value) => isStandardSchema(value),
+);
+const numberSettingSchemaSchema = z.custom<StandardSchemaV1<number, number>>(
+  (value) => isStandardSchema(value),
+);
+
 const settingDescriptorSchema = z.discriminatedUnion("type", [
   z
     .object({
@@ -123,6 +182,7 @@ const settingDescriptorSchema = z.discriminatedUnion("type", [
       ...settingsBaseFields,
       secret: z.literal(true).optional(),
       experimental_multiline: z.boolean().optional(),
+      experimental_schema: stringSettingSchemaSchema.optional(),
       default: z.string().optional(),
     })
     .strict()
@@ -143,7 +203,16 @@ const settingDescriptorSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("boolean"),
       ...settingsBaseFields,
+      experimental_schema: booleanSettingSchemaSchema.optional(),
       default: z.boolean().optional(),
+    })
+    .strict(),
+  z
+    .object({
+      type: z.literal("number"),
+      ...settingsBaseFields,
+      experimental_schema: numberSettingSchemaSchema.optional(),
+      default: z.number().finite().optional(),
     })
     .strict(),
   z
@@ -151,6 +220,7 @@ const settingDescriptorSchema = z.discriminatedUnion("type", [
       type: z.literal("select"),
       ...settingsBaseFields,
       options: z.array(z.string().min(1)).min(1),
+      experimental_schema: stringSettingSchemaSchema.optional(),
       default: z.string().optional(),
     })
     .strict(),
@@ -158,6 +228,7 @@ const settingDescriptorSchema = z.discriminatedUnion("type", [
     .object({
       type: z.literal("project"),
       ...settingsBaseFields,
+      experimental_schema: stringSettingSchemaSchema.optional(),
       default: z.string().optional(),
     })
     .strict(),
@@ -200,10 +271,46 @@ export function registerSettingDescriptors(
         `default for setting "${key}" must be one of its options`,
       );
     }
+    if (descriptor.default !== undefined) {
+      const errors = validateSettingsUpdate(
+        { [key]: descriptor },
+        { [key]: descriptor.default },
+      );
+      if (errors.length > 0) {
+        throw new Error(`invalid default for setting "${key}": ${errors[0]}`);
+      }
+    }
     validated[key] = descriptor;
   }
   Object.assign(target, validated);
   return validated;
+}
+
+function settingSchemaError<T extends string | number | boolean>(
+  key: string,
+  schema: StandardSchemaV1<T, T> | undefined,
+  value: T,
+): string | null {
+  if (schema === undefined) return null;
+  try {
+    const result = schema["~standard"].validate(value);
+    if (result instanceof Promise) {
+      return `schema for setting "${key}" must validate synchronously`;
+    }
+    if (result.issues !== undefined) {
+      return (
+        result.issues[0]?.message ??
+        `schema for setting "${key}" rejected the value`
+      );
+    }
+    if (result.value !== value) {
+      return `schema for setting "${key}" must not transform its value`;
+    }
+    return null;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return `schema for setting "${key}" failed: ${detail}`;
+  }
 }
 
 /** Validate a settings update. `null` means unset. */
@@ -222,6 +329,30 @@ export function validateSettingsUpdate(
     if (descriptor.type === "boolean") {
       if (typeof value !== "boolean") {
         errors.push(`setting "${key}" expects a boolean`);
+        continue;
+      }
+      const validationError = settingSchemaError(
+        key,
+        descriptor.experimental_schema,
+        value,
+      );
+      if (validationError !== null) {
+        errors.push(validationError);
+      }
+      continue;
+    }
+    if (descriptor.type === "number") {
+      if (typeof value !== "number" || !Number.isFinite(value)) {
+        errors.push(`setting "${key}" expects a finite number`);
+        continue;
+      }
+      const validationError = settingSchemaError(
+        key,
+        descriptor.experimental_schema,
+        value,
+      );
+      if (validationError !== null) {
+        errors.push(validationError);
       }
       continue;
     }
@@ -233,6 +364,15 @@ export function validateSettingsUpdate(
       errors.push(
         `setting "${key}" must be one of: ${descriptor.options.join(", ")}`,
       );
+      continue;
+    }
+    const validationError = settingSchemaError(
+      key,
+      descriptor.experimental_schema,
+      value,
+    );
+    if (validationError !== null) {
+      errors.push(validationError);
     }
   }
   return errors;
@@ -406,9 +546,7 @@ function normalizeProviderBridgeOptions(
       return current;
     }
     if (typeof current !== "object") {
-      throw new Error(
-        `provider "${providerId}" ${label}${path} must be JSON`,
-      );
+      throw new Error(`provider "${providerId}" ${label}${path} must be JSON`);
     }
     if (active.has(current)) {
       throw new Error(
@@ -449,9 +587,7 @@ function normalizeProviderBridgeOptions(
     Array.isArray(normalized) ||
     typeof normalized !== "object"
   ) {
-    throw new Error(
-      `provider "${providerId}" ${label} must be an object`,
-    );
+    throw new Error(`provider "${providerId}" ${label} must be an object`);
   }
   if (
     Buffer.byteLength(JSON.stringify(normalized), "utf8") >
@@ -491,9 +627,7 @@ function validateProviderStrings(
   value: unknown,
 ): PluginProviderStrings {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(
-      `provider "${providerId}" strings must be an object`,
-    );
+    throw new Error(`provider "${providerId}" strings must be an object`);
   }
   const record: Record<string, unknown> = Object.fromEntries(
     Object.entries(value),
@@ -733,7 +867,9 @@ function validateProviderNativeRoots(
   }
   return Object.freeze({
     user: Object.freeze(wire.data.user.map((root) => Object.freeze(root))),
-    project: Object.freeze(wire.data.project.map((root) => Object.freeze(root))),
+    project: Object.freeze(
+      wire.data.project.map((root) => Object.freeze(root)),
+    ),
   }) as ProviderNativeRoots;
 }
 
@@ -774,9 +910,7 @@ function validateProviderFallbackModels(
   value: unknown,
 ): readonly PluginProviderFallbackModel[] | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(
-      `provider "${providerId}" models must be an object`,
-    );
+    throw new Error(`provider "${providerId}" models must be an object`);
   }
   const fallback = Reflect.get(value, "fallback");
   if (fallback === undefined) {
@@ -794,109 +928,111 @@ function validateProviderFallbackModels(
   }
   const seen = new Set<string>();
   let defaults = 0;
-  const normalized = fallback.map((entry, index): PluginProviderFallbackModel => {
-    const field = `models.fallback[${index}]`;
-    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
-      throw new Error(`provider "${providerId}" ${field} must be an object`);
-    }
-    const record: Record<string, unknown> = Object.fromEntries(
-      Object.entries(entry),
-    );
-    const id = requireNonBlankString({
-      providerId,
-      field: `${field}.id`,
-      value: record.id,
-    });
-    if (seen.has(id)) {
-      throw new Error(
-        `provider "${providerId}" models.fallback id ${JSON.stringify(id)} is duplicated`,
+  const normalized = fallback.map(
+    (entry, index): PluginProviderFallbackModel => {
+      const field = `models.fallback[${index}]`;
+      if (typeof entry !== "object" || entry === null || Array.isArray(entry)) {
+        throw new Error(`provider "${providerId}" ${field} must be an object`);
+      }
+      const record: Record<string, unknown> = Object.fromEntries(
+        Object.entries(entry),
       );
-    }
-    seen.add(id);
-    const displayName = requireNonBlankString({
-      providerId,
-      field: `${field}.displayName`,
-      value: record.displayName,
-    });
-    const description = requireNonBlankString({
-      providerId,
-      field: `${field}.description`,
-      value: record.description,
-    });
-    const efforts = record.supportedReasoningEfforts;
-    if (!Array.isArray(efforts) || efforts.length === 0) {
-      throw new Error(
-        `provider "${providerId}" ${field}.supportedReasoningEfforts must be a non-empty array`,
+      const id = requireNonBlankString({
+        providerId,
+        field: `${field}.id`,
+        value: record.id,
+      });
+      if (seen.has(id)) {
+        throw new Error(
+          `provider "${providerId}" models.fallback id ${JSON.stringify(id)} is duplicated`,
+        );
+      }
+      seen.add(id);
+      const displayName = requireNonBlankString({
+        providerId,
+        field: `${field}.displayName`,
+        value: record.displayName,
+      });
+      const description = requireNonBlankString({
+        providerId,
+        field: `${field}.description`,
+        value: record.description,
+      });
+      const efforts = record.supportedReasoningEfforts;
+      if (!Array.isArray(efforts) || efforts.length === 0) {
+        throw new Error(
+          `provider "${providerId}" ${field}.supportedReasoningEfforts must be a non-empty array`,
+        );
+      }
+      const levels = new Set<PluginProviderReasoningLevel>();
+      const supportedReasoningEfforts = efforts.map(
+        (
+          effort,
+          effortIndex,
+        ): PluginProviderFallbackModel["supportedReasoningEfforts"][number] => {
+          if (
+            typeof effort !== "object" ||
+            effort === null ||
+            Array.isArray(effort)
+          ) {
+            throw new Error(
+              `provider "${providerId}" ${field}.supportedReasoningEfforts[${effortIndex}] must be { reasoningEffort, description }`,
+            );
+          }
+          const reasoningEffort = Reflect.get(effort, "reasoningEffort");
+          if (
+            typeof reasoningEffort !== "string" ||
+            !(
+              PLUGIN_PROVIDER_REASONING_LEVEL_VALUES as readonly string[]
+            ).includes(reasoningEffort)
+          ) {
+            throw new Error(
+              `provider "${providerId}" ${field}.supportedReasoningEfforts[${effortIndex}].reasoningEffort must be one of ${PLUGIN_PROVIDER_REASONING_LEVEL_VALUES.join(", ")}`,
+            );
+          }
+          const level = reasoningEffort as PluginProviderReasoningLevel;
+          if (levels.has(level)) {
+            throw new Error(
+              `provider "${providerId}" ${field}.supportedReasoningEfforts repeats ${JSON.stringify(level)}`,
+            );
+          }
+          levels.add(level);
+          return Object.freeze({
+            reasoningEffort: level,
+            description: requireNonBlankString({
+              providerId,
+              field: `${field}.supportedReasoningEfforts[${effortIndex}].description`,
+              value: Reflect.get(effort, "description"),
+            }),
+          });
+        },
       );
-    }
-    const levels = new Set<PluginProviderReasoningLevel>();
-    const supportedReasoningEfforts = efforts.map(
-      (
-        effort,
-        effortIndex,
-      ): PluginProviderFallbackModel["supportedReasoningEfforts"][number] => {
-        if (
-          typeof effort !== "object" ||
-          effort === null ||
-          Array.isArray(effort)
-        ) {
-          throw new Error(
-            `provider "${providerId}" ${field}.supportedReasoningEfforts[${effortIndex}] must be { reasoningEffort, description }`,
-          );
-        }
-        const reasoningEffort = Reflect.get(effort, "reasoningEffort");
-        if (
-          typeof reasoningEffort !== "string" ||
-          !(PLUGIN_PROVIDER_REASONING_LEVEL_VALUES as readonly string[]).includes(
-            reasoningEffort,
-          )
-        ) {
-          throw new Error(
-            `provider "${providerId}" ${field}.supportedReasoningEfforts[${effortIndex}].reasoningEffort must be one of ${PLUGIN_PROVIDER_REASONING_LEVEL_VALUES.join(", ")}`,
-          );
-        }
-        const level = reasoningEffort as PluginProviderReasoningLevel;
-        if (levels.has(level)) {
-          throw new Error(
-            `provider "${providerId}" ${field}.supportedReasoningEfforts repeats ${JSON.stringify(level)}`,
-          );
-        }
-        levels.add(level);
-        return Object.freeze({
-          reasoningEffort: level,
-          description: requireNonBlankString({
-            providerId,
-            field: `${field}.supportedReasoningEfforts[${effortIndex}].description`,
-            value: Reflect.get(effort, "description"),
-          }),
-        });
-      },
-    );
-    const defaultReasoningEffort = record.defaultReasoningEffort;
-    if (
-      typeof defaultReasoningEffort !== "string" ||
-      !levels.has(defaultReasoningEffort as PluginProviderReasoningLevel)
-    ) {
-      throw new Error(
-        `provider "${providerId}" ${field}.defaultReasoningEffort must be one of its supportedReasoningEfforts`,
-      );
-    }
-    if (typeof record.isDefault !== "boolean") {
-      throw new Error(
-        `provider "${providerId}" ${field}.isDefault must be a boolean`,
-      );
-    }
-    if (record.isDefault) defaults += 1;
-    return Object.freeze({
-      id,
-      displayName,
-      description,
-      supportedReasoningEfforts: Object.freeze(supportedReasoningEfforts),
-      defaultReasoningEffort:
-        defaultReasoningEffort as PluginProviderReasoningLevel,
-      isDefault: record.isDefault,
-    });
-  });
+      const defaultReasoningEffort = record.defaultReasoningEffort;
+      if (
+        typeof defaultReasoningEffort !== "string" ||
+        !levels.has(defaultReasoningEffort as PluginProviderReasoningLevel)
+      ) {
+        throw new Error(
+          `provider "${providerId}" ${field}.defaultReasoningEffort must be one of its supportedReasoningEfforts`,
+        );
+      }
+      if (typeof record.isDefault !== "boolean") {
+        throw new Error(
+          `provider "${providerId}" ${field}.isDefault must be a boolean`,
+        );
+      }
+      if (record.isDefault) defaults += 1;
+      return Object.freeze({
+        id,
+        displayName,
+        description,
+        supportedReasoningEfforts: Object.freeze(supportedReasoningEfforts),
+        defaultReasoningEffort:
+          defaultReasoningEffort as PluginProviderReasoningLevel,
+        isDefault: record.isDefault,
+      });
+    },
+  );
   if (normalized.length > 0 && defaults !== 1) {
     throw new Error(
       `provider "${providerId}" models.fallback must mark exactly one model isDefault (found ${defaults})`,
@@ -917,14 +1053,44 @@ const AI_SERVICE_KINDS = new Set<PluginAiServiceKind>(["inference", "voice"]);
  */
 export const SERVER_DIRECT_AI_SERVICE_IDS: readonly string[] = Object.freeze([
   "openai",
-  "amazon-bedrock", "ant-ling", "anthropic", "azure-openai-responses", "baseten",
-  "cerebras", "cloudflare-ai-gateway", "cloudflare-workers-ai", "deepseek",
-  "fireworks", "github-copilot", "google", "google-vertex", "groq", "huggingface",
-  "kimi-coding", "minimax", "minimax-cn", "mistral", "moonshotai", "moonshotai-cn",
-  "nvidia", "openai-codex", "opencode", "opencode-go", "openrouter",
-  "qwen-token-plan", "qwen-token-plan-cn", "radius", "together",
-  "vercel-ai-gateway", "xai", "xiaomi", "xiaomi-token-plan-ams",
-  "xiaomi-token-plan-cn", "xiaomi-token-plan-sgp", "zai", "zai-coding-cn",
+  "amazon-bedrock",
+  "ant-ling",
+  "anthropic",
+  "azure-openai-responses",
+  "baseten",
+  "cerebras",
+  "cloudflare-ai-gateway",
+  "cloudflare-workers-ai",
+  "deepseek",
+  "fireworks",
+  "github-copilot",
+  "google",
+  "google-vertex",
+  "groq",
+  "huggingface",
+  "kimi-coding",
+  "minimax",
+  "minimax-cn",
+  "mistral",
+  "moonshotai",
+  "moonshotai-cn",
+  "nvidia",
+  "openai-codex",
+  "opencode",
+  "opencode-go",
+  "openrouter",
+  "qwen-token-plan",
+  "qwen-token-plan-cn",
+  "radius",
+  "together",
+  "vercel-ai-gateway",
+  "xai",
+  "xiaomi",
+  "xiaomi-token-plan-ams",
+  "xiaomi-token-plan-cn",
+  "xiaomi-token-plan-sgp",
+  "zai",
+  "zai-coding-cn",
 ]);
 
 /**
@@ -949,9 +1115,7 @@ export function validatePluginAiServiceDeclaration(
       ? declaration.displayName.trim()
       : "";
   if (displayName.length === 0 || displayName.length > 64) {
-    throw new Error(
-      `AI service "${id}" displayName must be 1-64 characters`,
-    );
+    throw new Error(`AI service "${id}" displayName must be 1-64 characters`);
   }
   const kinds = declaration.kinds;
   if (!Array.isArray(kinds) || kinds.length === 0) {
@@ -959,7 +1123,10 @@ export function validatePluginAiServiceDeclaration(
   }
   const seen = new Set<PluginAiServiceKind>();
   for (const kind of kinds) {
-    if (typeof kind !== "string" || !AI_SERVICE_KINDS.has(kind as PluginAiServiceKind)) {
+    if (
+      typeof kind !== "string" ||
+      !AI_SERVICE_KINDS.has(kind as PluginAiServiceKind)
+    ) {
       throw new Error(
         `AI service "${id}" kind ${JSON.stringify(kind)} is not one of: ${[...AI_SERVICE_KINDS].join(", ")}`,
       );
@@ -1342,10 +1509,7 @@ export function validatePluginProviderDeclaration(
   const extensionKinds =
     declaration.extensionKinds === undefined
       ? undefined
-      : validateProviderExtensionKinds(
-          id,
-          declaration.extensionKinds,
-        );
+      : validateProviderExtensionKinds(id, declaration.extensionKinds);
   const fallbackModels =
     declaration.models === undefined
       ? undefined
@@ -1407,15 +1571,11 @@ export function validatePluginProviderDeclaration(
     capabilities: normalizedCapabilities,
     composerActions,
     ...(strings === undefined ? {} : { strings: strings }),
-    ...(serviceTiers === undefined
-      ? {}
-      : { serviceTiers: serviceTiers }),
+    ...(serviceTiers === undefined ? {} : { serviceTiers: serviceTiers }),
     ...(reasoningLevels === undefined
       ? {}
       : { reasoningLevels: reasoningLevels }),
-    ...(extensionKinds === undefined
-      ? {}
-      : { extensionKinds: extensionKinds }),
+    ...(extensionKinds === undefined ? {} : { extensionKinds: extensionKinds }),
     models: Object.freeze({
       ...(fallbackModels === undefined ? {} : { fallback: fallbackModels }),
       scope: modelCatalogScope,
@@ -1497,12 +1657,24 @@ export function readRpcMethodContract(
 
 /** Duck-typed zod detection: plugin sources may carry their own zod copy,
  * so instanceof is useless — anything with safeParse is treated as zod. */
-export function isZodSchemaLike(value: unknown): boolean {
+type ZodSchemaLike = {
+  safeParse: z.ZodType["safeParse"];
+  toJSONSchema?: z.ZodType["toJSONSchema"];
+};
+
+export function isZodSchemaLike(value: unknown): value is ZodSchemaLike {
   return (
     typeof value === "object" &&
     value !== null &&
     typeof (value as { safeParse?: unknown }).safeParse === "function"
   );
+}
+
+export function zodSchemaToJsonSchema(schema: ZodSchemaLike): unknown {
+  if (typeof schema.toJSONSchema === "function") {
+    return schema.toJSONSchema({ io: "input" });
+  }
+  return z.toJSONSchema(schema as z.ZodType, { io: "input" });
 }
 
 const SINGLE_SCHEMA_KEYWORDS = [
@@ -1737,9 +1909,7 @@ export function parsePluginAgentToolPresentation(
     return null;
   }
   if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new Error(
-      `tool "${toolName}" presentation must be an object`,
-    );
+    throw new Error(`tool "${toolName}" presentation must be an object`);
   }
   const declared = value as Record<string, unknown>;
   const presentation: PluginAgentToolPresentation = {};
@@ -1994,4 +2164,32 @@ export function agentToolIconRefusalMessage(
  */
 export function providerWithoutBridgeMessage(providerId: string): string {
   return `provider "${providerId}" has no bridge to run on: this plugin declares no "bb.host" entry in its manifest`;
+}
+
+/**
+ * Files a hook handler under its key in a per-hook record.
+ *
+ * The record is a mapped type over the hook-name union, so writing to it
+ * through a generic key is not expressible soundly in TypeScript: this call
+ * site knows `handler` matches `hook`, but the checker only knows both range
+ * over the union and so demands their intersection. The erasure is confined to
+ * this one function; every READ is sound, because a slot is typed for its own
+ * hook and the runner builds the context for the hook it read the handler from.
+ *
+ * Shared by the real host (`plugin-api.ts`) and the fake one so both register
+ * hooks by the same rule, which is the point of every other helper here.
+ */
+export function storePluginHook<K extends PluginHookName>(
+  records: { [N in PluginHookName]: PluginHookHandler<N> | null },
+  hook: K,
+  handler: PluginHookHandler<K>,
+): void {
+  (records as Record<PluginHookName, unknown>)[hook] = handler;
+}
+
+/** The refusal a second handler for one hook from one plugin gets. */
+export function pluginHookAlreadyRegisteredMessage(
+  hook: PluginHookName,
+): string {
+  return `a "${hook}" hook handler is already registered by this plugin`;
 }

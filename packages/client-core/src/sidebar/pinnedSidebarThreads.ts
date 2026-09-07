@@ -85,8 +85,6 @@ function collectRootNodes(
       case "environment":
         return item.group.nodes;
       case "section":
-        // Pinned flattens before folding, so sections never reach here; recurse
-        // to keep the function total.
         return collectRootNodes(item.group.items);
     }
   });

@@ -1,10 +1,3 @@
-/**
- * The plugin's orchestration: what it registers, what a settings change does
- * to that, and what a probe answer does to it. The rules live in pure
- * functions with their own tests; this drives the factory itself, where the
- * reconciler, the serialization, and the probe service meet.
- */
-
 import { getEventListeners } from "node:events";
 import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
@@ -15,15 +8,10 @@ import { acpHostContract } from "./src/contract.js";
 import { KNOWN_ACP_AGENTS } from "./src/known-agents.js";
 import acpProvidersPlugin from "./server.js";
 
-/** A data dir with no config.json, so the deprecated array is never read. */
 const NO_LEGACY_CONFIG = "/tmp/bb-acp-plugin-test-no-config";
 
 const PLUGIN_ID = "provider-acp";
 
-/**
- * The icon names the manifest declares (`bb.branding.experimental_icons`):
- * what production lets a provider `icon` name as `"provider-acp/<name>"`.
- */
 const DECLARED_ICON_NAMES = Object.keys(
   z
     .object({
@@ -103,8 +91,6 @@ describe("the ACP plugin's registrations", () => {
     expect(registeredIds(host)).toContain("acp-amp");
   });
 
-  // The documented override of an installed-only agent: one registration for
-  // that id, and it is the user's.
   it("replaces a shipped installed-only agent with a configured one", async () => {
     const host = await loadPlugin({
       customAgents: customAgents({
@@ -133,16 +119,12 @@ describe("the ACP plugin's registrations", () => {
 
     await host.harness.setSettings({ customAgents: "[]" });
 
-    // `onChange` queues the reconcile: reading the setting and the deprecated
-    // config file is IO, so the registrations settle a tick later.
     await vi.waitFor(() =>
       expect(registeredIds(host)).not.toContain("acp-amp"),
     );
     expect(registeredIds(host)).toContain("acp-cursor");
   });
 
-  // Reconciling, not disposing everything: an untouched agent keeps its
-  // registration, and with it its place in the picker's ACP group.
   it("leaves an untouched agent's registration alone across a settings save", async () => {
     const host = await loadPlugin({ customAgents: "[]" });
     const before = registeredIds(host);
@@ -178,9 +160,6 @@ describe("the ACP plugin's registrations", () => {
 });
 
 describe("the ACP plugin's registration bookkeeping", () => {
-  // bb's own list must be live from the first moment: reading the setting and
-  // the deprecated config file is IO, and a slow read would otherwise leave
-  // the picker empty.
   it("registers the shipped agents before the factory's first await", async () => {
     const host = createFakePluginHost({
       pluginId: PLUGIN_ID,
@@ -190,7 +169,6 @@ describe("the ACP plugin's registration bookkeeping", () => {
     host.harness.sdk.stub("hosts.list", () => Promise.resolve([]));
 
     const loading = acpProvidersPlugin(host.bb);
-    // Synchronously after the call: nothing has been awaited yet.
     expect(registeredIds(host)).toContain("acp-cursor");
     await loading;
   });
@@ -207,8 +185,6 @@ describe("the ACP plugin's registration bookkeeping", () => {
       (declaration) => declaration.id === "acp-opencode",
     );
     expect(override?.displayName).toBe("My opencode");
-    // The override launches differently; it keeps the shipped agent's skill
-    // roots and still asks the host for the rest.
     expect(override?.experimental_nativeSkillRoots?.project).toHaveLength(3);
     expect(override?.experimental_resolvesNativeRoots).toBe(true);
 
@@ -223,8 +199,6 @@ describe("the ACP plugin's registration bookkeeping", () => {
     });
   });
 
-  // Reconciling, not disposing everything: an untouched agent keeps the same
-  // registration object, and with it its sequence in the picker's ACP group.
   it("keeps an untouched agent's registration identical across a save", async () => {
     const host = await loadPlugin({ customAgents: "[]" });
     const before = host.harness.registrations.providerRegistrations.find(
@@ -240,8 +214,6 @@ describe("the ACP plugin's registration bookkeeping", () => {
     });
     await vi.waitFor(() => expect(registeredIds(host)).toContain("acp-amp"));
 
-    // Identity, not equality: a dispose-and-re-register would put a NEW
-    // object here even though the declaration is unchanged.
     expect(
       host.harness.registrations.providerRegistrations.find(
         (declaration) => declaration.id === "acp-cursor",
@@ -249,9 +221,6 @@ describe("the ACP plugin's registration bookkeeping", () => {
     ).toBe(before);
   });
 
-  // Two quick `bb plugin config set` calls. Unserialized, the second pass
-  // would register an id the first already took, throw part-way through, and
-  // leave registrations nobody holds a disposer for.
   it("serializes overlapping settings changes into one consistent state", async () => {
     const host = await loadPlugin({ customAgents: "[]" });
     const cursorBefore = host.harness.registrations.providerRegistrations.find(
@@ -276,8 +245,6 @@ describe("the ACP plugin's registration bookkeeping", () => {
     ]);
 
     await vi.waitFor(() => expect(registeredIds(host)).toContain("acp-amp"));
-    // Exactly one registration for the id, and the untouched agents were
-    // never re-registered.
     expect(registeredIds(host).filter((id) => id === "acp-amp")).toHaveLength(
       1,
     );
@@ -303,8 +270,6 @@ describe("the ACP plugin's capability probe", () => {
     await run.done;
   });
 
-  // One-directional: a probe verifies the agent's own answer, not that bb's
-  // whole fork path works, so a claim bb did not declare changes nothing.
   it("never widens a fork on an agent whose probe reports more", async () => {
     const probed: string[] = [];
     const host = await loadPlugin({
@@ -320,17 +285,11 @@ describe("the ACP plugin's capability probe", () => {
     run.controller.abort();
     await run.done;
 
-    // opencode declares "tip" and the agent confirms fork support: the rung
-    // it declared is the ceiling, so a confirmation changes nothing.
     expect(forkOf(host, "acp-opencode")).toBe("tip");
-    // cursor declares "none", so no answer could move it — and it is never
-    // asked. Its declaration is what the picker shows either way.
     expect(probed).not.toContain("cursor-agent");
     expect(forkOf(host, "acp-cursor")).toBe("none");
   });
 
-  // Only a `fork: "tip"` agent can be narrowed, so spawning the others would
-  // cost a 10s budget each for an outcome that cannot happen.
   it("only spawns the agents a probe answer could change", async () => {
     const probed: string[] = [];
     const host = await loadPlugin({
@@ -356,9 +315,6 @@ describe("the ACP plugin's capability probe", () => {
     expect(probed.length).toBeGreaterThan(0);
   });
 
-  // The daemon reports a worker that FAILS TO START as an unexpected exit, so
-  // re-probing from that event turns one deterministic worker failure into an
-  // unbounded restart loop. The probe results live here, not in the worker.
   it("does not re-probe when a host worker exits", async () => {
     const host = await loadPlugin({
       hosts: [{ id: "host_1", status: "connected" }],
@@ -378,8 +334,6 @@ describe("the ACP plugin's capability probe", () => {
     expect(host.harness.experimental_hostRpcCalls).toHaveLength(afterProbe);
   });
 
-  // One listener per poll would accrete for the plugin's lifetime on a signal
-  // that aborts exactly once, at dispose.
   it("leaves no abort listener behind per poll", async () => {
     const host = await loadPlugin({
       hosts: [{ id: "host_1", status: "connected" }],
@@ -390,9 +344,6 @@ describe("the ACP plugin's capability probe", () => {
     const { signal } = run.controller;
     vi.useFakeTimers();
     try {
-      // Several poll intervals. The service sleeps between passes, so the
-      // clock is what moves it; the advance must exceed the interval in
-      // server.ts (a longer one makes this assertion fail, not pass).
       for (let poll = 0; poll < 5; poll += 1) {
         await vi.advanceTimersByTimeAsync(5_000);
       }
@@ -406,9 +357,6 @@ describe("the ACP plugin's capability probe", () => {
     await run.done;
   });
 
-  // A hand-copied schema would reject every probe answer the moment the kit's
-  // grew a field, and the plugin would log one debug line and silently stop
-  // narrowing anything.
   it("validates probe answers with the kit's own schema", () => {
     expect(acpHostContract.probeAgent.output).toBe(
       experimental_acpAgentProbeSchema,
@@ -431,8 +379,6 @@ describe("the ACP plugin's capability probe", () => {
     expect(forkOf(host, "acp-opencode")).toBe("tip");
   });
 
-  // The boot ordering this service exists for: plugins load as soon as the
-  // server listens, and daemons reconnect a moment later.
   it("probes nothing while every host is disconnected", async () => {
     const probed: string[] = [];
     const host = await loadPlugin({
@@ -455,12 +401,6 @@ describe("the ACP plugin's capability probe", () => {
 });
 
 describe("known agent logos", () => {
-  // The packaged build ships only the assets the manifest declares. A
-  // `./icons/x.svg` path named only in a declaration is absent from the
-  // installed plugin, the provider registers without a logo, and the model
-  // picker draws nothing where the agent's mark belongs. The fake host
-  // refuses an undeclared namespaced glyph like production does; this guards
-  // the path form, which both accept.
   it("declares every agent logo in the manifest", () => {
     for (const agent of KNOWN_ACP_AGENTS) {
       if (agent.icon === undefined) continue;

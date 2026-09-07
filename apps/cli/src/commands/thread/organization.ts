@@ -1,5 +1,14 @@
 import { Command } from "commander";
 import { updateThreadTabsRequestSchema } from "@bb/server-contract";
+import {
+  queuedMessageWaitHolderSchema,
+  type PromptInput,
+  type QueuedMessageWaitHolder,
+} from "@bb/domain";
+import type { ThreadQueuedMessagesResult } from "@bb/sdk";
+import { renderBorderlessTable } from "../../table.js";
+import { describeQueueWait } from "./actions.js";
+import { formatQueueSendCountdown } from "./send-time.js";
 import { action } from "../../action.js";
 import { createCliBbSdk } from "../../client.js";
 import {
@@ -27,6 +36,10 @@ interface SearchOptions extends JsonOptions {
 
 interface HistoryOptions extends JsonOptions {
   limit?: string;
+}
+
+interface QueueListOptions extends JsonOptions {
+  waitHolder?: string;
 }
 
 interface QueueCreateOptions extends JsonOptions {
@@ -57,19 +70,97 @@ interface ReorderPinnedOptions extends JsonOptions {
   before?: string;
 }
 
+const THREAD_SEARCH_LIMIT_PER_GROUP_MAX = 50;
+
 function parsePositiveInteger(
   value: string | undefined,
   flag: string,
+  maximum?: number,
 ): string | undefined {
   if (value === undefined) return undefined;
   if (!/^\d+$/u.test(value) || Number(value) < 1) {
     throw new Error(`${flag} must be a positive integer.`);
+  }
+  if (maximum !== undefined && Number(value) > maximum) {
+    throw new Error(`${flag} must be at most ${maximum}.`);
   }
   return value;
 }
 
 function printHumanJson(value: unknown): void {
   console.log(JSON.stringify(value, null, 2));
+}
+
+const MAX_QUEUE_TEXT_WIDTH = 40;
+
+/**
+ * The queue as a table rather than raw JSON.
+ *
+ * `Waiting on` and `Send at` are the two columns that make a queued row
+ * legible: without them a queued message and one blocked behind a rate-limit
+ * window look identical, which is exactly the confusion the typed waits exist
+ * to remove.
+ */
+function printQueueTable(rows: ThreadQueuedMessagesResult): void {
+  const now = Date.now();
+  const table = rows.map((row) => [
+    row.id,
+    row.threadId,
+    truncateQueueCell(queuedMessagePreview(row.content)),
+    truncateQueueCell(describeQueueWait(row)),
+    formatQueueSendCountdown(row.sendAt, now),
+  ]);
+  console.log("");
+  console.log(
+    renderBorderlessTable(
+      {
+        head: ["ID", "Thread", "Message", "Waiting on", "Send at"],
+        colWidths: [
+          queueColumnWidth(table, 0, 2),
+          queueColumnWidth(table, 1, 6),
+          queueColumnWidth(table, 2, 7),
+          queueColumnWidth(table, 3, 10),
+          queueColumnWidth(table, 4, 7),
+        ],
+      },
+      table,
+    ),
+  );
+  console.log("");
+}
+
+function queuedMessagePreview(content: PromptInput[]): string {
+  const text = content
+    .filter((block) => block.type === "text")
+    .map((block) => block.text)
+    .join(" ");
+  return text.trim() === "" ? "(no text)" : text;
+}
+
+function queueColumnWidth(
+  rows: string[][],
+  index: number,
+  headWidth: number,
+): number {
+  return Math.max(headWidth, ...rows.map((row) => row[index]!.length));
+}
+
+function truncateQueueCell(value: string): string {
+  const singleLine = value.replace(/\s+/gu, " ");
+  if (singleLine.length <= MAX_QUEUE_TEXT_WIDTH) return singleLine;
+  return `${singleLine.slice(0, MAX_QUEUE_TEXT_WIDTH - 1)}…`;
+}
+
+/**
+ * Wait holders are a prefixed set, so a typo fails here with the shape spelled
+ * out rather than as an opaque 400 from the list route.
+ */
+function parseWaitHolder(value: string): QueuedMessageWaitHolder {
+  const parsed = queuedMessageWaitHolderSchema.safeParse(value.trim());
+  if (parsed.success) return parsed.data;
+  throw new Error(
+    `Invalid --wait-holder value '${value}'. Expected 'plugin:<plugin-id>'.`,
+  );
 }
 
 export function registerOrganizationCommands(
@@ -150,13 +241,20 @@ export function registerOrganizationCommands(
   parent
     .command("search <query>")
     .description("Search threads and messages")
-    .option("--limit <count>", "Maximum results per group")
+    .option(
+      "--limit <count>",
+      `Maximum results per group (1-${THREAD_SEARCH_LIMIT_PER_GROUP_MAX})`,
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
       action(async (query: string, opts: SearchOptions) => {
         const result = await createCliBbSdk(getUrl()).threads.search({
           query,
-          limitPerGroup: parsePositiveInteger(opts.limit, "--limit"),
+          limitPerGroup: parsePositiveInteger(
+            opts.limit,
+            "--limit",
+            THREAD_SEARCH_LIMIT_PER_GROUP_MAX,
+          ),
         });
         if (outputJson(opts, result)) return;
         printHumanJson(result);
@@ -223,17 +321,38 @@ export function registerOrganizationCommands(
     .command("queue")
     .description("Manage queued thread messages");
   queue
-    .command("list <threadId>")
-    .description("List queued messages")
+    .command("list [threadId]")
+    .description(
+      "List queued messages; omit the thread to list every one",
+    )
+    .option(
+      "--wait-holder <holder>",
+      "Filter to rows one plugin is holding: plugin:<plugin-id>",
+    )
     .option("--json", "Print machine-readable JSON output")
     .action(
-      action(async (threadId: string, opts: JsonOptions) => {
-        const result = await createCliBbSdk(
-          getUrl(),
-        ).threads.queuedMessages.list({ threadId });
-        if (outputJson(opts, result)) return;
-        printHumanJson(result);
-      }),
+      action(
+        async (threadId: string | undefined, opts: QueueListOptions) => {
+          const sdk = createCliBbSdk(getUrl());
+          // A thread argument keeps the thread-scoped route, which is the one
+          // that returns queue ORDER; the cross-thread route answers "what is
+          // queued anywhere" and is ordered by age instead.
+          const result =
+            threadId === undefined
+              ? await sdk.threads.queue.list({
+                  ...(opts.waitHolder
+                    ? { waitHolder: parseWaitHolder(opts.waitHolder) }
+                    : {}),
+                })
+              : await sdk.threads.queuedMessages.list({ threadId });
+          if (outputJson(opts, result)) return;
+          if (result.length === 0) {
+            console.log("No queued messages found");
+            return;
+          }
+          printQueueTable(result);
+        },
+      ),
     );
   queue
     .command("create <threadId> <message>")
@@ -324,6 +443,12 @@ export function registerOrganizationCommands(
             mode: opts.mode,
           });
           if (outputJson(opts, result)) return;
+          if (result.delivery === "queued") {
+            console.log(
+              `Queued message ${messageId} is still queued (${describeQueueWait(result.queuedMessage)})`,
+            );
+            return;
+          }
           console.log(`Queued message ${messageId} sent`);
         },
       ),

@@ -11,20 +11,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/**
- * Claude loads injected skills as local plugins, and a local plugin is a
- * directory with `.claude-plugin/plugin.json` whose `skills` entries are
- * plugin-relative (the manifest schema rejects absolute paths and `..`). The
- * generic `skills/configure` root is an absolute skills directory, so the
- * bridge assembles one plugin per root here: a manifest pointing at
- * `./skills`, and `skills` as a symlink to the root. Claude follows the
- * symlink when a session loads the plugin (its validator says so while
- * refusing to read through it), so the staged files are never copied.
- */
-
 export interface ClaudeSkillPluginRoot {
   id: string;
-  /** Absolute directory holding one subdirectory per skill. */
   path: string;
 }
 
@@ -39,7 +27,6 @@ interface ClaudePluginManifest {
 
 const MANIFEST_SCHEMA = "https://anthropic.com/claude-code/plugin.schema.json";
 
-/** A plugin directory name that is stable for a root and safe on disk. */
 function pluginDirectoryName(root: ClaudeSkillPluginRoot): string {
   return createHash("sha256")
     .update(`${root.id}\0${root.path}`)
@@ -47,15 +34,6 @@ function pluginDirectoryName(root: ClaudeSkillPluginRoot): string {
     .slice(0, 16);
 }
 
-/**
- * The plugin name Claude namespaces every injected skill under
- * (`<plugin>:<skill>`): it shows as the Skill tool's title and the model must
- * type it on every invocation, so it is the stable `bb-global-skills` — never
- * the catalog hash, which changes whenever any skill in the catalog does and
- * would leave a resumed transcript naming a plugin that no longer exists. A
- * second root in the same process (two catalogs side by side) gets a short
- * suffix so the two plugins do not collide.
- */
 export const CLAUDE_SKILL_PLUGIN_NAME = "bb-global-skills";
 
 function pluginNameFor(
@@ -70,15 +48,9 @@ function pluginNameFor(
   return `${CLAUDE_SKILL_PLUGIN_NAME}-${directory.slice(0, 8)}`;
 }
 
-/**
- * Assemble (or refresh) the local plugin for one root under `pluginsRoot`
- * and return its path. Idempotent: a second call for the same root rewrites
- * the manifest and re-points the symlink.
- */
 export function ensureClaudeSkillPlugin(args: {
   pluginsRoot: string;
   root: ClaudeSkillPluginRoot;
-  /** Plugin names already assembled under `pluginsRoot` → their directory. */
   takenNames?: Map<string, string>;
 }): string {
   const directory = pluginDirectoryName(args.root);
@@ -116,7 +88,6 @@ export function ensureClaudeSkillPlugin(args: {
   return pluginPath;
 }
 
-/** A fresh, process-private directory for the assembled plugins. */
 export function createClaudeSkillPluginsRoot(baseDir = tmpdir()): string {
   mkdirSync(baseDir, { recursive: true });
   return mkdtempSync(join(baseDir, "bb-claude-skill-plugins-"));

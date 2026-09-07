@@ -12,20 +12,6 @@ import { Text } from "./Text";
 
 const IS_IOS = process.env.EXPO_OS === "ios";
 
-/*
- * Variant and size names mirror packages/shared-ui/src/components/ui/button.tsx
- * so call sites port unchanged. Android renders the web shapes (below);
- * iOS maps the same names onto the system button styles:
- *
- *   default              → filled   (primary capsule, white label)
- *   destructive          → filled   (destructive capsule)
- *   outline · secondary  → tinted   (primary at 15%, primary label)
- *   ghost · link         → plain    (primary label, no fill)
- *
- * Pressing dims the whole button to 60% (UIKit highlight) instead of
- * swapping the fill; `pressed` (toggle) adds a tint fill to plain/tinted.
- */
-
 const androidButtonVariants = cva(
   "flex-row items-center justify-center gap-2 rounded-md",
   {
@@ -153,23 +139,12 @@ export interface ButtonProps
   extends
     Omit<PressableProps, "children" | "style" | "onPress">,
     Omit<VariantProps<typeof androidButtonVariants>, "pressed"> {
-  /** A string renders as themed text; any other node renders as-is. */
   children?: ReactNode;
-  /** Leading glyph (from ICON_MAP); trailing when `iconPosition="right"`. */
   icon?: IconName;
   iconPosition?: "left" | "right";
-  /** Shows a spinner in place of the icon and disables the button. */
   loading?: boolean;
-  /** Toggle-style pressed state (web `aria-pressed`). */
   pressed?: boolean;
-  /**
-   * iOS only: the color the tinted / plain appearances (`outline`,
-   * `secondary`, `ghost`, `link`) use — the primary tint (default) or the
-   * destructive red (a "Deny" / "Remove" that must not read as the primary
-   * action). Android keeps its variant look.
-   */
   tint?: "primary" | "destructive";
-  /** Fire haptic feedback on press. */
   haptic?: ButtonHaptic | boolean;
   onPress?: () => void;
   className?: string;
@@ -205,10 +180,8 @@ const IOS_ICON_SIZE: Record<ButtonSize, number> = {
   icon: 22,
 };
 
-/** Tint fill alphas for the iOS `tinted` appearance (rest / toggled). */
 const TINT_ALPHA = 0.15;
 const TINT_ALPHA_PRESSED = 0.28;
-/** UIKit highlight: the whole control dims while the finger is down. */
 const PRESS_OPACITY = 0.6;
 
 export function Button({
@@ -235,7 +208,6 @@ export function Button({
   const [pressing, setPressing] = useState(false);
   const isDisabled = disabled || loading;
   const appearance = IOS_APPEARANCE[variant];
-  // The tinted / plain appearances take the destructive red when asked.
   const iosTintable = appearance === "tinted" || appearance === "plain";
   const iosTintColor =
     tint === "destructive" ? tokens.destructive : tokens.primary;
@@ -277,7 +249,6 @@ export function Button({
       accessibilityState={{ disabled: !!isDisabled, selected: pressed }}
       disabled={isDisabled}
       onPress={() => {
-        // Honors the Settings → Haptics toggle (see @/lib/haptics).
         if (hapticProp) haptic(hapticKindForButton(hapticProp));
         onPress?.();
       }}

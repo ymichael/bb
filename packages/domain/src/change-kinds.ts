@@ -137,12 +137,6 @@ const unsubscribeMessageSchema = z.object({
 });
 export type UnsubscribeMessage = z.infer<typeof unsubscribeMessageSchema>;
 
-/**
- * Application-level liveness probe from a realtime client. Browsers expose no
- * WebSocket ping/pong API and a half-open socket (Wi-Fi/LTE switch, iOS
- * background suspend) stays `OPEN` indefinitely, so the app asks the server
- * for a `pong` and reconnects when none arrives.
- */
 export const pingMessageSchema = z.object({
   type: z.literal("ping"),
 });
@@ -155,7 +149,6 @@ export const clientMessageSchema = z.discriminatedUnion("type", [
 ]);
 export type ClientMessage = z.infer<typeof clientMessageSchema>;
 
-/** Server answer to {@link pingMessageSchema}; strict, guards the outgoing side. */
 export const pongMessageSchema = z
   .object({
     type: z.literal("pong"),
@@ -163,7 +156,6 @@ export const pongMessageSchema = z
   .strict();
 export type PongMessage = z.infer<typeof pongMessageSchema>;
 
-/** Lenient inbound counterpart of {@link pongMessageSchema} for clients. */
 export const pongMessageLenientSchema = z.object({
   type: z.literal("pong"),
 });
@@ -199,15 +191,6 @@ export function realtimeSubscriptionTargetKey(
   }
 }
 
-/**
- * The thread list row fields a lifecycle transition rewrites, carried on a
- * `status-changed` notification so clients patch the cached row instead of
- * refetching every thread list (the sidebar bootstrap is ~1 KB per thread).
- * `activity` is included because the plan-mode and goal counts are gated on
- * the thread status server-side and nothing else pushes them to list rows.
- * Producers that cannot resolve the post-transition runtime omit the whole
- * field; clients then fall back to refetching.
- */
 export const threadStatusChangeMetadataSchema = z
   .object({
     status: threadStatusSchema,
@@ -232,16 +215,6 @@ export const threadChangeMetadataSchema = z
   .strict();
 export type ThreadChangeMetadata = z.infer<typeof threadChangeMetadataSchema>;
 
-/**
- * Strict changed-message schemas validate the server's OUTGOING broadcasts —
- * the producer is in-repo, so unknown fields or kinds there are bugs and must
- * fail loudly. Message types are derived from these schemas (z.infer) so the
- * contract cannot drift from the validators.
- *
- * Clients must NOT parse inbound traffic with these: a long-lived tab or an
- * older installed SDK talking to a newer server would drop entire messages
- * over an additive change. Inbound parsing uses the lenient schemas below.
- */
 export const threadChangedMessageSchema = z
   .object({
     type: z.literal("changed"),
@@ -303,14 +276,6 @@ export const changedMessageSchema = z.discriminatedUnion("entity", [
 ]);
 export type ChangedMessage = z.infer<typeof changedMessageSchema>;
 
-/**
- * Lenient changed-message schemas parse INBOUND broadcasts on clients (SDK
- * consumers and the web app). They tolerate version skew against a newer
- * server: unknown fields are stripped and unknown change kinds are filtered
- * out instead of rejecting the whole message, so a stale client keeps
- * receiving the kinds it understands. Their output remains assignable to the
- * strict message types — dispatch sites enforce that at compile time.
- */
 function lenientKinds<TKind extends string>(kinds: readonly TKind[]) {
   const known: ReadonlySet<string> = new Set(kinds);
   return z
@@ -336,9 +301,6 @@ const threadChangeMetadataLenientSchema = z.object({
     .optional(),
   hasPendingInteraction: z.boolean().optional(),
   projectId: z.string().optional(),
-  // A newer server may emit a status or runtime display value this client
-  // does not know. Dropping just this field keeps the message and makes the
-  // client fall back to a refetch for the row.
   statusChange: threadStatusChangeMetadataSchema.optional().catch(undefined),
 });
 

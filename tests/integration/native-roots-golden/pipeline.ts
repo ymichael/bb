@@ -1,13 +1,3 @@
-/**
- * The discovery pipeline under proof, run in-process: the plugin's
- * declaration, its `resolveNativeRoots` answer for the workspace, the
- * daemon's declared-root resolver, then command and skill discovery —
- * exactly what the server, the plugin host worker and the daemon do across
- * the wire. The goldens hold the listing the pre-S5 daemon produced (the
- * server's `nativeSkillRoots` plus the daemon's per-provider table and
- * vendor resolvers), except where `fixtures.ts` says a variant was
- * re-captured from this pipeline after a deliberate rule change.
- */
 import {
   EMPTY_PROVIDER_NATIVE_ROOTS,
   EMPTY_PROVIDER_RESOLVED_NATIVE_ROOTS,
@@ -50,7 +40,6 @@ import {
 
 export interface PipelineInput {
   providerId: string;
-  /** Workspace cwd, or null for the user-only listing. */
   cwd: string | null;
   homeDir: string;
 }
@@ -77,13 +66,13 @@ interface ProviderNativeRootSource {
   ) => Promise<ExperimentalNativeRootsResolveAnswer>;
 }
 
-/** The plugin side of one provider: its declaration and its host resolver. */
 function providerSource(providerId: string): ProviderNativeRootSource {
   const env = process.env;
   if (providerId === "claude-code") {
     return {
       declaration: CLAUDE_NATIVE_ROOTS_DECLARATION,
-      resolve: (cwd, homeDir) => resolveClaudeNativeRoots({ cwd, homeDir, env }),
+      resolve: (cwd, homeDir) =>
+        resolveClaudeNativeRoots({ cwd, homeDir, env }),
     };
   }
   if (providerId === "codex") {
@@ -98,7 +87,9 @@ function providerSource(providerId: string): ProviderNativeRootSource {
       resolve: (_cwd, homeDir) => resolvePiNativeRoots({ homeDir, env }),
     };
   }
-  const agent = KNOWN_ACP_AGENTS.find((candidate) => candidate.id === providerId);
+  const agent = KNOWN_ACP_AGENTS.find(
+    (candidate) => candidate.id === providerId,
+  );
   if (agent === undefined) {
     throw new Error(`no native-root source for provider "${providerId}"`);
   }
@@ -109,7 +100,6 @@ function providerSource(providerId: string): ProviderNativeRootSource {
   };
 }
 
-/** What the server puts on `host.list_commands` / `host.list_skills`. */
 async function nativeRootSet(
   input: PipelineInput,
 ): Promise<ProviderNativeRootSet> {
@@ -125,7 +115,9 @@ async function nativeRootSet(
     skills:
       declaration.experimental_nativeSkillRoots === undefined
         ? EMPTY_PROVIDER_NATIVE_ROOTS
-        : normalizeProviderNativeRoots(declaration.experimental_nativeSkillRoots),
+        : normalizeProviderNativeRoots(
+            declaration.experimental_nativeSkillRoots,
+          ),
     commands:
       declaration.experimental_nativeCommandRoots === undefined
         ? EMPTY_PROVIDER_NATIVE_ROOTS
@@ -136,7 +128,6 @@ async function nativeRootSet(
   });
 }
 
-/** Declaration → resolver → daemon → discovery, minus the RPC envelopes. */
 export const pipeline: Pipeline = async (input) => {
   const resolution = {
     providerId: input.providerId,

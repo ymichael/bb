@@ -54,13 +54,6 @@ interface NormalizeSidebarSectionOrderArgs {
   hasThreadsSection?: boolean;
 }
 
-/**
- * Reconciles locally persisted order with the live entity set. The old
- * aggregate section token is expanded in place, so existing users keep their
- * Pinned/primary/Threads layout when projects and sections become first-level
- * sections. New entities join after the last entity without disturbing a
- * user's explicit placement of built-in sections.
- */
 export function normalizeSidebarSectionOrder({
   storedOrder,
   entitySectionIds,

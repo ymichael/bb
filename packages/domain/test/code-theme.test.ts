@@ -40,7 +40,10 @@ describe("code theme resolution", () => {
       expect(resolved.light, id).not.toBe(resolved.dark);
       const shipped = resolved.files[resolved.light];
       if (shipped !== undefined) {
-        expect(shipped, id).toMatchObject({ name: resolved.light, type: "light" });
+        expect(shipped, id).toMatchObject({
+          name: resolved.light,
+          type: "light",
+        });
       }
     }
     const dracula = resolveCodeTheme(null, "dracula");

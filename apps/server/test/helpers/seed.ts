@@ -26,12 +26,14 @@ import type {
   EnvironmentStatus,
   PermissionMode,
   PromptInput,
+  QueuedMessageWaitingOn,
   RecordedPermissionMode,
   StoredThreadEventDataForType,
   ThreadEventScope,
   ThreadEventItemType,
   ThreadEventType,
   ThreadOriginKind,
+  ThreadStatus,
   ThreadVisibility,
   WorkspaceProvisionType,
 } from "@bb/domain";
@@ -181,7 +183,7 @@ export function seedThread(
     projectId: string;
     environmentId?: string | null;
     providerId?: string;
-    status?: "idle" | "starting" | "active" | "stopping" | "error";
+    status?: ThreadStatus;
     title?: string | null;
     parentThreadId?: string | null;
     sourceThreadId?: string | null;
@@ -243,8 +245,11 @@ export function seedQueuedMessage(
     model?: string;
     reasoningLevel?: string;
     permissionMode?: PermissionMode;
-    senderThreadId?: string | null;
+      senderThreadId?: string | null;
     serviceTier?: string;
+    /** Defaults to a row with no wait: an ordinary queued message. */
+    waitingOn?: QueuedMessageWaitingOn | null;
+    sendAt?: number | null;
   },
 ) {
   return createQueuedThreadMessage(deps.db, deps.hub, {
@@ -255,6 +260,10 @@ export function seedQueuedMessage(
     permissionMode: args.permissionMode ?? "full",
     senderThreadId: args.senderThreadId ?? null,
     serviceTier: args.serviceTier ?? "default",
+    waitingOn: args.waitingOn ?? null,
+    sendAt: args.sendAt ?? null,
+    payload: { kind: "inline" },
+    systemNotice: null,
   });
 }
 
@@ -288,10 +297,6 @@ export function seedEvent<TType extends ThreadEventType>(
   ]);
 }
 
-/**
- * Seeds a stored provider turn for tests that exercise server-side behavior
- * after daemon ingestion has already persisted turn/started.
- */
 export function seedTurnStarted(
   deps: Pick<AppDeps, "db" | "hub">,
   args: SeedTurnStartedArgs,

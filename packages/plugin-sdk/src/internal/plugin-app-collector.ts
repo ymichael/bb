@@ -1,5 +1,12 @@
 import type {
   ComposerCustomization,
+  ExperimentalAppOverlayRegistration,
+  ExperimentalSidebarFooter,
+  ExperimentalSidebarFooterActionContext,
+  ExperimentalSidebarFooterActionRegistration,
+  ExperimentalSidebarFooterDisclosureController,
+  ExperimentalSidebarFooterDisclosureRegistration,
+  ExperimentalSidebarFooterItemRegistration,
   PluginAppDefinition,
   PluginContentScriptRegistration,
   PluginDiffRendererRegistration,
@@ -14,6 +21,7 @@ import type {
   PluginProviderIconRegistration,
   PluginSettingsSectionRegistration,
   PluginSidebarFooterActionRegistration,
+  ExperimentalSidebarNavigationRegistration,
   PluginSourceCodeRendererRegistration,
   PluginThreadHeaderActionRegistration,
   PluginThreadListRegistration,
@@ -32,6 +40,196 @@ import {
   requireTimelineRendererKind,
   requireUniqueId,
 } from "./composer-customization-validation.js";
+
+export type ExperimentalSidebarFooterCommandKind = "open" | "close" | "toggle";
+
+export interface ExperimentalSidebarFooterRuntimeSnapshot {
+  command: {
+    sequence: number;
+    kind: ExperimentalSidebarFooterCommandKind;
+  } | null;
+}
+
+export interface ExperimentalSidebarFooterItemRuntime {
+  subscribe(listener: () => void): () => void;
+  getSnapshot(): ExperimentalSidebarFooterRuntimeSnapshot;
+  acknowledgeCommand(sequence: number): void;
+}
+
+export type CollectedExperimentalSidebarFooterItem =
+  ExperimentalSidebarFooterItemRegistration & {
+    runtime: ExperimentalSidebarFooterItemRuntime;
+  };
+
+export type CollectedManagedSidebarFooterItem =
+  CollectedExperimentalSidebarFooterItem & {
+    source: "experimental_sidebarFooter";
+  };
+
+export interface CollectedCompatibilitySidebarFooterItem {
+  source: "sidebarFooterAction";
+  id: string;
+  label: string;
+  icon: string;
+  kind: "action";
+  onActivate(
+    context: ExperimentalSidebarFooterActionContext,
+  ): void | Promise<void>;
+  runtime: ExperimentalSidebarFooterItemRuntime;
+}
+
+export type CollectedSidebarFooterItem =
+  | CollectedCompatibilitySidebarFooterItem
+  | CollectedManagedSidebarFooterItem;
+
+let sidebarFooterCommandSequence = 0;
+
+const SIDEBAR_FOOTER_ACTION_KEYS: ReadonlySet<string> = new Set([
+  "id",
+  "label",
+  "icon",
+  "kind",
+  "onActivate",
+]);
+
+const SIDEBAR_FOOTER_DISCLOSURE_KEYS: ReadonlySet<string> = new Set([
+  "id",
+  "label",
+  "icon",
+  "kind",
+  "component",
+]);
+
+class SidebarFooterItemRuntime implements ExperimentalSidebarFooterItemRuntime {
+  private readonly listeners = new Set<() => void>();
+  private snapshot: ExperimentalSidebarFooterRuntimeSnapshot = {
+    command: null,
+  };
+
+  readonly subscribe = (listener: () => void): (() => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+
+  readonly getSnapshot = (): ExperimentalSidebarFooterRuntimeSnapshot =>
+    this.snapshot;
+
+  readonly acknowledgeCommand = (sequence: number): void => {
+    if (this.snapshot.command?.sequence !== sequence) return;
+    this.snapshot = { ...this.snapshot, command: null };
+    this.emit();
+  };
+
+  createDisclosureController(): ExperimentalSidebarFooterDisclosureController {
+    return Object.freeze({
+      open: () => this.request("open"),
+      close: () => this.request("close"),
+      toggle: () => this.request("toggle"),
+    });
+  }
+
+  private request(kind: ExperimentalSidebarFooterCommandKind): void {
+    sidebarFooterCommandSequence += 1;
+    this.snapshot = {
+      ...this.snapshot,
+      command: { sequence: sidebarFooterCommandSequence, kind },
+    };
+    this.emit();
+  }
+
+  private emit(): void {
+    for (const listener of this.listeners) listener();
+  }
+}
+
+export function adaptSidebarFooterAction(
+  registration: PluginSidebarFooterActionRegistration,
+): CollectedCompatibilitySidebarFooterItem {
+  return {
+    source: "sidebarFooterAction",
+    id: registration.id,
+    label: registration.title,
+    icon: registration.icon,
+    kind: "action",
+    onActivate: ({ openPluginDetails }) =>
+      registration.run({ openSettings: openPluginDetails }),
+    runtime: new SidebarFooterItemRuntime(),
+  };
+}
+
+class SidebarFooterCollector implements ExperimentalSidebarFooter {
+  constructor(
+    private readonly collected: CollectedExperimentalSidebarFooterItem[],
+    private readonly allCollected: CollectedSidebarFooterItem[],
+    private readonly seenIds: Set<string>,
+  ) {}
+
+  register(registration: ExperimentalSidebarFooterActionRegistration): void;
+  register(
+    registration: ExperimentalSidebarFooterDisclosureRegistration,
+  ): ExperimentalSidebarFooterDisclosureController;
+  register(
+    registration: ExperimentalSidebarFooterItemRegistration,
+  ): void | ExperimentalSidebarFooterDisclosureController {
+    const kind = "experimental_sidebarFooter.register";
+    const id = requireSlotId(kind, registration?.id);
+    requireUniqueId(kind, this.seenIds, id);
+    const label = requireNonEmptyString(kind, "label", registration.label);
+    const icon = requireNonEmptyString(kind, "icon", registration.icon);
+    const runtime = new SidebarFooterItemRuntime();
+
+    if (registration.kind === "action") {
+      this.rejectUnknownKeys(kind, registration, SIDEBAR_FOOTER_ACTION_KEYS);
+      if (typeof registration.onActivate !== "function") {
+        throw new Error(`${kind}: "onActivate" must be a function`);
+      }
+      const item: CollectedManagedSidebarFooterItem = {
+        id,
+        label,
+        icon,
+        kind: "action",
+        onActivate: registration.onActivate,
+        source: "experimental_sidebarFooter",
+        runtime,
+      };
+      this.collected.push(item);
+      this.allCollected.push(item);
+      return;
+    }
+
+    if (registration.kind === "disclosure") {
+      this.rejectUnknownKeys(
+        kind,
+        registration,
+        SIDEBAR_FOOTER_DISCLOSURE_KEYS,
+      );
+      const item: CollectedManagedSidebarFooterItem = {
+        id,
+        label,
+        icon,
+        kind: "disclosure",
+        component: requireComponent(kind, registration.component),
+        source: "experimental_sidebarFooter",
+        runtime,
+      };
+      this.collected.push(item);
+      this.allCollected.push(item);
+      return runtime.createDisclosureController();
+    }
+
+    throw new Error(`${kind}: "kind" must be "action" or "disclosure"`);
+  }
+
+  private rejectUnknownKeys(
+    kind: string,
+    registration: ExperimentalSidebarFooterItemRegistration,
+    allowed: ReadonlySet<string>,
+  ): void {
+    for (const key of Object.keys(registration)) {
+      if (!allowed.has(key)) throw new Error(`${kind}: unknown field "${key}"`);
+    }
+  }
+}
 
 type PluginNavPanelFixedTabRegistration = NonNullable<
   PluginNavPanelRegistration["fixedTabs"]
@@ -85,12 +283,15 @@ function rejectStaleNavPanelKeys(kind: string, registration: object): void {
 export interface CollectedPluginAppRegistrations {
   homepageSections: PluginHomepageSectionRegistration[];
   settingsSections: PluginSettingsSectionRegistration[];
+  appOverlays: ExperimentalAppOverlayRegistration[];
   navPanels: PluginNavPanelRegistration[];
   threadPanelActions: PluginThreadPanelActionRegistration[];
   newThreadPanelActions: PluginNewThreadPanelActionRegistration[];
   composerCustomizations: ComposerCustomization[];
   pendingInteractions: PluginPendingInteractionRegistration[];
   sidebarFooterActions: PluginSidebarFooterActionRegistration[];
+  experimentalSidebarFooterItems: CollectedExperimentalSidebarFooterItem[];
+  experimentalSidebarNavigations: ExperimentalSidebarNavigationRegistration[];
   threadLists: PluginThreadListRegistration[];
   threadHeaderActions: PluginThreadHeaderActionRegistration[];
   fileOpeners: PluginFileOpenerRegistration[];
@@ -104,6 +305,17 @@ export interface CollectedPluginAppRegistrations {
   contentScripts: PluginContentScriptRegistration[];
 }
 
+const sidebarFooterItemsByRegistrationSet = new WeakMap<
+  object,
+  readonly CollectedSidebarFooterItem[]
+>();
+
+export function getCollectedSidebarFooterItems(
+  registrations: object,
+): readonly CollectedSidebarFooterItem[] | null {
+  return sidebarFooterItemsByRegistrationSet.get(registrations) ?? null;
+}
+
 /**
  * Run a plugin app definition against the canonical validating collector.
  * Both the BB app and the public test harness use this implementation so a
@@ -115,15 +327,19 @@ export function collectPluginAppRegistrations(
   onComposerCustomizationRejected: (reason: string) => void = (reason) =>
     console.warn(reason),
 ): CollectedPluginAppRegistrations {
+  const sidebarFooterItems: CollectedSidebarFooterItem[] = [];
   const collected: CollectedPluginAppRegistrations = {
     homepageSections: [],
     settingsSections: [],
+    appOverlays: [],
     navPanels: [],
     threadPanelActions: [],
     newThreadPanelActions: [],
     composerCustomizations: [],
     pendingInteractions: [],
     sidebarFooterActions: [],
+    experimentalSidebarFooterItems: [],
+    experimentalSidebarNavigations: [],
     threadLists: [],
     threadHeaderActions: [],
     fileOpeners: [],
@@ -136,15 +352,18 @@ export function collectPluginAppRegistrations(
     timelineRenderers: [],
     contentScripts: [],
   };
+  sidebarFooterItemsByRegistrationSet.set(collected, sidebarFooterItems);
   const seenIds = {
     homepageSection: new Set<string>(),
     settingsSection: new Set<string>(),
+    appOverlay: new Set<string>(),
     navPanel: new Set<string>(),
     threadPanelAction: new Set<string>(),
     newThreadPanelAction: new Set<string>(),
     composerCustomization: new Set<string>(),
     pendingInteraction: new Set<string>(),
-    sidebarFooterAction: new Set<string>(),
+    sidebarFooterItem: new Set<string>(),
+    sidebarNavigation: new Set<string>(),
     threadList: new Set<string>(),
     threadHeaderAction: new Set<string>(),
     fileOpener: new Set<string>(),
@@ -184,6 +403,15 @@ export function collectPluginAppRegistrations(
           id,
           ...(title !== undefined ? { title } : {}),
           ...(description !== undefined ? { description } : {}),
+          component: requireComponent(kind, registration.component),
+        });
+      },
+      experimental_appOverlay(registration) {
+        const kind = "slots.experimental_appOverlay";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.appOverlay, id);
+        collected.appOverlays.push({
+          id,
           component: requireComponent(kind, registration.component),
         });
       },
@@ -374,15 +602,33 @@ export function collectPluginAppRegistrations(
       sidebarFooterAction(registration) {
         const kind = "slots.sidebarFooterAction";
         const id = requireSlotId(kind, registration?.id);
-        requireUniqueId(kind, seenIds.sidebarFooterAction, id);
+        requireUniqueId(kind, seenIds.sidebarFooterItem, id);
         if (typeof registration.run !== "function") {
           throw new Error(`${kind}: "run" must be a function`);
         }
-        collected.sidebarFooterActions.push({
+        const legacyRegistration = {
           id,
           title: requireNonEmptyString(kind, "title", registration.title),
           icon: requireNonEmptyString(kind, "icon", registration.icon),
           run: registration.run,
+        };
+        collected.sidebarFooterActions.push(legacyRegistration);
+        sidebarFooterItems.push(adaptSidebarFooterAction(legacyRegistration));
+      },
+      experimental_sidebarNavigation(registration) {
+        const kind = "slots.experimental_sidebarNavigation";
+        const id = requireSlotId(kind, registration?.id);
+        requireUniqueId(kind, seenIds.sidebarNavigation, id);
+        const description = requireOptionalString(
+          kind,
+          "description",
+          registration.description,
+        );
+        collected.experimentalSidebarNavigations.push({
+          id,
+          title: requireNonEmptyString(kind, "title", registration.title),
+          ...(description !== undefined ? { description } : {}),
+          component: requireComponent(kind, registration.component),
         });
       },
       experimental_threadList(registration) {
@@ -536,6 +782,11 @@ export function collectPluginAppRegistrations(
         });
       },
     },
+    experimental_sidebarFooter: new SidebarFooterCollector(
+      collected.experimentalSidebarFooterItems,
+      sidebarFooterItems,
+      seenIds.sidebarFooterItem,
+    ),
     composer: {
       customize(registration) {
         const customization = collectComposerCustomization(

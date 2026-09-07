@@ -1,4 +1,11 @@
-import { createThread, getEnvironment, getThread, listEvents } from "@bb/db";
+import {
+  createThread,
+  getAppSettings,
+  getEnvironment,
+  getThread,
+  listEvents,
+  setAppSettings,
+} from "@bb/db";
 import {
   type ResolvedThreadExecutionOptions,
   systemThreadProvisioningEventDataSchema,
@@ -65,8 +72,6 @@ vi.mock("@earendil-works/pi-ai/providers/all", () => ({
   builtinModels: () => ({
     complete: piAiMocks.complete,
     getModel: piAiMocks.getModel,
-    // No builtin provider ids: the `test/*` models these tests configure
-    // are neither server-direct nor plugin-served, so they reach getModel.
     getProviders: () => [],
   }),
 }));
@@ -146,6 +151,59 @@ describe("generated managed branch names", () => {
         `bb/improve-branch-names-${thread.id}`,
       );
       expect(piAiMocks.complete).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  it("applies the configured managed branch prefix", async () => {
+    mockThreadMetadata({
+      branchSlug: "unrelated-slug",
+      title: "Custom Prefix Branch",
+    });
+    await withTestHarness(async (harness) => {
+      const { host } = seedHostSession(harness.deps, {
+        id: "host-custom-branch-prefix",
+      });
+      const { project } = seedProjectWithSource(harness.deps, {
+        hostId: host.id,
+        path: "/tmp/custom-branch-prefix-project",
+      });
+      setAppSettings(harness.db, {
+        ...getAppSettings(harness.db),
+        managedBranchPrefix: "sawyer/wt-",
+      });
+
+      const response = await harness.app.request("/api/v1/threads", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          origin: "app",
+          projectId: project.id,
+          providerId: "codex",
+          model: "gpt-5",
+          input: [{ type: "text", text: "Use the configured branch prefix" }],
+          environment: {
+            type: "host",
+            hostId: host.id,
+            workspace: {
+              type: "managed-worktree",
+              baseBranch: { kind: "default" },
+            },
+          },
+        }),
+      });
+
+      expect(response.status).toBe(201);
+      const thread = threadSchema.parse(await readJson(response));
+
+      const queued = await waitForQueuedCommand(
+        harness,
+        ({ command }) => command.type === "environment.provision",
+      );
+      const managedCommand =
+        requireManagedWorktreeEnvironmentProvisionLiveCommand(queued);
+      expect(managedCommand.command.branchName).toBe(
+        `sawyer/wt-custom-prefix-branch-${thread.id}`,
+      );
     });
   });
 
@@ -825,9 +883,6 @@ describe("generated managed branch names", () => {
         titleFallback: "Idle late title rename",
       });
 
-      // Drive the non-managed provisioning path. The title is generated
-      // fire-and-forget (deferred mock), so provisioning continues and starts
-      // the thread before the title lands.
       const context = requestThreadProvision(harness.deps, {
         environmentIntent: {
           type: "reuse",
@@ -845,7 +900,6 @@ describe("generated managed branch names", () => {
         threadId: thread.id,
       });
 
-      // The thread starts while its title is still pending.
       const start = await waitForQueuedCommand(
         harness,
         ({ command }) =>
@@ -860,7 +914,6 @@ describe("generated managed branch names", () => {
       expect(getThread(harness.db, thread.id)?.status).toBe("active");
       expect(getThread(harness.db, thread.id)?.title).toBeNull();
 
-      // Finish the turn so the thread is idle by the time the title lands.
       const eventsResponse = await harness.app.request(
         "/internal/session/events",
         {
@@ -899,7 +952,6 @@ describe("generated managed branch names", () => {
         expect(piAiMocks.complete).toHaveBeenCalledTimes(2);
       });
 
-      // The fallback title lands only now, while the thread is idle.
       resolveMetadata({ title: "Late Idle Title" });
 
       const rename = await waitForQueuedCommandAfter(
@@ -987,9 +1039,6 @@ describe("generated managed branch names", () => {
         ({ command }) =>
           command.type === "thread.start" && command.threadId === thread.id,
       );
-      // The thread start fails, moving the thread to `error` before the title
-      // lands: the guard must drop the provider rename for a non-renamable
-      // thread.
       await reportQueuedCommandError(
         harness,
         start,

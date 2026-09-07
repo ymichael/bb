@@ -12,15 +12,6 @@ import {
   TOOLS_PAGES,
 } from "./tools-navigation";
 
-/**
- * The Extensions navigation, in the settings-sidebar treatment: each section
- * is a label and each of its pages is a row, so the sidebar is the one place
- * that lists every page — the pages themselves carry no tab layer.
- *
- * Rows and active-state come from `tools-navigation`'s canonical tables, so
- * the highlight always agrees with the ownership the breadcrumb resolver and
- * detail-route origin encode.
- */
 export function ToolsSidebar({
   appRoutePath,
   isResizing,
@@ -30,7 +21,6 @@ export function ToolsSidebar({
 }: {
   appRoutePath: string;
   isResizing: boolean;
-  /** Render the body only, inside a compact drawer panel owned by the caller. */
   mobileHosted?: boolean;
   onResizeMouseDown: (event: ReactMouseEvent<HTMLDivElement>) => void;
   showTopReserve: boolean;

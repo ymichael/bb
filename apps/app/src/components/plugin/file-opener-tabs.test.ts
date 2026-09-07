@@ -50,11 +50,6 @@ const REQUESTS: readonly {
   },
 ];
 
-/**
- * Opener tabs are persisted through the thread-tabs contract, which parses
- * every branch strictly — an owner field the contract does not model fails
- * the whole sync (issue #1773), not just that tab.
- */
 describe("createFileOpenerTabForRequest thread-tabs contract", () => {
   it.each(REQUESTS.map(({ label, request }) => [label, request] as const))(
     "produces a %s tab the thread-tabs contract accepts",

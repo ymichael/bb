@@ -40,8 +40,6 @@ describe("public project local host routes", () => {
         id: "host-personal-folder-project",
       });
       seedPrimaryHost(harness.deps, offlinePrimary.id);
-      // Threads created without a selected project belong to Personal. After
-      // changing directories, their target path is stored as an environment.
       ensurePersonalProject(harness.db);
       const personalEnvironment = seedEnvironment(harness.deps, {
         hostId: offlinePrimary.id,
@@ -328,8 +326,6 @@ describe("public project local host routes", () => {
       expect(fileResponse.headers.get("x-bb-content-encoding")).toBe("utf8");
       await expect(fileResponse.text()).resolves.toBe("console.log('ok');");
 
-      // A revalidation with the current tag still reads the file (the daemon
-      // hashes the bytes it returns) but answers 304 without a body.
       const revalidatePromise = harness.app.request(
         `/api/v1/projects/${project.id}/files/content?path=${encodeURIComponent("src/app.ts")}`,
         { headers: { "if-none-match": `"${"0".repeat(64)}"` } },

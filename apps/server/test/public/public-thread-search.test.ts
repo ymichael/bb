@@ -39,11 +39,7 @@ describe("public thread search route", () => {
         titleFallback: "routehiddenarchived",
         visibility: "hidden",
       });
-      archiveThread(
-        harness.deps.db,
-        harness.deps.hub,
-        hiddenArchivedThread.id,
-      );
+      archiveThread(harness.deps.db, harness.deps.hub, hiddenArchivedThread.id);
 
       const response = await harness.app.request(
         "/api/v1/threads/search?query=route&limitPerGroup=10",

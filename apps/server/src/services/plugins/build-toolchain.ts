@@ -5,23 +5,8 @@ import {
 } from "@bb/plugin-build";
 import type { PluginServiceDeps } from "./plugin-service-internal.js";
 
-/**
- * In-flight/settled toolchain per data dir. Holding the promise (not the
- * result) means concurrent installs share one fetch instead of racing npm
- * into the same directory. Keyed by data dir because tests run several
- * servers in one process.
- */
 const byDataDir = new Map<string, Promise<PluginBuildToolchain>>();
 
-/**
- * Resolve the pinned esbuild/Tailwind set bb builds plugin bundles with,
- * downloading it on first use.
- *
- * Shipped artifacts carry no build toolchain: it is fetched into
- * `<dataDir>/plugins/toolchain-<pins>/` the first time a `git:` or `path:`
- * plugin is actually built. Installing a prebuilt `npm:` plugin, or loading a
- * builtin, never reaches this.
- */
 export async function getPluginBuildToolchain(
   args: Pick<PluginServiceDeps, "dataDir" | "logger">,
 ): Promise<PluginBuildToolchain> {
@@ -43,7 +28,6 @@ export async function getPluginBuildToolchain(
   try {
     return await pending;
   } catch (error) {
-    // A failed fetch must not poison later installs — the next one retries.
     byDataDir.delete(args.dataDir);
     throw error;
   }

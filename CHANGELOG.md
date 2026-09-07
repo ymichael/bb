@@ -1,5 +1,210 @@
 # Changelog
 
+## 0.42.0
+
+This release adds Account Pooler for Claude and Codex, push notifications across devices, and a new plugin catalog.
+
+### New features
+
+- Use `/clear` in an idle thread to reset agent context while keeping the workspace and history.
+- Show, hide, and reorder sidebar destinations. Reorder new-tab Actions too.
+- Browse plugins by category, with screenshots, author pages, and a BB Official collection. The marketplace is also on getbb.app.
+- Manage installed plugins in Settings. Plugin settings now autosave with inline validation.
+- Read missed notifications in the notification center and expand long messages.
+- Expand completed **Thought for** entries to read provider-shared thinking.
+- Approvals and plan reviews open as a compact, actionable strip.
+- Search the project picker and customize worktree branch prefixes.
+- Copy images with message text and see attachment upload progress.
+
+### Built-in plugin updates
+
+- **Account Pooler.** Sign into multiple Claude and Codex accounts in one place. A proxy automatically rotates through your accounts as they hit usage limits. Experimental.
+- **Push notifications.** Choose mobile, web, and desktop delivery independently. Web needs permission and an open tab; desktop needs an open app window.
+- **Provider Usage.** Enable this new plugin to see limits and reset times across machines in the sidebar footer.
+- **Theme Preview.** Install this optional plugin to compare themes across bb screens and components.
+- **Side chat.** Fixes for pending questions, queued messages, and compact layouts.
+
+### Agent providers
+
+- Enable **Claude in Chrome** for browser tools.
+- Opt into releasing idle Claude queries after 30 seconds. The next turn resumes the conversation; background work stays active.
+- Cursor shows the correct reasoning choices. OMP supports manual compaction.
+- Fixes for Pi file attachments, Claude usage checks on macOS, and Codex rate-limit reporting.
+
+### CLI
+
+- `bb thread clear` resets context in an idle thread.
+- `bb thread fork` now reuses the source environment. Replace `--workspace` with `--environment` or `--new-environment worktree|personal`; forks stay on the same host.
+- Manage pooled accounts with `bb pool account`, check `bb pool status`, and control routing with `bb pool routing <claude|codex> [--off]`.
+- Test notifications with `bb push-notifications test <web|desktop>`.
+- Set branch prefixes with `bb settings general managedBranchPrefix <prefix>`.
+- `bb plugin new` scaffolds a store overview.
+- Use `bb environment branches`; `bb thread show --merge-base-branches` has been removed.
+
+### Performance
+
+- Enrolled machines download a smaller host-only package and skip identical reinstalls.
+- Codex resumes avoid loading full history. Plugin overlays rerender less often.
+- The optional `sidebarProgressiveDisclosure` experiment shortens long thread lists while keeping threads that need attention visible.
+
+### Notable fixes
+
+- Stopping a thread pauses its queue. Failed messages wait for an explicit retry.
+- Queued follow-ups survive offline hosts and reconnects; grouped messages dispatch together.
+- User questions survive daemon reconnects.
+- Turns containing steers can be edited, and follow-ups arrive reliably during startup.
+- Long conversations retain their leading history.
+- Codex archive undo stays in sync with bb.
+- Desktop browser OAuth popups work. Escape returns to the app.
+- Full browser storage no longer crashes the app.
+- Plugin settings preserve newer edits during saves, reloads report the correct version, and tool schemas support newer Zod 4 minors.
+- Fixes for intermittent Linux AppImage startup failures and host daemon startup and shutdown.
+
+### Plugin API changes
+
+- `threads.clearContext()` resets context within a thread.
+- `threads.fork()` takes `environment` and defaults to reusing the source environment.
+- `interaction.pending` reports questions and approvals; `bb.server.experimental_appUrl` exposes the app URL.
+- Plugin settings support numeric fields and validation through `experimental_schema`.
+- `app.slots.experimental_appOverlay` adds persistent app-wide UI.
+- `app.experimental_sidebarFooter.register()` adds footer actions and disclosures.
+- `bb.providers.experimental_contributeEnv()` supplies provider environment variables.
+- `bb.http.experimental_websocket()` registers plugin WebSocket routes.
+
+### Thanks
+
+Thank you to the fourteen contributors and co-authors outside the core team:
+
+- [@alanagoyal](https://github.com/alanagoyal)
+- [@andrewkchan](https://github.com/andrewkchan)
+- [@bradhallett](https://github.com/bradhallett)
+- [@davidondrej](https://github.com/davidondrej)
+- [@dillonzq](https://github.com/dillonzq)
+- [@IlyaM](https://github.com/IlyaM)
+- [@kravtsovd](https://github.com/kravtsovd)
+- [@MateoCerquetella](https://github.com/MateoCerquetella)
+- [@MayankBansal12](https://github.com/MayankBansal12)
+- [@nlorio-notion](https://github.com/nlorio-notion)
+- [@salemsayed](https://github.com/salemsayed)
+- [@smsunarto](https://github.com/smsunarto)
+- [@swairshah](https://github.com/swairshah)
+- [@vburojevic](https://github.com/vburojevic)
+
+Thank you also to everyone who reported an issue addressed in this release: **[@aaronphifer](https://github.com/aaronphifer)**, **[@amirghst](https://github.com/amirghst)**, **[@bradhallett](https://github.com/bradhallett)**, **[@dillonzq](https://github.com/dillonzq)**, **[@Guitaraholic](https://github.com/Guitaraholic)**, **[@GusevV1987](https://github.com/GusevV1987)**, **[@iamhenry](https://github.com/iamhenry)**, **[@IlyaM](https://github.com/IlyaM)**, **[@kravtsovd](https://github.com/kravtsovd)**, **[@lzfxxx](https://github.com/lzfxxx)**, **[@markasoftware-tc](https://github.com/markasoftware-tc)**, **[@MayankBansal12](https://github.com/MayankBansal12)**, **[@technicalpickles](https://github.com/technicalpickles)**, **[@Techno911](https://github.com/Techno911)**, **[@vixalien](https://github.com/vixalien)**, and **[@yusuf8834](https://github.com/yusuf8834)**.
+
+### Mobile app
+
+[Join the iOS TestFlight](https://testflight.apple.com/join/T9MayTMb).
+
+- Receive push notifications while the app is closed. Tap to open the thread on its server.
+- Use the new dark iOS app icon.
+- Toast swipes and sidebar dismissal are more reliable.
+- Panels respect device safe areas, pickers fit short screens, and the keyboard no longer flashes white.
+
+## 0.41.0
+
+This release adds a dispatch queue. You can schedule a send for later and limit how much work runs at the same time. The mobile app is now the bb web app in a native shell, and the new Plugin Guide maps every public plugin API.
+
+### New features
+
+- Send a message later. The bundled **Send later** plugin holds the message and dispatches it when it is due.
+- Limit how many threads run at the same time. The bundled **Concurrency limit** plugin defaults to the processor count of your machine.
+- Choose Queue or Steer for the Enter key in Settings > General. Each option describes what Enter and Command+Enter do. New installs use Steer.
+- Search your threads from the quick palette. The palette also opens Settings pages.
+- Reopen a closed tab with a keyboard shortcut.
+- Snap split panes to an equal grid.
+- Copy a link to a thread.
+- Search the parent thread picker. bb ranks parent threads that have children first.
+- Sort Browse Plugins by install count. This is the new default order.
+- Use a transparent or a frameless window on Linux.
+- Add a `.bb-env-teardown.sh` script to your repository. bb runs it before it removes a managed worktree.
+
+### Mobile app
+
+The mobile app is now a WebView shell around the bb web app. One implementation serves the phone and the desktop, so new features arrive on both at the same time.
+
+- Compact layouts use persistent shelves. The page stays visible behind the shelf.
+- The compact home page and the recents list are new.
+- Tool tabs open as full-page surfaces.
+- Navigation responds immediately.
+- Swipe to dismiss the sidebar again.
+
+### Built-in plugin updates
+
+- **Plugin Guide.** Enable this new plugin from Extensions > Installed Plugins. It maps every public plugin API surface over the real bb UI. Use **Copy for agent** to paste a surface reference into the composer.
+- **File Editor.** The Monaco editor uses your bb code theme. You can resize its file tree.
+- **Tasks.** Markdown tables render correctly, and a paste keeps the table content.
+- **Automations.** A degraded automation recovers instead of failing to load.
+- **Workflows.** The panel surface is cleaner, and worker threads archive when retention deletes their run.
+
+### Agent providers
+
+- Claude Code offers Fable 5.1.
+- The model picker shows the models that Pi gives you access to.
+- bb releases a restorable provider session after 30 idle minutes. This is no longer an experiment.
+- bb retires a provider bridge after its final thread ends.
+- bb retries a provider overload failure with the same conversation. It no longer sends a synthetic message.
+
+### CLI
+
+- `bb thread spawn --help` describes `--base-branch` correctly. Every named base is an exact Git ref.
+- `bb environment branches` keeps local and remote branch choices discoverable with query and limit controls.
+- `bb plugin new` creates a scaffold with a test that runs and a correct SDK example.
+- Command help and search results honor each command's help metadata.
+
+### Performance
+
+- Conversation outlines load much faster on large threads.
+- A cold load makes fewer duplicate network requests.
+- bb caches provider discovery and provider logos.
+- Plugin builds skip metafiles that nothing reads.
+
+### Notable fixes
+
+- A group of queued follow-ups stays together.
+- A steer queues correctly while a turn starts.
+- A thread keeps its execution model through the first dispatch.
+- Terminal OSC 8 links work, and a wrapped selection copies correctly.
+- macOS terminals no longer leak pty file descriptors.
+- Codex subagents relink after a session resume.
+- Codex spend controls report the correct rate limits.
+- Pi accepts a prompt that contains only an image.
+- Cursor plugin skills appear in the composer.
+- bb keeps a shared port while its host is offline.
+- The sidebar shows Offline when host capacity is unknown.
+- A large directory tree lists without a stack overflow.
+- Archived thread names resolve in sidebar mentions.
+- The Linux AppImage mounts and unmounts its runtime correctly.
+- Native module ABI failures no longer recur.
+
+### Plugin API changes
+
+- `bb.experimental_hooks.on("message.dispatch", handler)` gives one checkpoint for every send. Your handler can proceed, wait, or reject.
+- `bb.experimental_hooks.recheck(hook)` asks bb to pose the same question again.
+- New events report the queue: `message.queued`, `message.dispatched`, and `turn.failed`.
+- `sendAt` schedules a send, and `threads.retry()` dispatches a turn again.
+- `app.slots.experimental_sidebarNavigation` replaces the sidebar navigation with your own.
+- A plugin migration cannot reuse a migration index.
+
+### Thanks
+
+Twelve people outside the core team added code to this release. Thank you:
+
+- [@smsunarto](https://github.com/smsunarto)
+- [@wy3z](https://github.com/wy3z)
+- [@Danielalnajjar](https://github.com/Danielalnajjar)
+- [@fdx-peter](https://github.com/fdx-peter)
+- [@fgrehm](https://github.com/fgrehm)
+- [@hemaaanth](https://github.com/hemaaanth)
+- [@jonolee-kr](https://github.com/jonolee-kr)
+- [@peterfotinis](https://github.com/peterfotinis)
+- [@salemsayed](https://github.com/salemsayed)
+- [@sujeito-operator](https://github.com/sujeito-operator)
+- [@t1mdurden](https://github.com/t1mdurden)
+- [@yazydzhi](https://github.com/yazydzhi)
+
+Thank you also to everyone who reported an issue that this release fixes: **[@ariofrio](https://github.com/ariofrio)**, **[@bradhallett](https://github.com/bradhallett)**, **[@kongenpei](https://github.com/kongenpei)**, **[@markasoftware-tc](https://github.com/markasoftware-tc)**, **[@MGrin](https://github.com/MGrin)**, **[@MisterMunchkin](https://github.com/MisterMunchkin)**, **[@MPIsaac-Per](https://github.com/MPIsaac-Per)**, **[@nick8cyber](https://github.com/nick8cyber)**, **[@omar-quesada](https://github.com/omar-quesada)**, **[@pixexid](https://github.com/pixexid)**, **[@ryanbbrown](https://github.com/ryanbbrown)**, **[@Techno911](https://github.com/Techno911)**, **[@yurilaguardia](https://github.com/yurilaguardia)**, and **[@yusuf8834](https://github.com/yusuf8834)**.
+
 ## 0.40.0
 
 This release adds the File Editor and a quick command palette. It also makes bb faster across all devices.

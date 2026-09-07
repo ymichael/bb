@@ -24,6 +24,7 @@ export interface UseThreadTimelineControllerResult {
   activeThinking: ThreadTimelineResponse["activeThinking"];
   activeWorkflows: ThreadTimelineResponse["activeWorkflows"];
   activeBackgroundCommands: ThreadTimelineResponse["activeBackgroundCommands"];
+  contextBoundarySeq: ThreadTimelineResponse["contextBoundarySeq"];
   contextWindowUsage: ThreadTimelineResponse["contextWindowUsage"];
   goal: ThreadTimelineResponse["goal"];
   modelFallback: ThreadTimelineResponse["modelFallback"];
@@ -49,13 +50,17 @@ export function useThreadTimelineController({
   surfaceKey: explicitSurfaceKey,
   threadId,
 }: UseThreadTimelineControllerArgs): UseThreadTimelineControllerResult {
-  // Inherit the query's normal staleTime so remount/refocus can refresh a
-  // timeline that changed while this surface was unmounted.
   const latestTimelineQuery = useThreadTimeline(threadId, {
     enabled,
     refetchOnMount: true,
   });
-  const surfaceKey = explicitSurfaceKey ?? threadId;
+  const baseSurfaceKey = explicitSurfaceKey ?? threadId;
+  const contextBoundarySeq =
+    latestTimelineQuery.data?.contextBoundarySeq ?? null;
+  const surfaceKey =
+    contextBoundarySeq === null
+      ? baseSurfaceKey
+      : `${baseSurfaceKey}:context-boundary:${contextBoundarySeq}`;
   const [loadedTimeline, setLoadedTimeline] = useState<LoadedTimelineState>(
     () =>
       buildLoadedTimelineState({
@@ -199,6 +204,7 @@ export function useThreadTimelineController({
     activeThinking: latestTimeline?.activeThinking ?? null,
     activeWorkflows: latestTimeline?.activeWorkflows ?? [],
     activeBackgroundCommands: latestTimeline?.activeBackgroundCommands ?? [],
+    contextBoundarySeq,
     contextWindowUsage: latestTimeline?.contextWindowUsage,
     goal: latestTimeline?.goal ?? null,
     modelFallback: latestTimeline?.modelFallback ?? null,

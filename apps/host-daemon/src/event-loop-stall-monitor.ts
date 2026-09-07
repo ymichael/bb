@@ -4,7 +4,6 @@ import { isLikelySystemSuspensionDelay } from "./system-suspension.js";
 
 interface EventLoopStallMonitorOptions {
   logger: Pick<HostDaemonLogger, "warn">;
-  /** Injectable monotonic-enough wall clock for tests. */
   now?: () => number;
 }
 

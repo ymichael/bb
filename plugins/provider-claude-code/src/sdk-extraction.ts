@@ -78,6 +78,9 @@ const LARGE_CLAUDE_CONTEXT_WINDOW = 1_000_000;
 const LARGE_CLAUDE_CONTEXT_MODELS = new Set([
   "best",
   "claude-fable-5",
+  "claude-fable-5-1",
+  "claude-mythos-5",
+  "claude-mythos-5-1",
   "fable",
 ]);
 
@@ -257,10 +260,6 @@ interface ClaudeResultTokenUsage {
   modelContextWindow: number | null;
 }
 
-/**
- * The result's own (per-segment) token usage. Running thread totals are the
- * delta assembler's accumulation; the bridge only reports the segment.
- */
 export function extractClaudeResultTokenUsage(
   message: ClaudeResultMessage | SDKResultMessage,
 ): ClaudeResultTokenUsage | undefined {
@@ -361,8 +360,6 @@ function extractModelContextWindow(
     const reportedContextWindow = toPositiveNumber(usage.contextWindow);
     if (reportedContextWindow === undefined) continue;
 
-    // The SDK's 200k custom-endpoint value is a legacy BYOK fallback. Current
-    // Fable providers, including Bedrock, support 1M.
     const modelContextWindow = resolveClaudeModelContextWindowHint(model);
     const contextWindow =
       modelContextWindow === null

@@ -82,7 +82,7 @@ function isRuntimeErrorEvent(event: ThreadEvent): event is RuntimeErrorEvent {
   return event.type === "provider/error" || event.type === "system/error";
 }
 
-function formatRuntimeErrorEvent(event: RuntimeErrorEvent): string {
+export function formatRuntimeErrorEvent(event: RuntimeErrorEvent): string {
   const detail = event.detail ? ` detail=${event.detail}` : "";
   return `${event.type}: ${event.message}${detail}`;
 }
@@ -157,10 +157,6 @@ function failFastRuntimeFailure(args: RuntimeFailureContext): string | null {
   return null;
 }
 
-/**
- * Raw polling primitive for building intent-named runtime wait helpers.
- * Tests should prefer diagnosed helpers such as waitForThreadTurnCompleted.
- */
 export async function waitForRuntimeConditionUnsafe(
   condition: RuntimeWaitPredicate,
   config?: RuntimeWaitConditionConfig,
@@ -172,8 +168,6 @@ export async function waitForRuntimeConditionUnsafe(
   const deadline = Date.now() + timeoutMs;
 
   while (true) {
-    // Observe state before enforcing the deadline: the worker may have been
-    // descheduled past it after the condition became true.
     if (condition()) {
       return;
     }
@@ -214,11 +208,6 @@ export async function waitForRuntimeThreadEvent(
   });
 }
 
-/**
- * Resolves with the matching `turn/started` and its assembler-minted turn id
- * — the id the runtime's command plane and interaction requests speak, which
- * a test cannot know up front.
- */
 export async function waitForThreadTurnStarted(
   args: RuntimeThreadTurnStartedWaitArgs,
 ): Promise<{ event: ThreadEvent; turnId: string }> {

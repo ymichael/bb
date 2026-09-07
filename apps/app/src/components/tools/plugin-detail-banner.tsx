@@ -9,19 +9,6 @@ const TONE_ICON: Record<PluginBannerTone, string> = {
   warning: "text-warning",
 };
 
-/**
- * A page-level notification bar.
- *
- * These span the pane and sit above the detail page rather than inside it. As
- * inset cards in the centered column they read as content — one more block
- * among the sections — when the whole point is that they are conditions on the
- * page, not part of it. The neutral surface runs edge to edge; only the icon
- * carries semantic color, and the text lines up with the page gutter so a
- * banner and a section heading share a left edge.
- *
- * `maxWidthClassName` and the padding mirror ToolsScrollPage (ToolsView.tsx:87)
- * so that alignment holds.
- */
 export function PluginBannerBar({
   tone,
   icon,

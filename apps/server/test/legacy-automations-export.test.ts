@@ -169,7 +169,13 @@ describe("exportLegacyAutomationsForPluginImport", () => {
 
     const payload = JSON.parse(
       await readFile(
-        join(dataDir, "plugins", "automations", "import", "legacy-automations.json"),
+        join(
+          dataDir,
+          "plugins",
+          "automations",
+          "import",
+          "legacy-automations.json",
+        ),
         "utf8",
       ),
     );
@@ -237,7 +243,13 @@ describe("exportLegacyAutomationsForPluginImport", () => {
 
     const payload = JSON.parse(
       await readFile(
-        join(dataDir, "plugins", "automations", "import", "legacy-automations.json"),
+        join(
+          dataDir,
+          "plugins",
+          "automations",
+          "import",
+          "legacy-automations.json",
+        ),
         "utf8",
       ),
     );

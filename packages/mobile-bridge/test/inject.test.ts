@@ -29,10 +29,6 @@ interface FakeWindow {
   bb?: { native?: NativeShellApi };
 }
 
-/**
- * Run the injected script the way WKWebView does, against a stub window, so
- * the test covers the real string the shell ships rather than a copy of it.
- */
 function installBridge(overrides: Partial<NativeShellHandshake> = {}) {
   const posted: string[] = [];
   const fakeWindow: FakeWindow = {
@@ -134,8 +130,6 @@ describe("buildBridgeInjectionScript", () => {
   });
 
   it("re-applies the handshake instead of installing twice", () => {
-    // A WebView process reload re-runs the script on a live page. Losing the
-    // pending requests and the listeners there would strand the page.
     const { native, run, fakeWindow } = installBridge();
     const seen: unknown[] = [];
     native.subscribe((event: unknown) => seen.push(event));
@@ -161,8 +155,6 @@ describe("buildBridgeInjectionScript", () => {
   });
 
   it("survives a page with no ReactNativeWebView", () => {
-    // `injectedJavaScriptBeforeContentLoaded` can run before the WebView has
-    // finished wiring its own globals. Losing a message beats an exception.
     const fakeWindow: Record<string, unknown> = {};
     // eslint-disable-next-line no-new-func
     new Function("window", buildBridgeInjectionScript(handshake))(fakeWindow);

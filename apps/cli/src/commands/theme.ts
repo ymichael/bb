@@ -218,7 +218,6 @@ export function registerThemeCommands(
     .action(
       action(async (opts: JsonOutputOptions) => {
         const sdk = createCliBbSdk(getUrl());
-        // The SDK's theme-id shorthand carries the current favicon tint forward.
         const updated = await sdk.theme.set(defaultAppTheme.themeId);
         if (outputJson(opts, updated)) return;
         console.log(`Theme reset to ${describeActive(updated)}`);

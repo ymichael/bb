@@ -1,27 +1,17 @@
-/**
- * ACP tool call → grammar v3 item shape + presentation.
- *
- * An ACP agent describes a tool call with a native kind enum and a human
- * title. The kind maps straight onto the core kinds: `execute` → `command`,
- * `edit`/`delete` → `fileChange`, `read` → `fileRead`, `search` → `search`,
- * `fetch` → `webFetch`, `think` → `reasoning`; everything else — `other`,
- * `move`, an agent that sent no kind — is a generic `tool` whose `tool` slot
- * names the kind. The title is never a tool name: it rides
- * `presentation.title`.
- *
- * A core shape has required fields the agent does not always fill (Cursor's
- * `read` and `fetch` calls carry an empty `rawInput` and no `locations`). A
- * kind whose shape cannot be built honestly stays a generic `tool` that
- * presents as its kind ("Reading file" with the agent's title), so a row is
- * never a `fileRead` without a path or a `webFetch` without a URL.
- *
- * The command / file-change decision is `tool-call-operation.ts`'s, which the
- * permission mapping shares, so an approval row and its timeline item never
- * disagree (#1803).
- */
-
-import type { DeltaFileChange, DeltaItemShape, DeltaPresentation } from "@bb/provider-bridge-protocol";
-import { REASONING_PRESENTATION, extractResultText, fileReadPresentation, searchPresentation, toOptionalString, toolPresentation, webFetchPresentation } from "@bb/provider-bridge-protocol/bridge-kit";
+import type {
+  DeltaFileChange,
+  DeltaItemShape,
+  DeltaPresentation,
+} from "@bb/provider-bridge-protocol";
+import {
+  REASONING_PRESENTATION,
+  extractResultText,
+  fileReadPresentation,
+  searchPresentation,
+  toOptionalString,
+  toolPresentation,
+  webFetchPresentation,
+} from "@bb/provider-bridge-protocol/bridge-kit";
 import { z } from "zod";
 import {
   commandPresentation,
@@ -36,35 +26,20 @@ import {
   type AcpToolCallOperation,
   type AcpToolCallPathOptions,
 } from "./tool-call-operation.js";
-import {
-  extractAcpContentText,
-  type AcpToolCallUpdateEvent,
-} from "./wire.js";
+import { extractAcpContentText, type AcpToolCallUpdateEvent } from "./wire.js";
 
-/** A tool call's item shape plus the presentation that rides its lifecycle. */
 export interface AcpClassifiedToolCall {
   item: DeltaItemShape;
   presentation: DeltaPresentation;
 }
 
-/**
- * A bb-injected tool the session was constructed with (Q31). The definition
- * carries its presentation once the server resolved one; a definition from
- * before the field existed presents generically.
- */
 export interface AcpInjectedTool {
   name: string;
   presentation?: DeltaPresentation;
 }
 
-/** The `server` a bb-injected tool call carries on the wire (Q31). */
 const BB_TOOL_SERVER = "bb";
 
-/**
- * Whether a tool call can be a call to a bb-injected tool: ACP agents report
- * MCP tool calls under the generic `other` kind (or no kind), never as a
- * command, a file change, or a native read/search/fetch/think.
- */
 export function isInjectedToolCandidate(
   event: AcpToolCallUpdateEvent,
 ): boolean {
@@ -77,18 +52,12 @@ export function isInjectedToolCandidate(
 const INLINE_IMAGE_DATA_URL_PATTERN =
   /data:image\/[a-z0-9.+-]+(?:;[^,]*)?;base64,[a-z0-9+/_=-]+/giu;
 
-/**
- * The most of a tool call's `rawInput` / `rawOutput` the timeline keeps, in
- * serialized characters. The server truncates string outputs on read; a JSON
- * object rides the event whole, so the bridge bounds it here.
- */
 export const ACP_TOOL_PAYLOAD_MAX_CHARS = 64 * 1024;
 
 function scrubInlineImageDataUrls(text: string): string {
   return text.replace(INLINE_IMAGE_DATA_URL_PATTERN, "[image]");
 }
 
-/** The data-URL scrub, applied to every string inside a JSON value. */
 function scrubToolPayloadStrings(value: unknown): unknown {
   if (typeof value === "string") {
     return scrubInlineImageDataUrls(value);
@@ -115,14 +84,6 @@ function truncatedPayloadText(text: string): string {
   return `${text.slice(0, ACP_TOOL_PAYLOAD_MAX_CHARS)}\n…[${removed.toLocaleString("en-US")} more characters truncated]`;
 }
 
-/**
- * A tool call's `rawInput` or `rawOutput` as the timeline carries it: the
- * JSON value with inline image data URLs scrubbed, or — past the size cap —
- * its rendered text, head-truncated with the same marker the server's own
- * output truncation writes. Some ACP agents echo MCP image results as
- * data-URL attachments in rawOutput; the envelope stays, the potentially
- * multi-megabyte payload does not reach the timeline.
- */
 export function boundAcpToolPayload(value: unknown): unknown {
   if (value === undefined) {
     return undefined;
@@ -140,11 +101,6 @@ export function boundAcpToolPayload(value: unknown): unknown {
   );
 }
 
-/**
- * `rawInput` as `tool.args`: the assembler keeps only a JSON object as the
- * item's arguments, so a payload past the cap keeps its preview under one
- * key instead of vanishing.
- */
 function boundAcpToolArgs(value: unknown): Record<string, unknown> | undefined {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
@@ -153,7 +109,9 @@ function boundAcpToolArgs(value: unknown): Record<string, unknown> | undefined {
   if (typeof bounded === "string") {
     return { truncated: bounded };
   }
-  return bounded !== null && typeof bounded === "object" && !Array.isArray(bounded)
+  return bounded !== null &&
+    typeof bounded === "object" &&
+    !Array.isArray(bounded)
     ? (bounded as Record<string, unknown>)
     : undefined;
 }
@@ -174,10 +132,6 @@ function extractAcpToolCallContentText(
   return chunks.length > 0 ? chunks.join("\n") : undefined;
 }
 
-/**
- * The text output of a tool call: its `content` text blocks, else its
- * `rawOutput` rendered as text (data URLs scrubbed).
- */
 export function extractAcpToolCallOutputText(
   event: AcpToolCallUpdateEvent,
 ): string | undefined {
@@ -194,11 +148,6 @@ export function extractAcpToolCallOutputText(
   return rawOutputText.length > 0 ? rawOutputText : undefined;
 }
 
-/**
- * What the agents in the wild put in a command's `rawOutput`. Cursor:
- * `{exitCode, stdout, stderr}`. grok: `{exit_code, output_for_prompt,
- * signal, timed_out, …}`. ACP itself standardizes none of it.
- */
 const commandRawOutputSchema = z
   .object({
     exitCode: z.number().int().nullable().optional(),
@@ -213,9 +162,7 @@ const commandRawOutputSchema = z
 type CommandRawOutput = z.infer<typeof commandRawOutputSchema>;
 
 export interface AcpCommandResult {
-  /** The process exit code the agent reported; absent when it reported none. */
   exitCode?: number;
-  /** The command's output text; absent when the agent reported none. */
   output?: string;
 }
 
@@ -233,16 +180,6 @@ function joinStreams(stdout: string, stderr: string): string | undefined {
   return stdout.endsWith("\n") ? `${stdout}${stderr}` : `${stdout}\n${stderr}`;
 }
 
-/**
- * What the agent SAID the command printed: its `content` text, else the
- * streams its `rawOutput` named. Never the envelope rendered as JSON.
- *
- * `reported` is the part that matters. An agent that named its streams has
- * told bb what the command printed even when that is nothing, and nothing is
- * what the row must show: `node -e "process.exit(3)"` prints nothing, and
- * before this the empty join fell through to the envelope and the row read
- * `{"exitCode":3,"stdout":"","stderr":""}`.
- */
 function acpCommandOutputSoFar(
   event: AcpToolCallUpdateEvent,
   raw: CommandRawOutput | undefined,
@@ -251,10 +188,6 @@ function acpCommandOutputSoFar(
   if (content !== undefined) {
     return { reported: true, output: content };
   }
-  // A bare string `rawOutput` is the output, not an envelope to render: an
-  // agent that sends one has told bb what the command printed, mid-flight as
-  // much as at the close. No agent bb has read the wire for sends this, and
-  // that is exactly why it must keep working — the generality costs nothing.
   if (typeof event.rawOutput === "string") {
     return {
       reported: true,
@@ -278,14 +211,6 @@ function acpCommandOutputSoFar(
   return { reported: false, output: undefined };
 }
 
-/**
- * What a RUNNING command has printed so far, for the streamed snapshot.
- *
- * Mid-flight the rendered-envelope fallback is always wrong: a JSON object is
- * not "output so far", and the envelope carries an `exit_code` the command
- * has not reached. An agent whose in-progress envelope names no stream has
- * told bb nothing, and nothing is what the row shows until the close.
- */
 export function extractAcpStreamedCommandOutput(
   event: AcpToolCallUpdateEvent,
 ): string | undefined {
@@ -297,21 +222,6 @@ export function extractAcpStreamedCommandOutput(
   return output === undefined ? undefined : scrubInlineImageDataUrls(output);
 }
 
-/**
- * The real result of a command: the exit code the agent reported (never
- * synthesized from its status) and its output.
- *
- * Output precedence: the `content` text the agent chose to show; else a bare
- * string `rawOutput`; else stdout+stderr from the `rawOutput` envelope; else
- * grok's `output_for_prompt`; else the envelope rendered as JSON. An agent
- * that NAMED a stream has reported what the command printed even when that is
- * nothing, so an empty one shows nothing rather than falling through to the
- * envelope. A timeout or a terminating signal is noted after the output.
- *
- * The rendered-envelope fallback stays at the CLOSE, where an agent that
- * reported no stream at all has still finished and its envelope is the only
- * record of what happened.
- */
 export function extractAcpCommandResult(
   event: AcpToolCallUpdateEvent,
 ): AcpCommandResult {
@@ -332,14 +242,11 @@ export function extractAcpCommandResult(
   }
   return {
     ...(exitCode === undefined ? {} : { exitCode }),
-    ...(output === undefined ? {} : { output: scrubInlineImageDataUrls(output) }),
+    ...(output === undefined
+      ? {}
+      : { output: scrubInlineImageDataUrls(output) }),
   };
 }
-
-// ---------------------------------------------------------------------------
-// Argument schemas (one-off, dialect-local). ACP does not standardize
-// rawInput; these are the field names the agents in the wild use.
-// ---------------------------------------------------------------------------
 
 const optionalNonBlank = z
   .string()
@@ -368,12 +275,6 @@ const thinkRawInputSchema = z
   .object({ thought: optionalNonBlank, thinking: optionalNonBlank })
   .passthrough();
 
-/**
- * Agents put the one thing a call is about in the title when they put it
- * nowhere else: grok titles a read "Read `/abs/path`" and a fetch
- * "Fetch: https://…". A single code-ticked token, or a single URL, in the
- * title of a call of that kind is that thing.
- */
 const SINGLE_TICKED_TOKEN_PATTERN = /^[^`]*`([^`\n]+)`[^`]*$/;
 const URL_PATTERN = /https?:\/\/[^\s`'"<>]+/g;
 
@@ -400,11 +301,6 @@ function looksLikePath(token: string): boolean {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Per-kind shapes
-// ---------------------------------------------------------------------------
-
-/** The verb a set of file changes reads as: all adds, all deletes, else edits. */
 function fileChangeVerb(
   changes: readonly DeltaFileChange[],
   fallback: AcpFileChangeVerb,
@@ -521,11 +417,6 @@ function webFetchItem(
   };
 }
 
-/**
- * A `think` call is the agent's reasoning as a tool: the thought is the
- * call's content text, else its `rawInput` thought field; an in-flight call
- * with neither opens empty and fills in at the close.
- */
 function reasoningItem(event: AcpToolCallUpdateEvent): AcpClassifiedToolCall {
   const parsed = thinkRawInputSchema.safeParse(event.rawInput);
   const thought =
@@ -543,14 +434,12 @@ function reasoningItem(event: AcpToolCallUpdateEvent): AcpClassifiedToolCall {
   };
 }
 
-/**
- * The generic fields every `tool` item carries: `rawInput` as `args`,
- * `rawOutput` as `result`, and the output text as `error` when the call
- * failed. Absent fields stay absent.
- */
 function genericToolFields(
   event: AcpToolCallUpdateEvent,
-): Pick<Extract<DeltaItemShape, { type: "tool" }>, "args" | "result" | "error"> {
+): Pick<
+  Extract<DeltaItemShape, { type: "tool" }>,
+  "args" | "result" | "error"
+> {
   const args = boundAcpToolArgs(event.rawInput);
   const result = boundAcpToolPayload(event.rawOutput);
   const error =
@@ -562,12 +451,6 @@ function genericToolFields(
   };
 }
 
-/**
- * A generic tool names itself by its programmatic name when the agent
- * reports one (the unstable `name`, or the dialect's side channel), else by
- * its kind; a kind the wire schema did not know keeps the agent's own word
- * (`rawKind`) in the tool slot and presents as `other`.
- */
 function genericToolItem(
   event: AcpToolCallUpdateEvent,
   title: string | undefined,
@@ -583,11 +466,6 @@ function genericToolItem(
   };
 }
 
-/**
- * A call to a bb-injected tool: `server: "bb"` names its origin and the
- * definition the server handed the bridge says how the row reads, so no
- * tool-name table is needed anywhere downstream.
- */
 function bbToolItem(
   event: AcpToolCallUpdateEvent,
   injected: AcpInjectedTool,
@@ -603,14 +481,6 @@ function bbToolItem(
   };
 }
 
-/**
- * Classify a (merged) tool_call event into its item shape and presentation.
- * A call bound to a bb-injected tool reads as that tool. Otherwise command
- * and file-change come first, from the shared operation classifier (a diff
- * makes any kind a file change); then the native kind picks the shape; a
- * kind whose shape the agent left unfilled is a generic tool presenting as
- * its kind.
- */
 export function classifyAcpToolCall(
   event: AcpToolCallUpdateEvent,
   injected?: AcpInjectedTool,
@@ -621,10 +491,6 @@ export function classifyAcpToolCall(
   }
   const operation = classifyAcpToolCallOperation(event, options);
   if (operation.kind === "command") {
-    // ACP never says where the agent ran a command; the session cwd is where
-    // the agent process runs, so that is the command's cwd. Without one the
-    // call stays a generic tool item: bb fabricates no `commandExecution
-    // { cwd: "" }` (design §4).
     const cwd = toOptionalString(options?.cwd);
     if (cwd !== undefined) {
       return {
